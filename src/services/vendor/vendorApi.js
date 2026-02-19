@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = 'http://localhost:5000/api/vendors'; // Adjust base URL as needed
+const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/vendors`; // Adjust base URL as needed
 
 // Helper to get token (if auth is required)
 const getAuthHeaders = () => {

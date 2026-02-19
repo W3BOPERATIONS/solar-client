@@ -84,7 +84,7 @@ const BrandSupplierOverview = () => {
       const [suppliersData, manuData, statesResp] = await Promise.all([
         getAllSuppliers(),
         getAllManufacturers(),
-        axios.get('http://localhost:5000/api/locations/states?isActive=true')
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`)
       ]);
       setSuppliers(suppliersData);
       setManufacturers(manuData);
@@ -117,7 +117,7 @@ const BrandSupplierOverview = () => {
         return;
       }
       const promises = Array.from(selectedStates).map(stateId =>
-        axios.get(`http://localhost:5000/api/locations/cities?stateId=${stateId}&isActive=true`)
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/cities?stateId=${stateId}&isActive=true`)
       );
       try {
         const responses = await Promise.all(promises);
@@ -135,7 +135,7 @@ const BrandSupplierOverview = () => {
         return;
       }
       const promises = Array.from(selectedCities).map(cityId =>
-        axios.get(`http://localhost:5000/api/locations/districts?cityId=${cityId}&isActive=true`)
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/districts?cityId=${cityId}&isActive=true`)
       );
       try {
         const responses = await Promise.all(promises);
@@ -300,7 +300,7 @@ const BrandSupplierOverview = () => {
   const fetchModalCities = async (stateId) => {
     if (!stateId) { setModalCities([]); return; }
     try {
-      const res = await axios.get(`http://localhost:5000/api/locations/cities?stateId=${stateId}&isActive=true`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/cities?stateId=${stateId}&isActive=true`);
       if (res.data.success) setModalCities(res.data.data);
     } catch (e) { console.error(e); }
   };
@@ -308,7 +308,7 @@ const BrandSupplierOverview = () => {
   const fetchModalDistricts = async (cityId) => {
     if (!cityId) { setModalDistricts([]); return; }
     try {
-      const res = await axios.get(`http://localhost:5000/api/locations/districts?cityId=${cityId}&isActive=true`);
+      const res = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/districts?cityId=${cityId}&isActive=true`);
       if (res.data.success) setModalDistricts(res.data.data);
     } catch (e) { console.error(e); }
   };

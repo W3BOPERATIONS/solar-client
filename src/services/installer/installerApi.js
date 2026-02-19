@@ -4,7 +4,7 @@ const API_URL = '/installer';
 
 // --- Solar Installers ---
 export const getSolarInstallers = async (params = {}) => {
-    const response = await axios.get(`http://localhost:5000/api${API_URL}/installers`, { params });
+    const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}${API_URL}/installers`, { params });
     return response.data;
 };
 

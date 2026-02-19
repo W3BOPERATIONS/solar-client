@@ -91,7 +91,7 @@ const AddBrandManufacturer = () => {
 
   const fetchStates = async () => {
     try {
-      const response = await axios.get('http://localhost:5000/api/locations/states?isActive=true');
+      const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`);
       if (response.data.success) {
         setStates(response.data.data);
       }
@@ -106,7 +106,7 @@ const AddBrandManufacturer = () => {
       return;
     }
     try {
-      const response = await axios.get(`http://localhost:5000/api/locations/cities?stateId=${stateId}&isActive=true`);
+      const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/cities?stateId=${stateId}&isActive=true`);
       if (response.data.success) {
         setCities(response.data.data);
       }
@@ -121,7 +121,7 @@ const AddBrandManufacturer = () => {
       return;
     }
     try {
-      const response = await axios.get(`http://localhost:5000/api/locations/districts?cityId=${cityId}&isActive=true`);
+      const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/districts?cityId=${cityId}&isActive=true`);
       if (response.data.success) {
         setDistricts(response.data.data);
       }
