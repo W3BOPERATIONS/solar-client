@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import { locationAPI } from '../../../../api/api';
+import { getAssignments, updateAssignment } from '../../../../services/combokit/combokitApi';
 import toast from 'react-hot-toast';
 
 const CustomizeCombokit = () => {
@@ -25,7 +26,8 @@ const CustomizeCombokit = () => {
   const [availableClusters, setAvailableClusters] = useState({}); // stateId -> [clusters]
   const [availableDistricts, setAvailableDistricts] = useState({}); // clusterId -> [districts]
 
-  const [combokitData, setCombokitData] = useState({});
+  const [assignments, setAssignments] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [editMode, setEditMode] = useState({});
   const [modalContent, setModalContent] = useState(null);
   const [modalType, setModalType] = useState(null); // 'view', 'cluster', 'district'
@@ -44,25 +46,23 @@ const CustomizeCombokit = () => {
     }
   }, [countries]);
 
-  // Initialize combokit data for states when states are loaded
+  // Fetch Assignments
   useEffect(() => {
-    if (allStates.length > 0) {
-      const initialData = {};
-      allStates.forEach(state => {
-        initialData[state._id] = {
-          solarkitName: "Solarkit Name",
-          panel: [],
-          inverter: [],
-          boskit: [],
-          category: "Rooftop Solar",
-          subCategory: "Residential",
-          projectType: "1KW - 10KW",
-          subProjectType: "On-grid"
-        };
-      });
-      setCombokitData(prev => ({ ...prev, ...initialData }));
+    fetchAssignments();
+  }, []);
+
+  const fetchAssignments = async () => {
+    try {
+      setLoading(true);
+      const res = await getAssignments();
+      setAssignments(res || []);
+    } catch (error) {
+      console.error("Failed to fetch assignments", error);
+      toast.error("Failed to fetch assignments");
+    } finally {
+      setLoading(false);
     }
-  }, [allStates]);
+  };
 
   // Handle state selection
   const handleStateClick = async (stateId) => {
@@ -205,99 +205,70 @@ const CustomizeCombokit = () => {
     setSelectedDistricts(new Set());
   };
 
-  // Helpers to get counts
-  const getSelectedClustersForStateCount = (stateId) => {
-    if (!availableClusters[stateId]) return 0;
-    return availableClusters[stateId].filter(c => selectedClusters.has(c._id)).length;
-  };
 
-  const getSelectedDistrictsForStateCount = (stateId) => {
-    if (!availableClusters[stateId]) return 0;
-    // Clusters in this state that are selected
-    const selectedClustersInState = availableClusters[stateId].filter(c => selectedClusters.has(c._id));
-    let count = 0;
-    selectedClustersInState.forEach(c => {
-      if (availableDistricts[c._id]) {
-        count += availableDistricts[c._id].filter(d => selectedDistricts.has(d._id)).length;
-      }
-    });
-    return count;
-  };
 
   // Handle edit mode
-  const handleEditClick = (stateId) => {
-    setEditMode(prev => ({ ...prev, [stateId]: true }));
+  const handleEditClick = (assignmentId) => {
+    setEditMode(prev => ({ ...prev, [assignmentId]: true }));
   };
 
-  const handleSaveClick = (stateId) => {
-    setEditMode(prev => ({ ...prev, [stateId]: false }));
+  const handleSaveClick = async (assignmentId) => {
+    try {
+      const assignment = assignments.find(a => a._id === assignmentId);
+      if (!assignment) return;
+
+      const payload = {
+        panels: assignment.panels,
+        inverters: assignment.inverters,
+        boskits: assignment.boskits
+      };
+
+      await updateAssignment(assignmentId, payload);
+      toast.success("Details updated successfully");
+      setEditMode(prev => ({ ...prev, [assignmentId]: false }));
+    } catch (error) {
+      console.error("Failed to update assignment", error);
+      toast.error("Failed to update details");
+    }
   };
 
-  const handleCancelClick = (stateId) => {
-    setEditMode(prev => ({ ...prev, [stateId]: false }));
+  const handleCancelClick = (assignmentId) => {
+    setEditMode(prev => ({ ...prev, [assignmentId]: false }));
+    // Optionally revert changes by re-fetching or keeping a backup
+    fetchAssignments();
   };
 
   // Handle dropdown changes
-  const handlePanelChange = (stateId, selectedOptions) => {
-    setCombokitData(prev => ({
-      ...prev,
-      [stateId]: {
-        ...prev[stateId],
-        panel: selectedOptions
-      }
-    }));
+  const handlePanelChange = (assignmentId, selectedOptions) => {
+    setAssignments(prev => prev.map(a =>
+      a._id === assignmentId ? { ...a, panels: selectedOptions } : a
+    ));
   };
 
-  const handleInverterChange = (stateId, selectedOptions) => {
-    setCombokitData(prev => ({
-      ...prev,
-      [stateId]: {
-        ...prev[stateId],
-        inverter: selectedOptions
-      }
-    }));
+  const handleInverterChange = (assignmentId, selectedOptions) => {
+    setAssignments(prev => prev.map(a =>
+      a._id === assignmentId ? { ...a, inverters: selectedOptions } : a
+    ));
   };
 
-  const handleBoskitChange = (stateId, selectedOptions) => {
-    setCombokitData(prev => ({
-      ...prev,
-      [stateId]: {
-        ...prev[stateId],
-        boskit: selectedOptions
-      }
-    }));
+  const handleBoskitChange = (assignmentId, selectedOptions) => {
+    setAssignments(prev => prev.map(a =>
+      a._id === assignmentId ? { ...a, boskits: selectedOptions } : a
+    ));
   };
 
   // Modal handlers
-  const showCombokitDetails = (stateId) => {
-    const state = allStates.find(s => s._id === stateId);
-    const data = combokitData[stateId] || {};
-
-    // Get clusters names
-    const clusterNames = [];
-    if (availableClusters[stateId]) {
-      availableClusters[stateId].forEach(c => {
-        if (selectedClusters.has(c._id)) clusterNames.push(c.name);
-      });
-    }
-
-    // Get district names
-    const districtNames = [];
-    if (availableClusters[stateId]) {
-      availableClusters[stateId].forEach(c => {
-        if (selectedClusters.has(c._id) && availableDistricts[c._id]) {
-          availableDistricts[c._id].forEach(d => {
-            if (selectedDistricts.has(d._id)) districtNames.push(d.name);
-          });
-        }
-      });
-    }
+  const showCombokitDetails = (assignment) => {
+    const data = assignment;
+    const stateName = assignment.state?.name || "Unknown State";
+    const clusterName = assignment.cluster?.name || "Unknown Cluster";
+    const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
 
     setModalContent({
       title: "Combokit Details",
       content: (
         <div>
-          <h4 className="text-lg font-semibold mb-4">{state?.name} Combokit Details</h4>
+          <h4 className="text-lg font-semibold mb-4">{stateName} Combokit Details</h4>
           <table className="min-w-full divide-y divide-gray-200 mt-3">
             <tbody className="bg-white divide-y divide-gray-200">
               <tr>
@@ -307,32 +278,32 @@ const CustomizeCombokit = () => {
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Panel:</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                  {data.panel?.length ? data.panel.join(", ") : "Not Selected"}
+                  {data.panels?.length ? data.panels.join(", ") : "Not Selected"}
                 </td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Inverter:</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                  {data.inverter?.length ? data.inverter.join(", ") : "Not Selected"}
+                  {data.inverters?.length ? data.inverters.join(", ") : "Not Selected"}
                 </td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Boskit:</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">
-                  {data.boskit?.length ? data.boskit.join(", ") : "Not Selected"}
+                  {data.boskits?.length ? data.boskits.join(", ") : "Not Selected"}
                 </td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">State:</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{state?.name}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{stateName}</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Clusters:</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{clusterNames.join(', ') || 'None'}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{clusterName}</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Districts:</td>
-                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{districtNames.join(', ') || 'None'}</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{districtNames}</td>
               </tr>
               <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Category:</td>
@@ -358,88 +329,12 @@ const CustomizeCombokit = () => {
     setModalType('view');
   };
 
-  const showClusterDetails = (stateId) => {
-    const state = allStates.find(s => s._id === stateId);
-    let clusters = [];
-    if (availableClusters[stateId]) {
-      clusters = availableClusters[stateId].filter(c => selectedClusters.has(c._id));
-    }
-
-    setModalContent({
-      title: "Cluster Details",
-      content: (
-        <div>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cluster Name</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {clusters.map((cluster, index) => (
-                <tr key={index}>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{cluster.name}</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{state?.name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-sm"><strong>Total:</strong> {clusters.length} cluster{clusters.length !== 1 ? 's' : ''}</p>
-        </div>
-      )
-    });
-    setModalType('cluster');
-  };
-
-  const showDistrictDetails = (stateId) => {
-    const state = allStates.find(s => s._id === stateId);
-    let districts = [];
-    if (availableClusters[stateId]) {
-      availableClusters[stateId].forEach(c => {
-        if (selectedClusters.has(c._id) && availableDistricts[c._id]) {
-          const ds = availableDistricts[c._id].filter(d => selectedDistricts.has(d._id));
-          districts = [...districts, ...ds];
-        }
-      });
-    }
-
-    setModalContent({
-      title: "District Details",
-      content: (
-        <div>
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
-              <tr>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">District Name</th>
-                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">State</th>
-              </tr>
-            </thead>
-            <tbody className="bg-white divide-y divide-gray-200">
-              {districts.map((district, index) => (
-                <tr key={index}>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-900">{district.name}</td>
-                  <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{state?.name}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          <p className="mt-3 text-sm"><strong>Total:</strong> {districts.length} district{districts.length !== 1 ? 's' : ''}</p>
-        </div>
-      )
-    });
-    setModalType('district');
-  };
-
   const closeModal = () => {
     setModalContent(null);
     setModalType(null);
   };
 
-  // Check if result table should be shown
-  const shouldShowResultTable = () => {
-    return selectedStates.size > 0 && selectedClusters.size > 0 && selectedDistricts.size > 0;
-  };
+
 
   // Get modal header color based on type
   const getModalHeaderColor = () => {
@@ -488,8 +383,8 @@ const CustomizeCombokit = () => {
                 key={state._id}
                 onClick={() => handleStateClick(state._id)}
                 className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedStates.has(state._id)
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-blue-400 hover:border-blue-600'
+                  ? 'bg-blue-600 text-white border-blue-600'
+                  : 'border-blue-400 hover:border-blue-600'
                   }`}
               >
                 <p className="font-medium">{state.name}</p>
@@ -528,8 +423,8 @@ const CustomizeCombokit = () => {
                   key={cluster._id}
                   onClick={() => handleClusterClick(cluster._id)}
                   className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedClusters.has(cluster._id)
-                      ? 'bg-purple-700 text-white border-purple-700'
-                      : 'border-gray-300 hover:border-purple-500'
+                    ? 'bg-purple-700 text-white border-purple-700'
+                    : 'border-gray-300 hover:border-purple-500'
                     }`}
                 >
                   {cluster.name}
@@ -569,8 +464,8 @@ const CustomizeCombokit = () => {
                   key={district._id}
                   onClick={() => handleDistrictClick(district._id)}
                   className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedDistricts.has(district._id)
-                      ? 'bg-green-600 text-white border-green-600'
-                      : 'border-gray-300 hover:border-green-500'
+                    ? 'bg-green-600 text-white border-green-600'
+                    : 'border-gray-300 hover:border-green-500'
                     }`}
                 >
                   {district.name}
@@ -582,13 +477,17 @@ const CustomizeCombokit = () => {
       )}
 
       {/* Result Table */}
-      {shouldShowResultTable() && (
-        <div className="mt-6">
-          <div className="card shadow-lg rounded-lg bg-white">
-            <div className="card-body p-6">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Customize Combokit Details</h3>
+      <div className="mt-6">
+        <div className="card shadow-lg rounded-lg bg-white">
+          <div className="card-body p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Customize Combokit Details</h3>
 
-              <div className="overflow-x-auto">
+            <div className="overflow-x-auto">
+              {loading ? (
+                <div className="text-center py-4">Loading assignments...</div>
+              ) : assignments.length === 0 ? (
+                <div className="text-center py-4">No assignments found.</div>
+              ) : (
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-blue-50">
                     <tr>
@@ -597,7 +496,7 @@ const CustomizeCombokit = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Inverter</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Boskit</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">State</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Clusters</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cluster</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Districts</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Category</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Sub Category</th>
@@ -607,173 +506,169 @@ const CustomizeCombokit = () => {
                     </tr>
                   </thead>
                   <tbody className="bg-white divide-y divide-gray-200">
-                    {Array.from(selectedStates).map(stateId => {
-                      const state = allStates.find(s => s._id === stateId);
-                      const data = combokitData[stateId] || {};
-                      const isEditing = editMode[stateId];
-                      const clusterCount = getSelectedClustersForStateCount(stateId);
-                      const districtCount = getSelectedDistrictsForStateCount(stateId);
+                    {assignments
+                      .filter(assignment => {
+                        // Filter Logic
+                        if (selectedStates.size > 0 && !selectedStates.has(assignment.state?._id)) return false;
+                        if (selectedClusters.size > 0 && !selectedClusters.has(assignment.cluster?._id)) return false;
+                        // For districts, check if any of the assignment's districts are selected
+                        if (selectedDistricts.size > 0) {
+                          const hasSelectedDistrict = assignment.districts?.some(d => selectedDistricts.has(d._id));
+                          if (!hasSelectedDistrict) return false;
+                        }
+                        return true;
+                      })
+                      .map(assignment => {
+                        const isEditing = editMode[assignment._id];
+                        const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
+                        // Truncate district names if too long
+                        const districtsDisplay = districtNames.length > 50 ? districtNames.substring(0, 50) + "..." : districtNames;
 
-                      if (clusterCount === 0 || districtCount === 0) return null;
+                        return (
+                          <tr key={assignment._id}>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.solarkitName}</td>
 
-                      return (
-                        <tr key={stateId}>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{data.solarkitName}</td>
-
-                          {/* Panel Column */}
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            {!isEditing ? (
-                              <div className="view-mode bg-gray-50 p-2 rounded">
-                                {data.panel?.length ? data.panel.join(", ") : "Not Selected"}
-                              </div>
-                            ) : (
-                              <div className="edit-mode border border-gray-300 p-2 rounded">
-                                <select
-                                  multiple
-                                  className="w-full border rounded p-1"
-                                  value={data.panel || []}
-                                  onChange={(e) => {
-                                    const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                    handlePanelChange(stateId, selected);
-                                  }}
-                                >
-                                  {panelOptions.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Inverter Column */}
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            {!isEditing ? (
-                              <div className="view-mode bg-gray-50 p-2 rounded">
-                                {data.inverter?.length ? data.inverter.join(", ") : "Not Selected"}
-                              </div>
-                            ) : (
-                              <div className="edit-mode border border-gray-300 p-2 rounded">
-                                <select
-                                  multiple
-                                  className="w-full border rounded p-1"
-                                  value={data.inverter || []}
-                                  onChange={(e) => {
-                                    const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                    handleInverterChange(stateId, selected);
-                                  }}
-                                >
-                                  {inverterOptions.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                              </div>
-                            )}
-                          </td>
-
-                          {/* Boskit Column */}
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            {!isEditing ? (
-                              <div className="view-mode bg-gray-50 p-2 rounded">
-                                {data.boskit?.length ? data.boskit.join(", ") : "Not Selected"}
-                              </div>
-                            ) : (
-                              <div className="edit-mode border border-gray-300 p-2 rounded">
-                                <select
-                                  multiple
-                                  className="w-full border rounded p-1"
-                                  value={data.boskit || []}
-                                  onChange={(e) => {
-                                    const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                    handleBoskitChange(stateId, selected);
-                                  }}
-                                >
-                                  {boskitOptions.map(opt => (
-                                    <option key={opt} value={opt}>{opt}</option>
-                                  ))}
-                                </select>
-                                <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                              </div>
-                            )}
-                          </td>
-
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{state?.name}</td>
-
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            <span
-                              onClick={() => showClusterDetails(stateId)}
-                              className="count-badge cursor-pointer text-blue-600 font-semibold underline"
-                            >
-                              {clusterCount} cluster{clusterCount !== 1 ? 's' : ''}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            <span
-                              onClick={() => showDistrictDetails(stateId)}
-                              className="count-badge cursor-pointer text-blue-600 font-semibold underline"
-                            >
-                              {districtCount} district{districtCount !== 1 ? 's' : ''}
-                            </span>
-                          </td>
-
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{data.category}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{data.subCategory}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{data.projectType}</td>
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{data.subProjectType}</td>
-
-                          <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                            <div className="flex space-x-2">
-                              {!isEditing && (
-                                <>
-                                  <button
-                                    onClick={() => showCombokitDetails(stateId)}
-                                    className="btn btn-sm btn-info p-1.5 rounded bg-gray-600 text-white hover:bg-gray-700"
-                                    title="View Details"
+                            {/* Panel Column */}
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {!isEditing ? (
+                                <div className="view-mode bg-gray-50 p-2 rounded">
+                                  {assignment.panels?.length ? assignment.panels.join(", ") : "Not Selected"}
+                                </div>
+                              ) : (
+                                <div className="edit-mode border border-gray-300 p-2 rounded">
+                                  <select
+                                    multiple
+                                    className="w-full border rounded p-1"
+                                    value={assignment.panels || []}
+                                    onChange={(e) => {
+                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                                      handlePanelChange(assignment._id, selected);
+                                    }}
                                   >
-                                    <Eye className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleEditClick(stateId)}
-                                    className="btn btn-sm btn-primary p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
-                                    title="Edit"
-                                  >
-                                    <Edit className="w-4 h-4" />
-                                  </button>
-                                </>
+                                    {panelOptions.map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                                </div>
                               )}
+                            </td>
 
-                              {isEditing && (
-                                <>
-                                  <button
-                                    onClick={() => handleSaveClick(stateId)}
-                                    className="btn btn-sm btn-success p-1.5 rounded bg-green-600 text-white hover:bg-green-700"
-                                    title="Save"
+                            {/* Inverter Column */}
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {!isEditing ? (
+                                <div className="view-mode bg-gray-50 p-2 rounded">
+                                  {assignment.inverters?.length ? assignment.inverters.join(", ") : "Not Selected"}
+                                </div>
+                              ) : (
+                                <div className="edit-mode border border-gray-300 p-2 rounded">
+                                  <select
+                                    multiple
+                                    className="w-full border rounded p-1"
+                                    value={assignment.inverters || []}
+                                    onChange={(e) => {
+                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                                      handleInverterChange(assignment._id, selected);
+                                    }}
                                   >
-                                    <Save className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleCancelClick(stateId)}
-                                    className="btn btn-sm btn-secondary p-1.5 rounded bg-gray-500 text-white hover:bg-gray-600"
-                                    title="Cancel"
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </button>
-                                </>
+                                    {inverterOptions.map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                                </div>
                               )}
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            </td>
+
+                            {/* Boskit Column */}
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {!isEditing ? (
+                                <div className="view-mode bg-gray-50 p-2 rounded">
+                                  {assignment.boskits?.length ? assignment.boskits.join(", ") : "Not Selected"}
+                                </div>
+                              ) : (
+                                <div className="edit-mode border border-gray-300 p-2 rounded">
+                                  <select
+                                    multiple
+                                    className="w-full border rounded p-1"
+                                    value={assignment.boskits || []}
+                                    onChange={(e) => {
+                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
+                                      handleBoskitChange(assignment._id, selected);
+                                    }}
+                                  >
+                                    {boskitOptions.map(opt => (
+                                      <option key={opt} value={opt}>{opt}</option>
+                                    ))}
+                                  </select>
+                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
+                                </div>
+                              )}
+                            </td>
+
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.state?.name}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.cluster?.name}</td>
+
+                            <td className="px-4 py-3 text-sm text-gray-900">
+                              <span title={districtNames}>{districtsDisplay}</span>
+                            </td>
+
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.category}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.subCategory}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.projectType}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.subProjectType}</td>
+
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              <div className="flex space-x-2">
+                                {!isEditing && (
+                                  <>
+                                    <button
+                                      onClick={() => showCombokitDetails(assignment)}
+                                      className="btn btn-sm btn-info p-1.5 rounded bg-gray-600 text-white hover:bg-gray-700"
+                                      title="View Details"
+                                    >
+                                      <Eye className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleEditClick(assignment._id)}
+                                      className="btn btn-sm btn-primary p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
+                                      title="Edit"
+                                    >
+                                      <Edit className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+
+                                {isEditing && (
+                                  <>
+                                    <button
+                                      onClick={() => handleSaveClick(assignment._id)}
+                                      className="btn btn-sm btn-success p-1.5 rounded bg-green-600 text-white hover:bg-green-700"
+                                      title="Save"
+                                    >
+                                      <Save className="w-4 h-4" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleCancelClick(assignment._id)}
+                                      className="btn btn-sm btn-secondary p-1.5 rounded bg-gray-500 text-white hover:bg-gray-600"
+                                      title="Cancel"
+                                    >
+                                      <X className="w-4 h-4" />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
                   </tbody>
                 </table>
-              </div>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </div>
 
       {/* Modal */}
       {modalContent && (

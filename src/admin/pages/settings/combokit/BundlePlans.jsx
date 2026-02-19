@@ -77,17 +77,17 @@ const BundlePlans = () => {
         return;
       }
       try {
-        const uniqueClusters = [];
+        const uniqueClustersMap = new Map();
         const promises = Array.from(selectedStates).map(stateId =>
           locationAPI.getAllClusters({ state: stateId, isActive: 'true' })
         );
         const responses = await Promise.all(promises);
         responses.forEach(res => {
           if (res.data && res.data.data) {
-            uniqueClusters.push(...res.data.data);
+            res.data.data.forEach(item => uniqueClustersMap.set(item._id, item));
           }
         });
-        setClusterOptions(uniqueClusters);
+        setClusterOptions(Array.from(uniqueClustersMap.values()));
       } catch (error) {
         console.error("Error fetching clusters", error);
       }
@@ -103,17 +103,17 @@ const BundlePlans = () => {
         return;
       }
       try {
-        const uniqueDistricts = [];
+        const uniqueDistrictsMap = new Map();
         const promises = Array.from(selectedClusters).map(clusterId =>
           locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' })
         );
         const responses = await Promise.all(promises);
         responses.forEach(res => {
           if (res.data && res.data.data) {
-            uniqueDistricts.push(...res.data.data);
+            res.data.data.forEach(item => uniqueDistrictsMap.set(item._id, item));
           }
         });
-        setDistrictOptions(uniqueDistricts);
+        setDistrictOptions(Array.from(uniqueDistrictsMap.values()));
       } catch (error) {
         console.error("Error fetching districts", error);
       }
@@ -129,17 +129,17 @@ const BundlePlans = () => {
         return;
       }
       try {
-        const uniqueCities = [];
+        const uniqueCitiesMap = new Map();
         const promises = Array.from(selectedDistricts).map(districtId =>
           locationAPI.getAllCities({ district: districtId, isActive: 'true' })
         );
         const responses = await Promise.all(promises);
         responses.forEach(res => {
           if (res.data && res.data.data) {
-            uniqueCities.push(...res.data.data);
+            res.data.data.forEach(item => uniqueCitiesMap.set(item._id, item));
           }
         });
-        setCityOptions(uniqueCities);
+        setCityOptions(Array.from(uniqueCitiesMap.values()));
       } catch (error) {
         console.error("Error fetching cities", error);
       }

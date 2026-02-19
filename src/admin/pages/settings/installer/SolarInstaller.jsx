@@ -12,7 +12,9 @@ import {
   Award,
   FileText,
   Save,
-  X
+  X,
+  MapPin,
+  Layers
 } from 'lucide-react';
 import {
   getSolarInstallers,
@@ -20,6 +22,7 @@ import {
   updateSolarInstaller,
   deleteSolarInstaller
 } from '../../../../services/installer/installerApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
 import { useLocations } from '../../../../hooks/useLocations';
 import toast from 'react-hot-toast';
 
@@ -55,6 +58,9 @@ const SolarInstaller = () => {
     district: ''
   });
 
+  const [formClusters, setFormClusters] = useState([]);
+  const [formDistricts, setFormDistricts] = useState([]);
+
   useEffect(() => {
     fetchInstallers();
   }, [selectedState, selectedCluster, selectedDistrict]);
@@ -82,6 +88,39 @@ const SolarInstaller = () => {
     setFormData({ ...formData, [name]: value });
   };
 
+  const handleFormStateChange = async (e) => {
+    const newStateId = e.target.value;
+    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
+    setFormClusters([]);
+    setFormDistricts([]);
+
+    if (newStateId) {
+      try {
+        const data = await getClustersHierarchy(newStateId);
+        setFormClusters(data || []);
+      } catch (error) {
+        console.error('Error fetching clusters:', error);
+        toast.error('Failed to load clusters');
+      }
+    }
+  };
+
+  const handleFormClusterChange = async (e) => {
+    const newClusterId = e.target.value;
+    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
+    setFormDistricts([]);
+
+    if (newClusterId) {
+      try {
+        const data = await getDistrictsHierarchy(newClusterId);
+        setFormDistricts(data || []);
+      } catch (error) {
+        console.error('Error fetching districts:', error);
+        toast.error('Failed to load districts');
+      }
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.name || !formData.contact || !formData.state || !formData.cluster || !formData.district) {
@@ -106,7 +145,7 @@ const SolarInstaller = () => {
     }
   };
 
-  const handleEdit = (installer) => {
+  const handleEdit = async (installer) => {
     setCurrentInstaller(installer);
     setFormData({
       name: installer.name,
@@ -118,7 +157,26 @@ const SolarInstaller = () => {
       cluster: installer.cluster?._id || installer.cluster || '',
       district: installer.district?._id || installer.district || ''
     });
+
     setIsModalOpen(true);
+
+    // Fetch dependent data
+    try {
+      const stateId = installer.state?._id || installer.state;
+      if (stateId) {
+        const clustersData = await getClustersHierarchy(stateId);
+        setFormClusters(clustersData || []);
+
+        const clusterId = installer.cluster?._id || installer.cluster;
+        if (clusterId) {
+          const districtsData = await getDistrictsHierarchy(clusterId);
+          setFormDistricts(districtsData || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dependent location data:', error);
+      toast.error('Failed to load location data for editing');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -158,6 +216,8 @@ const SolarInstaller = () => {
       district: ''
     });
     setCurrentInstaller(null);
+    setFormClusters([]);
+    setFormDistricts([]);
   };
 
   const filteredInstallers = installers.filter(installer => {
@@ -442,10 +502,7 @@ const SolarInstaller = () => {
                   <select
                     name="state"
                     value={formData.state}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setFormData(prev => ({ ...prev, state: val, cluster: '', district: '' }));
-                    }}
+                    onChange={handleFormStateChange}
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
                     required
                   >
@@ -460,19 +517,13 @@ const SolarInstaller = () => {
                     <select
                       name="cluster"
                       value={formData.cluster}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setFormData(prev => ({ ...prev, cluster: val, district: '' }));
-                      }}
+                      onChange={handleFormClusterChange}
                       disabled={!formData.state}
                       className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none disabled:bg-gray-50"
                       required
                     >
                       <option value="">Select Cluster</option>
-                      {/* We need to fetch clusters for the form state separately OR filter the ones from useLocations if they match */}
-                      {/* Since useLocations follows the global filter, we might need a separate way to get clusters for the form's selected state */}
-                      {/* For now, I'll assume useLocations can be used if we're careful, but ideally we'd have a separate fetch or just use the hook's clusters if selectedState matches formData.state */}
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name || c.clusterName}</option>)}
+                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name || c.clusterName}</option>)}
                     </select>
                   </div>
                   <div>
@@ -486,7 +537,7 @@ const SolarInstaller = () => {
                       required
                     >
                       <option value="">Select District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name || d.districtName}</option>)}
+                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name || d.districtName}</option>)}
                     </select>
                   </div>
                 </div>

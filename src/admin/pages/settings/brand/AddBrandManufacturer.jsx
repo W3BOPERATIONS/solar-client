@@ -16,6 +16,7 @@ import {
   updateManufacturer,
   deleteManufacturer
 } from '../../../../services/brandApi';
+import { getCountries } from '../../../../services/locationApi';
 
 const AddBrandManufacturer = () => {
   // State management
@@ -38,6 +39,7 @@ const AddBrandManufacturer = () => {
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [countries, setCountries] = useState([]);
 
   // India form state
   const [indiaForm, setIndiaForm] = useState({
@@ -70,6 +72,7 @@ const AddBrandManufacturer = () => {
   useEffect(() => {
     fetchManufacturers();
     fetchStates();
+    fetchCountriesList();
   }, []);
 
   // UseEffect to refresh list when filters change
@@ -86,6 +89,15 @@ const AddBrandManufacturer = () => {
       console.error('Error fetching manufacturers:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const fetchCountriesList = async () => {
+    try {
+      const data = await getCountries();
+      setCountries(data || []);
+    } catch (error) {
+      console.error('Error fetching countries:', error);
     }
   };
 
@@ -381,17 +393,17 @@ const AddBrandManufacturer = () => {
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
         <h2 className="text-xl font-semibold mb-4">Select Country</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-          {['India', 'USA', 'UK', 'China'].map((country) => (
+          {countries.map((country) => (
             <div
-              key={country}
-              className={`p-6 border-2 rounded-lg cursor-pointer transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${selectedCountry === country.toLowerCase()
+              key={country._id}
+              className={`p-6 border-2 rounded-lg cursor-pointer transition-all duration-300 hover:shadow-md hover:-translate-y-1 ${selectedCountry === country.name.toLowerCase()
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-gray-200 hover:border-gray-300'
                 }`}
-              onClick={() => handleCountrySelect(country.toLowerCase())}
+              onClick={() => handleCountrySelect(country.name.toLowerCase())}
             >
               <div className="text-center">
-                <h3 className="text-lg font-medium">{country}</h3>
+                <h3 className="text-lg font-medium">{country.name}</h3>
               </div>
             </div>
           ))}
@@ -640,13 +652,9 @@ const AddBrandManufacturer = () => {
                 onChange={handleOtherInputChange}
               >
                 <option value="">-- Select Country --</option>
-                <option value="USA">USA</option>
-                <option value="UK">UK</option>
-                <option value="China">China</option>
-                <option value="Germany">Germany</option>
-                <option value="Japan">Japan</option>
-                <option value="South Korea">South Korea</option>
-                <option value="Other">Other</option>
+                {countries.map((country) => (
+                  <option key={country._id} value={country.name}>{country.name}</option>
+                ))}
               </select>
             </div>
 

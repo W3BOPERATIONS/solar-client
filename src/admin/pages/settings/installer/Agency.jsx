@@ -1,4 +1,12 @@
+import { useState, useEffect } from 'react';
 import { useLocations } from '../../../../hooks/useLocations';
+import {
+  getInstallerAgencies,
+  createInstallerAgency,
+  updateInstallerAgency,
+  deleteInstallerAgency
+} from '../../../../services/installer/installerApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
 import toast from 'react-hot-toast';
 import { Building2, Plus, Edit, Trash2, Search, Filter, Phone, MapPin, FileText, Save, X, Layers } from 'lucide-react';
 
@@ -34,6 +42,9 @@ const InstallerAgency = () => {
     status: 'Active'
   });
 
+  const [formClusters, setFormClusters] = useState([]);
+  const [formDistricts, setFormDistricts] = useState([]);
+
   useEffect(() => {
     fetchAgencies();
   }, [selectedState, selectedCluster, selectedDistrict]);
@@ -61,6 +72,39 @@ const InstallerAgency = () => {
     setFormData({ ...formData, [name]: value });
   };
 
+  const handleFormStateChange = async (e) => {
+    const newStateId = e.target.value;
+    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
+    setFormClusters([]);
+    setFormDistricts([]);
+
+    if (newStateId) {
+      try {
+        const data = await getClustersHierarchy(newStateId);
+        setFormClusters(data || []);
+      } catch (error) {
+        console.error('Error fetching clusters:', error);
+        toast.error('Failed to load clusters');
+      }
+    }
+  };
+
+  const handleFormClusterChange = async (e) => {
+    const newClusterId = e.target.value;
+    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
+    setFormDistricts([]);
+
+    if (newClusterId) {
+      try {
+        const data = await getDistrictsHierarchy(newClusterId);
+        setFormDistricts(data || []);
+      } catch (error) {
+        console.error('Error fetching districts:', error);
+        toast.error('Failed to load districts');
+      }
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!formData.agencyName || !formData.contact || !formData.state || !formData.cluster || !formData.district) {
@@ -85,7 +129,7 @@ const InstallerAgency = () => {
     }
   };
 
-  const handleEdit = (agency) => {
+  const handleEdit = async (agency) => {
     setCurrentAgency(agency);
     setFormData({
       agencyName: agency.agencyName,
@@ -98,6 +142,24 @@ const InstallerAgency = () => {
       status: agency.status
     });
     setIsModalOpen(true);
+
+    // Fetch dependent data
+    try {
+      const stateId = agency.state?._id || agency.state;
+      if (stateId) {
+        const clustersData = await getClustersHierarchy(stateId);
+        setFormClusters(clustersData || []);
+
+        const clusterId = agency.cluster?._id || agency.cluster;
+        if (clusterId) {
+          const districtsData = await getDistrictsHierarchy(clusterId);
+          setFormDistricts(districtsData || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dependent location data:', error);
+      toast.error('Failed to load location data for editing');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -125,6 +187,8 @@ const InstallerAgency = () => {
       status: 'Active'
     });
     setCurrentAgency(null);
+    setFormClusters([]);
+    setFormDistricts([]);
   };
 
   const filteredAgencies = agencies.filter(agency => {
@@ -363,12 +427,12 @@ const InstallerAgency = () => {
                   <select
                     name="state"
                     value={formData.state}
-                    onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value, cluster: '', district: '' }))}
+                    onChange={handleFormStateChange}
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none"
                     required
                   >
                     <option value="">Select State</option>
-                    {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                    {states.map(s => <option key={s._id} value={s._id}>{s.name || s.stateName}</option>)}
                   </select>
                 </div>
 
@@ -378,13 +442,13 @@ const InstallerAgency = () => {
                     <select
                       name="cluster"
                       value={formData.cluster}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cluster: e.target.value, district: '' }))}
+                      onChange={handleFormClusterChange}
                       disabled={!formData.state}
                       className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none disabled:bg-gray-50"
                       required
                     >
                       <option value="">Select Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name || c.clusterName}</option>)}
                     </select>
                   </div>
                   <div>
@@ -398,7 +462,7 @@ const InstallerAgency = () => {
                       required
                     >
                       <option value="">Select District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name || d.districtName}</option>)}
                     </select>
                   </div>
                 </div>

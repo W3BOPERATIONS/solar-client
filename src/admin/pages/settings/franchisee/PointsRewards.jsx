@@ -37,8 +37,8 @@ const PointsRewards = () => {
   const [products, setProducts] = useState([]);
   const [experiences, setExperiences] = useState([]);
   const [redeemSettings, setRedeemSettings] = useState({
-    minPoints: 10000,
-    frequency: 'quarterly',
+    minRedeemPoints: 10000,
+    redeemFrequency: 'quarterly',
     _id: null
   });
 
@@ -91,8 +91,8 @@ const PointsRewards = () => {
   const handleSaveRedeemSettings = async () => {
     try {
       const updated = await saveRedeemSettings({
-        minPoints: redeemSettings.minPoints,
-        frequency: redeemSettings.frequency
+        minRedeemPoints: redeemSettings.minRedeemPoints,
+        redeemFrequency: redeemSettings.redeemFrequency
       });
       setRedeemSettings(updated);
       toast.success('Redeem settings saved successfully!');
@@ -268,13 +268,13 @@ const PointsRewards = () => {
                       <input
                         type="text"
                         className="w-full p-2 border border-gray-300 rounded-lg"
-                        value={item.projectType}
+                        value={item.projectType || ''}
                         onChange={(e) => handleUpdateProjectPoint(item._id, 'projectType', e.target.value)}
                       />
                     </td>
                     <td className="p-3">
                       <select
-                        value={item.subProjectType}
+                        value={item.subProjectType || 'on-grid'}
                         onChange={(e) => handleUpdateProjectPoint(item._id, 'subProjectType', e.target.value)}
                         className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                       >
@@ -288,7 +288,7 @@ const PointsRewards = () => {
                         <input
                           type="number"
                           className="w-full p-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          value={item.kw}
+                          value={item.kw || ''}
                           onChange={(e) => handleUpdateProjectPoint(item._id, 'kw', e.target.value)}
                           min="1"
                         />
@@ -300,7 +300,7 @@ const PointsRewards = () => {
                         <input
                           type="number"
                           className="w-full p-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                          value={item.points}
+                          value={item.points || ''}
                           onChange={(e) => handleUpdateProjectPoint(item._id, 'points', e.target.value)}
                         />
                         <span className="bg-gray-100 px-3 py-2 border border-gray-300 border-l-0 rounded-r-lg text-gray-600">pts</span>
@@ -351,7 +351,7 @@ const PointsRewards = () => {
                 <input
                   type="number"
                   className="w-full p-2 border border-gray-300 rounded-l-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={redeemSettings.minPoints}
+                  value={redeemSettings.minPoints || ''}
                   onChange={(e) => setRedeemSettings({ ...redeemSettings, minPoints: e.target.value })}
                   min="1000"
                   step="500"
@@ -365,7 +365,7 @@ const PointsRewards = () => {
               <label className="block text-sm font-medium text-gray-700 mb-2">Redemption Frequency</label>
               <select
                 className="w-full p-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={redeemSettings.frequency}
+                value={redeemSettings.frequency || 'quarterly'}
                 onChange={(e) => setRedeemSettings({ ...redeemSettings, frequency: e.target.value })}
               >
                 <option value="monthly">Monthly</option>
@@ -386,6 +386,27 @@ const PointsRewards = () => {
               Save Redeem Settings
             </button>
           </div>
+
+          {/* Display Current Settings */}
+          {redeemSettings._id && (
+            <div className="mt-8 pt-6 border-t border-gray-200">
+              <h4 className="text-sm font-semibold text-gray-700 mb-3 uppercase tracking-wider">Current Configuration</h4>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200 flex flex-col md:flex-row md:items-center md:justify-between">
+                <div>
+                  <span className="text-gray-600 text-sm">Minimum Points Requirement:</span>
+                  <p className="text-lg font-bold text-gray-800">{redeemSettings.minPoints ? Number(redeemSettings.minPoints).toLocaleString() : 0} points</p>
+                </div>
+                <div className="mt-3 md:mt-0">
+                  <span className="text-gray-600 text-sm">Redemption Frequency:</span>
+                  <p className="text-lg font-bold text-gray-800 capitalize">{redeemSettings.frequency || 'Quarterly'}</p>
+                </div>
+                <div className="mt-3 md:mt-0 flex items-center text-green-700 bg-green-100 px-3 py-1 rounded-full text-xs font-medium">
+                  <CheckCircle className="w-3 h-3 mr-1" />
+                  Active
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 

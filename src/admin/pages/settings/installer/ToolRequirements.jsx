@@ -6,6 +6,7 @@ import {
   updateInstallerTool,
   deleteInstallerTool
 } from '../../../../services/installer/installerApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
 import { useLocations } from '../../../../hooks/useLocations';
 import toast from 'react-hot-toast';
 
@@ -37,6 +38,9 @@ export default function ToolRequirements() {
     status: 'Active'
   });
 
+  const [formClusters, setFormClusters] = useState([]);
+  const [formDistricts, setFormDistricts] = useState([]);
+
   useEffect(() => {
     fetchTools();
   }, [selectedState, selectedCluster, selectedDistrict]);
@@ -50,7 +54,7 @@ export default function ToolRequirements() {
         district: selectedDistrict
       };
       const data = await getInstallerTools(params);
-      setTools(data);
+      setTools(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
       console.error('Error fetching tools:', error);
       toast.error('Failed to load tools');
@@ -62,6 +66,39 @@ export default function ToolRequirements() {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
+  };
+
+  const handleFormStateChange = async (e) => {
+    const newStateId = e.target.value;
+    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
+    setFormClusters([]);
+    setFormDistricts([]);
+
+    if (newStateId) {
+      try {
+        const data = await getClustersHierarchy(newStateId);
+        setFormClusters(data || []);
+      } catch (error) {
+        console.error('Error fetching clusters:', error);
+        toast.error('Failed to load clusters');
+      }
+    }
+  };
+
+  const handleFormClusterChange = async (e) => {
+    const newClusterId = e.target.value;
+    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
+    setFormDistricts([]);
+
+    if (newClusterId) {
+      try {
+        const data = await getDistrictsHierarchy(newClusterId);
+        setFormDistricts(data || []);
+      } catch (error) {
+        console.error('Error fetching districts:', error);
+        toast.error('Failed to load districts');
+      }
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -87,7 +124,7 @@ export default function ToolRequirements() {
     }
   };
 
-  const handleEdit = (tool) => {
+  const handleEdit = async (tool) => {
     setFormData({
       toolName: tool.toolName,
       description: tool.description || '',
@@ -98,6 +135,24 @@ export default function ToolRequirements() {
     });
     setCurrentToolId(tool._id);
     setIsEditing(true);
+
+    // Fetch dependent data
+    try {
+      const stateId = tool.state?._id || tool.state;
+      if (stateId) {
+        const clustersData = await getClustersHierarchy(stateId);
+        setFormClusters(clustersData || []);
+
+        const clusterId = tool.cluster?._id || tool.cluster;
+        if (clusterId) {
+          const districtsData = await getDistrictsHierarchy(clusterId);
+          setFormDistricts(districtsData || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dependent location data:', error);
+      toast.error('Failed to load location data for editing');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -115,6 +170,8 @@ export default function ToolRequirements() {
 
   const resetForm = () => {
     setFormData({ toolName: '', description: '', state: '', cluster: '', district: '', status: 'Active' });
+    setFormClusters([]);
+    setFormDistricts([]);
     setIsEditing(false);
     setCurrentToolId(null);
   };
@@ -208,7 +265,7 @@ export default function ToolRequirements() {
                   <select
                     name="state"
                     value={formData.state}
-                    onChange={(e) => setFormData(prev => ({ ...prev, state: e.target.value, cluster: '', district: '' }))}
+                    onChange={handleFormStateChange}
                     className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
                     required
                   >
@@ -223,13 +280,13 @@ export default function ToolRequirements() {
                     <select
                       name="cluster"
                       value={formData.cluster}
-                      onChange={(e) => setFormData(prev => ({ ...prev, cluster: e.target.value, district: '' }))}
+                      onChange={handleFormClusterChange}
                       disabled={!formData.state}
                       className="w-full px-4 py-2 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all disabled:bg-gray-50 text-sm"
                       required
                     >
                       <option value="">Select Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -243,7 +300,7 @@ export default function ToolRequirements() {
                       required
                     >
                       <option value="">Select District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
                     </select>
                   </div>
                 </div>

@@ -7,6 +7,7 @@ import {
   deleteSupplierVendor,
   getSupplierTypes
 } from '../../../../services/vendor/vendorApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
 import { useLocations } from '../../../../hooks/useLocations';
 import toast from 'react-hot-toast';
 
@@ -43,6 +44,10 @@ export default function SupplierVendors() {
     district: '',
     status: 'Active'
   });
+
+  // Local state for formdropdowns
+  const [formClusters, setFormClusters] = useState([]);
+  const [formDistricts, setFormDistricts] = useState([]);
 
   useEffect(() => {
     fetchData();
@@ -94,11 +99,50 @@ export default function SupplierVendors() {
 
   const resetForm = () => {
     setFormData({ name: '', supplierTypeId: '', contact: '', email: '', state: '', cluster: '', district: '', status: 'Active' });
+    setFormClusters([]);
+    setFormDistricts([]);
     setEditingId(null);
     setShowModal(false);
   };
 
-  const handleEdit = (vendor) => {
+  const handleFormStateChange = async (e) => {
+    const newStateId = e.target.value;
+    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
+    setFormClusters([]);
+    setFormDistricts([]);
+
+    if (newStateId) {
+      try {
+        const data = await getClustersHierarchy(newStateId);
+        setFormClusters(data || []);
+      } catch (error) {
+        console.error('Error fetching clusters:', error);
+        toast.error('Failed to load clusters');
+      }
+    }
+  };
+
+  const handleFormClusterChange = async (e) => {
+    const newClusterId = e.target.value;
+    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
+    setFormDistricts([]);
+
+    if (newClusterId) {
+      try {
+        const data = await getDistrictsHierarchy(newClusterId);
+        setFormDistricts(data || []);
+      } catch (error) {
+        console.error('Error fetching districts:', error);
+        toast.error('Failed to load districts');
+      }
+    }
+  };
+
+  const handleEdit = async (vendor) => {
+    setEditingId(vendor._id);
+    setShowModal(true);
+
+    // Set basic data
     setFormData({
       name: vendor.name,
       supplierTypeId: vendor.supplierTypeId?._id || vendor.supplierTypeId,
@@ -109,8 +153,24 @@ export default function SupplierVendors() {
       district: vendor.district?._id || vendor.district || '',
       status: vendor.status
     });
-    setEditingId(vendor._id);
-    setShowModal(true);
+
+    // Fetch dependent data
+    try {
+      const stateId = vendor.state?._id || vendor.state;
+      if (stateId) {
+        const clustersData = await getClustersHierarchy(stateId);
+        setFormClusters(clustersData || []);
+
+        const clusterId = vendor.cluster?._id || vendor.cluster;
+        if (clusterId) {
+          const districtsData = await getDistrictsHierarchy(clusterId);
+          setFormDistricts(districtsData || []);
+        }
+      }
+    } catch (error) {
+      console.error('Error fetching dependent location data:', error);
+      toast.error('Failed to load location data for editing');
+    }
   };
 
   const handleDelete = async (id) => {
@@ -364,7 +424,7 @@ export default function SupplierVendors() {
                   <select
                     required
                     value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value, cluster: '', district: '' })}
+                    onChange={handleFormStateChange}
                     className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
                   >
                     <option value="">Select State</option>
@@ -378,12 +438,12 @@ export default function SupplierVendors() {
                     <select
                       required
                       value={formData.cluster}
-                      onChange={(e) => setFormData({ ...formData, cluster: e.target.value, district: '' })}
+                      onChange={handleFormClusterChange}
                       disabled={!formData.state}
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
                     >
                       <option value="">Select Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
@@ -396,7 +456,7 @@ export default function SupplierVendors() {
                       className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
                     >
                       <option value="">Select District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
                     </select>
                   </div>
                 </div>

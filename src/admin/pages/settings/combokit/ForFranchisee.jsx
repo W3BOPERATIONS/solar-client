@@ -5,6 +5,11 @@ import {
 } from 'lucide-react';
 import Select from 'react-select';
 import { useLocations } from '../../../../hooks/useLocations';
+import {
+  getAssignments,
+  createAssignment,
+  updateAssignment
+} from '../../../../services/combokit/combokitApi';
 import { locationAPI } from '../../../../api/api';
 
 // Main Component
@@ -77,6 +82,30 @@ export default function AddComboKit() {
       else fetchStates({ country: countries[0]._id });
     }
   }, [countries]);
+
+  // Load Assignments
+  useEffect(() => {
+    loadAssignments();
+  }, []);
+
+  const loadAssignments = async () => {
+    try {
+      const data = await getAssignments();
+      // Map backend data to frontend structure if necessary
+      // Assuming backend returns array of assignments similar to rows
+      setProjectRows(data.map(item => ({
+        ...item,
+        id: item._id, // Ensure id matches backend _id
+        stateId: item.state?._id || item.state,
+        state: item.state?.name || 'Unknown',
+        clusterId: item.cluster?._id || item.cluster,
+        // cluster name might need to be resolved or is populated
+        cluster: item.cluster?.name || 'Unknown',
+      })));
+    } catch (error) {
+      console.error("Error loading assignments:", error);
+    }
+  };
 
   // Handler functions
   const handleStateSelect = (stateId, stateName) => {
@@ -174,7 +203,7 @@ export default function AddComboKit() {
     setSelectAllDistrict(!selectAllDistrict);
   };
 
-  const handleAddProject = () => {
+  const handleAddProject = async () => {
     if (!selectedCluster) {
       alert('Please select a cluster first');
       return;
@@ -193,15 +222,11 @@ export default function AddComboKit() {
       .filter(d => selectedDistricts.includes(d._id))
       .map(d => d.name);
 
-    const newRow = {
-      id: Date.now().toString(),
-      state: selectedStateName,
-      stateId: selectedState,
-      cluster: selectedClusterName,
-      clusterId: selectedCluster,
+    const payload = {
+      state: selectedState,
+      cluster: selectedCluster,
       cpTypes: [...selectedCpTypes],
-      districts: selectedDistrictNames,
-      districtIds: [...selectedDistricts],
+      districts: [...selectedDistricts], // Send IDs to backend
       status: 'Inactive',
       comboKits: [],
       category: 'Solar Panel',
@@ -210,7 +235,25 @@ export default function AddComboKit() {
       subProjectType: 'On Grid'
     };
 
-    setProjectRows([...projectRows, newRow]);
+    try {
+      const newAssignment = await createAssignment(payload);
+      const newRow = {
+        ...newAssignment,
+        id: newAssignment._id,
+        state: selectedStateName,
+        stateId: selectedState,
+        cluster: selectedClusterName,
+        clusterId: selectedCluster,
+        cpTypes: newAssignment.cpTypes,
+        districts: selectedDistrictNames, // Use names for display if not populated yet
+        districtIds: newAssignment.districts
+      };
+      setProjectRows([...projectRows, newRow]);
+      alert('Project added successfully!');
+    } catch (error) {
+      console.error("Error creating assignment:", error);
+      alert('Failed to create project');
+    }
   };
 
   const handleAddComboKit = (rowId, isEdit = false) => {
@@ -232,53 +275,83 @@ export default function AddComboKit() {
     }
   };
 
-  const handleSaveComboKits = (e) => {
+  const handleSaveComboKits = async (e) => {
     e.preventDefault();
 
-    // Update the project row with combo kit data
-    const updatedRows = projectRows.map(row => {
-      if (row.id === currentRowId) {
-        const comboKitData = {
-          name: comboKitName,
-          image: comboKitImage,
-          panelBrand: solarPanelBrand,
-          panelSkus: selectedPanelSkus,
-          inverterBrand: inverterBrand
-        };
+    const currentRow = projectRows.find(r => r.id === currentRowId);
+    if (!currentRow) return;
 
-        if (isEditMode) {
-          // In edit mode, replace existing combo kits
-          return {
-            ...row,
-            comboKits: [comboKitData]
-          };
-        } else {
-          // In add mode, append to existing combo kits
-          return {
-            ...row,
-            comboKits: [...row.comboKits, comboKitData, ...additionalComboKits]
-          };
-        }
+    let updatedComboKits = [...currentRow.comboKits];
+
+    const comboKitData = {
+      name: comboKitName,
+      image: comboKitImage,
+      panelBrand: solarPanelBrand,
+      panelSkus: selectedPanelSkus,
+      inverterBrand: inverterBrand
+    };
+
+    if (isEditMode) {
+      // Note: This logic seems to imply replacing ALL combokits with this one in edit mode based on original code?
+      // The original code was: comboKits: [comboKitData]. This looks like it wipes others?
+      // Wait, the UI has "Edit" on the main row, which adds/edits combokits for that PROJECT.
+      // But the modal has "Create Combokit" tab.
+      // If I am editing a specific combokit (handleViewCombokitDetails -> Edit?), that's different.
+      // The "Add" button on row calls handleAddComboKit(row.id, false).
+      // The "Edit" button on row calls handleAddComboKit(row.id, true).
+      // If isEditMode (Yellow Edit button on row), it seemingly REPLACES the combo kits list?
+      // Let's stick to updating the backend with the new list.
+
+      if (editingRowId) {
+        // We are in the modal for a row.
+        // If we are strictly following original logic:
+        updatedComboKits = [comboKitData]; // This wipes others? That seems risky but matches original code logic.
       }
-      return row;
-    });
+    } else {
+      // Append
+      updatedComboKits = [...updatedComboKits, comboKitData, ...additionalComboKits];
+    }
 
-    setProjectRows(updatedRows);
-    setShowComboKitModal(false);
-    resetComboKitForm();
+    try {
+      const updatedAssignment = await updateAssignment(currentRowId, { comboKits: updatedComboKits });
+
+      const updatedRows = projectRows.map(row => {
+        if (row.id === currentRowId) {
+          return { ...row, comboKits: updatedAssignment.comboKits };
+        }
+        return row;
+      });
+
+      setProjectRows(updatedRows);
+      setShowComboKitModal(false);
+      resetComboKitForm();
+      alert('ComboKits saved successfully');
+    } catch (error) {
+      console.error("Error updating combokits:", error);
+      alert('Failed to save ComboKits');
+    }
   };
 
-  const handleStatusToggle = (rowId) => {
-    const updatedRows = projectRows.map(row => {
-      if (row.id === rowId) {
-        return {
-          ...row,
-          status: row.status === 'Active' ? 'Inactive' : 'Active'
-        };
-      }
-      return row;
-    });
-    setProjectRows(updatedRows);
+  const handleStatusToggle = async (rowId) => {
+    const row = projectRows.find(r => r.id === rowId);
+    if (!row) return;
+
+    const newStatus = row.status === 'Active' ? 'Inactive' : 'Active';
+
+    try {
+      await updateAssignment(rowId, { status: newStatus });
+
+      const updatedRows = projectRows.map(r => {
+        if (r.id === rowId) {
+          return { ...r, status: newStatus };
+        }
+        return r;
+      });
+      setProjectRows(updatedRows);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert('Failed to update status');
+    }
   };
 
   const handleImageUpload = (e) => {
