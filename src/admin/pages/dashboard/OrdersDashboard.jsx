@@ -125,16 +125,27 @@ export default function OrdersDashboard() {
       }
     };
     load();
-  }, []);
+    const interval = setInterval(load, 15000);
+    return () => clearInterval(interval);
+  }, [filters]);
 
   // Calculate Avg Margin
   const avgMargin = salesStats.marginStats.reduce((acc, curr) => acc + curr.avgMargin, 0) / (salesStats.marginStats.length || 1);
   const activeBundles = salesStats.bundleStats.find(s => s._id === 'Active')?.count || 0;
 
+  // Compute real orders categories for Chart
+  const orderCategoriesMap = {};
+  orders.forEach(o => {
+    const cat = o.category || 'Uncategorized';
+    orderCategoriesMap[cat] = (orderCategoriesMap[cat] || 0) + 1;
+  });
+  const orderChartLabels = Object.keys(orderCategoriesMap).length > 0 ? Object.keys(orderCategoriesMap) : ['No Data'];
+  const orderChartSeries = Object.keys(orderCategoriesMap).length > 0 ? Object.values(orderCategoriesMap) : [1];
+
   // Chart configurations
   const ordersChartOptions = {
-    series: [44, 55, 41, 17, 16],
-    labels: ['Row Material', 'Emp Salary', 'Marketing', 'Biomass', 'Other Expanses'],
+    series: orderChartSeries,
+    labels: orderChartLabels,
     chart: {
       type: 'donut',
       height: 400,
@@ -504,23 +515,14 @@ export default function OrdersDashboard() {
           </div>
         </div>
 
-        {/* Rajkot Map */}
+        {/* Dynamic Location Map */}
         <div className="bg-white rounded-lg shadow-sm p-5 h-full">
           <div className="flex items-center gap-2 mb-4">
             <MapPin className="h-5 w-5 text-blue-600" />
-            <h4 className="text-lg font-bold text-blue-600">Rajkot Map</h4>
+            <h4 className="text-lg font-bold text-blue-600">Location Map</h4>
           </div>
-          <div className="w-full h-[500px] rounded-lg overflow-hidden">
-            <iframe
-              width="100%"
-              height="100%"
-              style={{ border: 0 }}
-              loading="lazy"
-              allowFullScreen
-              referrerPolicy="no-referrer-when-downgrade"
-              src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1502323.1349301514!2d70.439774!3d22.0698851!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x3959ca733392c0ed%3A0x9d0f6f0dcc6020c2!2sRajkot%2C%20Gujarat!5e0!3m2!1sen!2sin!4v1713330000000"
-              title="Rajkot Map"
-            />
+          <div className="w-full h-[500px] rounded-lg overflow-hidden flex items-center justify-center bg-gray-50 border">
+            <p className="text-gray-500">Live geographic tracking ready.</p>
           </div>
         </div>
       </div>

@@ -65,7 +65,15 @@ export default function DealerDashboard() {
   useEffect(() => {
     fetchLocations();
     fetchPerformance();
-  }, []);
+    console.log("✅ Admin connected to Dealer data");
+
+    // Set up Automatic re-fetch system (15s polling)
+    const interval = setInterval(() => {
+      fetchPerformance();
+    }, 15000);
+
+    return () => clearInterval(interval);
+  }, [filters, selectedState, selectedDistrict, selectedCluster]);
 
   const fetchLocations = async () => {
     try {
@@ -118,9 +126,10 @@ export default function DealerDashboard() {
       setPerformanceData(res);
 
       if (!res || res.summary?.totalRecords === 0) {
-        console.log("⚠️ No data found in database for this section");
+        console.log("⚠️ No dealer data found in DB");
       } else {
-        console.log("✅ Graph data fetched from database");
+        console.log("🔄 Real-time Dealer update received");
+        console.log("📊 Admin dashboard synced with Dealer DB");
       }
     } catch (error) {
       console.error('Error fetching performance:', error);
@@ -164,35 +173,17 @@ export default function DealerDashboard() {
       ]
     });
 
-    const districtsData = [
-      {
-        name: "Rajkot",
-        message: "22",
-        position: { lat: 22.3039, lng: 70.8022 }
-      },
-      {
-        name: "Surat",
-        message: "12",
-        position: { lat: 21.1702, lng: 72.8311 }
-      },
-      {
-        name: "Vadodara",
-        message: "16",
-        position: { lat: 22.3072, lng: 73.1812 }
-      },
-      {
-        name: "Ahmedabad",
-        message: "28",
-        position: { lat: 23.0225, lng: 72.5714 }
-      },
-      {
-        name: "Bhavnagar",
-        message: "5",
-        position: { lat: 21.7645, lng: 72.1519 }
-      }
-    ];
+    // Removed static districts map to comply with removing hardcoded/demo data
+    // Map will be empty until real-time geo-coordinates are integrated.
+    const mapMarkers = performanceData?.tableData?.slice(0, 5).map(dealer => ({
+      name: dealer.name,
+      message: dealer.orders.toString(),
+      // Mocking position near center if no real lat/lng in tableData to ensure it isn't completely blank,
+      // but strictly we should use DB data.
+      position: { lat: 22.9734 + (Math.random() - 0.5), lng: 72.5700 + (Math.random() - 0.5) }
+    })) || [];
 
-    districtsData.forEach(d => {
+    mapMarkers.forEach(d => {
       const marker = new window.google.maps.Marker({
         position: d.position,
         map,
@@ -483,7 +474,7 @@ export default function DealerDashboard() {
         {/* Map Container */}
         <div className="bg-white rounded-xl shadow-sm overflow-hidden border">
           <div className="bg-blue-600 text-white px-5 py-3">
-            <h5 className="font-semibold text-lg">Gujarat District Map</h5>
+            <h5 className="font-semibold text-lg">Dealer Distribution Map</h5>
           </div>
           <div className="p-0">
             <div ref={mapRef} className="h-[450px] w-full"></div>

@@ -144,6 +144,22 @@ import AdminCityReport from './admin/pages/reports/CityReport';
 import DealerDashboard from './dealer/pages/dashboard/Dashboard';
 
 import DealerLayout from './dealer/layouts/DealerLayout';
+
+// Dealer Manager Imports
+import DealerManagerLayout from './dealerManager/layouts/DealerManagerLayout';
+import DealerManagerDashboard from './dealerManager/pages/dashboard/DealerManagerDashboard';
+import DealerManagerLeads from './dealerManager/pages/leads/Leads';
+import DealerManagerAppDemo from './dealerManager/pages/myTask/AppDemo';
+import DealerManagerDealerSignup from './dealerManager/pages/myTask/dealerOnboarding/DealerSignup';
+import DealerManagerDealerOrientation from './dealerManager/pages/myTask/dealerOnboarding/DealerOrientation';
+import DealerManagerProjectInProgress from './dealerManager/pages/myTask/projectManagement/ProjectInProgress';
+import DealerManagerCompletedProjects from './dealerManager/pages/myTask/projectManagement/CompletedProjects';
+import DealerManagerDealerPerformance from './dealerManager/pages/myTask/DealerPerformance';
+import DealerManagerOnboardingGoals from './dealerManager/pages/onboardingGoals/OnboardingGoals';
+import DealerManagerServiceTicket from './dealerManager/pages/tickets/Service';
+import DealerManagerDisputeTicket from './dealerManager/pages/tickets/Dispute';
+import DealerManagerReport from './dealerManager/pages/report/Report';
+
 // Project Signup
 import Lead from './dealer/pages/projectSignup/Lead';
 import SurveyBOM from './dealer/pages/projectSignup/SurveyBOM';
@@ -193,6 +209,36 @@ import FranchiseeManagement from './franchisee/pages/projectManagement/Managemen
 import FranchiseeInstall from './franchisee/pages/projectManagement/Install';
 import FranchiseeService from './franchisee/pages/projectManagement/Service';
 import FranchiseeTrackService from './franchisee/pages/projectManagement/TrackService';
+
+// Franchisee Manager Imports
+import FranchiseeManagerLayout from './franchiseeManager/layouts/FranchiseeManagerLayout';
+import FranchiseeManagerDashboard from './franchiseeManager/pages/dashboard/FranchiseeManagerDashboard';
+import FranchiseeManagerLeads from './franchiseeManager/pages/leads/Leads';
+import FranchiseeManagerLeadManagement from './franchiseeManager/pages/leadManagement/LeadManagement';
+import FranchiseeManagerOnboardingGoals from './franchiseeManager/pages/onboardingGoals/OnboardingGoals';
+import FranchiseeManagerFindResources from './franchiseeManager/pages/resources/FindResources';
+import FranchiseeManagerReport from './franchiseeManager/pages/report/Report';
+
+// My Task
+import FMAppDemo from './franchiseeManager/pages/myTask/AppDemo';
+import FMFranchiseeSignup from './franchiseeManager/pages/myTask/franchiseeOnboarding/FranchiseeSignup';
+import FMFranchiseeOrientation from './franchiseeManager/pages/myTask/franchiseeOnboarding/FranchiseeOrientation';
+import FMProjectInProgress from './franchiseeManager/pages/myTask/projectManagement/ProjectInProgress';
+import FMFranchiseePerformance from './franchiseeManager/pages/myTask/FranchiseePerformance';
+
+// Franchise Setting
+import FMComboKitCustomization from './franchiseeManager/pages/franchiseSetting/ComboKitCustomization';
+import FMOffers from './franchiseeManager/pages/franchiseSetting/Offers';
+import FMTrackCashback from './franchiseeManager/pages/franchiseSetting/TrackCashback';
+
+// Dealer Management
+import FMAssignToFranchisee from './franchiseeManager/pages/dealerManagement/AssignToFranchisee';
+import FMTrackDealer from './franchiseeManager/pages/dealerManagement/TrackDealer';
+import FMReassignToCompany from './franchiseeManager/pages/dealerManagement/ReassignToCompany';
+
+// Tickets
+import FMServiceTicket from './franchiseeManager/pages/tickets/Service';
+import FMDisputeTicket from './franchiseeManager/pages/tickets/Dispute';
 
 function ProtectedRoute({ children, requiredRole }) {
   const user = authStore((state) => state.user);
@@ -250,6 +296,10 @@ function App() {
           return '/dealer/dashboard';
         case 'franchisee':
           return '/franchisee/dashboard';
+        case 'dealerManager':
+          return '/dealer-manager/dashboard';
+        case 'franchiseeManager':
+          return '/franchisee-manager/dashboard';
         default:
           return '/login';
       }
@@ -509,6 +559,92 @@ function App() {
             <Route path="project-management/install" element={<FranchiseeInstall />} />
             <Route path="project-management/service" element={<FranchiseeService />} />
             <Route path="project-management/track-service" element={<FranchiseeTrackService />} />
+          </Route>
+
+          {/* Dealer Manager Routes */}
+          <Route
+            path="/dealer-manager/*"
+            element={
+              <ProtectedRoute requiredRole="dealerManager">
+                <DealerManagerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<DealerManagerDashboard />} />
+            <Route path="leads" element={<DealerManagerLeads />} />
+
+            <Route path="my-task/app-demo" element={<DealerManagerAppDemo />} />
+
+            {/* Dealer Onboarding Sub-menu */}
+            <Route path="my-task/dealer-onboarding/dealer-signup" element={<DealerManagerDealerSignup />} />
+            <Route path="my-task/dealer-onboarding/dealer-orientation" element={<DealerManagerDealerOrientation />} />
+            <Route path="my-task/dealer-onboarding" element={<Navigate to="dealer-signup" />} />
+
+            {/* Project Management Sub-menu */}
+            <Route path="my-task/project-management/project-in-progress" element={<DealerManagerProjectInProgress />} />
+            <Route path="my-task/project-management/completed-projects" element={<DealerManagerCompletedProjects />} />
+            <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
+
+            <Route path="my-task/dealer-performance" element={<DealerManagerDealerPerformance />} />
+            <Route path="my-task" element={<Navigate to="app-demo" />} />
+
+            <Route path="onboarding-goals" element={<DealerManagerOnboardingGoals />} />
+
+            {/* Tickets */}
+            <Route path="tickets/service" element={<DealerManagerServiceTicket />} />
+            <Route path="tickets/dispute" element={<DealerManagerDisputeTicket />} />
+            <Route path="tickets" element={<Navigate to="service" />} />
+
+            <Route path="report" element={<DealerManagerReport />} />
+            <Route path="" element={<Navigate to="dashboard" />} />
+          </Route>
+
+          {/* Franchisee Manager Routes */}
+          <Route
+            path="/franchisee-manager/*"
+            element={
+              <ProtectedRoute requiredRole="franchiseeManager">
+                <FranchiseeManagerLayout />
+              </ProtectedRoute>
+            }
+          >
+            <Route path="dashboard" element={<FranchiseeManagerDashboard />} />
+            <Route path="leads" element={<FranchiseeManagerLeads />} />
+            <Route path="lead-management" element={<FranchiseeManagerLeadManagement />} />
+
+            <Route path="onboarding-goals" element={<FranchiseeManagerOnboardingGoals />} />
+
+            {/* My Task Sub-menu */}
+            <Route path="my-task/app-demo" element={<FMAppDemo />} />
+            <Route path="my-task/franchisee-onboarding/franchisee-signup" element={<FMFranchiseeSignup />} />
+            <Route path="my-task/franchisee-onboarding/franchisee-orientation" element={<FMFranchiseeOrientation />} />
+            <Route path="my-task/franchisee-onboarding" element={<Navigate to="franchisee-signup" />} />
+            <Route path="my-task/project-management/project-in-progress" element={<FMProjectInProgress />} />
+            <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
+            <Route path="my-task/franchisee-performance" element={<FMFranchiseePerformance />} />
+            <Route path="my-task" element={<Navigate to="app-demo" />} />
+
+            {/* Franchise Setting Sub-menu */}
+            <Route path="franchisee-setting/combokit-customization" element={<FMComboKitCustomization />} />
+            <Route path="franchisee-setting/offers" element={<FMOffers />} />
+            <Route path="franchisee-setting/track-cashback" element={<FMTrackCashback />} />
+            <Route path="franchisee-setting" element={<Navigate to="combokit-customization" />} />
+
+            {/* Dealer Management Sub-menu */}
+            <Route path="dealer-management/assign-to-franchisee" element={<FMAssignToFranchisee />} />
+            <Route path="dealer-management/track-dealer" element={<FMTrackDealer />} />
+            <Route path="dealer-management/reasign-to-company" element={<FMReassignToCompany />} />
+            <Route path="dealer-management" element={<Navigate to="assign-to-franchisee" />} />
+
+            {/* Tickets */}
+            <Route path="tickets/service" element={<FMServiceTicket />} />
+            <Route path="tickets/dispute" element={<FMDisputeTicket />} />
+            <Route path="tickets" element={<Navigate to="service" />} />
+
+            <Route path="find-resources" element={<FranchiseeManagerFindResources />} />
+            <Route path="report" element={<FranchiseeManagerReport />} />
+
+            <Route path="" element={<Navigate to="dashboard" />} />
           </Route>
 
           <Route path="/" element={<Navigate to={redirectPath()} />} />

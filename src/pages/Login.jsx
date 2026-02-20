@@ -33,6 +33,10 @@ export default function Login() {
         navigate('/dealer/dashboard');
       } else if (response.data.user.role === 'franchisee') {
         navigate('/franchisee/dashboard');
+      } else if (response.data.user.role === 'dealerManager') {
+        navigate('/dealer-manager/dashboard');
+      } else if (response.data.user.role === 'franchiseeManager') {
+        navigate('/franchisee-manager/dashboard');
       } else {
         navigate('/');
       }
@@ -171,18 +175,18 @@ export default function Login() {
             <div className="space-y-3">
               <button
                 onClick={() => handleDemoLogin('admin@solarkits.com', '123456')}
-                className="w-full flex items-center justify-between p-3 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 transition-all duration-200 group"
+                className="w-full flex items-center justify-between p-3 bg-white hover:bg-red-50 rounded-lg border border-gray-200 transition-all duration-200 group"
               >
                 <div className="flex items-center">
                   <div className="w-8 h-8 bg-red-100 rounded-lg flex items-center justify-center mr-3">
                     <Shield size={16} className="text-red-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-medium text-slate-800 group-hover:text-blue-700">Admin</p>
+                    <p className="font-medium text-slate-800 group-hover:text-red-700">Admin</p>
                     <p className="text-xs text-slate-500">admin@solarkits.com</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-blue-600">Click to use</span>
+                <span className="text-xs font-medium text-red-600">Click to use</span>
               </button>
 
               <button
@@ -216,6 +220,41 @@ export default function Login() {
                 </div>
                 <span className="text-xs font-medium text-purple-600">Click to use</span>
               </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('dealermanager@example.com', 'password123')}
+                className="w-full flex items-center justify-between p-3 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 transition-all duration-200 group"
+              >
+                <div className="flex items-center">
+                  <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
+                    <Shield size={16} className="text-blue-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-slate-800 group-hover:text-blue-700">Dealer Manager</p>
+                    <p className="text-xs text-slate-500">dealermanager@example.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-blue-600">Click to use</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => handleDemoLogin('franchisemanager@example.com', 'password123')}
+                className="w-full flex items-center justify-between p-3 bg-white hover:bg-orange-50 rounded-lg border border-gray-200 transition-all duration-200 group"
+              >
+                <div className="flex items-center">
+                  <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
+                    <Building2 size={16} className="text-orange-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-slate-800 group-hover:text-orange-700">Franchisee Manager</p>
+                    <p className="text-xs text-slate-500">franchisemanager@example.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-orange-600">Click to use</span>
+              </button>
+
             </div>
           </div>
 
