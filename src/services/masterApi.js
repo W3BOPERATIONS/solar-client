@@ -54,6 +54,29 @@ export const getCategories = async () => {
     }
 };
 
+export const getSubCategories = async (projectTypeId, categoryId) => {
+    try {
+        let url = '/masters/sub-categories?';
+        if (projectTypeId) url += `projectTypeId=${projectTypeId}&`;
+        if (categoryId) url += `categoryId=${categoryId}`;
+        const res = await api.get(url);
+        return res.data.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
+export const getSubProjectTypes = async (projectTypeId) => {
+    try {
+        let url = '/masters/sub-project-types?';
+        if (projectTypeId) url += `projectTypeId=${projectTypeId}`;
+        const res = await api.get(url);
+        return res.data.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
 export const getUnits = async () => {
     try {
         const res = await api.get('/masters/units');

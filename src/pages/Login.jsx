@@ -223,7 +223,7 @@ export default function Login() {
 
               <button
                 type="button"
-                onClick={() => handleDemoLogin('dealermanager@example.com', 'password123')}
+                onClick={() => handleDemoLogin('dealermanager@solarkits.com', 'password123')}
                 className="w-full flex items-center justify-between p-3 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 transition-all duration-200 group"
               >
                 <div className="flex items-center">
@@ -232,7 +232,7 @@ export default function Login() {
                   </div>
                   <div className="text-left">
                     <p className="font-medium text-slate-800 group-hover:text-blue-700">Dealer Manager</p>
-                    <p className="text-xs text-slate-500">dealermanager@example.com</p>
+                    <p className="text-xs text-slate-500">dealermanager@solarkits.com</p>
                   </div>
                 </div>
                 <span className="text-xs font-medium text-blue-600">Click to use</span>

@@ -149,12 +149,17 @@ import DealerLayout from './dealer/layouts/DealerLayout';
 import DealerManagerLayout from './dealerManager/layouts/DealerManagerLayout';
 import DealerManagerDashboard from './dealerManager/pages/dashboard/DealerManagerDashboard';
 import DealerManagerLeads from './dealerManager/pages/leads/Leads';
+import DealerManagerOnboardingCompanyLead from './dealerManager/pages/leads/DealerManagerOnboardingCompanyLead';
+import DealerManagerMyLeads from './dealerManager/pages/leads/DealerManagerMyLeads';
+import DealerManagerSubLeads from './dealerManager/pages/leads/SubLeads';
 import DealerManagerAppDemo from './dealerManager/pages/myTask/AppDemo';
 import DealerManagerDealerSignup from './dealerManager/pages/myTask/dealerOnboarding/DealerSignup';
 import DealerManagerDealerOrientation from './dealerManager/pages/myTask/dealerOnboarding/DealerOrientation';
+import DealerManagerOrientationVideo from './dealerManager/pages/myTask/dealerOnboarding/DealerManagerOrientationVideo';
 import DealerManagerProjectInProgress from './dealerManager/pages/myTask/projectManagement/ProjectInProgress';
 import DealerManagerCompletedProjects from './dealerManager/pages/myTask/projectManagement/CompletedProjects';
 import DealerManagerDealerPerformance from './dealerManager/pages/myTask/DealerPerformance';
+import DealerManagerDealerPerformanceList from './dealerManager/pages/myTask/DealerPerformanceList';
 import DealerManagerOnboardingGoals from './dealerManager/pages/onboardingGoals/OnboardingGoals';
 import DealerManagerServiceTicket from './dealerManager/pages/tickets/Service';
 import DealerManagerDisputeTicket from './dealerManager/pages/tickets/Dispute';
@@ -572,12 +577,16 @@ function App() {
           >
             <Route path="dashboard" element={<DealerManagerDashboard />} />
             <Route path="leads" element={<DealerManagerLeads />} />
+            <Route path="onboarding/company-lead" element={<DealerManagerOnboardingCompanyLead />} />
+            <Route path="onboarding/my-lead" element={<DealerManagerMyLeads />} />
+            <Route path="onboarding/sub-leads/:id" element={<DealerManagerSubLeads />} />
 
             <Route path="my-task/app-demo" element={<DealerManagerAppDemo />} />
 
             {/* Dealer Onboarding Sub-menu */}
             <Route path="my-task/dealer-onboarding/dealer-signup" element={<DealerManagerDealerSignup />} />
             <Route path="my-task/dealer-onboarding/dealer-orientation" element={<DealerManagerDealerOrientation />} />
+            <Route path="orientation/video" element={<DealerManagerOrientationVideo />} />
             <Route path="my-task/dealer-onboarding" element={<Navigate to="dealer-signup" />} />
 
             {/* Project Management Sub-menu */}
@@ -586,6 +595,7 @@ function App() {
             <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
 
             <Route path="my-task/dealer-performance" element={<DealerManagerDealerPerformance />} />
+            <Route path="my-task/dealer-performance/:type" element={<DealerManagerDealerPerformanceList />} />
             <Route path="my-task" element={<Navigate to="app-demo" />} />
 
             <Route path="onboarding-goals" element={<DealerManagerOnboardingGoals />} />
