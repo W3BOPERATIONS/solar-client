@@ -25,11 +25,18 @@ import {
     Loader2
 } from 'lucide-react';
 import { getDealerKYCLists, updateDealerKYC } from '../../../services/leadService';
-import { getDistricts } from '../../../../services/locationApi';
+import LocationSelector from '../../../../components/common/LocationSelector';
 
 const DealerManagerDealerKYC = () => {
     // State for filters
-    const [selectedDistrict, setSelectedDistrict] = useState('');
+    const [locationFilters, setLocationFilters] = useState({
+        country: '',
+        state: '',
+        city: '',
+        district: '',
+        cluster: '',
+        zone: ''
+    });
     const [dateRange, setDateRange] = useState('today');
     const [kycStatus, setKycStatus] = useState('');
     const [showCustomDate, setShowCustomDate] = useState(false);
@@ -59,13 +66,17 @@ const DealerManagerDealerKYC = () => {
 
     useEffect(() => {
         fetchDealers();
-        getDistricts().then(res => setDistricts(res || [])).catch(err => console.error(err));
-    }, []);
+    }, [locationFilters, dateRange, kycStatus, customDate]);
 
     const fetchDealers = async () => {
         setLoading(true);
         try {
-            const res = await getDealerKYCLists();
+            const res = await getDealerKYCLists({
+                ...locationFilters,
+                dateRange,
+                status: kycStatus,
+                customDate
+            });
             if (res.success) {
                 setDealers(res.data);
             }
@@ -203,19 +214,12 @@ const DealerManagerDealerKYC = () => {
                     {/* Filters Section */}
                     <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 flex-1">
-                            {/* District Filter */}
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">Select District</label>
-                                <select
-                                    className="w-full p-2 border rounded focus:ring-2 focus:ring-blue-500"
-                                    value={selectedDistrict}
-                                    onChange={(e) => setSelectedDistrict(e.target.value)}
-                                >
-                                    <option value="">Choose district</option>
-                                    {districts.map(district => (
-                                        <option key={district._id} value={district.name}>{district.name}</option>
-                                    ))}
-                                </select>
+                            {/* Location Filters */}
+                            <div className="md:col-span-3">
+                                <LocationSelector
+                                    values={locationFilters}
+                                    onChange={setLocationFilters}
+                                />
                             </div>
 
                             {/* Date Range Filter */}

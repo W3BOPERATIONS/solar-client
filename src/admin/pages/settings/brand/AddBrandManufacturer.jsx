@@ -41,21 +41,11 @@ const AddBrandManufacturer = () => {
   const [districts, setDistricts] = useState([]);
   const [countries, setCountries] = useState([]);
 
-  // India form state
-  const [indiaForm, setIndiaForm] = useState({
+  // Form state
+  const [form, setForm] = useState({
     state: '',
     city: '',
     district: '',
-    companyName: '',
-    companyOriginCountry: 'India',
-    brand: '',
-    brandLogo: null,
-    product: '',
-    comboKit: false
-  });
-
-  // Other country form state
-  const [otherForm, setOtherForm] = useState({
     companyName: '',
     companyOriginCountry: '',
     brand: '',
@@ -66,7 +56,6 @@ const AddBrandManufacturer = () => {
 
   // File inputs refs
   const brandLogoRef = useRef(null);
-  const otherBrandLogoRef = useRef(null);
 
   // Fetch Initial Data
   useEffect(() => {
@@ -101,9 +90,12 @@ const AddBrandManufacturer = () => {
     }
   };
 
-  const fetchStates = async () => {
+  const fetchStates = async (countryId) => {
     try {
-      const response = await axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`);
+      const url = countryId
+        ? `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?countryId=${countryId}&isActive=true`
+        : `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`;
+      const response = await axios.get(url);
       if (response.data.success) {
         setStates(response.data.data);
       }
@@ -155,169 +147,115 @@ const AddBrandManufacturer = () => {
   const summary = calculateSummary();
 
   // Handle country selection
-  const handleCountrySelect = (country) => {
-    setSelectedCountry(country);
+  const handleCountrySelect = (countryName, countryId) => {
+    setSelectedCountry(countryName.toLowerCase());
     setEditMode({ ...editMode, isEditing: false, isOtherEditing: false });
-    if (country.toLowerCase() !== 'india') {
-      setOtherForm(prev => ({ ...prev, companyOriginCountry: country }));
-    }
+    setForm(prev => ({
+      ...prev,
+      companyOriginCountry: countryName,
+      state: '',
+      city: '',
+      district: ''
+    }));
+    setStates([]);
+    setCities([]);
+    setDistricts([]);
+    fetchStates(countryId);
   };
 
-  // Handle India form state change
-  const handleIndiaStateChange = (e) => {
+  // Handle Form state change
+  const handleStateChange = (e) => {
     const stateId = e.target.value;
-    setIndiaForm({
-      ...indiaForm,
+    setForm({
+      ...form,
       state: stateId,
       city: '',
       district: ''
     });
     setCities([]);
     setDistricts([]);
-    fetchCities(stateId);
+    if (stateId) fetchCities(stateId);
   };
 
-  const handleIndiaCityChange = (e) => {
+  const handleCityChange = (e) => {
     const cityId = e.target.value;
-    setIndiaForm({
-      ...indiaForm,
+    setForm({
+      ...form,
       city: cityId,
       district: ''
     });
     setDistricts([]);
-    fetchDistricts(cityId);
+    if (cityId) fetchDistricts(cityId);
   };
 
-  // Handle India form input change
-  const handleIndiaInputChange = (e) => {
+  const handleInputChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setIndiaForm({
-      ...indiaForm,
+    setForm({
+      ...form,
       [name]: type === 'checkbox' ? checked : value
     });
   };
 
-  // Handle other form input change
-  const handleOtherInputChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setOtherForm({
-      ...otherForm,
-      [name]: type === 'checkbox' ? checked : value
-    });
-  };
-
-  // Handle file upload
-  const handleLogoUpload = (e, isIndia) => {
+  const handleLogoUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
       const reader = new FileReader();
       reader.onloadend = () => {
-        if (isIndia) {
-          setIndiaForm({ ...indiaForm, brandLogo: reader.result });
-        } else {
-          setOtherForm({ ...otherForm, brandLogo: reader.result });
-        }
+        setForm({ ...form, brandLogo: reader.result });
       };
       reader.readAsDataURL(file);
     }
   };
 
-  // Add India manufacturer
-  const addIndiaManufacturer = async () => {
-    if (!indiaForm.state || !indiaForm.city || !indiaForm.district || !indiaForm.companyName ||
-      !indiaForm.brand || !indiaForm.product) {
-      alert('Please fill all required fields');
+  const addManufacturer = async () => {
+    if (!form.companyName || !form.companyOriginCountry || !form.brand || !form.product || !form.state || !form.city || !form.district) {
+      alert('Please fill all required fields (including State, City, and District)');
       return;
     }
 
     try {
-      await createManufacturer(indiaForm);
+      await createManufacturer(form);
       alert('Manufacturer added successfully!');
       fetchManufacturers();
-      resetIndiaForm();
-    } catch (error) {
-      alert('Error adding manufacturer: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  // Add other country manufacturer
-  const addOtherManufacturer = async () => {
-    if (!otherForm.companyName || !otherForm.companyOriginCountry ||
-      !otherForm.brand || !otherForm.product) {
-      alert('Please fill all required fields');
-      return;
-    }
-
-    try {
-      await createManufacturer(otherForm);
-      alert('Manufacturer added successfully!');
-      fetchManufacturers();
-      resetOtherForm();
+      resetForm();
     } catch (error) {
       alert('Error adding manufacturer: ' + (error.response?.data?.message || error.message));
     }
   };
 
   // Edit manufacturer
-  const editManufacturer = (manufacturer) => {
-    if (manufacturer.companyOriginCountry === 'India') {
-      setSelectedCountry('india');
-      setIndiaForm({
-        state: manufacturer.state?._id || manufacturer.state, // Handle populated or raw ID
-        city: manufacturer.city?._id || manufacturer.city,
-        district: manufacturer.district?._id || manufacturer.district,
-        companyName: manufacturer.companyName,
-        companyOriginCountry: manufacturer.companyOriginCountry,
-        brand: manufacturer.brand,
-        brandLogo: manufacturer.brandLogo,
-        product: manufacturer.product,
-        comboKit: manufacturer.comboKit
-      });
+  const editManufacturerRecord = (manufacturer) => {
+    setSelectedCountry(manufacturer.companyOriginCountry.toLowerCase());
+    setForm({
+      state: manufacturer.state?._id || manufacturer.state,
+      city: manufacturer.city?._id || manufacturer.city,
+      district: manufacturer.district?._id || manufacturer.district,
+      companyName: manufacturer.companyName,
+      companyOriginCountry: manufacturer.companyOriginCountry,
+      brand: manufacturer.brand,
+      brandLogo: manufacturer.brandLogo,
+      product: manufacturer.product,
+      comboKit: manufacturer.comboKit
+    });
 
-      // Pre-fetch dependent dropdowns
-      // Use logical OR to safely access _id or fallback to ID string
-      const stateId = manufacturer.state?._id || manufacturer.state;
-      const cityId = manufacturer.city?._id || manufacturer.city;
+    // Pre-fetch dependent dropdowns
+    const stateId = manufacturer.state?._id || manufacturer.state;
+    const cityId = manufacturer.city?._id || manufacturer.city;
 
-      if (stateId) fetchCities(stateId);
-      if (cityId) fetchDistricts(cityId);
+    if (stateId) fetchCities(stateId);
+    if (cityId) fetchDistricts(cityId);
 
-      setEditMode({ ...editMode, isEditing: true, editId: manufacturer._id });
-    } else {
-      setSelectedCountry(manufacturer.companyOriginCountry.toLowerCase());
-      setOtherForm({
-        companyName: manufacturer.companyName,
-        companyOriginCountry: manufacturer.companyOriginCountry,
-        brand: manufacturer.brand,
-        brandLogo: manufacturer.brandLogo,
-        product: manufacturer.product,
-        comboKit: manufacturer.comboKit
-      });
-      setEditMode({ ...editMode, isOtherEditing: true, otherEditId: manufacturer._id });
-    }
+    setEditMode({ ...editMode, isEditing: true, editId: manufacturer._id });
   };
 
   // Update India manufacturer
-  const updateIndiaManufacturerData = async () => {
+  const updateManufacturerData = async () => {
     try {
-      await updateManufacturer(editMode.editId, indiaForm);
+      await updateManufacturer(editMode.editId, form);
       alert('Manufacturer updated successfully!');
       fetchManufacturers();
       setEditMode({ ...editMode, isEditing: false, editId: null });
-      resetIndiaForm();
-    } catch (error) {
-      alert('Error updating manufacturer: ' + (error.response?.data?.message || error.message));
-    }
-  };
-
-  // Update other manufacturer
-  const updateOtherManufacturerData = async () => {
-    try {
-      await updateManufacturer(editMode.otherEditId, otherForm);
-      alert('Manufacturer updated successfully!');
-      fetchManufacturers();
-      setEditMode({ ...editMode, isOtherEditing: false, otherEditId: null });
-      resetOtherForm();
+      resetForm();
     } catch (error) {
       alert('Error updating manufacturer: ' + (error.response?.data?.message || error.message));
     }
@@ -337,13 +275,13 @@ const AddBrandManufacturer = () => {
   };
 
   // Reset forms
-  const resetIndiaForm = () => {
-    setIndiaForm({
+  const resetForm = () => {
+    setForm({
       state: '',
       city: '',
       district: '',
       companyName: '',
-      companyOriginCountry: 'India',
+      companyOriginCountry: selectedCountry ? countries.find(c => c.name.toLowerCase() === selectedCountry)?.name || '' : '',
       brand: '',
       brandLogo: null,
       product: '',
@@ -353,25 +291,9 @@ const AddBrandManufacturer = () => {
     setDistricts([]);
   };
 
-  const resetOtherForm = () => {
-    setOtherForm({
-      companyName: '',
-      companyOriginCountry: '',
-      brand: '',
-      brandLogo: null,
-      product: '',
-      comboKit: false
-    });
-  };
-
   const cancelEdit = () => {
     setEditMode({ ...editMode, isEditing: false, editId: null });
-    resetIndiaForm();
-  };
-
-  const cancelOtherEdit = () => {
-    setEditMode({ ...editMode, isOtherEditing: false, otherEditId: null });
-    resetOtherForm();
+    resetForm();
   };
 
   // Handle filter changes
@@ -400,7 +322,7 @@ const AddBrandManufacturer = () => {
                 ? 'border-blue-500 bg-blue-50'
                 : 'border-gray-200 hover:border-gray-300'
                 }`}
-              onClick={() => handleCountrySelect(country.name.toLowerCase())}
+              onClick={() => handleCountrySelect(country.name, country._id)}
             >
               <div className="text-center">
                 <h3 className="text-lg font-medium">{country.name}</h3>
@@ -410,10 +332,12 @@ const AddBrandManufacturer = () => {
         </div>
       </div>
 
-      {/* India Form */}
-      {selectedCountry === 'india' && (
+      {/* Manufacturer Form */}
+      {selectedCountry && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border-2 border-blue-500">
-          <h2 className="text-xl font-semibold mb-4">India Manufacturer Details</h2>
+          <h2 className="text-xl font-semibold mb-4">
+            {selectedCountry.charAt(0).toUpperCase() + selectedCountry.slice(1)} Manufacturer Details
+          </h2>
 
           <div className="space-y-4">
             {/* Location Fields */}
@@ -425,8 +349,8 @@ const AddBrandManufacturer = () => {
                 </label>
                 <select
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={indiaForm.state}
-                  onChange={handleIndiaStateChange}
+                  value={form.state}
+                  onChange={handleStateChange}
                 >
                   <option value="">-- Select State --</option>
                   {states.map(state => (
@@ -442,9 +366,9 @@ const AddBrandManufacturer = () => {
                 </label>
                 <select
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={indiaForm.city}
-                  onChange={handleIndiaCityChange}
-                  disabled={!indiaForm.state}
+                  value={form.city}
+                  onChange={handleCityChange}
+                  disabled={!form.state}
                 >
                   <option value="">-- Select City --</option>
                   {cities.map(city => (
@@ -460,9 +384,9 @@ const AddBrandManufacturer = () => {
                 </label>
                 <select
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  value={indiaForm.district}
-                  onChange={(e) => setIndiaForm({ ...indiaForm, district: e.target.value })}
-                  disabled={!indiaForm.city}
+                  value={form.district}
+                  onChange={(e) => setForm({ ...form, district: e.target.value })}
+                  disabled={!form.city}
                 >
                   <option value="">-- Select District --</option>
                   {districts.map(district => (
@@ -482,8 +406,8 @@ const AddBrandManufacturer = () => {
                 type="text"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                 placeholder="Enter company name"
-                value={indiaForm.companyName}
-                onChange={handleIndiaInputChange}
+                value={form.companyName}
+                onChange={handleInputChange}
               />
             </div>
 
@@ -495,10 +419,10 @@ const AddBrandManufacturer = () => {
               <select
                 name="companyOriginCountry"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={indiaForm.companyOriginCountry}
+                value={form.companyOriginCountry}
                 disabled
               >
-                <option value="India">India</option>
+                <option value={form.companyOriginCountry}>{form.companyOriginCountry}</option>
               </select>
             </div>
 
@@ -512,8 +436,8 @@ const AddBrandManufacturer = () => {
                 type="text"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
                 placeholder="Enter brand name"
-                value={indiaForm.brand}
-                onChange={handleIndiaInputChange}
+                value={form.brand}
+                onChange={handleInputChange}
               />
               <div className="flex items-center gap-4">
                 <button
@@ -529,11 +453,11 @@ const AddBrandManufacturer = () => {
                   ref={brandLogoRef}
                   className="hidden"
                   accept="image/*"
-                  onChange={(e) => handleLogoUpload(e, true)}
+                  onChange={handleLogoUpload}
                 />
-                {indiaForm.brandLogo && (
+                {form.brandLogo && (
                   <img
-                    src={indiaForm.brandLogo}
+                    src={form.brandLogo}
                     alt="Brand logo preview"
                     className="w-10 h-10 object-contain"
                   />
@@ -549,8 +473,8 @@ const AddBrandManufacturer = () => {
               <select
                 name="product"
                 className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={indiaForm.product}
-                onChange={handleIndiaInputChange}
+                value={form.product}
+                onChange={handleInputChange}
               >
                 <option value="">-- Select Product --</option>
                 <option value="inverter">Inverter</option>
@@ -567,21 +491,21 @@ const AddBrandManufacturer = () => {
                 Combo Kit:
               </label>
               <div className="flex items-center gap-3">
-                <span className={`text-sm ${!indiaForm.comboKit ? 'font-medium' : 'text-gray-500'}`}>
+                <span className={`text-sm ${!form.comboKit ? 'font-medium' : 'text-gray-500'}`}>
                   No
                 </span>
                 <button
                   type="button"
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ${indiaForm.comboKit ? 'bg-green-500' : 'bg-gray-300'
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ${form.comboKit ? 'bg-green-500' : 'bg-gray-300'
                     }`}
-                  onClick={() => setIndiaForm({ ...indiaForm, comboKit: !indiaForm.comboKit })}
+                  onClick={() => setForm({ ...form, comboKit: !form.comboKit })}
                 >
                   <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${indiaForm.comboKit ? 'translate-x-6' : 'translate-x-1'
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${form.comboKit ? 'translate-x-6' : 'translate-x-1'
                       }`}
                   />
                 </button>
-                <span className={`text-sm ${indiaForm.comboKit ? 'font-medium' : 'text-gray-500'}`}>
+                <span className={`text-sm ${form.comboKit ? 'font-medium' : 'text-gray-500'}`}>
                   Yes
                 </span>
               </div>
@@ -592,7 +516,7 @@ const AddBrandManufacturer = () => {
               {!editMode.isEditing ? (
                 <button
                   className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                  onClick={addIndiaManufacturer}
+                  onClick={addManufacturer}
                 >
                   Add Manufacturer
                 </button>
@@ -600,169 +524,13 @@ const AddBrandManufacturer = () => {
                 <>
                   <button
                     className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                    onClick={updateIndiaManufacturerData}
+                    onClick={updateManufacturerData}
                   >
                     Update Manufacturer
                   </button>
                   <button
                     className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
                     onClick={cancelEdit}
-                  >
-                    Cancel
-                  </button>
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Other Country Form */}
-      {selectedCountry && selectedCountry !== 'india' && (
-        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border-2 border-blue-500">
-          <h2 className="text-xl font-semibold mb-4">
-            {selectedCountry.charAt(0).toUpperCase() + selectedCountry.slice(1)} Manufacturer Details
-          </h2>
-
-          <div className="space-y-4">
-            {/* Company Name */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Name:
-              </label>
-              <input
-                name="companyName"
-                type="text"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter company name"
-                value={otherForm.companyName}
-                onChange={handleOtherInputChange}
-              />
-            </div>
-
-            {/* Company Origin Country */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Company Origin Country:
-              </label>
-              <select
-                name="companyOriginCountry"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={otherForm.companyOriginCountry}
-                onChange={handleOtherInputChange}
-              >
-                <option value="">-- Select Country --</option>
-                {countries.map((country) => (
-                  <option key={country._id} value={country.name}>{country.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Brand with Logo */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Brand:
-              </label>
-              <input
-                name="brand"
-                type="text"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 mb-2"
-                placeholder="Enter brand name"
-                value={otherForm.brand}
-                onChange={handleOtherInputChange}
-              />
-              <div className="flex items-center gap-4">
-                <button
-                  type="button"
-                  className="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 flex items-center gap-2"
-                  onClick={() => otherBrandLogoRef.current?.click()}
-                >
-                  <Upload size={16} />
-                  Upload Brand Logo
-                </button>
-                <input
-                  type="file"
-                  ref={otherBrandLogoRef}
-                  className="hidden"
-                  accept="image/*"
-                  onChange={(e) => handleLogoUpload(e, false)}
-                />
-                {otherForm.brandLogo && (
-                  <img
-                    src={otherForm.brandLogo}
-                    alt="Brand logo preview"
-                    className="w-10 h-10 object-contain"
-                  />
-                )}
-              </div>
-            </div>
-
-            {/* Product */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Product:
-              </label>
-              <select
-                name="product"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                value={otherForm.product}
-                onChange={handleOtherInputChange}
-              >
-                <option value="">-- Select Product --</option>
-                <option value="inverter">Inverter</option>
-                <option value="panel">Panel</option>
-                <option value="battery">Battery</option>
-                <option value="charge-controller">Charge Controller</option>
-                <option value="mounting-structure">Mounting Structure</option>
-              </select>
-            </div>
-
-            {/* Combo Kit Toggle */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                Combo Kit:
-              </label>
-              <div className="flex items-center gap-3">
-                <span className={`text-sm ${!otherForm.comboKit ? 'font-medium' : 'text-gray-500'}`}>
-                  No
-                </span>
-                <button
-                  type="button"
-                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-300 ${otherForm.comboKit ? 'bg-green-500' : 'bg-gray-300'
-                    }`}
-                  onClick={() => setOtherForm({ ...otherForm, comboKit: !otherForm.comboKit })}
-                >
-                  <span
-                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform duration-300 ${otherForm.comboKit ? 'translate-x-6' : 'translate-x-1'
-                      }`}
-                  />
-                </button>
-                <span className={`text-sm ${otherForm.comboKit ? 'font-medium' : 'text-gray-500'}`}>
-                  Yes
-                </span>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex gap-3 pt-4">
-              {!editMode.isOtherEditing ? (
-                <button
-                  className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
-                  onClick={addOtherManufacturer}
-                >
-                  Add Manufacturer
-                </button>
-              ) : (
-                <>
-                  <button
-                    className="px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition-colors"
-                    onClick={updateOtherManufacturerData}
-                  >
-                    Update Manufacturer
-                  </button>
-                  <button
-                    className="px-6 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 transition-colors"
-                    onClick={cancelOtherEdit}
                   >
                     Cancel
                   </button>
@@ -836,7 +604,9 @@ const AddBrandManufacturer = () => {
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Logo</th>
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Company</th>
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Country</th>
-                <th className="p-3 border-b text-sm font-semibold text-gray-600">State/City/District</th>
+                <th className="p-3 border-b text-sm font-semibold text-gray-600">State</th>
+                <th className="p-3 border-b text-sm font-semibold text-gray-600">City</th>
+                <th className="p-3 border-b text-sm font-semibold text-gray-600">District</th>
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Brand</th>
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Product</th>
                 <th className="p-3 border-b text-sm font-semibold text-gray-600">Combo Kit</th>
@@ -862,18 +632,9 @@ const AddBrandManufacturer = () => {
                     </td>
                     <td className="p-3 font-medium text-gray-800">{manufacturer.companyName}</td>
                     <td className="p-3 text-gray-600">{manufacturer.companyOriginCountry}</td>
-                    <td className="p-3 text-gray-600">
-                      {manufacturer.companyOriginCountry === 'India'
-                        ? (
-                          <span className="text-xs">
-                            {manufacturer.state?.name || '-'} / <br />
-                            {manufacturer.city?.name || '-'} / <br />
-                            {manufacturer.district?.name || '-'}
-                          </span>
-                        )
-                        : 'N/A'
-                      }
-                    </td>
+                    <td className="p-3 text-gray-600">{manufacturer.state?.name || '-'}</td>
+                    <td className="p-3 text-gray-600">{manufacturer.city?.name || '-'}</td>
+                    <td className="p-3 text-gray-600">{manufacturer.district?.name || '-'}</td>
                     <td className="p-3 text-gray-600">{manufacturer.brand}</td>
                     <td className="p-3 uppercase text-gray-600 text-sm">{manufacturer.product}</td>
                     <td className="p-3">
@@ -886,7 +647,7 @@ const AddBrandManufacturer = () => {
                       <div className="flex gap-2">
                         <button
                           className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
-                          onClick={() => editManufacturer(manufacturer)}
+                          onClick={() => editManufacturerRecord(manufacturer)}
                           title="Edit"
                         >
                           <Edit2 size={16} />
@@ -904,7 +665,7 @@ const AddBrandManufacturer = () => {
                 ))
               ) : (
                 <tr>
-                  <td colSpan="8" className="p-8 text-center text-gray-500">
+                  <td colSpan="10" className="p-8 text-center text-gray-500">
                     {isLoading ? (
                       <div className="flex justify-center items-center gap-2">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-500"></div>

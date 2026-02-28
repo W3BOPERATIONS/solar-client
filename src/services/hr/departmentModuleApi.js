@@ -42,3 +42,8 @@ export const getDepartmentStats = async (departmentId) => {
     const response = await api.get(`/department-modules/department-modules/stats/${departmentId}`);
     return response.data; // { success: true, stats: {} }
 };
+
+export const getAllDepartmentStats = async () => {
+    const response = await api.get(`/department-modules/department-modules/stats/all`);
+    return response.data; // { success: true, stats: { deptId: { country: N, ... } } }
+};

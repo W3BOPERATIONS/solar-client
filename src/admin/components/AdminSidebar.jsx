@@ -30,6 +30,7 @@ import {
   MapPin,
   ClipboardList,
   Wrench,
+  Layers,
 } from 'lucide-react';
 
 import authStore from '../../store/authStore';
@@ -203,6 +204,7 @@ export default function AdminSidebar() {
           children: [
             { name: '- Role Settings', href: '/admin/settings/hr/role-settings', icon: UserCog },
             { name: '- Create Department', href: '/admin/settings/hr/create-department', icon: Building2 },
+
             { name: '- Department-wise Modules', href: '/admin/settings/hr/department-wise-modules', icon: LayoutDashboard },
             { name: '- Temporary Incharge Setting', href: '/admin/settings/hr/temporary-incharge-setting', icon: Users },
           ],
@@ -264,8 +266,8 @@ export default function AdminSidebar() {
           children: [
             { name: '- Solar Installer', href: '/admin/settings/installer/solar-installer', icon: Users },
             { name: '- Installer Tool Requirements', href: '/admin/settings/installer/tool-requirements', icon: Wrench },
-            { name: '- Rate Setting', href: '/admin/settings/installer/rate-setting', icon: FileBarChart },
-            { name: '- Installer Agency', href: '/admin/settings/installer/agency', icon: BriefcaseBusiness },
+            { name: '- Rating Setting', href: '/admin/settings/installer/rating-setting', icon: FileBarChart },
+            { name: '- Installer Agency Plans', href: '/admin/settings/installer/agency-plans', icon: FileText },
           ],
         },
         {
@@ -318,8 +320,7 @@ export default function AdminSidebar() {
             { name: '- Create AMC', href: '/admin/settings/combokit/create-amc', icon: FileText },
             { name: '- AMC Services', href: '/admin/settings/combokit/amc-services', icon: ClipboardList },
             { name: '- Solarkit Bundle Plans', href: '/admin/settings/combokit/bundle-plans', icon: Package },
-            { name: '- Add ComboKit For Franchisee', href: '/admin/settings/combokit/for-franchisee', icon: Building },
-            { name: '- Add ComboKit For Dealer', href: '/admin/settings/combokit/for-dealer', icon: StoreIcon },
+            { name: '- Add ComboKit', href: '/admin/settings/combokit/add-combokit', icon: Building },
             { name: '- Customize Combokit', href: '/admin/settings/combokit/customize', icon: LayoutDashboard },
           ],
         },

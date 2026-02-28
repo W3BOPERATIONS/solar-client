@@ -8,7 +8,7 @@ import {
   Compass, Grid3x3, CheckSquare, Target, FolderOpen,
   BarChart3, Award, Shield, Cpu, Zap, Sun,
   Battery, PanelTop, PackageOpen, FileCheck,
-  Plus, Trash2, Edit2, X, AlertCircle
+  Plus, Trash2, Edit2, X, AlertCircle, Search
 } from 'lucide-react';
 import * as settingsApi from '../../../services/settings/settingsApi';
 import * as locationApi from '../../../services/locationApi';
@@ -38,8 +38,9 @@ export default function ChecklistSetting() {
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
     name: '',
-    category: '', // Changed from hardcoded 'Location Setting'
+    category: '',
     status: 'active',
+    manualStatus: 'pending',
     items: []
   });
   const [newItemName, setNewItemName] = useState('');
@@ -52,18 +53,18 @@ export default function ChecklistSetting() {
         // Seed if first time or to ensure structure
         await settingsApi.seedChecklists();
 
-        const [fetchedCountries, fetchedChecklists, fetchedCategories] = await Promise.all([
-          locationApi.getCountries(),
-          settingsApi.fetchChecklists(),
-          settingsApi.fetchCategories()
-        ]);
-
+        const fetchedCountries = await locationApi.getCountries();
         setCountries(fetchedCountries || []);
-        setChecklists(fetchedChecklists || []);
 
-        // Use global completions only if we want a global overview when no cluster is selected
-        // However, the user wants regional view, so we'll fetch completions when cluster changes
-        processCategories(fetchedChecklists, [], fetchedCategories);
+        // We'll fetch checklists and categories when cluster changes or on mount if no cluster
+        if (!selectedCluster) {
+          const [fetchedChecklists, fetchedCategories] = await Promise.all([
+            settingsApi.fetchChecklists(),
+            settingsApi.fetchCategories()
+          ]);
+          setChecklists(fetchedChecklists || []);
+          processCategories(fetchedChecklists, [], fetchedCategories);
+        }
       } catch (err) {
         setError('Failed to load initial data');
         console.error(err);
@@ -74,41 +75,64 @@ export default function ChecklistSetting() {
     init();
   }, []);
 
-  // Fetch regional completions when cluster changes
+  // Fetch regional checklists and completions when cluster changes
   useEffect(() => {
     const fetchRegionalData = async () => {
       if (selectedCluster) {
         try {
           setLoading(true);
-          const completions = await settingsApi.fetchModuleCompletions(selectedCluster._id);
-          const categories = await settingsApi.fetchCategories();
-          processCategories(checklists, completions, categories);
+          const [completions, regionalChecklists, categories] = await Promise.all([
+            settingsApi.fetchModuleCompletions(selectedCluster._id),
+            settingsApi.fetchChecklists(selectedCluster._id), // Pass clusterId
+            settingsApi.fetchCategories()
+          ]);
+          setChecklists(regionalChecklists || []);
+          processCategories(regionalChecklists, completions, categories);
         } catch (err) {
-          console.error('Failed to load regional completions', err);
+          console.error('Failed to load regional data', err);
+          setError('Failed to load regional data');
         } finally {
           setLoading(false);
         }
-      } else {
-        // Reset to global or empty when no cluster selected
-        processCategories(checklists, [], []);
       }
     };
     fetchRegionalData();
-  }, [selectedCluster?._id, checklists]);
+  }, [selectedCluster?._id]);
 
   const processCategories = (checklistTemplates, completions = [], categories = []) => {
     const processed = categories.map(cat => {
       // Find modules belonging to this category from checklists
       const catModules = checklistTemplates.filter(cl => cl.category === cat.title);
 
-      // Calculate progress based on regional completionStatus
-      const completedCount = catModules.filter(cl => {
-        // Find the regional completion for this module
-        const regComp = completions.find(c => c.moduleName === cl.name);
-        return regComp ? regComp.completed : false;
-      }).length;
+      const items = catModules.map(m => {
+        const regComp = completions.find(c => c.moduleName === m.name && c.category === m.category);
 
-      const progress = catModules.length > 0 ? Math.round((completedCount / catModules.length) * 100) : 0;
+        // Logic: Checklist is completed only if ALL items are checked
+        const itemsWithStatus = m.items.map(mi => {
+          const itemComp = regComp?.itemsStatus?.find(is => is.itemName === mi.itemName);
+          return {
+            ...mi,
+            completed: itemComp ? itemComp.completed : false
+          };
+        });
+
+        const totalChecklistItems = itemsWithStatus.length;
+        const completedChecklistItems = itemsWithStatus.filter(i => i.completed).length;
+        const autoCompleted = totalChecklistItems > 0 && totalChecklistItems === completedChecklistItems;
+
+        return {
+          id: m._id,
+          name: m.name,
+          items: itemsWithStatus,
+          status: autoCompleted ? 'completed' : 'pending',
+          progressPercent: totalChecklistItems > 0 ? Math.round((completedChecklistItems / totalChecklistItems) * 100) : 0,
+          manualStatus: m.manualStatus || 'pending'
+        };
+      });
+
+      // Calculate category progress based on completed modules (User Request)
+      const completedModulesCount = items.filter(i => i.status === 'completed').length;
+      const progress = items.length > 0 ? Math.round((completedModulesCount / items.length) * 100) : 0;
 
       // Map dynamic icon name to Lucide component
       const iconMap = {
@@ -128,14 +152,7 @@ export default function ChecklistSetting() {
         iconBg: cat.iconBg || "bg-blue-100 text-blue-600",
         progress: progress,
         modules: catModules.length,
-        items: catModules.map(m => {
-          const regComp = completions.find(c => c.moduleName === m.name);
-          return {
-            id: m._id,
-            name: m.name,
-            status: regComp ? (regComp.completed ? 'completed' : 'pending') : 'pending'
-          };
-        })
+        items: items
       };
     });
 
@@ -224,6 +241,10 @@ export default function ChecklistSetting() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!selectedCluster) {
+      setError("Please select Country, State, District, and Cluster first");
+      return;
+    }
     if (formData.items.length === 0) {
       setError("Please add at least one item to the checklist");
       return;
@@ -232,21 +253,33 @@ export default function ChecklistSetting() {
     try {
       setLoading(true);
       setError('');
+
+      const payload = {
+        ...formData,
+        state: selectedState._id,
+        district: selectedDistrict._id,
+        cluster: selectedCluster._id
+      };
+
       if (editingId) {
-        await settingsApi.updateChecklist(editingId, formData);
+        await settingsApi.updateChecklist(editingId, payload);
         setSuccess('Checklist updated successfully');
       } else {
-        await settingsApi.createChecklist(formData);
+        await settingsApi.createChecklist(payload);
         setSuccess('Checklist created successfully');
       }
 
-      // Refresh data
-      const updatedChecklists = await settingsApi.fetchChecklists();
-      const updatedCompletions = await settingsApi.fetchModuleCompletions();
-      setChecklists(updatedChecklists);
-      processCategories(updatedChecklists, updatedCompletions);
+      resetForm(); // This will close the modal and clear form state
 
-      resetForm();
+      // Refresh data
+      const clusterId = selectedCluster?._id;
+      const [updatedChecklists, updatedCompletions, categories] = await Promise.all([
+        settingsApi.fetchChecklists(clusterId),
+        settingsApi.fetchModuleCompletions(clusterId),
+        settingsApi.fetchCategories()
+      ]);
+      setChecklists(updatedChecklists);
+      processCategories(updatedChecklists, updatedCompletions, categories);
     } catch (err) {
       setError(err.response?.data?.message || 'Failed to save checklist');
     } finally {
@@ -259,6 +292,7 @@ export default function ChecklistSetting() {
       name: '',
       category: moduleCategories.length > 0 ? moduleCategories[0].title : '',
       status: 'active',
+      manualStatus: 'pending',
       items: []
     });
     setEditingId(null);
@@ -271,11 +305,11 @@ export default function ChecklistSetting() {
       name: cl.name,
       category: cl.category || 'Location Setting',
       status: cl.status,
+      manualStatus: cl.manualStatus || 'pending',
       items: cl.items
     });
     setEditingId(cl._id);
     setShowForm(true);
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
@@ -285,10 +319,15 @@ export default function ChecklistSetting() {
       await settingsApi.deleteChecklist(id);
       setSuccess('Checklist deleted successfully');
 
-      const updatedChecklists = await settingsApi.fetchChecklists();
-      const updatedCompletions = await settingsApi.fetchModuleCompletions();
+      // Refresh regional data
+      const clusterId = selectedCluster?._id;
+      const [updatedChecklists, updatedCompletions, categories] = await Promise.all([
+        settingsApi.fetchChecklists(clusterId),
+        settingsApi.fetchModuleCompletions(clusterId),
+        settingsApi.fetchCategories()
+      ]);
       setChecklists(updatedChecklists);
-      processCategories(updatedChecklists, updatedCompletions);
+      processCategories(updatedChecklists, updatedCompletions, categories);
     } catch (err) {
       setError('Failed to delete checklist');
     } finally {
@@ -309,7 +348,7 @@ export default function ChecklistSetting() {
     }
   };
 
-  const handleToggleCompletion = async (cl) => {
+  const handleToggleItemStatus = async (cl, itemName, currentStatus) => {
     if (!selectedCluster) {
       setError("Please select a cluster first to record regional completion");
       return;
@@ -317,62 +356,112 @@ export default function ChecklistSetting() {
     try {
       // Find current regional completion
       const currentCompletions = await settingsApi.fetchModuleCompletions(selectedCluster._id);
-      const regComp = currentCompletions.find(c => c.moduleName === cl.name);
+      const regComp = currentCompletions.find(c => c.moduleName === cl.name && c.category === cl.category);
 
-      const newCompleted = regComp ? !regComp.completed : true;
+      // Prepare itemsStatus
+      let itemsStatus = regComp?.itemsStatus || [];
+
+      // Sync itemsStatus with current template items if they differ (e.g. if template was updated)
+      const templateItemNames = cl.items.map(i => i.itemName.trim());
+
+      // Remove items no longer in template, and add new items from template as uncompleted
+      const syncedItemsStatus = templateItemNames.map(name => {
+        const existing = itemsStatus.find(is => is.itemName.trim() === name);
+        return existing ? existing : { itemName: name, completed: false };
+      });
+
+      // Update the specific item in the synced list
+      const targetName = itemName.trim();
+      const updatedItemsStatus = syncedItemsStatus.map(item =>
+        item.itemName.trim() === targetName ? { ...item, completed: !currentStatus } : item
+      );
+
+      // Logic: Checklist is completed only if ALL items are checked
+      const completedCount = updatedItemsStatus.filter(i => i.completed).length;
+      const allCompleted = completedCount === updatedItemsStatus.length;
 
       // Update ModuleCompletion record scoped to cluster
       await settingsApi.updateModuleCompletion({
         moduleName: cl.name,
-        completed: newCompleted,
-        progressPercent: newCompleted ? 100 : 0,
+        itemsStatus: updatedItemsStatus,
+        completed: allCompleted,
+        progressPercent: updatedItemsStatus.length > 0 ? Math.round((completedCount / updatedItemsStatus.length) * 100) : 0,
         category: cl.category,
         iconName: cl.iconName,
         clusterId: selectedCluster._id
       });
 
       // Refresh regional data
-      const updatedCompletions = await settingsApi.fetchModuleCompletions(selectedCluster._id);
-      processCategories(checklists, updatedCompletions, await settingsApi.fetchCategories());
+      const [updatedCompletions, regionalChecklists, categories] = await Promise.all([
+        settingsApi.fetchModuleCompletions(selectedCluster._id),
+        settingsApi.fetchChecklists(selectedCluster._id),
+        settingsApi.fetchCategories()
+      ]);
+      setChecklists(regionalChecklists);
+      processCategories(regionalChecklists, updatedCompletions, categories);
     } catch (err) {
       setError('Failed to update completion status');
       console.error(err);
     }
   };
 
-  // Stats calculation
-  const totalModules = checklists.length;
-  const completedModules = checklists.filter(c => c.completionStatus === 'completed').length;
+  // Stats calculation (Regional) - Calculate from processed categories for consistency
+  const totalModules = moduleCategories.reduce((acc, cat) => acc + cat.items.length, 0);
+  const completedModules = moduleCategories.reduce((acc, cat) => acc + cat.items.filter(i => i.status === 'completed').length, 0);
   const pendingModules = totalModules - completedModules;
   const completionRate = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
   const stats = [
-    { label: "Total Modules", value: totalModules.toString(), subtext: "All categories", icon: ClipboardList, color: "bg-gradient-to-r from-blue-500 to-cyan-500" },
-    { label: "Completed", value: completedModules.toString(), subtext: `${completionRate}% of total`, icon: CheckCircle, color: "bg-gradient-to-r from-emerald-500 to-green-600" },
-    { label: "Pending", value: pendingModules.toString(), subtext: `${100 - completionRate}% of total`, icon: Clock, color: "bg-gradient-to-r from-amber-500 to-orange-500" }
+    { label: "Total Modules", value: totalModules.toString(), subtext: "In this Region", icon: ClipboardList, color: "bg-gradient-to-r from-blue-500 to-cyan-500" },
+    { label: "Completed", value: completedModules.toString(), subtext: `${completionRate}% of regional`, icon: CheckCircle, color: "bg-gradient-to-r from-emerald-500 to-green-600" },
+    { label: "Pending", value: pendingModules.toString(), subtext: `${100 - completionRate}% of regional`, icon: Clock, color: "bg-gradient-to-r from-amber-500 to-orange-500" }
   ];
 
 
   // Get progress color based on percentage
   const getProgressColor = (percentage) => {
-    if (percentage >= 80) return "bg-emerald-500";
+    if (percentage >= 100) return "bg-emerald-500";
+    if (percentage >= 80) return "bg-emerald-400";
     if (percentage >= 60) return "bg-blue-500";
     if (percentage >= 40) return "bg-amber-500";
     return "bg-gray-400";
   };
 
   // Get status badge
-  const getStatusBadge = (status) => {
-    if (status === "completed") {
+  const getStatusBadge = (item) => {
+    // 1. If all items are completed (100%), always show Fully Completed
+    if (item.progressPercent === 100) {
       return (
-        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-          <CheckCircle className="w-4 h-4 mr-1" />
-          Completed
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-sm">
+          <CheckCircle className="w-4 h-4 mr-1 transition-transform group-hover:scale-110" />
+          Fully Completed
         </span>
       );
     }
+
+    // 2. If it's manually flagged as high priority and not 100%, show High Priority
+    if (item.manualStatus === "high-priority") {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-rose-100 text-rose-800 border border-rose-200 shadow-sm">
+          <TrendingUp className="w-4 h-4 mr-1 animate-pulse" />
+          High Priority
+        </span>
+      );
+    }
+
+    // 3. If some items are checked (> 0%) but not all, show In Progress
+    if (item.progressPercent > 0) {
+      return (
+        <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 border border-blue-200 shadow-sm">
+          <Clock className="w-4 h-4 mr-1" />
+          In Progress
+        </span>
+      );
+    }
+
+    // Default to pending
     return (
-      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-100 text-amber-800 border border-amber-200">
+      <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-amber-50 text-amber-700 border border-amber-200">
         <Clock className="w-4 h-4 mr-1" />
         Pending
       </span>
@@ -508,8 +597,14 @@ export default function ChecklistSetting() {
             </div>
             {!showForm && (
               <button
-                onClick={() => setShowForm(true)}
-                className="bg-blue-600 text-white px-4 py-2 rounded-xl flex items-center gap-2 hover:bg-blue-700 transition shadow-lg"
+                onClick={() => {
+                  if (!selectedCluster) {
+                    setError("Please select Country, State, District, and Cluster first to add a template");
+                    return;
+                  }
+                  setShowForm(true);
+                }}
+                className={`${!selectedCluster ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg`}
               >
                 <Plus className="w-4 h-4" />
                 Add Checklist Template
@@ -556,114 +651,142 @@ export default function ChecklistSetting() {
           </div>
         )}
 
-        {/* Management Form */}
+        {/* Create/Edit Template Form Modal */}
         {showForm && (
-          <div className="mb-10 bg-white rounded-2xl shadow-xl p-6 border-b-4 border-blue-500 animate-fadeIn">
-            <div className="flex justify-between items-center mb-6">
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                {editingId ? <Edit2 className="w-5 h-5 text-blue-500" /> : <Plus className="w-5 h-5 text-blue-500" />}
-                {editingId ? 'Edit Checklist Template' : 'Create New Checklist Template'}
-              </h2>
-              <button onClick={resetForm} className="text-gray-400 hover:text-gray-600 transition">
-                <X className="w-6 h-6" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Checklist Name *</label>
-                  <input
-                    type="text"
-                    required
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
-                    placeholder="e.g. Setup Location"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  />
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fadeIn">
+            <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto transform transition-all">
+              {/* Modal Error Alert */}
+              {error && (
+                <div className="m-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-xl flex items-center justify-between sticky top-0 z-20">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4" />
+                    <span className="text-sm font-medium">{error}</span>
+                  </div>
+                  <button onClick={() => setError('')}><X className="w-4 h-4" /></button>
                 </div>
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
-                  <select
-                    className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
-                    value={formData.category}
-                    onChange={(e) => setFormData({ ...formData, category: e.target.value })}
-                  >
-                    {moduleCategories.map(cat => (
-                      <option key={cat.title} value={cat.title}>{cat.title}</option>
-                    ))}
-                  </select>
-                </div>
+              )}
+              <div className="sticky top-0 bg-white z-10 p-6 border-b border-gray-100 flex justify-between items-center">
+                <h2 className="text-2xl font-bold text-gray-800 flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center">
+                    <Plus className="w-6 h-6 text-blue-600" />
+                  </div>
+                  {editingId ? 'Edit Checklist Template' : 'Create New Checklist Template'}
+                </h2>
+                <button
+                  onClick={resetForm}
+                  className="p-2 hover:bg-gray-100 rounded-full transition text-gray-400 hover:text-gray-600"
+                >
+                  <X className="w-6 h-6" />
+                </button>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-3">Checklist Items</label>
-                <div className="space-y-3 mb-4">
-                  {formData.items.map((item, index) => (
-                    <div key={index} className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 group">
-                      <div className="flex-1 flex items-center gap-3">
-                        <span className="bg-white border rounded-lg w-8 h-8 flex items-center justify-center text-sm font-bold text-gray-400">
+              <form onSubmit={handleSubmit} className="p-8 space-y-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Checklist Name *</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                      placeholder="e.g., Solar Panel Quality Inspection"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category *</label>
+                    <select
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                      value={formData.category}
+                      onChange={(e) => setFormData({ ...formData, category: e.target.value })}
+                      required
+                    >
+                      <option value="">Select Category</option>
+                      {moduleCategories.map(cat => (
+                        <option key={cat.id} value={cat.title}>{cat.title}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">Priority Status</label>
+                    <select
+                      className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                      value={formData.manualStatus}
+                      onChange={(e) => setFormData({ ...formData, manualStatus: e.target.value })}
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="completed">Completed</option>
+                      <option value="high-priority">High Priority</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2">
+                    Checklist Items
+                    <span className="text-xs font-normal text-gray-500">({formData.items.length} items added)</span>
+                  </label>
+                  <div className="space-y-3 mb-4">
+                    {formData.items.map((item, index) => (
+                      <div key={index} className="flex items-center gap-3 bg-gray-50 p-3 rounded-xl border border-gray-100 group">
+                        <span className="w-8 h-8 flex items-center justify-center bg-white border border-gray-200 rounded-lg text-xs font-bold text-gray-400">
                           {index + 1}
                         </span>
-                        <span className="font-medium text-gray-700">{item.itemName}</span>
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <button
-                          type="button"
-                          onClick={() => handleToggleRequired(index)}
-                          className={`text-xs font-bold px-3 py-1.5 rounded-lg transition ${item.required ? 'bg-rose-100 text-rose-600' : 'bg-gray-200 text-gray-500'}`}
-                        >
-                          {item.required ? 'Required' : 'Optional'}
-                        </button>
+                        <span className="flex-1 text-sm font-medium text-gray-700">{item.itemName}</span>
+                        {item.required && (
+                          <span className="text-[10px] uppercase font-bold text-rose-500 bg-rose-50 px-2 py-0.5 rounded">Required</span>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleRemoveItem(index)}
-                          className="text-gray-400 hover:text-rose-500 transition"
+                          className="p-2 opacity-0 group-hover:opacity-100 hover:bg-rose-100 text-rose-500 rounded-lg transition"
                         >
-                          <Trash2 className="w-5 h-5" />
+                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
+
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      className="flex-1 px-4 py-3 bg-white border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
+                      placeholder="Add new task..."
+                      value={newItemName}
+                      onChange={(e) => setNewItemName(e.target.value)}
+                      onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddItem())}
+                    />
+                    <button
+                      type="button"
+                      onClick={handleAddItem}
+                      className="bg-gray-800 text-white px-6 py-3 rounded-xl hover:bg-gray-700 transition flex items-center gap-2 shadow-lg"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Add
+                    </button>
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    className="flex-1 px-4 py-3 bg-gray-100 border-none rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
-                    placeholder="Add new item..."
-                    value={newItemName}
-                    onChange={(e) => setNewItemName(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddItem())}
-                  />
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100">
                   <button
                     type="button"
-                    onClick={handleAddItem}
-                    className="bg-gray-800 text-white px-6 py-3 rounded-xl hover:bg-gray-900 transition flex items-center gap-2"
+                    onClick={resetForm}
+                    className="px-8 py-3 bg-white border border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 transition font-semibold"
                   >
-                    <Plus className="w-5 h-5" />
-                    Add
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="px-8 py-3 bg-blue-600 text-white rounded-xl hover:bg-blue-700 transition shadow-lg shadow-blue-200 disabled:opacity-50 font-semibold"
+                  >
+                    {loading ? 'Saving...' : editingId ? 'Update Template' : 'Save Template'}
                   </button>
                 </div>
-              </div>
-
-              <div className="flex justify-end gap-3 pt-4">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-6 py-3 text-gray-600 font-semibold hover:bg-gray-100 rounded-xl transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="bg-blue-600 text-white px-10 py-3 rounded-xl font-bold hover:bg-blue-700 transition shadow-lg disabled:opacity-50"
-                >
-                  {loading ? 'Saving...' : editingId ? 'Update Template' : 'Save Template'}
-                </button>
-              </div>
-            </form>
+              </form>
+            </div>
           </div>
         )}
 
@@ -821,76 +944,49 @@ export default function ChecklistSetting() {
         {/* Module Categories Section - Show only when cluster is selected */}
         {selectedCluster && (
           <div className="animate-fadeIn">
-            <div className="mb-8">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-                <div>
-                  <h2 className="text-2xl font-bold text-gray-800 mb-2">Module Completion Status</h2>
-                  <p className="text-gray-600">Track progress and access individual modules</p>
-                </div>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-                  <p className="text-sm text-blue-800 font-medium">
-                    Region: <span className="font-bold text-blue-600">{selectedState?.name}</span> / Cluster: <span className="font-bold text-blue-600">{selectedCluster?.name}</span>
-                  </p>
-                </div>
-              </div>
-
-              {/* Filter Options */}
-              <div className="flex flex-wrap gap-3 mb-8">
-                <button
-                  onClick={() => setActiveFilter('all')}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 ${activeFilter === 'all'
-                    ? 'bg-blue-600 text-white shadow-lg shadow-blue-200'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-blue-300'
-                    }`}
-                >
-                  All Modules
-                </button>
-                <button
-                  onClick={() => setActiveFilter('completed')}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 flex items-center ${activeFilter === 'completed'
-                    ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-emerald-300'
-                    }`}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  Completed
-                </button>
-                <button
-                  onClick={() => setActiveFilter('pending')}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 flex items-center ${activeFilter === 'pending'
-                    ? 'bg-amber-600 text-white shadow-lg shadow-amber-200'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-amber-300'
-                    }`}
-                >
-                  <Clock className="w-4 h-4 mr-2" />
-                  Pending
-                </button>
-                <button
-                  onClick={() => setActiveFilter('high')}
-                  className={`px-5 py-2.5 rounded-xl text-sm font-medium transition-all duration-300 flex items-center ${activeFilter === 'high'
-                    ? 'bg-rose-600 text-white shadow-lg shadow-rose-200'
-                    : 'bg-white text-gray-700 hover:bg-gray-50 border border-gray-300 hover:border-rose-300'
-                    }`}
-                >
-                  <TrendingUp className="w-4 h-4 mr-2" />
-                  High Priority
-                </button>
-              </div>
+            {/* Filters */}
+            <div className="flex flex-wrap items-center gap-3 mb-8">
+              {[
+                { id: 'all', label: 'All Modules', icon: Grid3x3 },
+                { id: 'completed', label: 'Completed', icon: CheckCircle },
+                { id: 'pending', label: 'Pending', icon: Clock },
+                { id: 'high-priority', label: 'High Priority', icon: TrendingUp }
+              ].map((filter) => {
+                return (
+                  <button
+                    key={filter.id}
+                    onClick={() => setActiveFilter(filter.id)}
+                    className={`px-5 py-2.5 rounded-xl flex items-center gap-2.5 font-semibold transition-all duration-300 ${activeFilter === filter.id
+                      ? filter.id === 'high-priority' ? "bg-rose-500 text-white shadow-lg shadow-rose-200 ring-4 ring-rose-50"
+                        : filter.id === 'completed' ? "bg-emerald-500 text-white shadow-lg shadow-emerald-200 ring-4 ring-emerald-50"
+                          : filter.id === 'pending' ? "bg-amber-500 text-white shadow-lg shadow-amber-200 ring-4 ring-amber-50"
+                            : "bg-blue-600 text-white shadow-lg shadow-blue-200 ring-4 ring-blue-50"
+                      : "bg-white text-gray-600 hover:bg-gray-50 border border-gray-100"
+                      }`}
+                  >
+                    <filter.icon className="w-4 h-4" />
+                    {filter.label}
+                  </button>
+                );
+              })}
             </div>
 
-            {/* Module Categories Grid */}
+            {/* Categories Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {moduleCategories
                 .filter(cat => {
                   if (activeFilter === 'all') return true;
-                  if (activeFilter === 'completed') return cat.progress === 100;
-                  if (activeFilter === 'pending') return cat.progress < 100;
-                  return true;
+                  return cat.items.some(item => {
+                    if (activeFilter === 'high-priority') return item.manualStatus === 'high-priority';
+                    if (activeFilter === 'completed') return item.status === 'completed';
+                    if (activeFilter === 'pending') return item.status === 'pending';
+                    return false;
+                  });
                 })
                 .map((category, index) => (
-                  <div key={index} className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200 card-hover">
+                  <div key={index} className="bg-white rounded-2xl shadow-lg overflow-hidden border border-gray-200 card-hover flex flex-col">
                     {/* Category Header */}
-                    <div className="p-6 border-b border-gray-100">
+                    <div className="p-6 border-b border-gray-100 bg-gray-50/50">
                       <div className="flex justify-between items-start mb-4">
                         <div className="flex-1">
                           <div className="flex items-center justify-between mb-3">
@@ -900,10 +996,10 @@ export default function ChecklistSetting() {
                             </div>
                           </div>
                           <div className="flex items-center flex-wrap gap-4 text-sm text-gray-600">
-                            <span className="bg-gray-100 py-1.5 px-3 rounded-full">
+                            <span className="bg-white border border-gray-100 py-1.5 px-3 rounded-full font-medium shadow-sm">
                               {category.modules} Modules
                             </span>
-                            <span className="flex items-center bg-blue-50 text-blue-700 py-1.5 px-3 rounded-full">
+                            <span className="flex items-center bg-blue-50 text-blue-700 py-1.5 px-3 rounded-full font-medium border border-blue-100">
                               <TrendingUp className="w-4 h-4 mr-2" />
                               {category.progress}% Complete
                             </span>
@@ -914,90 +1010,110 @@ export default function ChecklistSetting() {
                       {/* Progress Bar */}
                       <div className="w-full bg-gray-200 rounded-full h-2.5 mt-4">
                         <div
-                          className={`h-2.5 rounded-full progress-bar-animated ${getProgressColor(category.progress)}`}
+                          className={`h-2.5 rounded-full progress-bar-animated transition-all duration-500 ${getProgressColor(category.progress)}`}
                           style={{ width: `${category.progress}%` }}
                         ></div>
-                      </div>
-                      <div className="flex justify-between text-xs text-gray-500 mt-2">
-                        <span>0%</span>
-                        <span>100%</span>
                       </div>
                     </div>
 
                     {/* Module List */}
-                    <div className="divide-y divide-gray-100 max-h-96 overflow-y-auto module-list-scrollbar">
-                      {category.items.length === 0 ? (
-                        <div className="p-10 text-center text-gray-400">
-                          <ClipboardList className="w-10 h-10 mx-auto mb-2 opacity-20" />
-                          <p className="text-sm">No checklists in this category</p>
-                        </div>
-                      ) : (
-                        category.items.map((item, itemIndex) => {
+                    <div className="divide-y divide-gray-100 max-h-[400px] overflow-y-auto module-list-scrollbar flex-grow">
+                      {(() => {
+                        const filteredItems = category.items.filter(item => {
+                          if (activeFilter === 'all') return true;
+                          if (activeFilter === 'high-priority') return item.manualStatus === 'high-priority';
+                          if (activeFilter === 'completed') return item.status === 'completed';
+                          if (activeFilter === 'pending') return item.status === 'pending';
+                          return true;
+                        });
+
+                        if (filteredItems.length === 0) {
+                          return (
+                            <div className="p-10 text-center text-gray-400 animate-fadeIn">
+                              <Search className="w-10 h-10 mx-auto mb-2 opacity-20 text-gray-500" />
+                              <p className="text-sm font-medium">No modules currently in this state</p>
+                            </div>
+                          );
+                        }
+
+                        return filteredItems.map((item, itemIndex) => {
                           const originalCl = checklists.find(c => c._id === item.id);
                           return (
                             <div
                               key={itemIndex}
-                              className={`p-5 module-item-hover ${item.status} ${item.status === 'completed' ? 'bg-emerald-50/30' : 'bg-amber-50/30'}`}
+                              className={`p-5 transition-colors ${item.status === 'completed' ? 'bg-emerald-50/20' : 'bg-white hover:bg-gray-50'}`}
                             >
-                              <div className="flex justify-between items-center">
-                                <div className="flex-1">
-                                  <div className="flex items-center gap-3 mb-2">
-                                    <h4 className="font-semibold text-gray-800">{item.name}</h4>
-                                    <div className={`w-2 h-2 rounded-full ${item.status === 'completed' ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
+                              <div className="flex flex-col gap-4">
+                                <div className="flex justify-between items-start">
+                                  <div className="flex-1">
+                                    <div className="flex items-center gap-3 mb-2">
+                                      <h4 className="font-bold text-gray-800">{item.name}</h4>
+                                    </div>
+                                    <div className="flex items-center flex-wrap gap-3">
+                                      {getStatusBadge(item)}
+                                      <span className="flex items-center gap-2 text-xs text-gray-500 font-medium bg-gray-100 px-2.5 py-1 rounded-lg">
+                                        <TrendingUp className="w-3.5 h-3.5" />
+                                        {item.progressPercent}% Complete
+                                      </span>
+                                    </div>
                                   </div>
-                                  <div className="flex items-center gap-4">
-                                    <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded ${originalCl?.status === 'active' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-400'}`}>
-                                      {originalCl?.status}
-                                    </span>
-                                    <span className="text-xs text-gray-500 italic">
-                                      {originalCl?.items?.length || 0} items
-                                    </span>
+                                  <div className="flex items-center gap-1.5">
+                                    <button
+                                      onClick={() => handleEdit(originalCl)}
+                                      className="p-2 text-blue-500 hover:bg-blue-50 rounded-xl transition-all"
+                                      title="Edit Template"
+                                    >
+                                      <Edit2 className="w-4 h-4" />
+                                    </button>
+                                    <div className="w-[1px] h-4 bg-gray-200 mx-1"></div>
+                                    <button
+                                      onClick={() => handleDelete(item.id)}
+                                      className="p-2 text-rose-500 hover:bg-rose-50 rounded-xl transition-all"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4" />
+                                    </button>
                                   </div>
                                 </div>
-                                <div className="ml-4 flex items-center gap-2">
-                                  <button
-                                    onClick={() => handleToggleCompletion(originalCl)}
-                                    title="Toggle Completion"
-                                  >
-                                    {getStatusBadge(item.status)}
-                                  </button>
-                                  <div className="h-4 w-[1px] bg-gray-200 mx-1"></div>
-                                  <button
-                                    onClick={() => handleEdit(originalCl)}
-                                    className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition"
-                                    title="Edit Template"
-                                  >
-                                    <Edit2 className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleToggleStatus(originalCl)}
-                                    className={`p-2 rounded-lg transition ${originalCl?.status === 'active' ? 'text-blue-500 hover:bg-blue-50' : 'text-gray-400 hover:bg-gray-50'}`}
-                                    title="Toggle Active Status"
-                                  >
-                                    <Gear className="w-4 h-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDelete(item.id)}
-                                    className="p-2 text-rose-500 hover:bg-rose-50 rounded-lg transition"
-                                    title="Delete"
-                                  >
-                                    <Trash2 className="w-4 h-4" />
-                                  </button>
+
+                                {/* Checklist Items */}
+                                <div className="grid grid-cols-1 gap-2.5 ml-1 pt-2">
+                                  {item.items.map((checkItem, idx) => (
+                                    <button
+                                      key={idx}
+                                      onClick={() => handleToggleItemStatus(originalCl, checkItem.itemName, checkItem.completed)}
+                                      className="flex items-center gap-3 w-full text-left group/item"
+                                    >
+                                      <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-300 ${checkItem.completed
+                                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                                        : 'border-gray-300 bg-white group-hover/item:border-blue-400'
+                                        }`}>
+                                        {checkItem.completed && <CheckCircle className="w-3.5 h-3.5 stroke-[3]" />}
+                                      </div>
+                                      <span className={`text-sm transition-all duration-300 ${checkItem.completed
+                                        ? 'text-gray-400 line-through'
+                                        : 'text-gray-700 font-medium'
+                                        }`}>
+                                        {checkItem.itemName}
+                                        {checkItem.required && <span className="text-rose-500 ml-1.5 font-bold">*</span>}
+                                      </span>
+                                    </button>
+                                  ))}
                                 </div>
                               </div>
                             </div>
                           );
-                        })
-                      )}
+                        });
+                      })()}
                     </div>
 
                     {/* Category Footer */}
-                    <div className="p-4 bg-gray-50 border-t border-gray-100">
-                      <div className="flex justify-between items-center text-sm text-gray-600">
+                    <div className="p-4 bg-gray-50/80 border-t border-gray-100">
+                      <div className="flex justify-between items-center text-xs text-gray-500 font-medium">
                         <span>{category.modules} Checklists Total</span>
                         <div className="flex items-center gap-2">
-                          <div className={`w-2 h-2 rounded-full ${category.progress === 100 ? 'bg-emerald-500' : 'bg-amber-500'}`}></div>
-                          <span className="font-medium">{category.progress === 100 ? 'Fully Completed' : 'In Progress'}</span>
+                          <div className={`w-2 h-2 rounded-full ${category.progress === 100 ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-amber-500 shadow-sm shadow-amber-200'}`}></div>
+                          <span>{category.progress === 100 ? 'Fully Completed' : 'In Progress'}</span>
                         </div>
                       </div>
                     </div>
@@ -1005,93 +1121,95 @@ export default function ChecklistSetting() {
                 ))}
             </div>
 
-            {/* Additional Info */}
-            <div className="mt-12 bg-gradient-to-r from-blue-50 to-cyan-50 rounded-2xl p-8 border border-blue-200">
-              <div className="text-center max-w-3xl mx-auto">
-                <div className="w-16 h-16 bg-white rounded-2xl shadow-lg flex items-center justify-center mx-auto mb-6">
-                  <CheckCircle className="w-8 h-8 text-emerald-600" />
+            {/* Global Empty State */}
+            {moduleCategories.filter(cat => {
+              if (activeFilter === 'all') return true;
+              return cat.items.some(item => {
+                if (activeFilter === 'high-priority') return item.manualStatus === 'high-priority';
+                if (activeFilter === 'completed') return item.status === 'completed';
+                if (activeFilter === 'pending') return item.status === 'pending';
+                return false;
+              });
+            }).length === 0 && (
+                <div className="bg-white rounded-3xl shadow-xl p-20 text-center border border-gray-100 animate-fadeIn">
+                  <div className="w-24 h-24 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
+                    <Grid3x3 className="w-12 h-12 text-blue-300" />
+                  </div>
+                  <h3 className="text-2xl font-black text-gray-800 mb-3">No Modules in this Filter</h3>
+                  <p className="text-gray-500 max-w-sm mx-auto font-medium">
+                    There are currently no checklists in the <span className="font-bold text-blue-600">"{activeFilter}"</span> state for this regional scope.
+                  </p>
+                  <button
+                    onClick={() => setActiveFilter('all')}
+                    className="mt-8 px-8 py-3 bg-blue-600 text-white rounded-2xl font-bold shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all"
+                  >
+                    View All Modules
+                  </button>
                 </div>
-                <h3 className="text-2xl font-bold text-gray-800 mb-3">
-                  Module Management Dashboard
-                </h3>
-                <p className="text-gray-600 mb-6">
-                  {selectedCluster ? (
-                    <>Currently viewing modules for <span className="font-bold text-blue-600">{selectedState?.name}</span>
-                      {selectedCluster && <> in <span className="font-bold text-blue-600">{selectedCluster?.name}</span> cluster</>}</>
-                  ) : 'Select a regional scope to begin tracking module completion'}
+              )}
+
+            {/* Additional Info Dashboard */}
+            <div className="mt-12 bg-white rounded-3xl p-8 border border-gray-100 shadow-xl">
+              <div className="text-center max-w-3xl mx-auto">
+                <div className="w-20 h-20 bg-blue-50 rounded-3xl flex items-center justify-center mx-auto mb-6 shadow-inner">
+                  <LayoutDashboard className="w-10 h-10 text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-4">Regional Management Center</h3>
+                <p className="text-gray-600 mb-8 leading-relaxed">
+                  Viewing data for <span className="font-bold text-blue-600">{selectedState?.name}</span> / <span className="font-bold text-blue-600">{selectedCluster?.name}</span>.
+                  Track regional requirements, manage task lists, and ensure quality standards are met across all modules.
                 </p>
-                <div className="flex flex-wrap justify-center gap-4">
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-emerald-500"></div>
-                      <span className="font-medium">
-                        {checklists.filter(c => c.completionStatus === 'completed').length || 0} Completed
-                      </span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  {[
+                    { label: "Completed", value: completedModules, color: "text-emerald-600", bg: "bg-emerald-50" },
+                    { label: "Remaining", value: pendingModules, color: "text-amber-600", bg: "bg-amber-50" },
+                    { label: "Categories", value: moduleCategories.length, color: "text-blue-600", bg: "bg-blue-50" }
+                  ].map((sum, i) => (
+                    <div key={i} className={`${sum.bg} rounded-2xl p-5 border border-white/50 shadow-sm`}>
+                      <div className={`text-3xl font-black ${sum.color} mb-1`}>{sum.value}</div>
+                      <div className="text-sm font-bold text-gray-500 uppercase tracking-wider">{sum.label}</div>
                     </div>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-amber-500"></div>
-                      <span className="font-medium">
-                        {checklists.filter(c => c.completionStatus !== 'completed').length || 0} Pending
-                      </span>
-                    </div>
-                  </div>
-                  <div className="bg-white rounded-xl p-4 shadow-sm border border-gray-200">
-                    <div className="flex items-center gap-3">
-                      <div className="w-3 h-3 rounded-full bg-blue-500"></div>
-                      <span className="font-medium">
-                        {moduleCategories.length || 0} Categories
-                      </span>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               </div>
             </div>
           </div>
         )}
 
-        {/* Empty State - Show when no cluster is selected */}
+        {/* Empty State */}
         {!selectedCluster && (
-          <div className="text-center py-20">
-            <div className="w-32 h-32 mx-auto mb-8 rounded-3xl bg-gradient-to-br from-blue-100 to-cyan-100 flex items-center justify-center shadow-lg">
-              <LayoutDashboard className="w-16 h-16 text-blue-600" />
+          <div className="text-center py-24 animate-fadeIn">
+            <div className="w-40 h-40 mx-auto mb-10 rounded-[2.5rem] bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center shadow-lg transform -rotate-3 hover:rotate-0 transition-transform duration-500">
+              <LayoutDashboard className="w-20 h-20 text-blue-600" />
             </div>
-            <h3 className="text-3xl font-bold text-gray-800 mb-4">Select Regional Scope to Begin</h3>
-            <p className="text-gray-600 max-w-2xl mx-auto mb-10 text-lg">
-              Choose Country, State, District, and Cluster to view module completion status and manage configurations for that region.
-              Track progress, manage access, and configure regional settings.
+            <h3 className="text-4xl font-extrabold text-gray-900 mb-6">Select Regional Scope</h3>
+            <p className="text-xl text-gray-500 max-w-2xl mx-auto mb-12 leading-relaxed font-medium">
+              Choose your Country, State, District, and Cluster to synchronize regional checklist configurations and track operational progress.
             </p>
-            <div className="flex flex-wrap justify-center items-center gap-8 text-sm text-gray-600">
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-                <span>Track completion progress</span>
-              </div>
-              <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-                <span>Manage module access</span>
-              </div>
-              <div className="w-2 h-2 bg-gray-300 rounded-full"></div>
-              <div className="flex items-center gap-2">
-                <CheckCircle className="w-5 h-5 text-emerald-500" />
-                <span>Configure regional settings</span>
-              </div>
+            <div className="flex flex-wrap justify-center items-center gap-10">
+              {[
+                { label: "Real-time Monitoring", icon: TrendingUp },
+                { label: "Regional Scoping", icon: MapPin },
+                { label: "Quality Assurance", icon: Shield }
+              ].map((feat, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white rounded-xl shadow-md flex items-center justify-center border border-gray-100">
+                    <feat.icon className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <span className="font-bold text-gray-700">{feat.label}</span>
+                </div>
+              ))}
             </div>
           </div>
         )}
+
         {/* Footer */}
-        <div className="mt-12 pt-8 border-t border-gray-200">
-          <div className="flex flex-col md:flex-row justify-between items-center gap-4 text-sm text-gray-600">
-            <div>
-              <p>© {new Date().getFullYear()} Solarkits ERP. All rights reserved.</p>
-            </div>
-            <div className="flex items-center gap-6">
-              <span>Module Completion Dashboard</span>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
-                <span>System Status: {loading ? 'Syncing...' : 'Operational'}</span>
-              </div>
+        <div className="mt-20 pt-10 border-t border-gray-200 flex flex-col md:flex-row justify-between items-center gap-6 text-sm font-medium text-gray-500">
+          <p>© {new Date().getFullYear()} Solarkits ERP. Precision Operations Platform.</p>
+          <div className="flex items-center gap-8">
+            <div className="flex items-center gap-2.5">
+              <div className={`w-2.5 h-2.5 rounded-full ${loading ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'}`}></div>
+              <span>System: {loading ? 'Processing' : 'Active'}</span>
             </div>
           </div>
         </div>

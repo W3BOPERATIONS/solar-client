@@ -22,30 +22,53 @@ const CreateSolarkit = () => {
   const { countries, loading: locationLoading, fetchCountries } = useLocations();
 
   // State management
-  const [selectedCountry, setSelectedCountry] = useState('');
-  const [showTable, setShowTable] = useState(false); // Controls visibility of the table
+  const [activeCountry, setActiveCountry] = useState('India');
   const [solarkits, setSolarkits] = useState([]);
   const [modalOpen, setModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [bomModalOpen, setBomModalOpen] = useState(false);
   const [currentRow, setCurrentRow] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Form states
   const [solarkitForm, setSolarkitForm] = useState({
     name: '',
-    products: [''],
-    country: ''
+    products: ['Panel'],
+    category: 'Solar Panel',
+    subCategory: 'Residential',
+    projectType: '1kW - 10kW',
+    subProjectType: 'On Grid'
   });
 
   // BOM State
-  const [bomData, setBomData] = useState([]);
+  const [bomData, setBomData] = useState([{
+    bosKitName: '',
+    kitType: 'Combokit',
+    kitCategory: '',
+    items: [{ name: '', type: '', qty: '', unit: '', price: 0 }]
+  }]);
   const [currentKitId, setCurrentKitId] = useState(null);
+
+  const countriesList = [
+    { name: 'India', code: 'IN', flag: '🇮🇳' },
+    { name: 'USA', code: 'US', flag: '🇺🇸' },
+    { name: 'Germany', code: 'DE', flag: '🇩🇪' },
+    { name: 'Australia', code: 'AU', flag: '🇦🇺' }
+  ];
 
   // Fetch initial data
   useEffect(() => {
     fetchCountries();
+    fetchSolarkits();
   }, []);
+
+  // Update activeCountry when countries load
+  useEffect(() => {
+    if (countries && countries.length > 0 && !activeCountry) {
+      setActiveCountry(countries[0].name);
+    }
+  }, [countries]);
 
   // Fetch Solarkits
   const fetchSolarkits = async () => {
@@ -58,18 +81,6 @@ const CreateSolarkit = () => {
       toast.error('Failed to load solarkits');
     } finally {
       setLoading(false);
-    }
-  };
-
-  // Handle country selection
-  const handleCountrySelect = (countryId) => {
-    setSelectedCountry(countryId);
-    if (countryId) {
-      setShowTable(true);
-      fetchSolarkits(); // Fetch solarkits for the selected country (filtering can be added later if needed)
-    } else {
-      setShowTable(false);
-      setSolarkits([]);
     }
   };
 
@@ -111,14 +122,20 @@ const CreateSolarkit = () => {
 
   // Save solarkit
   const saveSolarkit2 = async () => {
-    if (!solarkitForm.name || !selectedCountry) {
-      toast.error('Please fill in all required fields');
+    if (!solarkitForm.name) {
+      toast.error('Please enter a kit name');
+      return;
+    }
+
+    const countryObj = countries.find(c => c.name.toLowerCase() === activeCountry.toLowerCase());
+    if (!countryObj) {
+      toast.error('Country configuration error');
       return;
     }
 
     const payload = {
-      name: solarkitForm.name,
-      country: selectedCountry,
+      ...solarkitForm,
+      country: countryObj._id,
       products: solarkitForm.products.filter(p => p.trim() !== '')
     };
 
@@ -132,7 +149,14 @@ const CreateSolarkit = () => {
       }
       setModalOpen(false);
       fetchSolarkits();
-      setSolarkitForm({ name: '', products: [''], country: '' });
+      setSolarkitForm({
+        name: '',
+        products: ['Panel'],
+        category: 'Solar Panel',
+        subCategory: 'Residential',
+        projectType: '1kW - 10kW',
+        subProjectType: 'On Grid'
+      });
       setCurrentRow(null);
     } catch (error) {
       console.error('Error saving solarkit:', error);
@@ -145,8 +169,11 @@ const CreateSolarkit = () => {
     setCurrentRow(kit);
     setSolarkitForm({
       name: kit.name,
-      products: kit.products || [''],
-      country: kit.country?._id || selectedCountry
+      products: kit.products || ['Panel'],
+      category: kit.category || 'Solar Panel',
+      subCategory: kit.subCategory || 'Residential',
+      projectType: kit.projectType || '1kW - 10kW',
+      subProjectType: kit.subProjectType || 'On Grid'
     });
     setModalOpen(true);
   };
@@ -183,7 +210,21 @@ const CreateSolarkit = () => {
     setCurrentRow(kit);
     try {
       const data = await getSolarkitBOM(kit._id);
-      setBomData(data.bom || []);
+      const initialBOM = data.bom && data.bom.length > 0
+        ? data.bom.map(section => ({
+          ...section,
+          items: section.items?.map(item => ({
+            ...item,
+            itemType: item.itemType || item.type // Backward compatibility
+          })) || []
+        }))
+        : [{
+          bosKitName: '',
+          kitType: 'Combokit',
+          kitCategory: '',
+          items: [{ name: '', itemType: '', qty: '', unit: '', price: 0 }]
+        }];
+      setBomData(initialBOM);
       setBomModalOpen(true);
     } catch (error) {
       console.error('Error fetching BOM:', error);
@@ -192,7 +233,12 @@ const CreateSolarkit = () => {
   };
 
   const addBomSection = () => {
-    setBomData([...bomData, { title: '', items: [{ name: '', qty: '', unit: '' }] }]);
+    setBomData([...bomData, {
+      bosKitName: '',
+      kitType: 'Combokit',
+      kitCategory: '',
+      items: [{ name: '', itemType: '', qty: '', unit: '', price: 0 }]
+    }]);
   };
 
   const removeBomSection = (index) => {
@@ -208,7 +254,7 @@ const CreateSolarkit = () => {
 
   const addBomItem = (sectionIndex) => {
     const newData = [...bomData];
-    newData[sectionIndex].items.push({ name: '', qty: '', unit: '' });
+    newData[sectionIndex].items.push({ name: '', itemType: '', qty: '', unit: '', price: 0 });
     setBomData(newData);
   };
 
@@ -229,6 +275,7 @@ const CreateSolarkit = () => {
       await saveSolarkitBOM(currentKitId, bomData);
       toast.success('BOM saved successfully');
       setBomModalOpen(false);
+      fetchSolarkits();
     } catch (error) {
       console.error('Error saving BOM:', error);
       toast.error('Failed to save BOM');
@@ -240,239 +287,312 @@ const CreateSolarkit = () => {
     setViewModalOpen(true);
   };
 
+  const filteredSolarkits = solarkits.filter(kit => {
+    const countryName = kit.country?.name || '';
+    if (countryName.toLowerCase() !== activeCountry.toLowerCase()) return false;
+    if (searchQuery) {
+      return kit.name.toLowerCase().includes(searchQuery.toLowerCase());
+    }
+    return true;
+  });
+
   return (
-    <div className="container-fluid py-4">
-      {/* Header */}
-      <div className="row mb-4">
-        <div className="col-12">
-          <div className="card shadow-sm">
-            <div className="card-body">
-              <h4 className="mb-2 flex items-center text-gray-800">
-                <Cog className="mr-2 text-primary" size={24} />
-                Create Solar Kit
-              </h4>
-              <p className="text-muted mb-0">
-                Manage solar kits like 3kW, 5kW, etc., and define their Bill of Materials (BOM).
-              </p>
-            </div>
-          </div>
+    <div className="min-h-screen bg-gray-50/50 p-4 md:p-6">
+      {/* Header Section */}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+          Add Solarkits - {activeCountry}
+        </h1>
+        <div className="h-1 w-16 bg-blue-600 rounded-full"></div>
+      </div>
+
+      {/* Country Tabs - Dynamic from database */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+        {countries.map((c) => (
+          <button
+            key={c._id}
+            onClick={() => setActiveCountry(c.name)}
+            className={`p-3 rounded-xl border transition-all duration-200 flex flex-col items-center justify-center gap-1 group shadow-sm hover:shadow ${activeCountry === c.name
+              ? "bg-blue-600 border-blue-600 text-white"
+              : "bg-white border-gray-100 text-gray-500 hover:border-blue-200"
+              }`}
+          >
+            <span className="text-xs font-bold uppercase tracking-wider">{c.name}</span>
+            <span className="text-base font-black opacity-80">{c.code || c.name.substring(0, 2).toUpperCase()}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* List Header */}
+      <div className="mb-4 flex flex-col md:flex-row justify-between items-center gap-3">
+        <h2 className="text-base font-bold text-gray-800 flex items-center gap-2">
+          <List className="text-blue-600" size={18} />
+          SolarKits List
+        </h2>
+        <div className="relative flex-1 max-w-xs w-full">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={14} />
+          <input
+            type="text"
+            placeholder="Search kits..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-9 pr-3 py-1.5 bg-white border border-gray-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 transition-all font-medium text-sm"
+          />
         </div>
       </div>
 
-      <div className="row">
-        {/* Left Column: Country Selection */}
-        <div className="col-lg-4 mb-4">
-          <div className="card shadow-sm h-100">
-            <div className="card-header bg-primary text-white">
-              <h5 className="mb-0 flex items-center">
-                <Search className="mr-2" size={20} />
-                Select Country
-              </h5>
-            </div>
-            <div className="card-body">
-              <div className="form-group mb-4">
-                <label className="font-semibold mb-2">Filter by Country</label>
-                <select
-                  className="form-control w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary focus:border-primary"
-                  value={selectedCountry}
-                  onChange={(e) => handleCountrySelect(e.target.value)}
-                  disabled={locationLoading}
-                >
-                  <option value="">-- Select Country --</option>
-                  {countries.map((country) => (
-                    <option key={country._id} value={country._id}>
-                      {country.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+      {/* Table Section */}
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left">
+            <thead>
+              <tr className="bg-slate-800 text-white">
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Create</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Status</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Name</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Country</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Category</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Sub Category</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Project Type</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">View</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {loading ? (
+                <tr>
+                  <td colSpan="9" className="py-20">
+                    <div className="flex flex-col items-center justify-center gap-4">
+                      <Loader className="animate-spin text-blue-600" size={40} />
+                      <p className="text-gray-500 font-bold">Synchronizing Regional Data...</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : filteredSolarkits.length === 0 ? (
+                <tr>
+                  <td colSpan="9" className="py-20 text-center">
+                    <div className="max-w-xs mx-auto">
+                      <Package className="w-16 h-16 text-gray-200 mx-auto mb-4" />
+                      <p className="text-gray-400 font-medium">No solar kits found for this region. Initialize your first kit below.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                filteredSolarkits.map((kit) => (
+                  <tr key={kit._id} className="hover:bg-blue-50/20 transition-colors group">
+                    <td className="px-4 py-3 text-sm">
+                      <div className="flex gap-1.5">
+                        <button
+                          onClick={() => handleEdit(kit)}
+                          className="bg-emerald-500 text-white px-2.5 py-1 rounded text-[10px] font-bold hover:bg-emerald-600 transition-all"
+                        >
+                          Create
+                        </button>
+                        <button
+                          onClick={() => openBomModal(kit)}
+                          className="bg-sky-500 text-white px-2.5 py-1 rounded text-[10px] font-bold hover:bg-sky-600 transition-all"
+                        >
+                          Add BOM
+                        </button>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        onClick={() => toggleStatus(kit._id, kit.status === 'Active')}
+                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all ${kit.status === 'Active'
+                          ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
+                          : "bg-rose-100 text-rose-700 border border-rose-200"
+                          }`}
+                      >
+                        {kit.status}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-gray-700 text-sm">{kit.name}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.country?.name}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.category}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.subCategory}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.projectType}</td>
+                    <td className="px-4 py-3 text-center">
+                      <button
+                        onClick={() => openViewModal(kit)}
+                        className="bg-cyan-500 text-white px-3 py-1 rounded-md text-[10px] font-bold hover:bg-cyan-600 transition-all"
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
 
-              {selectedCountry && (
-                <div className="mt-4 text-center">
+              <tr className="bg-gray-50/30">
+                <td colSpan="8" className="px-6 py-6 text-center">
                   <button
-                    className="btn btn-primary w-full py-2 flex justify-center items-center"
                     onClick={() => {
-                      setSolarkitForm({ name: '', products: [''], country: selectedCountry });
+                      setSolarkitForm({
+                        name: '',
+                        products: ['Panel'],
+                        category: 'Solar Panel',
+                        subCategory: 'Residential',
+                        projectType: '1kW - 10kW',
+                        subProjectType: 'On Grid'
+                      });
                       setCurrentRow(null);
                       setModalOpen(true);
                     }}
+                    className="group bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center gap-2 mx-auto"
                   >
-                    <PlusCircle className="mr-2" size={20} />
-                    Add New Solarkit
+                    <PlusCircle size={18} />
+                    CREATE NEW SOLAR KIT
                   </button>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Right Column: Solarkits Table */}
-        <div className="col-lg-8">
-          {showTable && (
-            <div className="card shadow-sm">
-              <div className="card-header bg-success text-white flex justify-between items-center">
-                <h5 className="mb-0 flex items-center">
-                  <List className="mr-2" size={20} />
-                  Solar Kits List
-                </h5>
-                <span className="badge bg-light text-dark px-3 py-1 rounded-full">
-                  {solarkits.length} Kit{solarkits.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-              <div className="card-body">
-                {loading ? (
-                  <div className="flex justify-center py-5">
-                    <Loader className="animate-spin text-blue-600" size={32} />
-                  </div>
-                ) : solarkits.length === 0 ? (
-                  <div className="text-center py-5">
-                    <Package className="fa fa-box-open fa-3x text-muted mb-3 mx-auto" size={48} />
-                    <h5>No Solar Kits Found</h5>
-                    <p className="text-muted">
-                      Add a new solar kit for the selected country.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table table-hover w-full">
-                      <thead className="bg-gray-100">
-                        <tr>
-                          <th className="px-4 py-3 text-left">#</th>
-                          <th className="px-4 py-3 text-left">Kit Name</th>
-                          <th className="px-4 py-3 text-left">Products</th>
-                          <th className="px-4 py-3 text-left">Status</th>
-                          <th className="px-4 py-3 text-left">BOM</th>
-                          <th className="px-4 py-3 text-left">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {solarkits.map((kit, index) => (
-                          <tr key={kit._id} className="hover:bg-gray-50">
-                            <td className="px-4 py-3">{index + 1}</td>
-                            <td className="px-4 py-3 font-semibold">{kit.name}</td>
-                            <td className="px-4 py-3">
-                              <span className="badge bg-secondary text-white px-2 py-1 rounded text-xs">
-                                {kit.products.length} Products
-                              </span>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="form-check form-switch">
-                                <input
-                                  className="form-check-input"
-                                  type="checkbox"
-                                  role="switch"
-                                  checked={kit.status}
-                                  onChange={() => toggleStatus(kit._id, kit.status)}
-                                />
-                              </div>
-                            </td>
-                            <td className="px-4 py-3">
-                              <button
-                                className="btn btn-outline-info btn-sm flex items-center px-2 py-1 rounded text-blue-600 border-blue-600 hover:bg-blue-50"
-                                onClick={() => openBomModal(kit)}
-                              >
-                                <FileText size={14} className="mr-1" />
-                                Manage
-                              </button>
-                            </td>
-                            <td className="px-4 py-3">
-                              <div className="flex space-x-2">
-                                <button
-                                  className="btn btn-warning btn-sm flex items-center px-2 py-1 bg-yellow-500 text-white rounded hover:bg-yellow-600"
-                                  onClick={() => handleEdit(kit)}
-                                >
-                                  <Edit2 size={14} />
-                                </button>
-                                <button
-                                  className="btn btn-danger btn-sm flex items-center px-2 py-1 bg-red-500 text-white rounded hover:bg-red-600"
-                                  onClick={() => handleDelete(kit._id)}
-                                >
-                                  <Trash2 size={14} />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </div>
 
+      {/* Footer */}
+      <div className="mt-8 text-center p-4">
+        <p className="text-gray-400 font-semibold uppercase tracking-widest text-[10px]">
+          Copyright © 2025 Solarkits. All Rights Reserved.
+        </p>
+      </div>
+
       {/* Internal Modals */}
-      {/* Add/Edit Modal */}
+      {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-lg shadow-lg rounded-md bg-white">
-            <div className="bg-primary text-white p-4 rounded-t-md flex justify-between items-center">
-              <h3 className="text-lg font-semibold">{currentRow ? 'Edit Solarkit' : 'Add Solarkit'}</h3>
-              <button
-                onClick={() => setModalOpen(false)}
-                className="text-white hover:text-gray-200 text-xl"
-              >
-                &times;
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white w-full max-w-xl shadow-2xl rounded-2xl overflow-hidden animate-slideUp">
+            <div className="bg-blue-600 p-6 flex justify-between items-center text-white">
+              <div>
+                <h3 className="text-lg font-bold">{currentRow ? 'Update SolarKit' : 'Create New SolarKit'}</h3>
+                <p className="text-blue-100 text-xs">Define kit properties and product list</p>
+              </div>
+              <button onClick={() => setModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
+                <XSquare size={24} />
               </button>
             </div>
-            <div className="p-6">
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">Kit Name</label>
-                <input
-                  type="text"
-                  name="name"
-                  value={solarkitForm.name}
-                  onChange={handleInputChange}
-                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
-                  placeholder="e.g., 3kW Solar Kit"
-                />
+
+            <div className="p-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="col-span-full">
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">SolarKit Name</label>
+                  <input
+                    type="text"
+                    name="name"
+                    value={solarkitForm.name}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
+                    placeholder="e.g., 5kW Ultra Series"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Category</label>
+                  <select
+                    name="category"
+                    value={solarkitForm.category}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
+                  >
+                    <option>Solar Panel</option>
+                    <option>Inverter</option>
+                    <option>BOS Kit</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Sub Category</label>
+                  <select
+                    name="subCategory"
+                    value={solarkitForm.subCategory}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
+                  >
+                    <option>Residential</option>
+                    <option>Commercial</option>
+                    <option>Industrial</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Project Type</label>
+                  <select
+                    name="projectType"
+                    value={solarkitForm.projectType}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
+                  >
+                    <option>1kW - 10kW</option>
+                    <option>10kW - 50kW</option>
+                    <option>50kW+</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Sub Project Type</label>
+                  <select
+                    name="subProjectType"
+                    value={solarkitForm.subProjectType}
+                    onChange={handleInputChange}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
+                  >
+                    <option>On Grid</option>
+                    <option>Off Grid</option>
+                    <option>Hybrid</option>
+                  </select>
+                </div>
               </div>
 
-              <div className="mb-4">
-                <label className="block text-gray-700 text-sm font-bold mb-2">Products Included</label>
-                {solarkitForm.products.map((product, index) => (
-                  <div key={index} className="flex mb-2">
-                    <input
-                      type="text"
-                      value={product}
-                      onChange={(e) => handleProductChange(index, e.target.value)}
-                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline mr-2"
-                      placeholder="Product Name"
-                    />
-                    {index > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => removeProductField(index)}
-                        className="text-red-500 hover:text-red-700 font-bold"
+              <div className="mb-6 p-4 bg-blue-50/40 rounded-2xl border border-blue-100/50">
+                <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
+                  <Package size={14} /> Products Included
+                </label>
+                <div className="space-y-2">
+                  {solarkitForm.products.map((product, index) => (
+                    <div key={index} className="flex gap-2 group animate-fadeIn">
+                      <select
+                        value={product}
+                        onChange={(e) => handleProductChange(index, e.target.value)}
+                        className="flex-1 px-3 py-2 bg-white border border-gray-200 focus:border-blue-500 rounded-lg transition-all font-semibold text-gray-700 text-sm shadow-sm"
                       >
-                        &times;
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={addProductField}
-                  className="text-blue-500 hover:text-blue-700 text-sm font-medium flex items-center"
-                >
-                  <PlusCircle size={14} className="mr-1" /> Add Product
-                </button>
+                        <option>Panel</option>
+                        <option>Inverter</option>
+                        <option>BOS Kit</option>
+                        <option>Battery</option>
+                        <option>Structure</option>
+                      </select>
+                      {index > 0 && (
+                        <button
+                          onClick={() => removeProductField(index)}
+                          className="bg-white text-rose-500 hover:bg-rose-500 hover:text-white p-2 rounded-lg transition-all shadow-sm border border-rose-100"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  <button
+                    onClick={addProductField}
+                    className="w-full py-2 mt-1 border border-dashed border-blue-300 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all font-bold text-xs flex items-center justify-center gap-2"
+                  >
+                    <PlusCircle size={14} /> ADD PRODUCT
+                  </button>
+                </div>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="flex gap-3">
                 <button
                   onClick={() => setModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all"
                 >
-                  Cancel
+                  DISCARD
                 </button>
                 <button
                   onClick={saveSolarkit2}
-                  className="px-4 py-2 bg-primary text-white rounded hover:bg-blue-700"
+                  className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
                 >
-                  Save
+                  <Save size={18} />
+                  {currentRow ? 'UPDATE KIT' : 'SAVE KIT'}
                 </button>
               </div>
             </div>
@@ -482,103 +602,248 @@ const CreateSolarkit = () => {
 
       {/* BOM Configuration Modal */}
       {bomModalOpen && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-          <div className="relative top-20 mx-auto p-5 border w-full max-w-4xl shadow-lg rounded-md bg-white">
-            <div className="bg-info text-white p-4 rounded-t-md flex justify-between items-center">
-              <h3 className="text-lg font-semibold">Manage BOM: {currentRow?.name}</h3>
-              <button
-                onClick={() => setBomModalOpen(false)}
-                className="text-white hover:text-gray-200 text-xl"
-              >
-                &times;
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white w-full max-w-5xl shadow-2xl rounded-2xl overflow-hidden animate-slideUp">
+            {/* BOM Modal Header */}
+            <div className="bg-slate-900 text-white p-5 flex justify-between items-center border-b border-slate-800">
+              <div>
+                <div className="flex items-center gap-2 mb-0.5">
+                  <Package className="text-cyan-400" size={18} />
+                  <h3 className="text-base font-bold tracking-tight">Bill of Materials (BOM)</h3>
+                </div>
+                <p className="text-slate-400 text-[10px] font-bold uppercase tracking-widest flex items-center gap-1.5">
+                  CONFIGURING <ChevronRight size={10} className="text-slate-600" /> <span className="text-cyan-400">{currentRow?.name || 'SolarKit'}</span>
+                </p>
+              </div>
+              <button onClick={() => setBomModalOpen(false)} className="bg-slate-800 hover:bg-slate-700 p-2 rounded-xl transition-all border border-slate-700/50">
+                <XSquare size={18} className="text-slate-300" />
               </button>
             </div>
-            <div className="p-6">
-              <div className="space-y-6">
-                {bomData.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="border rounded-lg p-4 bg-gray-50 relative">
-                    <button
-                      onClick={() => removeBomSection(sectionIndex)}
-                      className="absolute top-2 right-2 text-red-500 hover:text-red-700"
-                    >
-                      <Trash2 size={16} />
-                    </button>
 
-                    <div className="mb-3">
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Section Title</label>
-                      <input
-                        type="text"
-                        value={section.title}
-                        onChange={(e) => updateBomSection(sectionIndex, 'title', e.target.value)}
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                        placeholder="e.g., Solar Panels, Structure, etc."
-                      />
+            <div className="p-5 max-h-[75vh] overflow-y-auto custom-scrollbar bg-white">
+              <div className="space-y-5">
+                {bomData.map((section, idx) => (
+                  <div key={idx} className="bg-slate-50/50 rounded-xl border border-slate-200 p-5 relative animate-fadeIn shadow-sm">
+                    <div className="flex justify-between items-center mb-4 pb-2 border-b border-slate-100">
+                      <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-2">
+                        <span className="bg-cyan-500 text-white w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-black">0{idx + 1}</span>
+                        BOM SECTION
+                      </h4>
+                      {idx > 0 && (
+                        <button
+                          onClick={() => removeBomSection(idx)}
+                          className="text-rose-500 hover:text-rose-700 px-2 py-1 rounded-md font-bold text-[9px] flex items-center gap-1 transition-all bg-rose-50 border border-rose-100"
+                        >
+                          <Trash2 size={10} /> REMOVE
+                        </button>
+                      )}
                     </div>
 
-                    <div className="space-y-2">
-                      <label className="block text-sm font-medium text-gray-700">Items</label>
-                      {section.items.map((item, itemIndex) => (
-                        <div key={itemIndex} className="flex gap-2">
-                          <input
-                            type="text"
-                            value={item.name}
-                            onChange={(e) => updateBomItem(sectionIndex, itemIndex, 'name', e.target.value)}
-                            className="flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            placeholder="Item Name"
-                          />
-                          <input
-                            type="text"
-                            value={item.qty}
-                            onChange={(e) => updateBomItem(sectionIndex, itemIndex, 'qty', e.target.value)}
-                            className="w-20 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            placeholder="Qty"
-                          />
-                          <input
-                            type="text"
-                            value={item.unit}
-                            onChange={(e) => updateBomItem(sectionIndex, itemIndex, 'unit', e.target.value)}
-                            className="w-20 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                            placeholder="Unit"
-                          />
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-5">
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">BOS KIT NAME</label>
+                        <input
+                          type="text"
+                          value={section.bosKitName}
+                          onChange={(e) => updateBomSection(idx, 'bosKitName', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none font-bold text-slate-700 bg-white placeholder:text-slate-300 text-xs transition-all"
+                          placeholder="e.g. Inverter Kit"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KIT TYPE</label>
+                        <div className="flex gap-1 p-1 bg-slate-100 border border-slate-200 rounded-lg h-[38px] items-center">
                           <button
-                            onClick={() => removeBomItem(sectionIndex, itemIndex)}
-                            className="text-red-500 hover:text-red-700 p-1"
+                            onClick={() => updateBomSection(idx, 'kitType', 'CP')}
+                            className={`flex-1 h-full rounded-md text-[10px] font-black transition-all ${section.kitType === 'CP' ? 'bg-white shadow text-cyan-600' : 'text-slate-400 hover:text-slate-600'}`}
                           >
-                            <XSquare size={16} />
+                            CP
+                          </button>
+                          <button
+                            onClick={() => updateBomSection(idx, 'kitType', 'Combokit')}
+                            className={`flex-1 h-full rounded-md text-[10px] font-black transition-all ${section.kitType === 'Combokit' ? 'bg-white shadow text-cyan-600' : 'text-slate-400 hover:text-slate-600'}`}
+                          >
+                            COMBOKIT
                           </button>
                         </div>
-                      ))}
-                      <button
-                        onClick={() => addBomItem(sectionIndex)}
-                        className="text-sm text-blue-600 hover:text-blue-800 flex items-center mt-2"
-                      >
-                        <PlusCircle size={14} className="mr-1" /> Add Item
-                      </button>
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5 ml-1">KIT CATEGORY</label>
+                        <input
+                          type="text"
+                          value={section.kitCategory}
+                          onChange={(e) => updateBomSection(idx, 'kitCategory', e.target.value)}
+                          className="w-full px-3 py-2 border border-slate-200 rounded-lg focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500/20 focus:outline-none font-bold text-slate-700 bg-white placeholder:text-slate-300 text-xs transition-all"
+                          placeholder="e.g. Structure"
+                        />
+                      </div>
                     </div>
+
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm mb-4">
+                      <table className="w-full text-left">
+                        <thead className="bg-slate-800 text-white">
+                          <tr>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">Item Name</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">Type</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">Qty</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">Unit</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest">Price</th>
+                            <th className="px-4 py-2 text-[9px] font-black uppercase tracking-widest text-center"></th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                          {section.items.map((item, itemIdx) => (
+                            <tr key={itemIdx} className="group hover:bg-gray-50/50 transition-colors">
+                              <td className="p-2">
+                                <select
+                                  value={item.name}
+                                  onChange={(e) => updateBomItem(idx, itemIdx, 'name', e.target.value)}
+                                  className="w-full border border-slate-100 rounded-md p-1.5 font-bold text-slate-700 bg-slate-50/50 group-hover:bg-white transition-all text-[11px] focus:outline-none focus:border-cyan-500"
+                                >
+                                  <option value="">Select Item</option>
+                                  <option>Panel</option>
+                                  <option>Inverter</option>
+                                  <option>Rail</option>
+                                  <option>Clamp</option>
+                                </select>
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={item.itemType}
+                                  onChange={(e) => updateBomItem(idx, itemIdx, 'itemType', e.target.value)}
+                                  className="w-full border border-slate-100 rounded-md p-1.5 font-bold text-slate-700 bg-slate-50/50 group-hover:bg-white transition-all text-[11px] focus:outline-none focus:border-cyan-500"
+                                >
+                                  <option value="">Select Type</option>
+                                  <option>Hardware</option>
+                                  <option>Electronics</option>
+                                </select>
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="text"
+                                  value={item.qty}
+                                  onChange={(e) => updateBomItem(idx, itemIdx, 'qty', e.target.value)}
+                                  className="w-full border border-slate-100 rounded-md p-1.5 font-bold text-slate-700 bg-slate-50/50 group-hover:bg-white transition-all text-[11px] focus:outline-none focus:border-cyan-500"
+                                  placeholder="1"
+                                />
+                              </td>
+                              <td className="p-2">
+                                <select
+                                  value={item.unit}
+                                  onChange={(e) => updateBomItem(idx, itemIdx, 'unit', e.target.value)}
+                                  className="w-full border border-slate-100 rounded-md p-1.5 font-bold text-slate-700 bg-slate-50/50 group-hover:bg-white transition-all text-[11px] focus:outline-none focus:border-cyan-500"
+                                >
+                                  <option value="">Select Unit</option>
+                                  <option>Nos</option>
+                                  <option>Kgs</option>
+                                  <option>Mtrs</option>
+                                </select>
+                              </td>
+                              <td className="p-2">
+                                <input
+                                  type="number"
+                                  value={item.price}
+                                  onChange={(e) => updateBomItem(idx, itemIdx, 'price', e.target.value)}
+                                  className="w-full border border-slate-100 rounded-md p-1.5 font-bold text-slate-700 bg-slate-50/50 group-hover:bg-white transition-all text-[11px] focus:outline-none focus:border-cyan-500"
+                                  placeholder="0.00"
+                                />
+                              </td>
+                              <td className="p-2 text-center">
+                                <button
+                                  onClick={() => removeBomItem(idx, itemIdx)}
+                                  className="text-slate-300 hover:text-rose-500 p-1.5 rounded-md hover:bg-rose-50 transition-all"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    <button
+                      onClick={() => addBomItem(idx)}
+                      className="w-full py-2 border border-dashed border-slate-200 rounded-lg text-slate-400 font-bold text-[10px] hover:border-cyan-300 hover:text-cyan-600 hover:bg-cyan-50/50 transition-all flex items-center justify-center gap-2 uppercase tracking-wide"
+                    >
+                      <PlusCircle size={12} /> Add New Item
+                    </button>
                   </div>
                 ))}
 
                 <button
                   onClick={addBomSection}
-                  className="w-full py-2 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500 flex items-center justify-center gap-2"
+                  className="w-full py-4 border-2 border-dashed border-cyan-100 rounded-xl text-cyan-600 font-black text-xs hover:bg-cyan-50/50 transition-all flex items-center justify-center gap-2 shadow-sm uppercase tracking-widest"
                 >
-                  <PlusCircle size={20} />
-                  Add Another BOM Section
+                  <PlusCircle size={16} /> Add New BOM Section
                 </button>
               </div>
 
-              <div className="flex justify-end gap-3 mt-6">
+              <div className="flex justify-end gap-3 mt-10 pt-6 border-t border-slate-100">
                 <button
                   onClick={() => setBomModalOpen(false)}
-                  className="px-4 py-2 border border-gray-300 rounded hover:bg-gray-50"
+                  className="px-6 py-2 text-slate-400 font-bold text-xs hover:text-slate-600 transition-all uppercase tracking-widest"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={saveBOM}
-                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+                  className="px-8 py-2.5 bg-cyan-600 text-white rounded-lg font-black text-xs hover:bg-cyan-700 transition-all shadow-lg shadow-cyan-100 flex items-center gap-2 uppercase tracking-widest"
                 >
-                  Save BOM
+                  <Save size={14} /> Save Configuration
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Details Modal */}
+      {viewModalOpen && (
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
+          <div className="relative bg-white w-full max-w-3xl shadow-2xl rounded-2xl overflow-hidden animate-slideUp">
+            <div className="bg-cyan-600 p-6 flex justify-between items-center text-white">
+              <h3 className="text-lg font-bold uppercase tracking-wider">SolarKit Details</h3>
+              <button onClick={() => setViewModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-1.5 rounded-lg transition-all">
+                <XSquare size={20} />
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+                <table className="w-full text-left">
+                  <tbody>
+                    {[
+                      { label: 'Name', value: currentRow?.name || '(Not Created)', color: 'text-blue-600' },
+                      { label: 'Products', value: currentRow?.products?.join(', ') || 'No products added' },
+                      { label: 'Country', value: currentRow?.country?.name || 'Unknown' },
+                      { label: 'Category', value: currentRow?.category },
+                      { label: 'Sub Category', value: currentRow?.subCategory },
+                      { label: 'Project Type', value: currentRow?.projectType },
+                      { label: 'Sub Project Type', value: currentRow?.subProjectType },
+                      { label: 'Status', value: currentRow?.status, badge: true },
+                      { label: 'BOM Details', value: currentRow?.bom?.length > 0 ? `${currentRow.bom.length} Sections Defined` : 'No BOM data available', color: 'text-sky-600' }
+                    ].map((row, i) => (
+                      <tr key={i} className={`${i % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'} border-b border-gray-100 last:border-0`}>
+                        <td className="px-6 py-3 font-bold text-gray-400 uppercase tracking-widest text-[10px] w-40">{row.label}</td>
+                        <td className={`px-6 py-3 font-semibold text-sm ${row.color || 'text-gray-700'}`}>
+                          {row.badge ? (
+                            <span className={`px-2 py-0.5 rounded-full text-[9px] uppercase font-bold ${row.value === 'Active' ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'}`}>
+                              {row.value}
+                            </span>
+                          ) : row.value}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex justify-end mt-6">
+                <button
+                  onClick={() => setViewModalOpen(false)}
+                  className="px-6 py-2 bg-gray-800 text-white rounded-lg font-bold text-xs hover:bg-black transition-all shadow-md"
+                >
+                  CLOSE
                 </button>
               </div>
             </div>

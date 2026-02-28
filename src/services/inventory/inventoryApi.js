@@ -25,6 +25,10 @@ const inventoryApi = {
     createWarehouse: (data) => api.post('/inventory/warehouses', data),
     updateWarehouse: (id, data) => api.patch(`/inventory/warehouses/${id}`, data),
     deleteWarehouse: (id) => api.delete(`/inventory/warehouses/${id}`),
+
+    // Inventory Settings
+    getSettings: () => api.get('/inventory/settings'),
+    updateSettings: (data) => api.put('/inventory/settings', data),
 };
 
 export default inventoryApi;

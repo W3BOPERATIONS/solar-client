@@ -14,11 +14,23 @@ export const productApi = {
     updateProjectType: (id, data) => axiosInstance.put(`/masters/project-types/${id}`, data),
     deleteProjectType: (id) => axiosInstance.delete(`/masters/project-types/${id}`),
 
+    // Sub Project Types
+    getSubProjectTypes: (params) => axiosInstance.get('/masters/sub-project-types', { params }),
+    createSubProjectType: (data) => axiosInstance.post('/masters/sub-project-types', data),
+    updateSubProjectType: (id, data) => axiosInstance.put(`/masters/sub-project-types/${id}`, data),
+    deleteSubProjectType: (id) => axiosInstance.delete(`/masters/sub-project-types/${id}`),
+
     // Categories
     getCategories: (params) => axiosInstance.get('/masters/categories', { params }),
     createCategory: (data) => axiosInstance.post('/masters/categories', data),
     updateCategory: (id, data) => axiosInstance.put(`/masters/categories/${id}`, data),
     deleteCategory: (id) => axiosInstance.delete(`/masters/categories/${id}`),
+
+    // Sub Categories
+    getSubCategories: (params) => axiosInstance.get('/masters/sub-categories', { params }),
+    createSubCategory: (data) => axiosInstance.post('/masters/sub-categories', data),
+    updateSubCategory: (id, data) => axiosInstance.put(`/masters/sub-categories/${id}`, data),
+    deleteSubCategory: (id) => axiosInstance.delete(`/masters/sub-categories/${id}`),
 
     // Units
     getUnits: (params) => axiosInstance.get('/masters/units', { params }),
@@ -37,4 +49,17 @@ export const productApi = {
     createPriceMaster: (data) => axiosInstance.post('/masters/price-master', data),
     updatePriceMaster: (id, data) => axiosInstance.put(`/masters/price-master/${id}`, data),
     deletePriceMaster: (id) => axiosInstance.delete(`/masters/price-master/${id}`),
+
+    // Project Category Mappings
+    getProjectCategoryMappings: (params) => axiosInstance.get('/masters/project-category-mappings', { params }),
+    createProjectCategoryMapping: (data) => axiosInstance.post('/masters/project-category-mappings', data),
+    updateProjectCategoryMapping: (id, data) => axiosInstance.put(`/masters/project-category-mappings/${id}`, data),
+    deleteProjectCategoryMapping: (id) => axiosInstance.delete(`/masters/project-category-mappings/${id}`),
+
+    // Geography
+    getStates: () => axiosInstance.get('/locations/states'),
+    getClusters: (params) => axiosInstance.get('/locations/clusters', { params }),
+
+    // Brands
+    getBrands: () => axiosInstance.get('/brand/manufacturer'),
 };

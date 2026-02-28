@@ -45,24 +45,24 @@ export const deleteInstallerTool = async (id) => {
     return response.data;
 };
 
-// --- Installation Rates ---
-export const getInstallationRates = async () => {
-    const response = await axios.get(`${API_URL}/rates`);
+// --- Installer Ratings ---
+export const getInstallerRatings = async () => {
+    const response = await axios.get(`${API_URL}/ratings`);
     return response.data;
 };
 
-export const createInstallationRate = async (data) => {
-    const response = await axios.post(`${API_URL}/rates`, data);
+export const createInstallerRating = async (data) => {
+    const response = await axios.post(`${API_URL}/ratings`, data);
     return response.data;
 };
 
-export const updateInstallationRate = async (id, data) => {
-    const response = await axios.put(`${API_URL}/rates/${id}`, data);
+export const updateInstallerRating = async (id, data) => {
+    const response = await axios.put(`${API_URL}/ratings/${id}`, data);
     return response.data;
 };
 
-export const deleteInstallationRate = async (id) => {
-    const response = await axios.delete(`${API_URL}/rates/${id}`);
+export const deleteInstallerRating = async (id) => {
+    const response = await axios.delete(`${API_URL}/ratings/${id}`);
     return response.data;
 };
 
@@ -84,5 +84,31 @@ export const updateInstallerAgency = async (id, data) => {
 
 export const deleteInstallerAgency = async (id) => {
     const response = await axios.delete(`${API_URL}/agencies/${id}`);
+    return response.data;
+};
+
+// ---------------------------------------------------------------------------
+// Installer Agency Plan functions
+// ---------------------------------------------------------------------------
+
+// Get all installer agency plans (optionally filtered by state)
+export const getInstallerAgencyPlans = async (stateId = null) => {
+    const url = stateId ? `${API_URL}/agency-plans?stateId=${stateId}` : `${API_URL}/agency-plans`;
+    const response = await axios.get(url);
+    return response.data;
+};
+
+export const createInstallerAgencyPlan = async (data) => {
+    const response = await axios.post(`${API_URL}/agency-plans`, data);
+    return response.data;
+};
+
+export const updateInstallerAgencyPlan = async (id, data) => {
+    const response = await axios.put(`${API_URL}/agency-plans/${id}`, data);
+    return response.data;
+};
+
+export const deleteInstallerAgencyPlan = async (id) => {
+    const response = await axios.delete(`${API_URL}/agency-plans/${id}`);
     return response.data;
 };

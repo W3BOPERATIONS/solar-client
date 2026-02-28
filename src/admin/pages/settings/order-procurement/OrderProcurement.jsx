@@ -1,29 +1,40 @@
 import React, { useState, useEffect } from 'react';
-import { Settings, Eye, Search, X, Plus, Trash, Edit, Save } from 'lucide-react';
+import { Eye, Search, X, Plus, Trash, Edit, Save, Settings } from 'lucide-react';
 import { toast } from 'react-hot-toast';
+import Select from 'react-select';
 import {
-  getAllOrders,
-  createOrder,
-  updateOrder,
-  deleteOrder,
-  getAllSuppliers,
-  getAllProducts,
-  getStates,
-  getCities,
-  getDistricts
-} from '../../../../services/procurement/procurementApi';
+  getAllOrderProcurementSettings,
+  createOrderProcurementSetting,
+  updateOrderProcurementSetting,
+  deleteOrderProcurementSetting,
+  getCategories,
+  getSubCategories,
+  getProjectTypes,
+  getSubProjectTypes,
+  getProducts,
+  getBrands,
+  getComboKits,
+  getSupplierTypes,
+  getSkus
+} from '../../../../services/settings/orderProcurementSettingApi';
 
 export default function OrderProcurement() {
   // Data State
-  const [orders, setOrders] = useState([]);
-  const [filteredOrders, setFilteredOrders] = useState([]);
-  const [suppliers, setSuppliers] = useState([]);
+  const [settings, setSettings] = useState([]);
+  const [filteredSettings, setFilteredSettings] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
   const [products, setProducts] = useState([]);
-  const [states, setStates] = useState([]);
+  const [brands, setBrands] = useState([]);
+  const [skusList, setSkusList] = useState([]);
+  const [comboKits, setComboKits] = useState([]);
+  const [supplierTypes, setSupplierTypes] = useState([]);
 
-  // Form Location State
-  const [formCities, setFormCities] = useState([]);
-  const [formDistricts, setFormDistricts] = useState([]);
+  // Form Dep Dropdowns
+  const [formSubCategories, setFormSubCategories] = useState([]);
+  const [formSubProjectTypes, setFormSubProjectTypes] = useState([]);
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -32,22 +43,23 @@ export default function OrderProcurement() {
 
   // Filters
   const [filters, setFilters] = useState({
-    supplier: '',
-    status: '',
-    state: '',
-    orderNumber: ''
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: ''
   });
 
-  // Current Order Form Data
+  // Current Setting Form Data
   const initialFormState = {
-    orderNumber: '',
-    supplierId: '',
-    items: [{ product: '', quantity: 1, price: 0 }],
-    status: 'Pending',
-    state: '',
-    city: '',
-    district: '',
-    totalAmount: 0
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: '',
+    product: '',
+    brand: '',
+    skus: [],
+    skuSelectionOption: 'ComboKit',
+    skuItems: [{ minRange: '', maxRange: '', comboKit: '', supplierType: '' }]
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -59,21 +71,45 @@ export default function OrderProcurement() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [ordersData, suppliersData, productsData, statesData] = await Promise.all([
-        getAllOrders(),
-        getAllSuppliers(),
-        getAllProducts(),
-        getStates()
+      const [
+        settingsData,
+        catData,
+        pTypeData,
+        prodData,
+        brandData,
+        skuData,
+        comboData,
+        suppTypeData,
+        allSubCatData,
+        allSubPTypeData
+      ] = await Promise.all([
+        getAllOrderProcurementSettings(),
+        getCategories(),
+        getProjectTypes(),
+        getProducts(),
+        getBrands(),
+        getSkus(),
+        getComboKits(),
+        getSupplierTypes(),
+        getSubCategories(), // fetch all for list filters
+        getSubProjectTypes() // fetch all for list filters
       ]);
 
-      setOrders(ordersData?.data || []);
-      setFilteredOrders(ordersData?.data || []);
-      setSuppliers(suppliersData?.data || []);
-      setProducts(productsData?.data || []);
-      setStates(statesData?.data || []);
+      setSettings(settingsData?.data || []);
+      setFilteredSettings(settingsData?.data || []);
+      setCategories(catData?.data || []);
+      setProjectTypes(pTypeData?.data || []);
+      setProducts(prodData?.data || []);
+      setBrands(Array.isArray(brandData) ? brandData : brandData?.data || []);
+      setSkusList(skuData?.data || []);
+      setComboKits(Array.isArray(comboData) ? comboData : comboData?.data || []);
+      setSupplierTypes(suppTypeData?.data || []);
+      
+      setSubCategories(allSubCatData?.data || []);
+      setSubProjectTypes(allSubPTypeData?.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast.error("Failed to load data");
+      toast.error("Failed to load initial data");
     } finally {
       setLoading(false);
     }
@@ -81,138 +117,115 @@ export default function OrderProcurement() {
 
   // Filter Logic
   useEffect(() => {
-    let result = orders;
+    let result = settings;
 
-    if (filters.supplier) {
-      result = result.filter(o => o.supplierId?._id === filters.supplier || o.supplierId === filters.supplier);
+    if (filters.category) {
+      result = result.filter(s => s.category?.name === filters.category || s.category?._id === filters.category || s.category === filters.category);
     }
-    if (filters.status) {
-      result = result.filter(o => o.status === filters.status);
+    if (filters.subCategory) {
+      result = result.filter(s => s.subCategory?.name === filters.subCategory || s.subCategory?._id === filters.subCategory || s.subCategory === filters.subCategory);
     }
-    if (filters.state) {
-      result = result.filter(o => o.state?._id === filters.state || o.state === filters.state);
+    if (filters.projectType) {
+      result = result.filter(s => s.projectType?.name === filters.projectType || s.projectType?._id === filters.projectType || s.projectType === filters.projectType);
     }
-    if (filters.orderNumber) {
-      result = result.filter(o => o.orderNumber.toLowerCase().includes(filters.orderNumber.toLowerCase()));
+    if (filters.subProjectType) {
+      result = result.filter(s => s.subProjectType?.name === filters.subProjectType || s.subProjectType?._id === filters.subProjectType || s.subProjectType === filters.subProjectType);
     }
 
-    setFilteredOrders(result);
-  }, [filters, orders]);
+    setFilteredSettings(result);
+  }, [filters, settings]);
 
-  // Dependent Dropdowns for Form
-  const handleStateChange = async (e) => {
-    const stateId = e.target.value;
-    setFormData(prev => ({ ...prev, state: stateId, city: '', district: '' }));
-    setFormCities([]);
-    setFormDistricts([]);
-    if (stateId) {
+  // Form Handlers
+  const handleCategoryChange = async (e) => {
+    const catId = e.target.value;
+    setFormData(prev => ({ ...prev, category: catId, subCategory: '' }));
+    setFormSubCategories([]);
+    if (catId) {
       try {
-        const res = await getCities(stateId);
-        setFormCities(res.data || []);
+        const res = await getSubCategories(catId);
+        setFormSubCategories(res.data || []);
       } catch (err) {
-        toast.error("Failed to load cities");
+        toast.error("Failed to load sub categories");
       }
     }
   };
 
-  const handleCityChange = async (e) => {
-    const cityId = e.target.value;
-    setFormData(prev => ({ ...prev, city: cityId, district: '' }));
-    setFormDistricts([]);
-    if (cityId) {
+  const handleProjectTypeChange = async (e) => {
+    const ptId = e.target.value;
+    setFormData(prev => ({ ...prev, projectType: ptId, subProjectType: '' }));
+    setFormSubProjectTypes([]);
+    if (ptId) {
       try {
-        const res = await getDistricts(cityId);
-        setFormDistricts(res.data || []);
+        const res = await getSubProjectTypes(ptId);
+        setFormSubProjectTypes(res.data || []);
       } catch (err) {
-        toast.error("Failed to load districts");
+        toast.error("Failed to load sub project types");
       }
     }
   };
 
-  // Order Items Logic
-  const handleItemChange = (index, field, value) => {
-    const newItems = [...formData.items];
+  // SKU Items Logic
+  const handleSkuItemChange = (index, field, value) => {
+    const newItems = [...formData.skuItems];
     newItems[index][field] = value;
-
-    // Auto update price if product selected
-    if (field === 'product') {
-      const prod = products.find(p => p._id === value);
-      if (prod) {
-        // Assuming product has a price field or we set default. 
-        // If product doesn't have price, we might need another fetch or use 0.
-        // For now using 0 or existing price logic if Product model had it. Product model didn't seem to have price.
-        // So user enters price manually or we fetch from PriceMaster? 
-        // Keeping it manual/default for now as per prompt "only replace static data".
-        // Use a default or 0 if not found.
-        newItems[index].price = 0;
-      }
-    }
-
-    setFormData({ ...formData, items: newItems });
-    calculateTotal(newItems);
+    setFormData({ ...formData, skuItems: newItems });
   };
 
-  const addItem = () => {
+  const addSkuItem = () => {
     setFormData({
       ...formData,
-      items: [...formData.items, { product: '', quantity: 1, price: 0 }]
+      skuItems: [...formData.skuItems, { minRange: '', maxRange: '', comboKit: '', supplierType: '' }]
     });
   };
 
-  const removeItem = (index) => {
-    const newItems = formData.items.filter((_, i) => i !== index);
-    setFormData({ ...formData, items: newItems });
-    calculateTotal(newItems);
-  };
-
-  const calculateTotal = (items) => {
-    const total = items.reduce((sum, item) => sum + (Number(item.quantity) * Number(item.price)), 0);
-    setFormData(prev => ({ ...prev, totalAmount: total }));
+  const removeSkuItem = (index) => {
+    const newItems = formData.skuItems.filter((_, i) => i !== index);
+    setFormData({ ...formData, skuItems: newItems });
   };
 
   // CRUD Actions
-  const handleEdit = async (order) => {
+  const handleEdit = async (setting) => {
     setIsEdit(true);
     setFormData({
-      orderNumber: order.orderNumber,
-      supplierId: order.supplierId?._id || order.supplierId,
-      items: order.items.map(i => ({
-        product: i.product?._id || i.product,
-        quantity: i.quantity,
-        price: i.price
+      category: setting.category?._id || setting.category,
+      subCategory: setting.subCategory?._id || setting.subCategory,
+      projectType: setting.projectType?._id || setting.projectType,
+      subProjectType: setting.subProjectType?._id || setting.subProjectType,
+      product: setting.product?._id || setting.product,
+      brand: setting.brand?._id || setting.brand,
+      skus: setting.skus?.map(s => s._id || s) || [],
+      skuSelectionOption: setting.skuSelectionOption || 'ComboKit',
+      skuItems: setting.skuItems.map(i => ({
+        minRange: i.minRange,
+        maxRange: i.maxRange,
+        comboKit: i.comboKit?._id || i.comboKit || '',
+        supplierType: i.supplierType?._id || i.supplierType || '',
+        _id: i._id
       })),
-      status: order.status,
-      state: order.state?._id || order.state,
-      city: order.city?._id || order.city,
-      district: order.district?._id || order.district,
-      totalAmount: order.totalAmount,
-      _id: order._id
+      _id: setting._id
     });
 
-    // Pre-load dependent dropdowns
-    if (order.state?._id || order.state) {
-      const sId = order.state?._id || order.state;
-      const cRes = await getCities(sId);
-      setFormCities(cRes.data || []);
-
-      if (order.city?._id || order.city) {
-        const cId = order.city?._id || order.city;
-        const dRes = await getDistricts(cId);
-        setFormDistricts(dRes.data || []);
-      }
+    // Load dependent dropdowns for form
+    if (setting.category?._id || setting.category) {
+      const res = await getSubCategories(setting.category?._id || setting.category);
+      setFormSubCategories(res.data || []);
+    }
+    if (setting.projectType?._id || setting.projectType) {
+      const res = await getSubProjectTypes(setting.projectType?._id || setting.projectType);
+      setFormSubProjectTypes(res.data || []);
     }
 
     setShowModal(true);
   };
 
   const handleDelete = async (id) => {
-    if (window.confirm('Are you sure you want to delete this order?')) {
+    if (window.confirm('Are you sure you want to delete this setting?')) {
       try {
-        await deleteOrder(id);
-        toast.success('Order deleted successfully');
+        await deleteOrderProcurementSetting(id);
+        toast.success('Setting deleted successfully');
         fetchInitialData();
       } catch (err) {
-        toast.error(err.message || 'Failed to delete order');
+        toast.error(err.message || 'Failed to delete setting');
       }
     }
   };
@@ -220,12 +233,22 @@ export default function OrderProcurement() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      const payload = {
+        ...formData,
+        skuItems: formData.skuItems.map(item => {
+          const newItem = { ...item };
+          if (!newItem.comboKit || newItem.comboKit === '') delete newItem.comboKit;
+          if (!newItem.supplierType || newItem.supplierType === '') delete newItem.supplierType;
+          return newItem;
+        })
+      };
+
       if (isEdit) {
-        await updateOrder(formData._id, formData);
-        toast.success('Order updated successfully');
+        await updateOrderProcurementSetting(formData._id, payload);
+        toast.success('Setting updated successfully');
       } else {
-        await createOrder(formData);
-        toast.success('Order created successfully');
+        await createOrderProcurementSetting(payload);
+        toast.success('Setting created successfully');
       }
       setShowModal(false);
       fetchInitialData();
@@ -237,115 +260,123 @@ export default function OrderProcurement() {
 
   const resetForm = () => {
     setFormData(initialFormState);
-    setFormCities([]);
-    setFormDistricts([]);
+    setFormSubCategories([]);
+    setFormSubProjectTypes([]);
     setIsEdit(false);
   };
 
   return (
     <div className="container px-4 py-8 mx-auto">
-      {/* Header */}
-      <div className="p-4 mb-4 bg-white rounded-lg shadow-sm flex justify-between items-center">
-        <h4 className="text-xl font-semibold text-blue-600 mb-0">Order Procurement</h4>
-        <button
-          onClick={() => { resetForm(); setShowModal(true); }}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center gap-2 hover:bg-blue-700"
-        >
-          <Plus size={18} /> Add Order
-        </button>
-      </div>
+      {/* Header and Add Button inside one card */}
+      <div className="p-6 mb-6 bg-white rounded-lg shadow-sm border border-gray-100 flex flex-col items-start gap-4">
+        <h4 className="text-xl font-bold text-blue-600 mb-0">Order Procurement Setting</h4>
+        
+        {/* Filters Grid */}
+        <div className="w-full grid grid-cols-1 gap-4 md:grid-cols-4 items-center">
+          <select
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.category}
+            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+          >
+            <option value="">Filter by Category</option>
+            {Array.from(new Set(categories.map(c => c.name))).map(name => <option key={name} value={name}>{name}</option>)}
+          </select>
 
-      {/* Filters */}
-      <div className="p-4 mb-4 bg-white rounded-lg shadow-sm">
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
-          <input
-            type="text"
-            placeholder="Search Order #"
-            className="p-2 border border-gray-300 rounded-lg"
-            value={filters.orderNumber}
-            onChange={(e) => setFilters({ ...filters, orderNumber: e.target.value })}
-          />
           <select
-            className="p-2 border border-gray-300 rounded-lg"
-            value={filters.supplier}
-            onChange={(e) => setFilters({ ...filters, supplier: e.target.value })}
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.subCategory}
+            onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
           >
-            <option value="">All Suppliers</option>
-            {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+            <option value="">Filter by Sub-Category</option>
+            {Array.from(new Set(subCategories.map(c => c.name))).map(name => <option key={name} value={name}>{name}</option>)}
           </select>
+
           <select
-            className="p-2 border border-gray-300 rounded-lg"
-            value={filters.status}
-            onChange={(e) => setFilters({ ...filters, status: e.target.value })}
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.projectType}
+            onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
           >
-            <option value="">All Status</option>
-            {['Pending', 'Approved', 'Completed', 'Cancelled'].map(s =>
-              <option key={s} value={s}>{s}</option>
-            )}
+            <option value="">Filter by Project type</option>
+            {Array.from(new Set(projectTypes.map(p => p.name))).map(name => <option key={name} value={name}>{name}</option>)}
           </select>
+
           <select
-            className="p-2 border border-gray-300 rounded-lg"
-            value={filters.state}
-            onChange={(e) => setFilters({ ...filters, state: e.target.value })}
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.subProjectType}
+            onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
           >
-            <option value="">All Locations (State)</option>
-            {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+            <option value="">Filter by Sub Project type</option>
+            {Array.from(new Set(subProjectTypes.map(p => p.name))).map(name => <option key={name} value={name}>{name}</option>)}
           </select>
+        </div>
+        
+        <div className="flex w-full justify-between items-center mt-2">
+            <button 
+                onClick={() => setFilters({ category: '', subCategory: '', projectType: '', subProjectType: '' })}
+                className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
+            >
+                <X size={14} className="mr-1" /> Clear Filters
+            </button>
+            <button
+            onClick={() => { resetForm(); setShowModal(true); }}
+            className="bg-blue-600 text-white px-5 py-2 rounded-md flex items-center gap-2 hover:bg-blue-700 transition"
+            >
+            <Plus size={18} /> Add
+            </button>
         </div>
       </div>
 
       {/* Table */}
-      <div className="p-4 bg-white rounded-lg shadow-sm overflow-x-auto">
+      <div className="p-0 bg-white rounded-lg shadow-sm overflow-x-auto border border-gray-100">
         {loading ? (
-          <div className="text-center py-8">Loading...</div>
-        ) : filteredOrders.length === 0 ? (
-          <div className="py-8 text-center text-gray-500">
-            <Search size={48} className="mx-auto mb-4" />
-            <p>No orders found</p>
+          <div className="text-center py-12 text-gray-500">Loading settings...</div>
+        ) : filteredSettings.length === 0 ? (
+          <div className="py-16 text-center text-gray-400 font-medium">
+            <Settings size={48} className="mx-auto mb-4 opacity-50" />
+            <p>No setting permutations found. Try adding a new configuration.</p>
           </div>
         ) : (
-          <table className="w-full text-sm text-left">
-            <thead className="bg-blue-50 text-gray-700 uppercase">
+          <table className="w-full text-sm text-left border-collapse">
+            <thead className="bg-[#5da5eb] text-white">
               <tr>
-                <th className="p-3">Order #</th>
-                <th className="p-3">Supplier</th>
-                <th className="p-3">Location</th>
-                <th className="p-3">Status</th>
-                <th className="p-3">Total Amount</th>
-                <th className="p-3 text-center">Actions</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">ID</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Category</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Sub category</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Project type</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Sub Project type</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9] text-center">action</th>
               </tr>
             </thead>
             <tbody>
-              {filteredOrders.map((order) => (
-                <tr key={order._id} className="border-b hover:bg-gray-50">
-                  <td className="p-3 font-medium">{order.orderNumber}</td>
-                  <td className="p-3">{order.supplierId?.name || 'N/A'}</td>
-                  <td className="p-3">
-                    {[order.state?.name, order.city?.name, order.district?.name].filter(Boolean).join(', ')}
-                  </td>
-                  <td className="p-3">
-                    <span className={`px-2 py-1 rounded text-xs font-semibold
-                      ${order.status === 'Completed' ? 'bg-green-100 text-green-800' :
-                        order.status === 'Pending' ? 'bg-yellow-100 text-yellow-800' :
-                          order.status === 'Cancelled' ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
-                      {order.status}
-                    </span>
-                  </td>
-                  <td className="p-3 font-semibold">₹{order.totalAmount}</td>
-                  <td className="p-3 text-center flex justify-center gap-2">
+              {filteredSettings.map((setting, idx) => (
+                <tr key={setting._id} className="border-b hover:bg-blue-50/30 transition">
+                  <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{setting.category?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.subCategory?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.projectType?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.subProjectType?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-center flex justify-center gap-3">
                     <button
-                      onClick={() => handleEdit(order)}
-                      className="p-1.5 border border-blue-600 rounded hover:bg-blue-50 text-blue-600"
+                      onClick={() => handleEdit(setting)}
+                      className="text-blue-500 hover:text-blue-700"
                       title="Edit"
                     >
-                      <Edit size={16} />
+                      <Settings size={18} />
                     </button>
                     <button
-                      onClick={() => handleDelete(order._id)}
-                      className="p-1.5 border border-red-500 rounded hover:bg-red-50 text-red-500"
+                      onClick={() => handleEdit(setting)}
+                      className="text-blue-500 hover:text-blue-700"
+                      title="View"
+                    >
+                      <Eye size={18} />
+                    </button>
+                    {/* Add delete optionally */}
+                    <button
+                      onClick={() => handleDelete(setting._id)}
+                      className="text-red-400 hover:text-red-600"
                       title="Delete"
                     >
-                      <Trash size={16} />
+                      <Trash size={18} />
                     </button>
                   </td>
                 </tr>
@@ -355,164 +386,257 @@ export default function OrderProcurement() {
         )}
       </div>
 
-      {/* Add/Edit Modal */}
+      {/* Add/Edit Modal matching exact structure */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-            <div className="p-6">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-xl font-bold">{isEdit ? 'Edit Order' : 'Create New Order'}</h3>
-                <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700">
-                  <X size={24} />
-                </button>
-              </div>
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4 xl:p-0">
+          <div className="bg-[#f0f4f8] rounded-xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[95vh]">
+            
+            <div className="p-6 bg-white border-b border-gray-200 flex justify-between items-center rounded-t-xl">
+              <h3 className="text-[22px] font-bold text-[#1f8dec] m-0 leading-tight">
+                {isEdit ? 'Edit Order Procurement Setting' : 'Add Order Procurement Setting'}
+              </h3>
+              <button onClick={() => setShowModal(false)} className="text-gray-400 hover:text-gray-700 flex items-center text-sm font-medium gap-1 uppercase tracking-wide">
+                <span className="text-xl">&larr;</span> Back
+              </button>
+            </div>
 
-              <form onSubmit={handleSubmit}>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                  {/* Basic Info */}
+            <div className="p-8 overflow-y-auto flex-1 bg-white mx-0 my-0">
+              <form onSubmit={handleSubmit} className="space-y-6">
+                
+                {/* Row 1: Category, Sub Category, Project Type, Sub Project Type */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div>
-                    <label className="block text-sm font-medium mb-1">Order Number *</label>
-                    <input
-                      required
-                      type="text"
-                      className="w-full p-2 border rounded"
-                      value={formData.orderNumber}
-                      onChange={e => setFormData({ ...formData, orderNumber: e.target.value })}
-                      disabled={isEdit} // Disable mostly for consistency, but logic allows change if needed
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium mb-1">Supplier *</label>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Category</label>
                     <select
                       required
-                      className="w-full p-2 border rounded"
-                      value={formData.supplierId}
-                      onChange={e => setFormData({ ...formData, supplierId: e.target.value })}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.category}
+                      onChange={handleCategoryChange}
                     >
-                      <option value="">Select Supplier</option>
-                      {suppliers.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  </div>
-
-                  {/* Location - Dependent Dropdowns */}
-                  <div>
-                    <label className="block text-sm font-medium mb-1">State *</label>
-                    <select
-                      required
-                      className="w-full p-2 border rounded"
-                      value={formData.state}
-                      onChange={handleStateChange}
-                    >
-                      <option value="">Select State</option>
-                      {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                      <option value="">Select Category</option>
+                      {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">City *</label>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Sub Category</label>
                     <select
                       required
-                      className="w-full p-2 border rounded"
-                      value={formData.city}
-                      onChange={handleCityChange}
-                      disabled={!formData.state}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.subCategory}
+                      onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
+                      disabled={!formData.category}
                     >
-                      <option value="">Select City</option>
-                      {formCities.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      <option value="">Select Sub Category</option>
+                      {formSubCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">District *</label>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Project Type</label>
                     <select
                       required
-                      className="w-full p-2 border rounded"
-                      value={formData.district}
-                      onChange={e => setFormData({ ...formData, district: e.target.value })}
-                      disabled={!formData.city}
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.projectType}
+                      onChange={handleProjectTypeChange}
                     >
-                      <option value="">Select District</option>
-                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+                      <option value="">Select Project Type</option>
+                      {projectTypes.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
                     </select>
                   </div>
-
                   <div>
-                    <label className="block text-sm font-medium mb-1">Status</label>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Sub Project Type</label>
                     <select
-                      className="w-full p-2 border rounded"
-                      value={formData.status}
-                      onChange={e => setFormData({ ...formData, status: e.target.value })}
+                      required
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.subProjectType}
+                      onChange={e => setFormData({ ...formData, subProjectType: e.target.value })}
+                      disabled={!formData.projectType}
                     >
-                      {['Pending', 'Approved', 'Completed', 'Cancelled'].map(s =>
-                        <option key={s} value={s}>{s}</option>
-                      )}
+                      <option value="">Select Sub Project</option>
+                      {formSubProjectTypes.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
                     </select>
                   </div>
                 </div>
 
-                {/* Items Section */}
-                <div className="mb-6">
-                  <div className="flex justify-between items-center mb-2">
-                    <h4 className="font-semibold">Order Items</h4>
-                    <button type="button" onClick={addItem} className="text-blue-600 text-sm hover:underline">+ Add Item</button>
+                {/* Row 2: Product, Brand */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Product</label>
+                    <select
+                      required
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.product}
+                      onChange={e => setFormData({ ...formData, product: e.target.value })}
+                    >
+                      <option value="">Select Product</option>
+                      {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                    </select>
                   </div>
-                  <div className="space-y-2">
-                    {formData.items.map((item, index) => (
-                      <div key={index} className="flex gap-2 items-center">
-                        <select
-                          required
-                          className="flex-1 p-2 border rounded"
-                          value={item.product}
-                          onChange={(e) => handleItemChange(index, 'product', e.target.value)}
-                        >
-                          <option value="">Select Product</option>
-                          {products.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
-                        </select>
-                        <input
-                          type="number"
-                          min="1"
-                          placeholder="Qty"
-                          className="w-24 p-2 border rounded"
-                          value={item.quantity}
-                          onChange={(e) => handleItemChange(index, 'quantity', e.target.value)}
-                        />
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="Price"
-                          className="w-32 p-2 border rounded"
-                          value={item.price}
-                          onChange={(e) => handleItemChange(index, 'price', e.target.value)}
-                        />
+                  <div>
+                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Brand</label>
+                    <select
+                      required
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.brand}
+                      onChange={e => setFormData({ ...formData, brand: e.target.value })}
+                    >
+                      <option value="">Select Brand</option>
+                      {brands.map(b => <option key={b._id} value={b._id}>{b.companyName || b.brand || b.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* SKUs block with Tabs */}
+                <div className="mt-8 border border-gray-200 rounded-lg p-1 max-w-sm inline-block w-full sm:w-80">
+                  <div className="p-3">
+                      <label className="block font-medium text-blue-600 mb-4">SKUs</label>
+                      <Select
+                          isMulti
+                          placeholder="Select SKUs"
+                          className="mb-4 text-sm"
+                          options={skusList.map(s => ({ label: s.skuCode, value: s._id }))}
+                          value={formData.skus.map(sId => {
+                              const s = skusList.find(x => x._id === sId);
+                              return { label: s?.skuCode || sId, value: sId };
+                          })}
+                          onChange={(selected) => setFormData({ ...formData, skus: selected ? selected.map(s => s.value) : [] })}
+                      />
+                      
+                      <div className="flex bg-gray-100 rounded overflow-hidden mt-4 shadow-inner">
                         <button
                           type="button"
-                          onClick={() => removeItem(index)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded"
+                          className={`flex-1 py-2 text-sm font-medium transition ${
+                            formData.skuSelectionOption === 'ComboKit' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
+                          }`}
+                          onClick={() => setFormData({ ...formData, skuSelectionOption: 'ComboKit' })}
                         >
-                          <Trash size={16} />
+                          ComboKit
                         </button>
+                        <button
+                          type="button"
+                          className={`flex-1 py-2 text-sm font-medium transition ${
+                            formData.skuSelectionOption === 'Customize' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
+                          }`}
+                          onClick={() => setFormData({ ...formData, skuSelectionOption: 'Customize' })}
+                        >
+                          Customize
+                        </button>
+                      </div>
+                  </div>
+                </div>
+                
+                {/* Red Arrow helper mapping UI visually */}
+                {/* This represents the logic mapping on the UI image */}
+                <div className="relative mt-8 bg-[#f8f9fa] border border-gray-200 rounded-xl p-6">
+                    
+                  {/* Table headers for dynamic rows */}
+                  <div className="flex mb-2">
+                      <div className="w-[30%] text-[13px] font-medium text-gray-600">Range (kW)</div>
+                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">{formData.skuSelectionOption}</div>
+                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Supplier Type</div>
+                      <div className="w-10"></div>
+                  </div>
+
+                  <div className="space-y-4">
+                    {formData.skuItems.map((item, index) => (
+                      <div key={index} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
+                        
+                        <div className="w-[30%] flex gap-2">
+                           <input
+                              required
+                              type="number"
+                              min="0"
+                              placeholder="Min"
+                              className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                              value={item.minRange}
+                              onChange={(e) => handleSkuItemChange(index, 'minRange', e.target.value)}
+                            />
+                            <input
+                              required
+                              type="number"
+                              min="0"
+                              placeholder="Max"
+                              className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                              value={item.maxRange}
+                              onChange={(e) => handleSkuItemChange(index, 'maxRange', e.target.value)}
+                            />
+                        </div>
+                        
+                        <div className="w-[30%]">
+                            {formData.skuSelectionOption === 'ComboKit' ? (
+                                <select
+                                    required
+                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                                    value={item.comboKit}
+                                    onChange={(e) => handleSkuItemChange(index, 'comboKit', e.target.value)}
+                                >
+                                    <option value="">Select ComboKit</option>
+                                    {comboKits.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                </select>
+                            ) : (
+                                <div className="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-md text-sm text-gray-500 text-center">
+                                    Custom Logic Applied
+                                </div>
+                            )}
+                        </div>
+                        
+                        <div className="w-[30%]">
+                            <select
+                                required
+                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                                value={item.supplierType}
+                                onChange={(e) => handleSkuItemChange(index, 'supplierType', e.target.value)}
+                            >
+                                <option value="">Select Supplier Type</option>
+                                {supplierTypes.map(s => <option key={s._id} value={s._id}>{s.name || s.type_name || s._id}</option>)}
+                            </select>
+                        </div>
+                        
+                        <div className="w-10 flex justify-center">
+                            {formData.skuItems.length > 1 && (
+                                <button
+                                    type="button"
+                                    onClick={() => removeSkuItem(index)}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
+                                >
+                                    <X size={18} />
+                                </button>
+                            )}
+                        </div>
                       </div>
                     ))}
                   </div>
-                  <div className="mt-4 text-right font-bold text-lg">
-                    Total: ₹{formData.totalAmount}
+
+                  <div className="mt-4">
+                     <button 
+                        type="button" 
+                        onClick={addSkuItem} 
+                        className="text-[#1f8dec] text-sm font-medium hover:underline flex items-center"
+                     >
+                        <Plus size={16} className="mr-1" /> Add {formData.skuSelectionOption}
+                     </button>
                   </div>
                 </div>
 
-                <div className="flex justify-end gap-3 pt-4 border-t">
+                <div className="flex justify-end gap-3 pt-6 border-t border-gray-100 mt-8 mb-2">
                   <button
                     type="button"
                     onClick={() => setShowModal(false)}
-                    className="px-4 py-2 border rounded hover:bg-gray-50"
+                    className="px-6 py-2 border border-gray-300 rounded-md hover:bg-gray-50 font-medium text-gray-600 transition"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center gap-2"
+                    className="px-8 py-2 bg-[#1976d2] text-white font-medium rounded-md shadow hover:bg-blue-700 flex items-center gap-2 transition"
                   >
-                    <Save size={18} /> Save Order
+                    <Save size={18} /> Save
                   </button>
                 </div>
               </form>
+            </div>
+            
+            <div className="bg-white py-3 border-t text-center text-xs text-gray-500 border-gray-200">
+                Copyright © {new Date().getFullYear()} Solarkits. All Rights Reserved.
             </div>
           </div>
         </div>

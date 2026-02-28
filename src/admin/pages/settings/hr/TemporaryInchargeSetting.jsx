@@ -1,52 +1,85 @@
 import React, { useState, useEffect } from 'react';
-import { UserCheck, Save, Clock, AlertCircle } from 'lucide-react';
-import { createTemporaryIncharge, getTemporaryIncharges, getDepartments, getUsers } from '../../../services/hrService'; // Adjust path
 import { toast } from 'react-hot-toast';
+import { getTemporaryInchargeDashboard, getDepartments, createTemporaryIncharge, getUsers } from '../../../services/hrService'; // Adjust path
+import { getStates } from '../../../../services/locationApi';
+import { X, ChevronDown, Clock } from 'lucide-react';
 
 export default function TemporaryInchargeSetting() {
+  const [loading, setLoading] = useState(true);
+  const [dashboardData, setDashboardData] = useState({
+    totalAbsent: 0,
+    stateStats: {},
+    clusterStats: {},
+    allStateStats: {},
+    employeeList: []
+  });
+
   const [departments, setDepartments] = useState([]);
   const [users, setUsers] = useState([]);
-  const [incharges, setIncharges] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [states, setStates] = useState([]);
+  const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
+  const [selectedStateFilter, setSelectedStateFilter] = useState('');
 
+  // Dropdown UI toggle
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [managementType, setManagementType] = useState('Leave Employee Management');
+
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedEmployee, setSelectedEmployee] = useState(null);
+  const [saving, setSaving] = useState(false);
+
+  // Assignment Form State
   const [formData, setFormData] = useState({
-    originalUser: '',
     tempInchargeUser: '',
-    department: '',
     startDate: '',
     endDate: '',
     reason: 'Leave'
   });
 
   useEffect(() => {
-    fetchInitialData();
+    fetchDashboard();
   }, []);
 
-  const fetchInitialData = async () => {
+  const fetchDashboard = async () => {
     try {
       setLoading(true);
-      const [deptRes, inchargeRes] = await Promise.all([
+      const [dashRes, deptRes, userRes, statesRes] = await Promise.all([
+        getTemporaryInchargeDashboard(),
         getDepartments(),
-        getTemporaryIncharges()
+        getUsers(), // for the temp incharge dropdown in modal
+        getStates()
       ]);
 
-      if (deptRes.success) setDepartments(deptRes.data);
-      if (inchargeRes.success) setIncharges(inchargeRes.data);
-
-      // Fetch all users initially or when dept selected? 
-      // For now fetch all users to populate dropdowns easily
-      const userRes = await getUsers();
+      if (dashRes.success) {
+        setDashboardData(dashRes.data);
+      }
+      if (deptRes.success) {
+        setDepartments(deptRes.data);
+      }
       if (userRes.success) {
-        // userController returns { users: [...] }, masterController returns { data: [...] }
         setUsers(userRes.users || userRes.data || []);
       }
-
+      if (statesRes) {
+        setStates(statesRes);
+      }
     } catch (error) {
       console.error("Error loading data:", error);
-      toast.error("Failed to load initial data");
+      toast.error("Failed to load dashboard data");
     } finally {
       setLoading(false);
     }
+  };
+
+  const openAssignModal = (employee) => {
+    setSelectedEmployee(employee);
+    setFormData({
+      tempInchargeUser: '',
+      startDate: '',
+      endDate: '',
+      reason: 'Leave'
+    });
+    setIsModalOpen(true);
   };
 
   const handleInputChange = (e) => {
@@ -54,230 +87,367 @@ export default function TemporaryInchargeSetting() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e) => {
+  const handleAssignSubmit = async (e) => {
     e.preventDefault();
 
-    if (!formData.originalUser || !formData.tempInchargeUser || !formData.department || !formData.startDate || !formData.endDate) {
+    if (!formData.tempInchargeUser || !formData.startDate || !formData.endDate) {
       toast.error("Please fill all required fields");
       return;
     }
 
-    if (formData.originalUser === formData.tempInchargeUser) {
+    if (selectedEmployee._id === formData.tempInchargeUser) {
       toast.error("Original user and Temporary Incharge cannot be the same person");
       return;
     }
 
+    setSaving(true);
     try {
-      const res = await createTemporaryIncharge(formData);
+      // Find the department ID for the selected employee if available
+      const dept = departments.find(d => d.name === selectedEmployee.department);
+      const deptId = dept ? dept._id : null;
+
+      const payload = {
+        originalUser: selectedEmployee._id,
+        tempInchargeUser: formData.tempInchargeUser,
+        department: deptId,
+        startDate: formData.startDate,
+        endDate: formData.endDate,
+        reason: formData.reason
+      };
+
+      const res = await createTemporaryIncharge(payload);
       if (res.success) {
         toast.success("Temporary In-charge assigned successfully");
-        setFormData({
-          originalUser: '',
-          tempInchargeUser: '',
-          department: '',
-          startDate: '',
-          endDate: '',
-          reason: 'Leave'
-        });
-        // Refresh list
-        const listRes = await getTemporaryIncharges();
-        if (listRes.success) setIncharges(listRes.data);
+        setIsModalOpen(false);
+        fetchDashboard(); // Refresh UI
       }
     } catch (error) {
       console.error("Assignment error:", error);
       toast.error(error.response?.data?.message || "Failed to assign temporary in-charge");
+    } finally {
+      setSaving(false);
     }
   };
 
+  // Derived filtered employees
+  const filteredEmployees = dashboardData.employeeList.filter(emp => {
+    let match = true;
+    if (selectedDeptFilter && emp.department !== selectedDeptFilter) match = false;
+    if (selectedStateFilter && emp.state !== selectedStateFilter) match = false;
+    return match;
+  });
+
   return (
-    <div className="p-4">
-      {/* Header */}
-      <div className="mb-6 bg-white p-4 rounded-lg shadow-sm">
-        <h2 className="text-xl font-bold flex items-center gap-2">
-          <Clock className="text-blue-500" />
-          Temporary In-Charge Settings
-        </h2>
-        <p className="text-gray-500 text-sm mt-1">
-          Delegate responsibilities temporarily during leaves or absence.
-        </p>
-      </div>
+    <div className="p-6 bg-gray-50 min-h-screen font-sans">
+      <h1 className="text-xl font-bold text-blue-900 mb-6 tracking-wide">Temporary Incharge Management</h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Assignment Form */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-lg shadow p-6">
-            <h3 className="font-bold text-lg mb-4 border-b pb-2 flex items-center gap-2">
-              <UserCheck size={20} className="text-green-600" />
-              Assign New In-Charge
-            </h3>
+      {loading ? (
+        <div className="flex justify-center items-center py-20">
+          <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-blue-600"></div>
+        </div>
+      ) : (
+        <div className="max-w-7xl mx-auto space-y-8">
 
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Select Department</label>
-                <select
-                  name="department"
-                  value={formData.department}
-                  onChange={handleInputChange}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
+          {/* Top Section: Leave Dropdown and State Stats */}
+          <div className="flex flex-col md:flex-row gap-6">
+
+            {/* Dropdown Card */}
+            <div className="w-full md:w-1/4">
+              <div className="relative mb-2">
+                <button
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="w-full bg-white border border-gray-300 rounded shadow-sm px-4 py-2 flex justify-between items-center text-sm font-medium text-gray-700"
                 >
-                  <option value="">Select Department</option>
-                  {departments.map(dept => (
-                    <option key={dept._id} value={dept._id}>{dept.name}</option>
+                  {managementType}
+                  <ChevronDown size={16} />
+                </button>
+                {isDropdownOpen && (
+                  <div className="absolute top-11 left-0 w-full bg-white border border-gray-200 rounded shadow-lg z-10 text-sm">
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 border-b border-gray-100"
+                      onClick={() => { setManagementType('Leave Employee Management'); setIsDropdownOpen(false); }}
+                    >
+                      Leave Employee Management
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700"
+                      onClick={() => { setManagementType('Assigned Employee Management'); setIsDropdownOpen(false); }}
+                    >
+                      Assigned Employee Management
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Total Absent Card */}
+              <div className="bg-[#4b8feb] text-white rounded-md p-6 flex flex-col items-center justify-center shadow-sm h-32">
+                <div className="text-3xl font-bold text-red-100">{dashboardData.totalAbsent}</div>
+                <div className="text-sm tracking-wide mt-1">Absent Employees</div>
+              </div>
+            </div>
+
+            {/* State Cards Mapping */}
+            <div className="w-full md:w-3/4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
+              {Object.keys(dashboardData.stateStats || {}).length > 0 ? (
+                Object.entries(dashboardData.stateStats).map(([stateName, count]) => (
+                  <div key={stateName} className="bg-white rounded-md p-6 border border-gray-100 shadow-sm flex flex-col items-center justify-center h-32">
+                    <div className="text-sm font-bold text-gray-700 mb-2">{stateName}</div>
+                    <div className="text-3xl font-bold text-red-500 mb-1">{count}</div>
+                    <div className="text-xs text-gray-500">Absent Employees</div>
+                  </div>
+                ))
+              ) : (
+                <div className="bg-white rounded-md p-6 border border-gray-100 shadow-sm flex flex-col items-center justify-center h-32 text-gray-400">
+                  No state data available
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Middle Section: State Filter Cards */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-blue-600 rounded"></div>
+              <h2 className="text-lg font-bold text-gray-800">Select State</h2>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div
+                onClick={() => setSelectedStateFilter('')}
+                className={`cursor-pointer rounded-md p-6 flex flex-col items-center justify-center h-32 shadow-sm border transition-all ${!selectedStateFilter ? 'bg-[#4b8feb] text-white border-blue-400 shadow-md scale-105' : 'bg-white text-gray-700 border-gray-100 hover:bg-gray-50'}`}
+              >
+                <div className="text-sm font-bold mb-2">All States</div>
+                <div className={`text-3xl font-bold mb-1 ${!selectedStateFilter ? 'text-red-100' : 'text-blue-600'}`}>
+                  {dashboardData.employeeList.length}
+                </div>
+                <div className={`text-xs ${!selectedStateFilter ? 'text-blue-100' : 'text-gray-500'}`}>Total Employees</div>
+              </div>
+
+              {states.length > 0 && (
+                states.map((stateObj) => {
+                  const stateName = stateObj.name;
+                  const isSelected = selectedStateFilter === stateName;
+                  const count = dashboardData.allStateStats?.[stateName] || 0;
+                  return (
+                    <div
+                      key={stateObj._id || stateName}
+                      onClick={() => setSelectedStateFilter(stateName)}
+                      className={`cursor-pointer rounded-md p-6 flex flex-col items-center justify-center h-32 shadow-sm border transition-all ${isSelected ? 'bg-[#4b8feb] text-white border-blue-400 shadow-md scale-105' : 'bg-white text-gray-700 border-gray-100 hover:bg-gray-50'}`}
+                    >
+                      <div className="text-sm font-bold mb-2">{stateName}</div>
+                      <div className={`text-3xl font-bold mb-1 ${isSelected ? 'text-red-100' : 'text-blue-600'}`}>{count}</div>
+                      <div className={`text-xs ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>Total Employees</div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          </div>
+
+          {/* Bottom Section: Employee List */}
+          <div>
+            <div className="flex items-center gap-2 mb-4">
+              <div className="w-1 h-6 bg-blue-600 rounded"></div>
+              <h2 className="text-lg font-bold text-gray-800">Employee List</h2>
+            </div>
+
+            <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <span className="font-bold text-gray-700">Employees</span>
+                <select
+                  className="bg-white border border-gray-300 text-gray-700 text-sm rounded px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  value={selectedDeptFilter}
+                  onChange={e => setSelectedDeptFilter(e.target.value)}
+                >
+                  <option value="">All Departments</option>
+                  {departments.map(d => (
+                    <option key={d._id} value={d.name}>{d.name}</option>
                   ))}
                 </select>
               </div>
 
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                  <thead className="bg-[#4b8feb] text-white">
+                    <tr>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Employee ID</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Name</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Department</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Position</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Status</th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Absent Days</th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Pending Task</th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Overdue Task</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Temp Incharge</th>
+                      <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {filteredEmployees.length === 0 ? (
+                      <tr>
+                        <td colSpan="10" className="px-6 py-8 text-center text-gray-500">No employees found</td>
+                      </tr>
+                    ) : (
+                      filteredEmployees.map((emp, idx) => (
+                        <tr key={emp._id} className="bg-white hover:bg-gray-50 transition-colors">
+                          <td className="px-6 py-4 font-medium text-gray-900">{emp.employeeId}</td>
+                          <td className="px-6 py-4 text-gray-700">
+                            <div>{emp.name}</div>
+                            {/* <div className="text-xs text-gray-400">{emp.email}</div> */}
+                          </td>
+                          <td className="px-6 py-4 text-gray-500">{emp.department}</td>
+                          <td className="px-6 py-4 text-gray-500 capitalize">{emp.position}</td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`px-2.5 py-1 text-xs font-semibold rounded ${emp.status === 'Absent' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                              {emp.status}
+                            </span>
+                          </td>
+                          <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">{emp.absentDays}</td>
+                          <td className="px-4 py-4 text-center text-yellow-500 font-medium font-mono text-xs">{emp.pendingTask}</td>
+                          <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">{emp.overdueTask}</td>
+                          <td className="px-6 py-4 text-center">
+                            {emp.tempInchargeName && emp.tempInchargeName !== '-' ? (
+                              <span className="text-green-600 font-medium">{emp.tempInchargeName}</span>
+                            ) : (
+                              <span className="text-gray-600">-</span>
+                            )}
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {emp.tempInchargeName && emp.tempInchargeName !== '-' ? (
+                              <span className="text-gray-400 text-xs">N/A</span>
+                            ) : (
+                              <button
+                                onClick={() => openAssignModal(emp)}
+                                className="bg-[#0074b7] text-white px-4 py-1.5 rounded text-xs font-medium hover:bg-blue-700 transition"
+                              >
+                                Assign
+                              </button>
+                            )}
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      )}
+
+      {/* Assignment Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+              <h2 className="text-lg font-bold text-gray-800">Assign Temporary In-Charge</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={20} />
+              </button>
+            </div>
+
+            <form onSubmit={handleAssignSubmit} className="p-6 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Original User (On Leave)</label>
-                <select
-                  name="originalUser"
-                  value={formData.originalUser}
-                  onChange={handleInputChange}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
-                  <option value="">Select User</option>
-                  {users.map(u => (
-                    <option key={u._id} value={u._id}>{u.name} ({u.role?.name || 'No Role'})</option>
-                  ))}
-                </select>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Absent Employee</label>
+                <input
+                  type="text"
+                  disabled
+                  value={selectedEmployee?.name || ''}
+                  className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-gray-500 text-sm"
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Temporary In-Charge</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  disabled
+                  value={selectedEmployee?.department || ''}
+                  className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-gray-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Position</label>
+                <input
+                  type="text"
+                  disabled
+                  value={selectedEmployee?.position || ''}
+                  className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-gray-500 text-sm capitalize"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Absent Days</label>
+                <input
+                  type="text"
+                  disabled
+                  value={selectedEmployee?.absentDays || '0 days'}
+                  className="w-full border border-gray-300 rounded px-3 py-2 bg-gray-50 text-gray-500 text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Select Temporary Incharge</label>
                 <select
                   name="tempInchargeUser"
                   value={formData.tempInchargeUser}
                   onChange={handleInputChange}
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm"
                   required
                 >
-                  <option value="">Select User</option>
+                  <option value="">Select employee</option>
                   {users.map(u => (
-                    <option key={u._id} value={u._id}>{u.name} ({u.role?.name || 'No Role'})</option>
+                    <option key={u._id} value={u._id}>{u.name} ({u.role})</option>
                   ))}
                 </select>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
-                  <input
-                    type="date"
-                    name="startDate"
-                    value={formData.startDate}
-                    onChange={handleInputChange}
-                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
-                  <input
-                    type="date"
-                    name="endDate"
-                    value={formData.endDate}
-                    onChange={handleInputChange}
-                    className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                    required
-                  />
-                </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Start Date</label>
+                <input
+                  type="date"
+                  name="startDate"
+                  value={formData.startDate}
+                  onChange={handleInputChange}
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm"
+                  required
+                />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
-                <textarea
-                  name="reason"
-                  value={formData.reason}
+                <label className="block text-sm font-medium text-gray-700 mb-1">End Date</label>
+                <input
+                  type="date"
+                  name="endDate"
+                  value={formData.endDate}
                   onChange={handleInputChange}
-                  rows="3"
-                  className="w-full border rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500"
-                  placeholder="Reason for temporary assignment..."
-                ></textarea>
+                  className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-1 focus:ring-blue-500 focus:outline-none text-sm"
+                  required
+                />
               </div>
 
-              <button
-                type="submit"
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors"
-                disabled={loading}
-              >
-                <Save size={18} />
-                Assign In-Charge
-              </button>
+              <div className="pt-4 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 border border-blue-500 bg-white text-blue-500 rounded text-sm font-medium hover:bg-gray-50 transition drop-shadow-sm"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="px-4 py-2 bg-[#0074b7] text-white rounded text-sm font-medium hover:bg-blue-700 transition disabled:opacity-70 flex items-center gap-2 drop-shadow-sm"
+                >
+                  {saving ? 'Saving...' : 'Save changes'}
+                </button>
+              </div>
             </form>
           </div>
         </div>
-
-        {/* Active Assignments List */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-lg shadow overflow-hidden h-full">
-            <div className="p-4 border-b bg-gray-50 flex justify-between items-center">
-              <h3 className="font-bold text-lg text-gray-800">Active Assignments</h3>
-              <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full font-medium">
-                {incharges.length} Active
-              </span>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-50 text-gray-600 border-b">
-                  <tr>
-                    <th className="p-4 font-semibold text-sm">Original User</th>
-                    <th className="p-4 font-semibold text-sm">Temp In-Charge</th>
-                    <th className="p-4 font-semibold text-sm">Department</th>
-                    <th className="p-4 font-semibold text-sm">Duration</th>
-                    <th className="p-4 font-semibold text-sm">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {loading ? (
-                    <tr><td colSpan="5" className="p-6 text-center text-gray-500">Loading...</td></tr>
-                  ) : incharges.length === 0 ? (
-                    <tr>
-                      <td colSpan="5" className="p-8 text-center text-gray-500 flex flex-col items-center justify-center">
-                        <AlertCircle size={32} className="mb-2 text-gray-300" />
-                        <p>No active temporary in-charge assignments found.</p>
-                      </td>
-                    </tr>
-                  ) : (
-                    incharges.map(inc => (
-                      <tr key={inc._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="p-4">
-                          <div className="font-medium text-gray-900">{inc.originalUser?.name || 'Unknown'}</div>
-                          <div className="text-xs text-gray-500">{inc.originalUser?.email}</div>
-                        </td>
-                        <td className="p-4">
-                          <div className="font-medium text-gray-900">{inc.tempInchargeUser?.name || 'Unknown'}</div>
-                          <div className="text-xs text-gray-500">{inc.tempInchargeUser?.email}</div>
-                        </td>
-                        <td className="p-4">
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            {inc.department?.name || '-'}
-                          </span>
-                        </td>
-                        <td className="p-4">
-                          <div className="text-sm text-gray-600">
-                            {new Date(inc.startDate).toLocaleDateString()} -
-                            <br />
-                            {new Date(inc.endDate).toLocaleDateString()}
-                          </div>
-                        </td>
-                        <td className="p-4">
-                          <span className={`px-2 py-1 rounded-full text-xs font-medium ${inc.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'
-                            }`}>
-                            {inc.isActive ? 'Active' : 'Inactive'}
-                          </span>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </div>
+      )}
     </div>
   );
 }

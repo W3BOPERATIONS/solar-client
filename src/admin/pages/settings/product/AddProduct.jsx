@@ -13,6 +13,11 @@ import {
 import { productApi } from '../../../../api/productApi';
 import { masterApi } from '../../../../api/masterApi';
 import axiosInstance from '../../../../api/axios';
+import {
+  getSubCategories,
+  getSubProjectTypes,
+  getBrands
+} from '../../../../services/settings/orderProcurementSettingApi';
 
 const AddProduct = () => {
   const [view, setView] = useState('list'); // list, create, edit
@@ -23,6 +28,9 @@ const AddProduct = () => {
 
   // Master Data
   const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [brands, setBrands] = useState([]);
   const [units, setUnits] = useState([]);
   const [skus, setSkus] = useState([]);
 
@@ -32,17 +40,19 @@ const AddProduct = () => {
   const [districts, setDistricts] = useState([]);
 
   // Form State
-  const [formData, setFormData] = useState({
+  const initialFormState = {
     name: '',
     categoryId: '',
-    unitId: '',
-    skuId: '',
-    stateId: '',
-    cityId: '',
-    districtId: '',
+    subCategoryId: '',
+    subProjectTypeId: '',
+    brandId: '',
+    mechanicalParameters: [''],
+    electricalParameters: [''],
+    skuParameters: [''],
     description: '',
     status: true
-  });
+  };
+  const [formData, setFormData] = useState(initialFormState);
   const [editingId, setEditingId] = useState(null);
 
   // Initial Fetch
@@ -53,16 +63,24 @@ const AddProduct = () => {
 
   const fetchMasters = async () => {
     try {
-      const [catRes, unitRes, skuRes, stateRes] = await Promise.all([
+      const [
+        catRes, unitRes, skuRes, stateRes, subCatRes, subPTypeRes, brandRes
+      ] = await Promise.all([
         productApi.getCategories(),
         productApi.getUnits(),
         productApi.getSkus(),
-        axiosInstance.get('/locations/states')
+        axiosInstance.get('/locations/states'),
+        getSubCategories(),
+        getSubProjectTypes(),
+        getBrands()
       ]);
       if (catRes.data.success) setCategories(catRes.data.data);
       if (unitRes.data.success) setUnits(unitRes.data.data);
       if (skuRes.data.success) setSkus(skuRes.data.data);
       if (stateRes.data.success) setStates(stateRes.data.data);
+      if (subCatRes?.data) setSubCategories(subCatRes.data);
+      if (subPTypeRes?.data) setSubProjectTypes(subPTypeRes.data);
+      if (brandRes) setBrands(Array.isArray(brandRes) ? brandRes : brandRes.data || []);
     } catch (error) {
       console.error("Error fetching masters", error);
     }
@@ -103,6 +121,12 @@ const AddProduct = () => {
     setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
   };
 
+  const handleCreateNew = () => {
+    setFormData(initialFormState);
+    setEditingId(null);
+    setView('create');
+  };
+
   const handleStateChange = (e) => {
     const stateId = e.target.value;
     setFormData({ ...formData, stateId, cityId: '', districtId: '' });
@@ -118,14 +142,7 @@ const AddProduct = () => {
     if (cityId) fetchDistricts(cityId);
   };
 
-  const handleCreateNew = () => {
-    setFormData({
-      name: '', categoryId: '', unitId: '', skuId: '',
-      stateId: '', cityId: '', districtId: '', description: '', status: true
-    });
-    setEditingId(null);
-    setView('create');
-  };
+
 
   const handleEdit = async (product) => {
     setEditingId(product._id);
@@ -133,43 +150,44 @@ const AddProduct = () => {
     // Build initial form data
     const initialData = {
       name: product.name,
-      categoryId: product.categoryId?._id,
-      unitId: product.unitId?._id,
-      skuId: product.skuId?._id,
-      stateId: product.stateId?._id,
-      cityId: product.cityId?._id,
-      districtId: product.districtId?._id,
+      categoryId: product.categoryId?._id || '',
+      subCategoryId: product.subCategoryId?._id || '',
+      subProjectTypeId: product.subProjectTypeId?._id || '',
+      brandId: product.brandId?._id || '',
+      mechanicalParameters: product.mechanicalParameters?.length > 0 ? product.mechanicalParameters : [''],
+      electricalParameters: product.electricalParameters?.length > 0 ? product.electricalParameters : [''],
+      skuParameters: product.skuParameters?.length > 0 ? product.skuParameters : [''],
       description: product.description,
       status: product.status
     };
 
     setFormData(initialData);
     setView('edit'); // Switch view first
-
-    // Fetch dependent locations
-    if (initialData.stateId) {
-      await fetchCities(initialData.stateId);
-    }
-    if (initialData.cityId) {
-      await fetchDistricts(initialData.cityId);
-    }
   };
 
   const handleSubmit = async () => {
     // Validate
-    const required = ['name', 'categoryId', 'unitId', 'skuId', 'stateId', 'cityId', 'districtId'];
+    const required = ['name', 'categoryId'];
     const missing = required.filter(k => !formData[k]);
     if (missing.length > 0) {
       showToast(`Missing fields: ${missing.join(', ')}`, 'error');
       return;
     }
 
+    // Filter out empty arrays before submit
+    const payload = {
+      ...formData,
+      mechanicalParameters: formData.mechanicalParameters.filter(p => p.trim() !== ''),
+      electricalParameters: formData.electricalParameters.filter(p => p.trim() !== ''),
+      skuParameters: formData.skuParameters.filter(p => p.trim() !== '')
+    }
+
     try {
       if (editingId) {
-        await productApi.update(editingId, formData);
+        await productApi.update(editingId, payload);
         showToast('Product Updated');
       } else {
-        await productApi.create(formData);
+        await productApi.create(payload);
         showToast('Product Created');
       }
       setView('list');
@@ -215,17 +233,9 @@ const AddProduct = () => {
               value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} />
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">SKU (Stock Keeping Unit) *</label>
-            <select className="w-full border rounded p-2"
-              value={formData.skuId} onChange={e => setFormData({ ...formData, skuId: e.target.value })}>
-              <option value="">Select SKU</option>
-              {skus.map(s => <option key={s._id} value={s._id}>{s.skuCode} - {s.description}</option>)}
-            </select>
-          </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Category *</label>
+            <label className="block text-sm font-medium mb-1">Product Category *</label>
             <select className="w-full border rounded p-2"
               value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value })}>
               <option value="">Select Category</option>
@@ -234,45 +244,132 @@ const AddProduct = () => {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Unit *</label>
+            <label className="block text-sm font-medium mb-1">Sub Category</label>
             <select className="w-full border rounded p-2"
-              value={formData.unitId} onChange={e => setFormData({ ...formData, unitId: e.target.value })}>
-              <option value="">Select Unit</option>
-              {units.map(u => <option key={u._id} value={u._id}>{u.unitName} ({u.symbol})</option>)}
+              value={formData.subCategoryId} onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}>
+              <option value="">Select Sub Category</option>
+              {subCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Sub Project Type</label>
+            <select className="w-full border rounded p-2"
+              value={formData.subProjectTypeId} onChange={e => setFormData({ ...formData, subProjectTypeId: e.target.value })}>
+              <option value="">Select Sub Project Type</option>
+              {subProjectTypes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium mb-1">Brand</label>
+            <select className="w-full border rounded p-2"
+              value={formData.brandId} onChange={e => setFormData({ ...formData, brandId: e.target.value })}>
+              <option value="">Select Brand</option>
+              {brands.map(b => <option key={b._id} value={b._id}>{b.name || b.companyName}</option>)}
             </select>
           </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <div className="col-span-full">
-            <h5 className="font-semibold text-green-600 mb-3 block border-b pb-1">Location Details (Mandatory)</h5>
+          {/* Dynamic Parameters */}
+          <div className="border rounded-md p-4">
+            <h5 className="font-semibold text-blue-600 mb-3">Mechanical</h5>
+            {formData.mechanicalParameters.map((param, index) => (
+              <div key={`mech-${index}`} className="flex items-center gap-2 mb-2">
+                <input 
+                  type="text" 
+                  className="w-full border rounded p-2 text-sm" 
+                  placeholder="Mechanical Parameter"
+                  value={param}
+                  onChange={(e) => {
+                    const newArr = [...formData.mechanicalParameters];
+                    newArr[index] = e.target.value;
+                    setFormData({ ...formData, mechanicalParameters: newArr });
+                  }}
+                />
+                {formData.mechanicalParameters.length > 1 && (
+                  <button onClick={() => {
+                      const newArr = formData.mechanicalParameters.filter((_, i) => i !== index);
+                      setFormData({ ...formData, mechanicalParameters: newArr });
+                  }} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button 
+              onClick={() => setFormData({ ...formData, mechanicalParameters: [...formData.mechanicalParameters, ''] })}
+              className="mt-2 bg-gray-500 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1 font-medium"
+            >
+              + Add More
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">State *</label>
-            <select className="w-full border rounded p-2"
-              value={formData.stateId} onChange={handleStateChange}>
-              <option value="">Select State</option>
-              {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-            </select>
+          <div className="border rounded-md p-4">
+            <h5 className="font-semibold text-blue-600 mb-3">Electrical</h5>
+            {formData.electricalParameters.map((param, index) => (
+              <div key={`elec-${index}`} className="flex items-center gap-2 mb-2">
+                <input 
+                  type="text" 
+                  className="w-full border rounded p-2 text-sm" 
+                  placeholder="Electrical Parameter"
+                  value={param}
+                  onChange={(e) => {
+                    const newArr = [...formData.electricalParameters];
+                    newArr[index] = e.target.value;
+                    setFormData({ ...formData, electricalParameters: newArr });
+                  }}
+                />
+                {formData.electricalParameters.length > 1 && (
+                  <button onClick={() => {
+                      const newArr = formData.electricalParameters.filter((_, i) => i !== index);
+                      setFormData({ ...formData, electricalParameters: newArr });
+                  }} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button 
+              onClick={() => setFormData({ ...formData, electricalParameters: [...formData.electricalParameters, ''] })}
+              className="mt-2 bg-gray-500 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1 font-medium"
+            >
+              + Add More
+            </button>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium mb-1">City *</label>
-            <select className="w-full border rounded p-2"
-              value={formData.cityId} onChange={handleCityChange} disabled={!formData.stateId}>
-              <option value="">Select City</option>
-              {cities.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium mb-1">District *</label>
-            <select className="w-full border rounded p-2"
-              value={formData.districtId} onChange={e => setFormData({ ...formData, districtId: e.target.value })} disabled={!formData.cityId}>
-              <option value="">Select District</option>
-              {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-            </select>
+          <div className="border rounded-md p-4">
+            <h5 className="font-semibold text-blue-600 mb-3">SKU</h5>
+            {formData.skuParameters.map((param, index) => (
+              <div key={`sku-${index}`} className="flex items-center gap-2 mb-2">
+                <input 
+                  type="text" 
+                  className="w-full border rounded p-2 text-sm" 
+                  placeholder="SKU Parameter"
+                  value={param}
+                  onChange={(e) => {
+                    const newArr = [...formData.skuParameters];
+                    newArr[index] = e.target.value;
+                    setFormData({ ...formData, skuParameters: newArr });
+                  }}
+                />
+                {formData.skuParameters.length > 1 && (
+                  <button onClick={() => {
+                      const newArr = formData.skuParameters.filter((_, i) => i !== index);
+                      setFormData({ ...formData, skuParameters: newArr });
+                  }} className="text-red-500 hover:text-red-700">
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            ))}
+            <button 
+              onClick={() => setFormData({ ...formData, skuParameters: [...formData.skuParameters, ''] })}
+              className="mt-2 bg-gray-500 hover:bg-gray-600 text-white text-xs px-3 py-1 rounded flex items-center gap-1 font-medium"
+            >
+              + Add More
+            </button>
           </div>
         </div>
 
@@ -325,13 +422,13 @@ const AddProduct = () => {
         {loading ? <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div> : (
           <div className="overflow-x-auto">
             <table className="w-full text-left">
-              <thead className="bg-gray-50 border-b">
+              <thead className="bg-[#42A5F5] text-white border-b">
                 <tr>
-                  <th className="p-3">Product</th>
-                  <th className="p-3">SKU</th>
+                  <th className="p-3">Product Name</th>
                   <th className="p-3">Category</th>
-                  <th className="p-3">Unit</th>
-                  <th className="p-3">Location</th>
+                  <th className="p-3">Mechanical</th>
+                  <th className="p-3">Electrical</th>
+                  <th className="p-3">SKU</th>
                   <th className="p-3">Action</th>
                 </tr>
               </thead>
@@ -339,11 +436,33 @@ const AddProduct = () => {
                 {filteredList.map(p => (
                   <tr key={p._id} className="border-b hover:bg-gray-50">
                     <td className="p-3 font-medium">{p.name}</td>
-                    <td className="p-3 font-mono text-sm">{p.skuId?.skuCode || '-'}</td>
-                    <td className="p-3">{p.categoryId?.name || '-'}</td>
-                    <td className="p-3">{p.unitId?.symbol || '-'}</td>
+                    <td className="p-3 font-semibold">{p.categoryId?.name || '-'}</td>
                     <td className="p-3 text-sm text-gray-600">
-                      {p.cityId?.name}, {p.stateId?.name}
+                      {p.mechanicalParameters?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {p.mechanicalParameters.map((param, i) => (
+                            <span key={i} className="bg-gray-100 px-2 py-1 rounded text-xs">{param}</span>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td className="p-3 text-sm text-gray-600">
+                      {p.electricalParameters?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {p.electricalParameters.map((param, i) => (
+                            <span key={i} className="bg-gray-100 px-2 py-1 rounded text-xs">{param}</span>
+                          ))}
+                        </div>
+                      ) : '-'}
+                    </td>
+                    <td className="p-3 text-sm text-gray-600">
+                      {p.skuParameters?.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {p.skuParameters.map((param, i) => (
+                            <span key={i} className="bg-gray-100 px-2 py-1 rounded text-xs">{param}</span>
+                          ))}
+                        </div>
+                      ) : '-'}
                     </td>
                     <td className="p-3 flex gap-2">
                       <button onClick={() => handleEdit(p)} className="text-blue-500 p-1"><Pencil size={16} /></button>

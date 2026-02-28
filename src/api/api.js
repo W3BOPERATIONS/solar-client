@@ -91,6 +91,8 @@ export const adminConfigAPI = {
 export const locationAPI = {
   // Country APIs
   getAllCountries: (params) => api.get('/locations/countries', { params }),
+  getMasterCountries: () => api.get('/locations/countries/master'),
+  activateCountry: (data) => api.post('/locations/countries/activate', data),
   getCountryById: (id) => api.get(`/locations/countries/${id}`),
   createCountry: (data) => api.post('/locations/countries', data),
   updateCountry: (id, data) => api.put(`/locations/countries/${id}`, data),
@@ -188,6 +190,18 @@ export const solarKitAPI = {
   create: (data) => api.post('/solar-kits', data),
   update: (id, data) => api.put(`/solar-kits/${id}`, data),
   delete: (id) => api.delete(`/solar-kits/${id}`),
+};
+
+export const campaignAPI = {
+  // Config
+  getConfig: () => api.get('/campaigns/settings/config'),
+  updateConfig: (data) => api.put('/campaigns/settings/config', data),
+
+  // Social Platforms
+  getAllSocialPlatforms: () => api.get('/campaigns/social/platforms'),
+  createSocialPlatform: (data) => api.post('/campaigns/social/platforms', data),
+  updateSocialPlatform: (id, data) => api.put(`/campaigns/social/platforms/${id}`, data),
+  deleteSocialPlatform: (id) => api.delete(`/campaigns/social/platforms/${id}`),
 };
 
 export default api;

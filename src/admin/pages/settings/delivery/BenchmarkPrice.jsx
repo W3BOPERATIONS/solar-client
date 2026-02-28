@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Edit, Trash2, Plus, AlertCircle, Loader, Search } from 'lucide-react';
+import { Eye, EyeOff, Edit, Trash2, Loader, X } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import {
   getDeliveryTypes,
@@ -8,9 +8,12 @@ import {
   updateBenchmarkPrice,
   deleteBenchmarkPrice
 } from '../../../../services/delivery/deliveryApi';
+import { locationAPI } from '../../../../api/api';
 
 const DeliveryBenchmarkPrice = () => {
-  // State management
+  // Common Location State
+  const { countries, states, fetchCountries, fetchStates } = useLocations();
+
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
   const [loading, setLoading] = useState(false);
   const [dataLoading, setDataLoading] = useState(true);
@@ -19,66 +22,69 @@ const DeliveryBenchmarkPrice = () => {
   const [deliveryTypes, setDeliveryTypes] = useState([]);
   const [benchmarkPrices, setBenchmarkPrices] = useState([]);
 
-  // Location Selection State
+  // Hierarchical Location Selection
   const [selectedState, setSelectedState] = useState('');
-  const [selectedCity, setSelectedCity] = useState('');
+  const [selectedStateName, setSelectedStateName] = useState('');
+  const [clusterOptions, setClusterOptions] = useState([]);
+  const [selectedCluster, setSelectedCluster] = useState('');
+  const [selectedClusterName, setSelectedClusterName] = useState('');
+  const [districtOptions, setDistrictOptions] = useState([]);
   const [selectedDistrict, setSelectedDistrict] = useState('');
+  const [selectedDistrictName, setSelectedDistrictName] = useState('');
 
-  const [showFormWrapper, setShowFormWrapper] = useState(false);
-  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
-  const [editingId, setEditingId] = useState(null);
-
-  // Dynamic Location Data
-  const {
-    states,
-    cities,
-    districts,
-    fetchStates,
-    fetchCities,
-    fetchDistricts
-  } = useLocations();
-
-  // Form data
+  // Form State
   const [formData, setFormData] = useState({
     deliveryType: '',
     benchmarkPrice: '',
-    status: 'active'
-    // Simplified model only has these fields + deliveryType ref
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: '',
+    combokit: ''
   });
 
-  // Fetch initial data
+  const [notification, setNotification] = useState({ show: false, message: '', type: '' });
+
+  // Initial Fetch
   useEffect(() => {
-    fetchStates();
-    loadInitialData();
+    fetchCountries();
+    loadDeliveryTypes();
   }, []);
 
-  const loadInitialData = async () => {
+  useEffect(() => {
+    if (countries.length > 0) {
+      const india = countries.find(c => c.name === 'India');
+      if (india) fetchStates({ country: india._id });
+      else fetchStates({ country: countries[0]._id });
+    }
+  }, [countries]);
+
+  const loadDeliveryTypes = async () => {
+    try {
+      const typesRes = await getDeliveryTypes();
+      if (typesRes.success) setDeliveryTypes(typesRes.data);
+    } catch (error) {
+      console.error("Failed to load delivery types");
+    }
+  };
+
+  const loadBenchmarkPrices = async (districtId) => {
+    if (!districtId) return;
     try {
       setDataLoading(true);
-      const [typesRes, pricesRes] = await Promise.all([
-        getDeliveryTypes(),
-        getBenchmarkPrices()
-      ]);
-
-      if (typesRes.success) setDeliveryTypes(typesRes.data);
-      if (pricesRes.success) setBenchmarkPrices(pricesRes.data);
+      const res = await getBenchmarkPrices({ district: districtId });
+      if (res.success) setBenchmarkPrices(res.data);
     } catch (error) {
-      showNotification('Failed to load data', 'error');
+      showNotification('Failed to load prices for district', 'error');
     } finally {
       setDataLoading(false);
     }
   };
 
-  const refreshPrices = async () => {
-    try {
-      const response = await getBenchmarkPrices();
-      if (response.success) setBenchmarkPrices(response.data);
-    } catch (error) {
-      console.error(error);
-    }
+  const refreshPrices = () => {
+    if (selectedDistrict) loadBenchmarkPrices(selectedDistrict);
   };
 
-  // Show notification
   const showNotification = (message, type) => {
     setNotification({ show: true, message, type });
     setTimeout(() => {
@@ -86,128 +92,95 @@ const DeliveryBenchmarkPrice = () => {
     }, 3000);
   };
 
-  // Handle state selection
-  const handleStateSelect = (stateId) => {
-    const state = states.find(s => s._id === stateId);
-    if (state) {
-      setSelectedState(state);
-      setSelectedCity('');
-      setSelectedDistrict('');
-      fetchCities({ stateId: state._id });
-      setShowFormWrapper(false);
+  // Location Handlers
+  const handleStateSelect = async (stateId, stateName) => {
+    setSelectedState(stateId);
+    setSelectedStateName(stateName);
+
+    // Reset downward
+    setSelectedCluster('');
+    setSelectedClusterName('');
+    setClusterOptions([]);
+    setSelectedDistrict('');
+    setSelectedDistrictName('');
+    setDistrictOptions([]);
+    setBenchmarkPrices([]);
+
+    try {
+      const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
+      if (res.data && res.data.data) {
+        setClusterOptions(res.data.data);
+      }
+    } catch (e) {
+      console.error("Error fetching clusters", e);
     }
   };
 
-  // Handle city selection
-  const handleCitySelect = (cityId) => {
-    const city = cities.find(c => c._id === cityId);
-    if (city) {
-      setSelectedCity(city);
-      setSelectedDistrict('');
-      fetchDistricts({ cityId: city._id });
+  const handleClusterSelect = async (clusterId, clusterName) => {
+    setSelectedCluster(clusterId);
+    setSelectedClusterName(clusterName);
+
+    // Reset downward
+    setSelectedDistrict('');
+    setSelectedDistrictName('');
+    setDistrictOptions([]);
+    setBenchmarkPrices([]);
+
+    try {
+      const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
+      if (res.data && res.data.data) {
+        setDistrictOptions(res.data.data);
+      }
+    } catch (e) {
+      console.error("Error fetching districts", e);
     }
   };
 
-  // Handle district selection
-  const handleDistrictSelect = (districtId) => {
-    const district = districts.find(d => d._id === districtId);
-    if (district) {
-      setSelectedDistrict(district);
-      setShowFormWrapper(true);
-      showNotification(`Location set to ${district.name}`, 'success');
-    }
+  const handleDistrictSelect = (districtId, districtName) => {
+    setSelectedDistrict(districtId);
+    setSelectedDistrictName(districtName);
+    loadBenchmarkPrices(districtId);
   };
 
-  // Handle form input changes
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({
-      ...prev,
-      [name]: value
-    }));
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const resetForm = () => {
     setFormData({
       deliveryType: '',
       benchmarkPrice: '',
-      status: 'active'
+      category: '',
+      subCategory: '',
+      projectType: '',
+      subProjectType: '',
+      combokit: ''
     });
-    setEditingId(null);
   };
 
-  // Handle create/update
   const handleSubmit = async () => {
+    if (!selectedDistrict) {
+      showNotification('Please select a district first', 'error');
+      return;
+    }
     if (!formData.deliveryType || !formData.benchmarkPrice) {
-      showNotification('Please fill in all required fields', 'error');
+      showNotification('Delivery Type and Benchmark Price are required', 'error');
       return;
     }
 
-    /* 
-       NOTE: The user requirement mentions linking with location.
-       However, the database schema provided in the prompt for `DeliveryBenchmarkPrices` 
-       ONLY has: `deliveryTypeId`, `benchmarkPrice`, `status`, `timestamps`.
-       It DOES NOT satisfy the location-specific requirement in the schema definition.
-       
-       BUT, to make it "Fully Dynamic" and distinct per location as implied by the UI refactor,
-       I will proceed with the schema I created which matched the user request exactly.
-       The user request was:
-       DeliveryBenchmarkPrices
-       - deliveryTypeId (reference DeliveryTypes)
-       - benchmarkPrice
-       - status
-       - timestamps
-
-       This implies global benchmark price per delivery type?
-       Or did the user miss fields?
-       "DeliveryBenchmarkPrice.jsx - Link with Delivery Type - Prevent duplicate benchmark per location/type"
-       
-       If the schema doesn't have location fields, I can't save them.
-       I will implement it as per the schema requested.
-       However, the previous UI strongly suggests location dependency.
-       If I strictly follow "EXPECTED OUTPUT" schema, I lose location specificity.
-       
-       I will assume for now that I should follow the Schema strictly.
-       If so, location selection is just for context/viewing or maybe filtering, 
-       but if the model doesn't store it, I can't persist it.
-       
-       Wait, let's re-read the schema request carefully.
-       "DeliveryBenchmarkPrices - deliveryTypeId - benchmarkPrice - status"
-       Nothing else.
-       
-       However, "Prevent duplicate benchmark per location/type" in features list implies location is needed.
-       I will ADD location references to the Schema if I can, but I must follow instructions.
-       The instructions explicitly listed the fields.
-       
-       Maybe "Location" is implicit or I missed it?
-       No, I double checked.
-       
-       I will follow the Schema fields.
-       If the User wants location specific pricing, they presumably would have asked for location fields.
-       OR, maybe `DeliveryType` itself is location specific? No, `DeliveryType` has `name`, `description`.
-       
-       I will implement global benchmark price per delivery type for now, as per schema.
-       But I will keep the location selector UI as a "Filter" or "Context" if applicable, 
-       or maybe the user intends to add location later.
-       Actually, I'll hide the location selection if it's not relevant to saving data, 
-       BUT the user asked to "Link with Delivery Type" and "Prevent duplicate benchmark per location/type".
-       This is a contradiction.
-       
-       I will stick to the schema fields. It's safer.
-       The location selection might be for a future feature or I should just implement the schema.
-       I'll update the UI to just manage Benchmark Prices per Delivery Type.
-       
-    */
-
     try {
       setLoading(true);
-      if (editingId) {
-        await updateBenchmarkPrice(editingId, formData);
-        showNotification('Benchmark price updated', 'success');
-      } else {
-        await createBenchmarkPrice(formData);
-        showNotification('Benchmark price created', 'success');
-      }
+      const payload = {
+        ...formData,
+        state: selectedState,
+        cluster: selectedCluster,
+        district: selectedDistrict,
+        status: 'active'
+      };
+
+      await createBenchmarkPrice(payload);
+      showNotification('Benchmark price created successfully', 'success');
       refreshPrices();
       resetForm();
     } catch (error) {
@@ -215,17 +188,6 @@ const DeliveryBenchmarkPrice = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleEdit = (price) => {
-    setEditingId(price._id);
-    setFormData({
-      deliveryType: price.deliveryType._id,
-      benchmarkPrice: price.benchmarkPrice,
-      status: price.status
-    });
-    // Scroll to form
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleDelete = async (id) => {
@@ -241,164 +203,278 @@ const DeliveryBenchmarkPrice = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
-      {/* Notification Toast */}
+    <div className="min-h-screen bg-gray-50 p-6 font-sans">
+      {/* Notification */}
       {notification.show && (
-        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
-          }`}>
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white font-medium ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
           {notification.message}
         </div>
       )}
 
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Delivery Benchmark Prices</h1>
-        <p className="text-gray-600">Manage base prices for delivery types</p>
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 p-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold text-[#1e293b]">Delivery Benchmark Price</h1>
+          <button
+            className="mt-2 bg-[#0ea5e9] text-white px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-2 hover:bg-[#0284c7] transition"
+            onClick={() => setLocationCardsVisible(!locationCardsVisible)}
+          >
+            {locationCardsVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+            {locationCardsVisible ? 'Hide Location Cards' : 'Show Location Cards'}
+          </button>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Form Section */}
-        <div className="lg:col-span-1">
-          <div className="bg-white rounded-xl shadow-sm p-6 sticky top-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              {editingId ? 'Edit Benchmark Price' : 'Add Benchmark Price'}
-            </h2>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Delivery Type <span className="text-red-500">*</span>
-                </label>
-                <select
-                  name="deliveryType"
-                  value={formData.deliveryType}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  disabled={loading}
+      {/* Hierarchy Selection Cards */}
+      {locationCardsVisible && (
+        <div className="space-y-6 mb-8">
+          {/* State Section */}
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {states.map(state => (
+                <div
+                  key={state._id}
+                  className={`border rounded-md p-4 text-center cursor-pointer transition-colors flex justify-center items-center h-20 shadow-sm ${selectedState === state._id
+                      ? 'bg-[#7dd3fc] border-[#38bdf8] text-slate-800'
+                      : 'bg-white border-gray-200 hover:border-[#38bdf8]'
+                    }`}
+                  onClick={() => handleStateSelect(state._id, state.name)}
                 >
-                  <option value="">Select Delivery Type</option>
-                  {deliveryTypes.filter(t => t.status === 'active').map(type => (
-                    <option key={type._id} value={type._id}>{type.name}</option>
+                  <div>
+                    <div className="font-semibold text-sm">{state.name}</div>
+                    <div className="text-xs text-gray-500 mt-1 uppercase">{state.name.substring(0, 2)}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cluster Section */}
+          {selectedState && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select Cluster</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {clusterOptions.length === 0 ? <p className="text-sm text-gray-500">No clusters found.</p> :
+                  clusterOptions.map(cluster => (
+                    <div
+                      key={cluster._id}
+                      className={`border rounded-md p-4 text-center cursor-pointer transition-colors flex justify-center items-center h-20 shadow-sm ${selectedCluster === cluster._id
+                          ? 'bg-[#e0f2fe] border-[#7dd3fc] text-slate-800'
+                          : 'bg-white border-gray-200 hover:border-[#7dd3fc]'
+                        }`}
+                      onClick={() => handleClusterSelect(cluster._id, cluster.name)}
+                    >
+                      <div>
+                        <div className="font-semibold text-sm">{cluster.name}</div>
+                        <div className="text-xs text-gray-400 mt-1">{selectedStateName}</div>
+                      </div>
+                    </div>
                   ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Benchmark Price (₹) <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="number"
-                  name="benchmarkPrice"
-                  value={formData.benchmarkPrice}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  placeholder="0.00"
-                  min="0"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status
-                </label>
-                <select
-                  name="status"
-                  value={formData.status}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="active">Active</option>
-                  <option value="inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="pt-4 flex space-x-3">
-                {editingId && (
-                  <button
-                    onClick={resetForm}
-                    className="flex-1 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50"
-                  >
-                    Cancel
-                  </button>
-                )}
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="flex-1 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex justify-center items-center"
-                >
-                  {loading ? <Loader className="w-5 h-5 animate-spin" /> : (editingId ? 'Update' : 'Create')}
-                </button>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* District Section */}
+          {selectedCluster && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select District</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {districtOptions.length === 0 ? <p className="text-sm text-gray-500">No districts found.</p> :
+                  districtOptions.map(district => (
+                    <div
+                      key={district._id}
+                      className={`border rounded-md p-4 text-center cursor-pointer transition-colors flex justify-center items-center h-20 shadow-sm ${selectedDistrict === district._id
+                          ? 'bg-[#f0f9ff] border-[#bae6fd] text-slate-800'
+                          : 'bg-white border-gray-200 hover:border-[#bae6fd]'
+                        }`}
+                      onClick={() => handleDistrictSelect(district._id, district.name)}
+                    >
+                      <div>
+                        <div className="font-semibold text-sm">{district.name}</div>
+                        <div className="text-xs text-gray-400 mt-1">{selectedClusterName}</div>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
+      )}
 
-        {/* List Section */}
-        <div className="lg:col-span-2">
-          <div className="bg-white rounded-xl shadow-sm overflow-hidden">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
-              <h3 className="font-bold text-gray-700">Existing Benchmark Prices</h3>
-              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">{benchmarkPrices.length} Records</span>
-            </div>
+      {/* Input Matrix & Data Table (Only visible when District is selected) */}
+      {selectedDistrict ? (
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mt-6 animate-in fade-in duration-500">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm whitespace-nowrap">
+              <thead className="bg-[#1e293b] text-white text-xs font-semibold tracking-wide">
+                <tr>
+                  <th className="px-4 py-3">Delivery Type</th>
+                  <th className="px-4 py-3">Cluster</th>
+                  <th className="px-4 py-3">Benchmark Price</th>
+                  <th className="px-4 py-3">Category Type</th>
+                  <th className="px-4 py-3">Sub Category</th>
+                  <th className="px-4 py-3">Project Type</th>
+                  <th className="px-4 py-3">Sub Project Type</th>
+                  <th className="px-4 py-3">Combokit Selection</th>
+                  <th className="px-4 py-3 text-center">Actions</th>
+                </tr>
+              </thead>
 
-            {dataLoading ? (
-              <div className="p-8 text-center">
-                <Loader className="w-8 h-8 text-blue-600 animate-spin mx-auto" />
-              </div>
-            ) : benchmarkPrices.length === 0 ? (
-              <div className="p-8 text-center text-gray-500">
-                No benchmark prices found.
-              </div>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 text-gray-600 text-sm">
-                    <tr>
-                      <th className="px-6 py-3 text-left">Delivery Type</th>
-                      <th className="px-6 py-3 text-left">Price</th>
-                      <th className="px-6 py-3 text-left">Status</th>
-                      <th className="px-6 py-3 text-right">Actions</th>
+              <tbody className="divide-y divide-gray-100">
+                {/* Creation Form Row */}
+                <tr className="bg-slate-50">
+                  <td className="px-2 py-2">
+                    <select
+                      name="deliveryType"
+                      value={formData.deliveryType}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Select Type</option>
+                      {deliveryTypes.map(t => <option key={t._id} value={t._id}>{t.name}</option>)}
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <input
+                      type="text"
+                      disabled
+                      value={selectedClusterName}
+                      className="w-full text-xs p-2 border border-slate-300 rounded bg-gray-100 text-gray-500 cursor-not-allowed"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <input
+                      type="number"
+                      name="benchmarkPrice"
+                      value={formData.benchmarkPrice}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 5000"
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    />
+                  </td>
+                  <td className="px-2 py-2">
+                    <select
+                      name="category"
+                      value={formData.category}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Category</option>
+                      <option value="Solar Panel">Solar Panel</option>
+                      <option value="Water Heater">Water Heater</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <select
+                      name="subCategory"
+                      value={formData.subCategory}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Sub Category</option>
+                      <option value="Residential">Residential</option>
+                      <option value="Commercial">Commercial</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <select
+                      name="projectType"
+                      value={formData.projectType}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Project Type</option>
+                      <option value="1kw-10kw">1kw-10kw</option>
+                      <option value="11kw-50kw">11kw-50kw</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <select
+                      name="subProjectType"
+                      value={formData.subProjectType}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Sub P. Type</option>
+                      <option value="On Grid">On Grid</option>
+                      <option value="Off Grid">Off Grid</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2">
+                    <select
+                      name="combokit"
+                      value={formData.combokit}
+                      onChange={handleInputChange}
+                      className="w-full text-xs p-2 border border-slate-300 rounded focus:border-blue-500 outline-none"
+                    >
+                      <option value="">Select Combokit</option>
+                      <option value="Standard Kit">Standard Kit</option>
+                      <option value="Premium Kit">Premium Kit</option>
+                      <option value="Custom Kit">Custom Kit</option>
+                    </select>
+                  </td>
+                  <td className="px-2 py-2 text-center">
+                    <button
+                      onClick={handleSubmit}
+                      disabled={loading}
+                      className="bg-[#0ea5e9] text-white px-4 py-2 rounded text-xs font-bold hover:bg-[#0284c7] transition flex items-center justify-center w-full"
+                    >
+                      {loading ? <Loader size={12} className="animate-spin" /> : 'Create'}
+                    </button>
+                  </td>
+                </tr>
+
+                {/* Data Rows */}
+                {dataLoading ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-8">
+                      <Loader className="w-6 h-6 animate-spin text-blue-500 mx-auto mb-2" />
+                      <p className="text-gray-500 text-sm">Loading prices for {selectedDistrictName}...</p>
+                    </td>
+                  </tr>
+                ) : benchmarkPrices.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-8 text-gray-500 text-sm">
+                      No benchmark prices set for {selectedDistrictName}. Create one above!
+                    </td>
+                  </tr>
+                ) : (
+                  benchmarkPrices.map((price) => (
+                    <tr key={price._id} className="hover:bg-slate-50 transition">
+                      <td className="px-4 py-3 font-medium text-slate-800">{price.deliveryType?.name || 'N/A'}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.cluster?.name || selectedClusterName}</td>
+                      <td className="px-4 py-3 font-bold text-emerald-600">₹{price.benchmarkPrice}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.category || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.subCategory || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.projectType || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.subProjectType || '-'}</td>
+                      <td className="px-4 py-3 text-slate-600">{price.combokit || '-'}</td>
+                      <td className="px-4 py-3 text-center">
+                        <button
+                          onClick={() => handleDelete(price._id)}
+                          className="p-1.5 text-red-500 hover:bg-red-50 rounded transition"
+                          title="Delete"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {benchmarkPrices.map((price) => (
-                      <tr key={price._id} className="hover:bg-gray-50">
-                        <td className="px-6 py-4 font-medium text-gray-900">
-                          {price.deliveryType?.name || 'Unknown Type'}
-                        </td>
-                        <td className="px-6 py-4 text-gray-600">
-                          ₹{price.benchmarkPrice}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${price.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                            }`}>
-                            {price.status}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex justify-end space-x-2">
-                            <button
-                              onClick={() => handleEdit(price)}
-                              className="p-1 text-blue-600 hover:bg-blue-50 rounded"
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(price._id)}
-                              className="p-1 text-red-600 hover:bg-red-50 rounded"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                  ))
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-48 bg-white rounded-lg border border-dashed border-gray-300 text-gray-400">
+          <p>Please navigate the locations and select a District to view/set Benchmark Prices.</p>
+        </div>
+      )}
+
+      {/* Footer text matching screenshot */}
+      <div className="mt-8 text-center text-xs text-gray-400 font-medium">
+        Copyright © 2025 Solarkits. All Rights Reserved.
       </div>
     </div>
   );

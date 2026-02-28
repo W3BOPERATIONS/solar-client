@@ -80,7 +80,9 @@ const CandidateTrainingSetting = () => {
         try {
           const promises = selectedCities.map(city => getDistricts(city._id));
           const results = await Promise.all(promises);
-          setDistricts(results.flat());
+          const allDistricts = results.flat();
+          const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
+          setDistricts(uniqueDistricts);
         } catch (error) {
           console.error("Error fetching districts:", error);
           toast.error("Failed to load districts");
@@ -482,11 +484,81 @@ const CandidateTrainingSetting = () => {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end mb-8">
               <button onClick={saveTrainingSettings} disabled={isSaving} className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold flex items-center disabled:opacity-50">
                 <Save className="h-5 w-5 mr-2" />
                 {isSaving ? 'Saving...' : 'Save Training Settings'}
               </button>
+            </div>
+
+            {/* Training Summary Section */}
+            <div className="bg-gray-50 border-l-4 border-blue-600 rounded-r-lg p-6 mb-8 mt-12 shadow-sm">
+              <h3 className="text-xl font-bold text-blue-800 mb-6 flex items-center">
+                Training Summary
+              </h3>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                {/* Location Coverage */}
+                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                  <h4 className="font-semibold text-gray-700 flex items-center mb-3">
+                    Location Coverage
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentState?.name || 'N/A'}</span>
+                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{selectedCities.length === cities.length ? 'All Clusters' : `${selectedCities.length} Clusters`}</span>
+                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{selectedDistricts.length === districts.length ? 'All Districts' : `${selectedDistricts.length} Districts`}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">Training will be available in selected locations</p>
+                </div>
+
+                {/* Department & Position */}
+                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                  <h4 className="font-semibold text-gray-700 flex items-center mb-3">
+                    <Users className="w-4 h-4 mr-1" /> Department & Position
+                  </h4>
+                  <div className="flex flex-wrap gap-2 mb-2">
+                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentDepartment?.name || 'N/A'}</span>
+                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentPosition?.name || 'N/A'}</span>
+                  </div>
+                  <p className="text-xs text-gray-500">Training configured for specific department roles</p>
+                </div>
+              </div>
+
+              {/* Training Content */}
+              <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
+                <h4 className="font-semibold text-gray-700 flex items-center mb-4">
+                  <PlayCircle className="w-4 h-4 mr-1" /> Training Content
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  {/* We compute dynamic summary from sections state */}
+                  {['solarrooftop', 'solarpump', 'solarstreetlight'].map(cat => {
+                    const catSections = sections.filter(s => s.category === cat);
+                    const videoCount = catSections.reduce((acc, s) => acc + s.videos.length, 0);
+                    if (videoCount === 0 && catSections.length === 0) return null;
+
+                    const catName = cat === 'solarrooftop' ? 'Solar Rooftop Basics' :
+                      cat === 'solarpump' ? 'Solar Pump Guide' : 'Solar Street Light';
+
+                    return (
+                      <div key={cat} className="flex items-start">
+                        <FileVideo className="w-6 h-6 text-blue-500 mr-2 mt-1" />
+                        <div>
+                          <h5 className="font-semibold text-sm text-gray-800">{catName}</h5>
+                          <p className="text-xs text-gray-500">{videoCount} videos</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {sections.length === 0 || sections.every(s => s.videos.length === 0) ? (
+                    <p className="text-sm text-gray-500 col-span-full">No training content added yet.</p>
+                  ) : null}
+                </div>
+                <div className="border-t pt-3 mt-4">
+                  <p className="text-xs text-gray-500">
+                    Total: {sections.reduce((acc, s) => acc + s.videos.length, 0)} training videos across {new Set(sections.map(s => s.category)).size} categories
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         )}

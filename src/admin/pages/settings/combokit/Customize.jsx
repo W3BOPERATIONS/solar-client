@@ -21,6 +21,9 @@ const CustomizeCombokit = () => {
   const [selectedStates, setSelectedStates] = useState(new Set());
   const [selectedClusters, setSelectedClusters] = useState(new Set());
   const [selectedDistricts, setSelectedDistricts] = useState(new Set());
+  const [selectedRoles, setSelectedRoles] = useState(new Set());
+
+  const allRoles = ['Dealer', 'Franchisee', 'Channel Partner'];
 
   // Data Cache (ID -> Data)
   const [availableClusters, setAvailableClusters] = useState({}); // stateId -> [clusters]
@@ -112,14 +115,21 @@ const CustomizeCombokit = () => {
     setSelectedStates(new Set());
     setSelectedClusters(new Set());
     setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
   };
 
   // Get displayed clusters based on selected states
   const getDisplayedClusters = () => {
     let clusters = [];
+    const seen = new Set();
     selectedStates.forEach(stateId => {
       if (availableClusters[stateId]) {
-        clusters = [...clusters, ...availableClusters[stateId]];
+        availableClusters[stateId].forEach(cluster => {
+          if (!seen.has(cluster._id)) {
+            seen.add(cluster._id);
+            clusters.push(cluster);
+          }
+        });
       }
     });
     return clusters;
@@ -171,14 +181,21 @@ const CustomizeCombokit = () => {
   const clearAllClusters = () => {
     setSelectedClusters(new Set());
     setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
   };
 
   // Get displayed districts based on selected clusters
   const getDisplayedDistricts = () => {
     let districts = [];
+    const seen = new Set();
     selectedClusters.forEach(clusterId => {
       if (availableDistricts[clusterId]) {
-        districts = [...districts, ...availableDistricts[clusterId]];
+        availableDistricts[clusterId].forEach(district => {
+          if (!seen.has(district._id)) {
+            seen.add(district._id);
+            districts.push(district);
+          }
+        });
       }
     });
     return districts;
@@ -203,6 +220,26 @@ const CustomizeCombokit = () => {
 
   const clearAllDistricts = () => {
     setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
+  };
+
+  // Handle role selection
+  const handleRoleClick = (role) => {
+    const newSelectedRoles = new Set(selectedRoles);
+    if (newSelectedRoles.has(role)) {
+      newSelectedRoles.delete(role);
+    } else {
+      newSelectedRoles.add(role);
+    }
+    setSelectedRoles(newSelectedRoles);
+  };
+
+  const selectAllRoles = () => {
+    setSelectedRoles(new Set(allRoles));
+  };
+
+  const clearAllRoles = () => {
+    setSelectedRoles(new Set());
   };
 
 
@@ -306,6 +343,10 @@ const CustomizeCombokit = () => {
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{districtNames}</td>
               </tr>
               <tr>
+                <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Partner:</td>
+                <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{data.role || data.cpTypes?.join(", ") || '-'}</td>
+              </tr>
+              <tr>
                 <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900 bg-gray-50">Category:</td>
                 <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-500">{data.category}</td>
               </tr>
@@ -378,9 +419,9 @@ const CustomizeCombokit = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {allStates.map(state => (
+            {allStates.map((state, index) => (
               <div
-                key={state._id}
+                key={`${state._id}-${index}`}
                 onClick={() => handleStateClick(state._id)}
                 className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedStates.has(state._id)
                   ? 'bg-blue-600 text-white border-blue-600'
@@ -418,9 +459,9 @@ const CustomizeCombokit = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {getDisplayedClusters().map(cluster => (
+              {getDisplayedClusters().map((cluster, index) => (
                 <div
-                  key={cluster._id}
+                  key={`${cluster._id}-${index}`}
                   onClick={() => handleClusterClick(cluster._id)}
                   className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedClusters.has(cluster._id)
                     ? 'bg-purple-700 text-white border-purple-700'
@@ -459,9 +500,9 @@ const CustomizeCombokit = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {getDisplayedDistricts().map(district => (
+              {getDisplayedDistricts().map((district, index) => (
                 <div
-                  key={district._id}
+                  key={`${district._id}-${index}`}
                   onClick={() => handleDistrictClick(district._id)}
                   className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedDistricts.has(district._id)
                     ? 'bg-green-600 text-white border-green-600'
@@ -469,6 +510,47 @@ const CustomizeCombokit = () => {
                     }`}
                 >
                   {district.name}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Role Selection */}
+      {selectedDistricts.size > 0 && (
+        <div className="card mb-6 shadow-lg rounded-lg bg-white">
+          <div className="card-body p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Partner</h3>
+
+            <div className="mb-4">
+              <button
+                onClick={selectAllRoles}
+                className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                <CheckSquare className="inline-block w-4 h-4 mr-1" />
+                Select All
+              </button>
+              <button
+                onClick={clearAllRoles}
+                className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <XCircle className="inline-block w-4 h-4 mr-1" />
+                Clear All
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {allRoles.map((role, index) => (
+                <div
+                  key={`${role}-${index}`}
+                  onClick={() => handleRoleClick(role)}
+                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedRoles.has(role)
+                    ? 'bg-orange-600 text-white border-orange-600'
+                    : 'border-gray-300 hover:border-orange-500'
+                    }`}
+                >
+                  {role}
                 </div>
               ))}
             </div>
@@ -498,6 +580,7 @@ const CustomizeCombokit = () => {
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">State</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cluster</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Districts</th>
+                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Partner</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Category</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Sub Category</th>
                       <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Project Type</th>
@@ -516,16 +599,21 @@ const CustomizeCombokit = () => {
                           const hasSelectedDistrict = assignment.districts?.some(d => selectedDistricts.has(d._id));
                           if (!hasSelectedDistrict) return false;
                         }
+                        // For CP Type / Role
+                        if (selectedRoles.size > 0) {
+                          const assignmentRole = assignment.role || assignment.cpTypes?.[0];
+                          if (!selectedRoles.has(assignmentRole)) return false;
+                        }
                         return true;
                       })
-                      .map(assignment => {
+                      .map((assignment, index) => {
                         const isEditing = editMode[assignment._id];
                         const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
                         // Truncate district names if too long
                         const districtsDisplay = districtNames.length > 50 ? districtNames.substring(0, 50) + "..." : districtNames;
 
                         return (
-                          <tr key={assignment._id}>
+                          <tr key={`${assignment._id}-${index}`}>
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.solarkitName}</td>
 
                             {/* Panel Column */}
@@ -611,6 +699,10 @@ const CustomizeCombokit = () => {
 
                             <td className="px-4 py-3 text-sm text-gray-900">
                               <span title={districtNames}>{districtsDisplay}</span>
+                            </td>
+
+                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                              {assignment.role || assignment.cpTypes?.join(", ") || '-'}
                             </td>
 
                             <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.category}</td>

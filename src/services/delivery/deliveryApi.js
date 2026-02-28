@@ -65,6 +65,17 @@ export const deleteVehicle = async (id) => {
     return response.data;
 };
 
+// Vendor Delivery Config
+export const getVendorDeliveryConfig = async () => {
+    const response = await axios.get(`${API_URL}/vendor-config`);
+    return response.data;
+};
+
+export const upsertVendorDeliveryConfig = async (data) => {
+    const response = await axios.post(`${API_URL}/vendor-config`, data);
+    return response.data;
+};
+
 // Vendor Delivery Plans
 export const getVendorDeliveryPlans = async () => {
     const response = await axios.get(`${API_URL}/vendor-plans`);

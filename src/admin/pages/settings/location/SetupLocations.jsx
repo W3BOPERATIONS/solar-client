@@ -10,9 +10,11 @@ import {
   Trash2,
   X,
   AlertCircle,
+  Loader2,
 } from 'lucide-react';
 
 import { locationAPI } from '../../../../api/api';
+import LocationSelector from '../../../../components/common/LocationSelector';
 
 const toId = (v) => {
   if (!v) return '';
@@ -20,20 +22,37 @@ const toId = (v) => {
   return v?._id || '';
 };
 
-const normalizeItemToForm = (item) => ({
-  name: item?.name || '',
-  code: item?.code || '',
-  description: item?.description || '',
-  country: toId(item?.country),
-  state: toId(item?.state),
-  city: toId(item?.city),
-  district: toId(item?.district),
-  cluster: toId(item?.cluster),
-});
+const normalizeItemToForm = (item) => {
+  const country = toId(item?.country);
+  const state = toId(item?.state);
+  const district = toId(item?.district);
+  const districts = (item?.districts || []).map(d => toId(d));
+  const cluster = toId(item?.cluster);
+  const clusters = (item?.clusters || []).map(c => toId(c));
+  const zone = toId(item?.zone);
+  const zones = (item?.zones || []).map(z => toId(z));
+
+  return {
+    name: item?.name || '',
+    country,
+    state,
+    // Use plural array for singular field if it exists, to support multi-select UI
+    district: districts.length > 0 ? districts : district,
+    districts,
+    cluster: clusters.length > 0 ? clusters : cluster,
+    clusters,
+    zone: zones.length > 0 ? zones : zone,
+    zones,
+    areaType: item?.areaType || 'Urban',
+    pincodes: item?.pincodes || [],
+    isActive: item?.isActive !== undefined ? item.isActive : true,
+  };
+};
 
 export default function SetupLocations() {
   const [activeTab, setActiveTab] = useState('countries');
   const [countries, setCountries] = useState([]);
+  const [masterCountries, setMasterCountries] = useState([]); // New state for all master countries
   const [states, setStates] = useState([]);
   const [cities, setCities] = useState([]); // New state for Cities
   const [districts, setDistricts] = useState([]);
@@ -49,19 +68,25 @@ export default function SetupLocations() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
-    name: '',
-    code: '',
-    description: '',
-    country: '',
-    state: '',
-    city: '', // New field
-    district: '',
-    cluster: '',
+    districts: [], // Multi-select
+    clusters: [], // Multi-select
+    zones: [], // Multi-select
+    district: '', // Single parent
+    cluster: '', // Single parent
+    zone: '', // Single parent
+    areaType: 'Urban',
+    pincodes: [],
+    isActive: true,
   });
+
+  const [selectedMasterId, setSelectedMasterId] = useState(''); // New state for selected master country to activate
+  const [activating, setActivating] = useState(false); // New state for activation loading
+  const [pincodeStr, setPincodeStr] = useState(''); // Local state for pincode input string
 
   // Load base data on mount
   useEffect(() => {
     loadCountries();
+    loadMasterCountries(); // Load all master countries
   }, []);
 
   // Load data whenever tab changes
@@ -69,6 +94,7 @@ export default function SetupLocations() {
     setSearchQuery('');
     setError('');
     setSuccess('');
+    setSelectedMasterId(''); // Reset selected master ID on tab change
 
     if (activeTab === 'countries') loadCountries();
     else if (activeTab === 'states') loadStates();
@@ -78,75 +104,37 @@ export default function SetupLocations() {
     else if (activeTab === 'zones') loadZones();
   }, [activeTab]);
 
-  // Load states when country changes
-  useEffect(() => {
-    if (!showForm) return;
-    if (formData.country) {
-      loadStates({ countryId: formData.country });
-    } else {
-      setStates([]);
-      setFormData((prev) => ({ ...prev, state: '', city: '', district: '', cluster: '' }));
+  const loadMasterCountries = async () => {
+    try {
+      const response = await locationAPI.getMasterCountries();
+      setMasterCountries(response.data.data || []);
+    } catch (err) {
+      console.error('Failed to load master countries:', err);
     }
-  }, [formData.country, showForm]);
+  };
 
-  // Load cities when state changes (New dependency)
-  useEffect(() => {
-    if (!showForm) return;
-    if (formData.state) {
-      loadCities({ stateId: formData.state });
-    } else {
-      setCities([]);
-      setFormData((prev) => ({ ...prev, city: '', district: '', cluster: '' }));
+  const handleActivateCountry = async () => {
+    if (!selectedMasterId) return;
+    try {
+      setActivating(true);
+      setError('');
+      setSuccess('');
+      await locationAPI.activateCountry({ countryId: selectedMasterId });
+      setSuccess('Country activated successfully');
+      setSelectedMasterId('');
+      loadCountries(); // Reload active countries
+      loadMasterCountries(); // Reload master countries to update dropdown
+    } catch (err) {
+      setError(err.response?.data?.message || 'Failed to activate country');
+    } finally {
+      setActivating(false);
     }
-  }, [formData.state, showForm]);
-
-  // Load districts when city changes (Updated dependency: State -> City -> District)
-  useEffect(() => {
-    if (!showForm) return;
-    if (formData.city) {
-      loadDistricts({ cityId: formData.city });
-    } else {
-      setDistricts([]);
-      setFormData((prev) => ({ ...prev, district: '', cluster: '' }));
-    }
-  }, [formData.city, showForm]);
-
-  // Load clusters when district changes
-  useEffect(() => {
-    if (!showForm) return;
-    if (formData.district) {
-      loadClusters({ districtId: formData.district });
-    } else {
-      setClusters([]);
-      setFormData((prev) => ({ ...prev, cluster: '' }));
-    }
-  }, [formData.district, showForm]);
-
-  // Load zones when cluster changes
-  useEffect(() => {
-    if (!showForm) return;
-    if (formData.cluster) {
-      loadZones({ clusterId: formData.cluster });
-    } else {
-      setZones([]);
-    }
-  }, [formData.cluster, showForm]);
-
-  // When closing available form, reload list for the active tab
-  useEffect(() => {
-    if (showForm) return;
-    if (activeTab === 'countries') loadCountries();
-    if (activeTab === 'states') loadStates();
-    if (activeTab === 'cities') loadCities();
-    if (activeTab === 'districts') loadDistricts();
-    if (activeTab === 'clusters') loadClusters();
-    if (activeTab === 'zones') loadZones();
-  }, [showForm, activeTab]);
+  };
 
   const loadCountries = async () => {
     try {
       setLoading(true);
-      const response = await locationAPI.getAllCountries({ isActive: 'true' });
+      const response = await locationAPI.getAllCountries();
       setCountries(response.data.data || []);
     } catch (err) {
       setError('Failed to load countries');
@@ -201,6 +189,77 @@ export default function SetupLocations() {
     }
   };
 
+  // Load states when country changes
+  useEffect(() => {
+    if (!showForm) return; // Only load for form filtering
+    const countryId = formData.country;
+    if (countryId) {
+      loadStates({ countryId });
+    } else {
+      setStates([]);
+      setFormData((prev) => ({ ...prev, state: '', district: '', districts: [], cluster: '', clusters: [], zone: '', zones: [], city: '' }));
+    }
+  }, [formData.country, showForm]);
+
+  // Load districts when state changes
+  useEffect(() => {
+    if (!showForm) return;
+    const stateId = formData.state;
+    if (stateId) {
+      loadDistricts({ stateId });
+    } else {
+      setDistricts([]);
+      setFormData((prev) => ({ ...prev, district: '', districts: [], cluster: '', clusters: [], zone: '', zones: [], city: '' }));
+    }
+  }, [formData.state, showForm]);
+
+  // Load clusters when district changes
+  useEffect(() => {
+    if (!showForm) return;
+    const districtId = formData.district;
+    if (districtId) {
+      loadClusters({ districtId });
+    } else {
+      setClusters([]);
+      setFormData((prev) => ({ ...prev, cluster: '', clusters: [], zone: '', zones: [], city: '' }));
+    }
+  }, [formData.district, showForm]);
+
+  // Load zones when cluster changes
+  useEffect(() => {
+    if (!showForm) return;
+    const clusterId = formData.cluster;
+    if (clusterId) {
+      loadZones({ clusterId });
+    } else {
+      setZones([]);
+      setFormData((prev) => ({ ...prev, zone: '', zones: [], city: '' }));
+    }
+  }, [formData.cluster, showForm]);
+
+  // Load cities when zone changes
+  useEffect(() => {
+    if (!showForm) return;
+    const zoneId = formData.zone;
+    if (zoneId) {
+      loadCities({ zoneId });
+    } else {
+      setCities([]);
+      setFormData((prev) => ({ ...prev, city: '' }));
+    }
+  }, [formData.zone, showForm]);
+
+  // When closing available form, reload list for the active tab
+  useEffect(() => {
+    if (showForm) return;
+    if (activeTab === 'countries') loadCountries();
+    if (activeTab === 'states') loadStates();
+    if (activeTab === 'cities') loadCities();
+    if (activeTab === 'districts') loadDistricts();
+    if (activeTab === 'clusters') loadClusters();
+    if (activeTab === 'zones') loadZones();
+  }, [showForm, activeTab]);
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -208,23 +267,42 @@ export default function SetupLocations() {
     setSuccess('');
 
     try {
-      const payload = normalizeItemToForm(formData);
-      // Clean up empty strings or nulls
-      Object.keys(payload).forEach(key => {
-        if (!payload[key]) delete payload[key];
-      });
+      // 1. Common fields
+      const payload = {
+        name: formData.name,
+        isActive: formData.isActive,
+        country: toId(formData.country),
+        state: toId(formData.state),
+      };
 
-      // Explicitly keep country/state/city/district/cluster IDs if required by schema validation
-      if (formData.country) payload.country = formData.country;
-      if (formData.state) payload.state = formData.state;
-      if (formData.city) payload.city = formData.city;
-      if (formData.district) payload.district = formData.district;
-      if (formData.cluster) payload.cluster = formData.cluster;
+      // 2. Tab-specific mapping (Ensuring correct singular/plural names for backend)
+      if (activeTab === 'states') {
+        // No special fields
+      } else if (activeTab === 'districts') {
+        // No special fields
+      } else if (activeTab === 'clusters') {
+        // districts (plural) is required for Cluster model
+        payload.districts = Array.isArray(formData.district) ? formData.district : (formData.districts || []);
+      } else if (activeTab === 'zones') {
+        // clusters (plural) is required for Zone model
+        payload.clusters = Array.isArray(formData.cluster) ? formData.cluster : (formData.clusters || []);
+      } else if (activeTab === 'cities') {
+        // zones (plural) is required for City model
+        payload.zones = Array.isArray(formData.zone) ? formData.zone : (formData.zones || []);
+        payload.cluster = toId(formData.cluster);
+        payload.district = toId(formData.district);
+        payload.areaType = formData.areaType;
+        payload.pincodes = formData.pincodes;
+        // Name is optional for cities
+        if (formData.name) payload.name = formData.name;
+        else delete payload.name;
+      }
 
-
+      // 3. API Call
       if (activeTab === 'countries') {
-        if (editingId) await locationAPI.updateCountry(editingId, payload);
-        else await locationAPI.createCountry(payload);
+        const countryPayload = { name: formData.name, isActive: formData.isActive };
+        if (editingId) await locationAPI.updateCountry(editingId, countryPayload);
+        else await locationAPI.createCountry(countryPayload);
         setSuccess(`Country ${editingId ? 'updated' : 'created'} successfully`);
         loadCountries();
       } else if (activeTab === 'states') {
@@ -232,26 +310,26 @@ export default function SetupLocations() {
         else await locationAPI.createState(payload);
         setSuccess(`State ${editingId ? 'updated' : 'created'} successfully`);
         loadStates({ countryId: formData.country });
+      } else if (activeTab === 'districts') {
+        if (editingId) await locationAPI.updateDistrict(editingId, payload);
+        else await locationAPI.createDistrict(payload);
+        setSuccess(`District ${editingId ? 'updated' : 'created'} successfully`);
+        loadDistricts({ stateId: formData.state });
+      } else if (activeTab === 'clusters') {
+        if (editingId) await locationAPI.updateCluster(editingId, payload);
+        else await locationAPI.createCluster(payload);
+        setSuccess(`Cluster ${editingId ? 'updated' : 'created'} successfully`);
+        loadClusters({ stateId: formData.state }); // Refresh by state
+      } else if (activeTab === 'zones') {
+        if (editingId) await locationAPI.updateZone(editingId, payload);
+        else await locationAPI.createZone(payload);
+        setSuccess(`Zone ${editingId ? 'updated' : 'created'} successfully`);
+        loadZones({ stateId: formData.state });
       } else if (activeTab === 'cities') {
         if (editingId) await locationAPI.updateCity(editingId, payload);
         else await locationAPI.createCity(payload);
         setSuccess(`City ${editingId ? 'updated' : 'created'} successfully`);
         loadCities({ stateId: formData.state });
-      } else if (activeTab === 'districts') {
-        if (editingId) await locationAPI.updateDistrict(editingId, payload);
-        else await locationAPI.createDistrict(payload);
-        setSuccess(`District ${editingId ? 'updated' : 'created'} successfully`);
-        loadDistricts({ cityId: formData.city });
-      } else if (activeTab === 'clusters') {
-        if (editingId) await locationAPI.updateCluster(editingId, payload);
-        else await locationAPI.createCluster(payload);
-        setSuccess(`Cluster ${editingId ? 'updated' : 'created'} successfully`);
-        loadClusters({ districtId: formData.district });
-      } else if (activeTab === 'zones') {
-        if (editingId) await locationAPI.updateZone(editingId, payload);
-        else await locationAPI.createZone(payload);
-        setSuccess(`Zone ${editingId ? 'updated' : 'created'} successfully`);
-        loadZones({ clusterId: formData.cluster });
       }
 
       resetForm();
@@ -269,21 +347,22 @@ export default function SetupLocations() {
         if (activeTab === 'countries') {
           await locationAPI.deleteCountry(id);
           loadCountries();
+          loadMasterCountries();
         } else if (activeTab === 'states') {
           await locationAPI.deleteState(id);
           loadStates({ countryId: formData.country });
-        } else if (activeTab === 'cities') {
-          await locationAPI.deleteCity(id);
-          loadCities({ stateId: formData.state });
         } else if (activeTab === 'districts') {
           await locationAPI.deleteDistrict(id);
-          loadDistricts({ cityId: formData.city });
+          loadDistricts({ stateId: formData.state });
         } else if (activeTab === 'clusters') {
           await locationAPI.deleteCluster(id);
           loadClusters({ districtId: formData.district });
         } else if (activeTab === 'zones') {
           await locationAPI.deleteZone(id);
           loadZones({ clusterId: formData.cluster });
+        } else if (activeTab === 'cities') {
+          await locationAPI.deleteCity(id);
+          loadCities({ zoneId: formData.zone });
         }
         setSuccess('Deleted successfully');
       } catch (err) {
@@ -296,17 +375,20 @@ export default function SetupLocations() {
 
   const resetForm = () => {
     setFormData({
-      name: '',
-      code: '',
-      description: '',
-      country: '',
-      state: '',
-      city: '',
+      districts: [],
+      clusters: [],
+      zones: [],
       district: '',
       cluster: '',
+      zone: '',
+      areaType: 'Urban',
+      pincodes: [],
+      isActive: true,
     });
     setEditingId(null);
     setShowForm(false);
+    setSelectedMasterId(''); // Reset selected master ID
+    setPincodeStr(''); // Reset pincode string
   };
 
   const getDisplayData = () => {
@@ -318,13 +400,14 @@ export default function SetupLocations() {
     else if (activeTab === 'clusters') data = clusters;
     else if (activeTab === 'zones') data = zones;
 
-    return data.filter(item =>
-      item.name?.toLowerCase().includes(searchQuery.toLowerCase())
-    );
+    return data.filter(item => {
+      const name = item.name || (activeTab === 'cities' ? item.zones?.map(z => z.name).join(', ') : '');
+      return name?.toLowerCase().includes(searchQuery.toLowerCase());
+    });
   };
 
   const getCountByParent = () => {
-    if (activeTab === 'countries') return countries.length;
+    if (activeTab === 'countries') return `${countries.filter(c => c.isActive).length}/${masterCountries.length}`; // Show Active/Total Master
     if (activeTab === 'states') return states.length;
     if (activeTab === 'cities') return cities.length;
     if (activeTab === 'districts') return districts.length;
@@ -334,7 +417,7 @@ export default function SetupLocations() {
   };
 
   // Tabs list
-  const TABS = ['countries', 'states', 'cities', 'districts', 'clusters', 'zones'];
+  const TABS = ['countries', 'states', 'districts', 'clusters', 'zones', 'cities'];
 
   return (
     <div className="p-6">
@@ -348,12 +431,14 @@ export default function SetupLocations() {
                 Location Management
               </h4>
               <p className="text-gray-500 mt-2 text-sm">
-                Manage countries, states, cities, districts, clusters and zones
+                Manage countries, states, districts, clusters, zones and cities
               </p>
             </div>
             <div className="text-right">
               <h3 className="font-bold text-3xl text-blue-500">{getCountByParent()}</h3>
-              <small className="text-gray-500 text-sm capitalize">Total {activeTab}</small>
+              <small className="text-gray-500 text-sm capitalize">
+                {activeTab === 'countries' ? 'Active/Total Global' : `Total ${activeTab}`}
+              </small>
             </div>
           </div>
 
@@ -397,11 +482,55 @@ export default function SetupLocations() {
           </div>
         )}
 
-        {/* Add Form */}
+        {/* Specialized Country Activation Flow */}
+        {activeTab === 'countries' && (
+          <div className="rounded-2xl bg-white shadow-[0px_3px_10px_rgba(0,0,0,0.08)] p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <PlusCircle className="text-blue-500" size={24} />
+              <h5 className="font-bold text-xl text-gray-800">Activate New Country</h5>
+            </div>
+            <p className="text-gray-500 text-sm mb-6">Select a country to activate and start managing regions</p>
+
+            <div className="flex flex-col md:flex-row gap-4 items-end">
+              <div className="flex-1 w-full">
+                <label className="text-sm font-semibold text-gray-700 block mb-2 flex items-center gap-1">
+                  <Globe size={14} className="text-gray-400" />
+                  Select Country
+                </label>
+                <select
+                  value={selectedMasterId}
+                  onChange={(e) => setSelectedMasterId(e.target.value)}
+                  className="w-full p-4 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                >
+                  <option value="">-- Select Country --</option>
+                  {masterCountries.map((c) => (
+                    <option key={c._id} value={c._id}>
+                      {c.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                onClick={handleActivateCountry}
+                disabled={!selectedMasterId || activating}
+                className="w-full md:w-auto bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-8 rounded-xl flex items-center justify-center gap-2 transition-all disabled:opacity-50 shadow-lg shadow-blue-100"
+              >
+                {activating ? (
+                  <Loader2 className="animate-spin" size={20} />
+                ) : (
+                  <CheckCircle size={20} />
+                )}
+                Activate Country
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Standard Add Form for other tabs */}
         {showForm && (
           <div className="rounded-2xl bg-gray-50 shadow-[0px_3px_10px_rgba(0,0,0,0.08)] p-6 border-2 border-blue-200">
             <div className="flex justify-between items-center mb-4">
-              <h5 className="font-bold text-lg">{editingId ? 'Edit' : 'Add New'} {activeTab.slice(0, -1)}</h5>
+              <h5 className="font-bold text-lg">{editingId ? 'Edit' : 'Add New'} {activeTab === 'cities' ? 'City' : activeTab.slice(0, -1)}</h5>
               <button
                 onClick={resetForm}
                 className="text-gray-500 hover:text-gray-700"
@@ -411,151 +540,97 @@ export default function SetupLocations() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              {/* Country Selector (Required for State+) */}
               {activeTab !== 'countries' && (
-                <div>
-                  <label className="font-semibold text-gray-700 block mb-2">
-                    Country <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.country}
-                    onChange={(e) => setFormData({ ...formData, country: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                  >
-                    <option value="">-- Select Country --</option>
-                    {countries.map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* State Selector (Required for City+) */}
-              {['cities', 'districts', 'clusters', 'zones'].includes(activeTab) && (
-                <div>
-                  <label className="font-semibold text-gray-700 block mb-2">
-                    State <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.state}
-                    onChange={(e) => setFormData({ ...formData, state: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    disabled={!formData.country}
-                  >
-                    <option value="">-- Select State --</option>
-                    {states.map((s) => (
-                      <option key={s._id} value={s._id}>
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* City Selector (Required for District+) */}
-              {['districts', 'clusters', 'zones'].includes(activeTab) && (
-                <div>
-                  <label className="font-semibold text-gray-700 block mb-2">
-                    City <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.city}
-                    onChange={(e) => setFormData({ ...formData, city: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    disabled={!formData.state}
-                  >
-                    <option value="">-- Select City --</option>
-                    {cities.map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* District Selector (Required for Cluster+) */}
-              {['clusters', 'zones'].includes(activeTab) && (
-                <div>
-                  <label className="font-semibold text-gray-700 block mb-2">
-                    District <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.district}
-                    onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    disabled={!formData.city}
-                  >
-                    <option value="">-- Select District --</option>
-                    {districts.map((d) => (
-                      <option key={d._id} value={d._id}>
-                        {d.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              {/* Cluster Selector (Required for Zones) */}
-              {activeTab === 'zones' && (
-                <div>
-                  <label className="font-semibold text-gray-700 block mb-2">
-                    Cluster <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    value={formData.cluster}
-                    onChange={(e) => setFormData({ ...formData, cluster: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    required
-                    disabled={!formData.district}
-                  >
-                    <option value="">-- Select Cluster --</option>
-                    {clusters.map((c) => (
-                      <option key={c._id} value={c._id}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-
-              <div>
-                <label className="font-semibold text-gray-700 block mb-2">
-                  Name <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
+                <LocationSelector
+                  values={formData}
+                  onChange={(updates) => setFormData(prev => ({ ...prev, ...updates }))}
+                  upto={
+                    activeTab === 'states' ? 'country' :
+                      activeTab === 'districts' ? 'state' :
+                        activeTab === 'clusters' ? 'district' :
+                          activeTab === 'zones' ? 'cluster' :
+                            activeTab === 'cities' ? 'zone' : null
+                  }
+                  multiple={{
+                    district: activeTab === 'clusters',
+                    cluster: activeTab === 'zones',
+                    zone: activeTab === 'cities'
+                  }}
+                  layout="stack"
                 />
-              </div>
+              )}
 
-              <div>
-                <label className="font-semibold text-gray-700 block mb-2">Code</label>
-                <input
-                  type="text"
-                  value={formData.code}
-                  onChange={(e) => setFormData({ ...formData, code: e.target.value })}
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
-              </div>
 
-              <div>
-                <label className="font-semibold text-gray-700 block mb-2">Description</label>
-                <textarea
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows="3"
-                  className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                />
+
+              {activeTab !== 'cities' && (
+                <div>
+                  <label className="font-semibold text-gray-700 block mb-2">
+                    Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                </div>
+              )}
+
+
+              {activeTab === 'cities' && (
+                <>
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-2">Area Type</label>
+                    <div className="flex gap-4">
+                      {['Urban', 'Rural'].map(type => (
+                        <label key={type} className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="radio"
+                            name="areaType"
+                            checked={formData.areaType === type}
+                            onChange={() => setFormData({ ...formData, areaType: type })}
+                            className="w-4 h-4 text-blue-600"
+                          />
+                          <span>{type}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="font-semibold text-gray-700 block mb-2">Pincodes (Comma separated)</label>
+                    <input
+                      type="text"
+                      value={pincodeStr}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setPincodeStr(val);
+                        setFormData({
+                          ...formData,
+                          pincodes: val.split(',').map(p => p.trim()).filter(p => p)
+                        });
+                      }}
+                      placeholder="e.g. 380001, 380002"
+                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </>
+              )}
+
+
+              <div className="flex items-center gap-3 bg-white p-4 rounded-xl border border-gray-200">
+                <div className="flex-1">
+                  <h6 className="font-bold text-gray-800">Active Status</h6>
+                  <p className="text-xs text-gray-500">Enable or disable this {activeTab.slice(0, -1)} across the system</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFormData({ ...formData, isActive: !formData.isActive })}
+                  className={`w-14 h-7 rounded-full transition-all relative ${formData.isActive ? 'bg-blue-500' : 'bg-gray-300'}`}
+                >
+                  <div className={`absolute top-1 w-5 h-5 bg-white rounded-full transition-all ${formData.isActive ? 'right-1' : 'left-1'}`} />
+                </button>
               </div>
 
               <div className="flex gap-3">
@@ -579,60 +654,138 @@ export default function SetupLocations() {
           </div>
         )}
 
-        {/* Add Button */}
-        {!showForm && (
+        {/* Add Button for tabs other than countries */}
+        {!showForm && activeTab !== 'countries' && (
           <button
             onClick={() => setShowForm(true)}
             className="w-full rounded-2xl bg-blue-50 shadow-[0px_3px_10px_rgba(0,0,0,0.08)] p-4 border-2 border-dashed border-blue-300 hover:border-blue-500 text-blue-600 font-medium flex items-center justify-center gap-2 transition-colors"
           >
             <PlusCircle size={20} />
-            Add New {activeTab.slice(0, -1)}
+            Add New {activeTab === 'cities' ? 'City' : activeTab.slice(0, -1)}
           </button>
         )}
 
-        {/* Search */}
-        {getDisplayData().length > 0 && (
-          <div className="relative">
-            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-              <Search size={18} className="text-gray-400" />
-            </div>
-            <input
-              type="text"
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700"
-              placeholder="Search..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+        {/* List Section Header */}
+        <div className="flex justify-between items-center mb-2">
+          <div className="flex items-center gap-2">
+            <Globe className="text-green-500" size={20} />
+            <h5 className="font-bold text-lg text-gray-800">
+              {activeTab === 'countries' ? 'Active Countries' : `Active ${activeTab}`}
+            </h5>
           </div>
-        )}
+          {activeTab === 'countries' && (
+            <span className="bg-green-100 text-green-700 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
+              {countries.filter(c => c.isActive).length} Active
+            </span>
+          )}
+        </div>
+
+        {/* Search */}
+        <div className="relative">
+          <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+            <Search size={18} className="text-gray-400" />
+          </div>
+          <input
+            type="text"
+            className="w-full pl-10 pr-4 py-4 bg-white border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-700 shadow-sm transition-all"
+            placeholder={activeTab === 'countries' ? "Search active countries..." : `Search ${activeTab}...`}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
 
         {/* List */}
         <div className="space-y-3">
           {getDisplayData().length > 0 ? (
             getDisplayData().map((item) => (
-              <div key={item._id} className="rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.06)] p-4 bg-white border-l-4 border-blue-500">
+              <div key={item._id} className="group rounded-xl shadow-[0px_2px_8px_rgba(0,0,0,0.06)] p-5 bg-white border border-gray-100 hover:border-blue-300 transition-all duration-300">
                 <div className="flex justify-between items-start">
                   <div className="flex-1">
-                    <h5 className="font-bold text-lg text-gray-800">{item.name}</h5>
-                    {item.code && <p className="text-sm text-gray-500">Code: {item.code}</p>}
-                    {item.description && <p className="text-sm text-gray-600 mt-1">{item.description}</p>}
+                    <div className="flex items-center gap-3">
+                      <h5 className="font-bold text-lg text-gray-800 group-hover:text-blue-600 transition-colors">
+                        {activeTab === 'cities'
+                          ? (item.name || `Zones: ${item.zones?.map(z => z.name).join(', ') || 'N/A'}`)
+                          : item.name}
+                      </h5>
+                      {item.isActive ? (
+                        <span className="px-2 py-0.5 bg-blue-50 text-blue-600 text-[10px] font-bold rounded uppercase border border-blue-100">
+                          Active
+                        </span>
+                      ) : (
+                        <span className="px-2 py-0.5 bg-gray-100 text-gray-400 text-[10px] font-bold rounded uppercase border border-gray-200">
+                          Inactive
+                        </span>
+                      )}
+                    </div>
+                    {activeTab === 'states' && item.code && <p className="text-sm text-gray-500 font-medium">Code: {item.code}</p>}
+                    {activeTab === 'states' && item.description && <p className="text-sm text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg">{item.description}</p>}
 
                     {/* Hierarchy details */}
-                    {activeTab !== 'countries' && item.country?.name && (
-                      <p className="text-xs text-gray-500 mt-1">Country: {item.country.name}</p>
-                    )}
-                    {['cities', 'districts', 'clusters', 'zones'].includes(activeTab) && item.state?.name && (
-                      <p className="text-xs text-gray-500 mt-1">State: {item.state.name}</p>
-                    )}
-                    {['districts', 'clusters', 'zones'].includes(activeTab) && item.city?.name && (
-                      <p className="text-xs text-gray-500 mt-1">City: {item.city.name}</p>
-                    )}
-                    {['clusters', 'zones'].includes(activeTab) && item.district?.name && (
-                      <p className="text-xs text-gray-500 mt-1">District: {item.district.name}</p>
-                    )}
-                    {activeTab === 'zones' && item.cluster?.name && (
-                      <p className="text-xs text-gray-500 mt-1">Cluster: {item.cluster.name}</p>
-                    )}
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {activeTab !== 'countries' && item.country?.name && (
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">
+                          Country: {item.country.name}
+                        </span>
+                      )}
+                      {['states', 'districts', 'clusters', 'zones', 'cities'].includes(activeTab) && item.state?.name && (
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">
+                          State: {item.state.name}
+                        </span>
+                      )}
+                      {['districts', 'clusters', 'zones', 'cities'].includes(activeTab) && item.district?.name && (
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">
+                          District: {item.district.name}
+                        </span>
+                      )}
+                      {activeTab === 'clusters' && item.districts?.length > 0 && (
+                        <div className="w-full mt-2">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Districts:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.districts.map(d => (
+                              <span key={d._id} className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-semibold">
+                                {d.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {activeTab === 'zones' && item.clusters?.length > 0 && (
+                        <div className="w-full mt-2">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Clusters:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.clusters.map(c => (
+                              <span key={c._id} className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-semibold">
+                                {c.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {activeTab === 'cities' && item.zones?.length > 0 && (
+                        <div className="w-full mt-2">
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Zones:</p>
+                          <div className="flex flex-wrap gap-1">
+                            {item.zones.map(z => (
+                              <span key={z._id} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-semibold">
+                                {z.name}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {activeTab === 'cities' && (
+                        <>
+                          <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded-full font-bold">
+                            Type: {item.areaType || 'Urban'}
+                          </span>
+                          {item.pincodes?.length > 0 && (
+                            <span className="text-[10px] bg-green-50 text-green-600 px-2 py-1 rounded-full font-bold">
+                              Pincodes: {item.pincodes.join(', ')}
+                            </span>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                   <div className="flex gap-2">
                     <button
@@ -640,26 +793,39 @@ export default function SetupLocations() {
                         setFormData(normalizeItemToForm(item));
                         setEditingId(item._id);
                         setShowForm(true);
+                        if (activeTab === 'cities') {
+                          setPincodeStr((item.pincodes || []).join(', '));
+                        }
+                        // For countries, we don't use the standard form but we might want to edit basic info
+                        if (activeTab === 'countries') {
+                          // Special handling if needed, e.g., a dedicated modal for country details
+                        }
                       }}
-                      className="p-2 text-blue-500 hover:bg-blue-50 rounded-lg transition-colors"
+                      className="p-3 text-blue-500 hover:bg-blue-50 rounded-xl transition-all hover:scale-110"
+                      title="Edit"
                     >
-                      <Edit2 size={18} />
+                      <Edit2 size={20} />
                     </button>
                     <button
                       onClick={() => handleDelete(item._id)}
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                      className="p-3 text-red-500 hover:bg-red-50 rounded-xl transition-all hover:scale-110"
+                      title="Delete"
                     >
-                      <Trash2 size={18} />
+                      <Trash2 size={20} />
                     </button>
                   </div>
                 </div>
               </div>
             ))
           ) : (
-            <div className="rounded-2xl bg-white shadow-[0px_3px_10px_rgba(0,0,0,0.08)] p-8 text-center text-gray-500">
-              <AlertCircle size={40} className="mx-auto mb-3 opacity-50" />
-              <p className="font-medium">No {activeTab} available</p>
-              <p className="text-sm mt-1">Add a new {activeTab.slice(0, -1)} to get started</p>
+            <div className="rounded-2xl bg-white shadow-[0px_3px_10px_rgba(0,0,0,0.08)] p-12 text-center text-gray-500 border border-dashed border-gray-200">
+              <AlertCircle size={48} className="mx-auto mb-4 text-gray-300" />
+              <p className="font-bold text-xl text-gray-400">No {activeTab} available</p>
+              <p className="text-sm mt-2">
+                {activeTab === 'countries'
+                  ? "Select a country from the dropdown above to activate it."
+                  : `Add a new ${activeTab.slice(0, -1)} to get started.`}
+              </p>
             </div>
           )}
         </div>

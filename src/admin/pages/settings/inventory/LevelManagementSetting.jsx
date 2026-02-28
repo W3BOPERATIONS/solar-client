@@ -17,18 +17,34 @@ const InventoryLevelManagementSetting = () => {
   const [inventoryData, setInventoryData] = useState([]);
   const [loading, setLoading] = useState(false);
 
+  const [brands, setBrands] = useState([]);
+  const [editingId, setEditingId] = useState(null);
+  const [editForm, setEditForm] = useState({});
+
   const [activeFilters, setActiveFilters] = useState({
     brand: '',
     category: '',
     subCategory: '',
     projectType: '',
-    subProjectType: ''
+    subProjectType: '',
+    productName: '',
+    sku: ''
   });
 
   // Load Initial Data
   useEffect(() => {
     loadStates();
+    loadBrands();
   }, []);
+
+  const loadBrands = async () => {
+    try {
+      const res = await inventoryApi.getBrands();
+      setBrands(res.data || []);
+    } catch (error) {
+      console.error("Failed to load brands", error);
+    }
+  };
 
   // Fetch Inventory when filters changed
   useEffect(() => {
@@ -101,24 +117,58 @@ const InventoryLevelManagementSetting = () => {
       category: '',
       subCategory: '',
       projectType: '',
-      subProjectType: ''
+      subProjectType: '',
+      productName: '',
+      sku: ''
     });
   };
 
-  const handleSetDefaultQuantity = (sku) => {
-    const newLevel = prompt("Enter new Min Level for " + sku);
-    if (newLevel) {
-      // Logic to update minLevel via API would go here, but I haven't implemented that specific endpoint yet 
-      // (updateInventoryItem handles it generally).
-      toast.promise(
-        new Promise((resolve) => setTimeout(resolve, 1000)),
-        {
-          loading: 'Updating...',
-          success: 'Min Level Updated!',
-          error: 'Error updating'
-        }
-      );
+  // Extract unique products and SKUs for filter dropdowns from current view data
+  const uniqueProducts = useMemo(() => {
+    const products = new Set(inventoryData.map(item => item.itemName));
+    return Array.from(products).filter(Boolean).sort();
+  }, [inventoryData]);
+
+  const uniqueSkus = useMemo(() => {
+    const skus = new Set(inventoryData.map(item => item.sku));
+    return Array.from(skus).filter(Boolean).sort();
+  }, [inventoryData]);
+
+  const handleEditClick = (product) => {
+    setEditingId(product._id);
+    setEditForm({
+      sku: product.sku || '',
+      brand: product.brand?._id || '',
+      itemName: product.itemName || '',
+      category: product.category || '',
+      subCategory: product.subCategory || '',
+      quantity: product.quantity || 0,
+      city: product.city?._id || product.city || ''
+    });
+  };
+
+  const handleEditChange = (e) => {
+    const { name, value } = e.target;
+    setEditForm(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSave = async (id) => {
+    try {
+      setLoading(true);
+      await inventoryApi.updateItem(id, editForm);
+      toast.success('Item updated successfully');
+      setEditingId(null);
+      fetchInventory();
+    } catch (error) {
+      console.error('Failed to update item:', error);
+      toast.error('Failed to update item');
+    } finally {
+      setLoading(false);
     }
+  };
+
+  const handleCancelEdit = () => {
+    setEditingId(null);
   };
 
   // --- Render Clusters (Now Cities) ---
@@ -216,22 +266,55 @@ const InventoryLevelManagementSetting = () => {
           <div className="bg-white rounded-lg shadow mb-6 p-6">
             <h5 className="text-blue-600 text-lg font-semibold mb-4">Filter Options</h5>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-              {/* Brand Filter */}
-              {/* Note: Ideally fetch brands from API, here simplifying as free text or select from available data */}
+              {/* Added Filter: Product Name Dropdown */}
               <div>
-                <label className="block text-sm font-medium mb-2">Brand</label>
-                <input
-                  type="text"
-                  className="w-full border rounded-lg px-3 py-2"
-                  placeholder="Search Brand"
+                <label className="block text-sm font-medium mb-2 text-gray-700">Product</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={activeFilters.productName}
+                  onChange={(e) => setActiveFilters({ ...activeFilters, productName: e.target.value })}
+                >
+                  <option value="">Select Product...</option>
+                  {uniqueProducts.map((name, idx) => (
+                    <option key={idx} value={name}>{name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Added Filter: SKU Dropdown */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">SKU</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={activeFilters.sku}
+                  onChange={(e) => setActiveFilters({ ...activeFilters, sku: e.target.value })}
+                >
+                  <option value="">Select SKU...</option>
+                  {uniqueSkus.map((skuStr, idx) => (
+                    <option key={idx} value={skuStr}>{skuStr}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Updated Filter: Brand Dropdown (Replaces text input) */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Brand</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={activeFilters.brand}
                   onChange={(e) => setActiveFilters({ ...activeFilters, brand: e.target.value })}
-                />
+                >
+                  <option value="">Select Brand</option>
+                  {brands.map(b => (
+                    <option key={b._id} value={b._id}>{b.brandName}</option>
+                  ))}
+                </select>
               </div>
+              
               <div>
-                <label className="block text-sm font-medium mb-2">Category</label>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Category</label>
                 <select
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={activeFilters.category}
                   onChange={(e) => setActiveFilters({ ...activeFilters, category: e.target.value })}
                 >
@@ -239,12 +322,15 @@ const InventoryLevelManagementSetting = () => {
                   <option value="Rooftop">Rooftop Solar</option>
                   <option value="SolarPump">Solar Pump</option>
                   <option value="SolarLight">Solar Light</option>
+                  <option value="Inverter">Inverter</option>
+                  <option value="Solar Panel">Solar Panel</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium mb-2">Sub Category</label>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Sub Category</label>
                 <select
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={activeFilters.subCategory}
                   onChange={(e) => setActiveFilters({ ...activeFilters, subCategory: e.target.value })}
                 >
@@ -253,10 +339,11 @@ const InventoryLevelManagementSetting = () => {
                   <option value="Commercial">Commercial</option>
                 </select>
               </div>
+
               <div>
-                <label className="block text-sm font-medium mb-2">Project Type</label>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Project Type</label>
                 <select
-                  className="w-full border rounded-lg px-3 py-2"
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                   value={activeFilters.projectType}
                   onChange={(e) => setActiveFilters({ ...activeFilters, projectType: e.target.value })}
                 >
@@ -266,9 +353,24 @@ const InventoryLevelManagementSetting = () => {
                   <option value="10+">Above 10 kW</option>
                 </select>
               </div>
+
+              {/* Added Missing Filter: Project Sub Type Dropdown */}
+              <div>
+                <label className="block text-sm font-medium mb-2 text-gray-700">Project Sub Type</label>
+                <select
+                  className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={activeFilters.subProjectType}
+                  onChange={(e) => setActiveFilters({ ...activeFilters, subProjectType: e.target.value })}
+                >
+                  <option value="">Select Sub Type</option>
+                  <option value="On Grid">On Grid</option>
+                  <option value="Off Grid">Off Grid</option>
+                  <option value="Hybrid">Hybrid</option>
+                </select>
+              </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-end border-t pt-4">
               <button
                 onClick={handleResetFilters}
                 className="px-4 py-2 border rounded-lg hover:bg-gray-50 flex items-center"
@@ -313,24 +415,71 @@ const InventoryLevelManagementSetting = () => {
                     inventoryData.map((product, index) => (
                       <tr key={product._id} className="border-b hover:bg-gray-50">
                         <td className="py-3 px-4 whitespace-nowrap">{index + 1}</td>
-                        <td className="py-3 px-4 whitespace-nowrap text-sm">{product.sku}</td>
-                        <td className="py-3 px-4 whitespace-nowrap">{product.brand?.brandName || 'Unknown'}</td>
-                        <td className="py-3 px-4 whitespace-nowrap font-medium">{product.itemName}</td>
-                        <td className="py-3 px-4 whitespace-nowrap">{product.category}</td>
-                        <td className="py-3 px-4 whitespace-nowrap">{product.subCategory}</td>
-                        <td className="py-3 px-4 whitespace-nowrap font-bold text-center">
-                          {product.quantity}
-                        </td>
-                        <td className="py-3 px-4 whitespace-nowrap">{product.city?.name}</td>
-                        <td className="py-3 px-4 whitespace-nowrap">
-                          <button
-                            onClick={() => handleSetDefaultQuantity(product.sku)}
-                            className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm flex items-center"
-                          >
-                            <Settings size={14} className="mr-1" />
-                            Set Limits
-                          </button>
-                        </td>
+                        {editingId === product._id ? (
+                          <>
+                            <td className="py-3 px-4"><input type="text" name="sku" value={editForm.sku} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm" /></td>
+                            <td className="py-3 px-4">
+                              <select name="brand" value={editForm.brand} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm">
+                                <option value="">Select Brand</option>
+                                {brands.map(b => (
+                                  <option key={b._id} value={b._id}>{b.brandName}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-3 px-4"><input type="text" name="itemName" value={editForm.itemName} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm" /></td>
+                            <td className="py-3 px-4">
+                              <select name="category" value={editForm.category} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm">
+                                <option value="">Category</option>
+                                <option value="Rooftop">Rooftop Solar</option>
+                                <option value="SolarPump">Solar Pump</option>
+                                <option value="SolarLight">Solar Light</option>
+                                <option value="Inverter">Inverter</option>
+                                <option value="Solar Panel">Solar Panel</option>
+                              </select>
+                            </td>
+                            <td className="py-3 px-4">
+                              <select name="subCategory" value={editForm.subCategory} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm">
+                                <option value="">Sub Category</option>
+                                <option value="Residential">Residential</option>
+                                <option value="Commercial">Commercial</option>
+                              </select>
+                            </td>
+                            <td className="py-3 px-4"><input type="number" name="quantity" value={editForm.quantity} onChange={handleEditChange} className="border rounded px-2 py-1 w-20 text-center text-sm" /></td>
+                            <td className="py-3 px-4">
+                              <select name="city" value={editForm.city} onChange={handleEditChange} className="border rounded px-2 py-1 w-full text-sm">
+                                <option value="">Select City</option>
+                                {cities.map(c => (
+                                  <option key={c._id} value={c._id}>{c.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <div className="flex space-x-2">
+                                <button onClick={() => handleSave(product._id)} className="px-3 py-1 bg-green-500 text-white rounded hover:bg-green-600 text-sm">Save</button>
+                                <button onClick={handleCancelEdit} className="px-3 py-1 bg-gray-500 text-white rounded hover:bg-gray-600 text-sm">Cancel</button>
+                              </div>
+                            </td>
+                          </>
+                        ) : (
+                          <>
+                            <td className="py-3 px-4 whitespace-nowrap text-sm">{product.sku}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">{product.brand?.brandName || 'Unknown'}</td>
+                            <td className="py-3 px-4 whitespace-nowrap font-medium">{product.itemName}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">{product.category}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">{product.subCategory}</td>
+                            <td className="py-3 px-4 whitespace-nowrap font-bold text-center">{product.quantity}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">{product.city?.name}</td>
+                            <td className="py-3 px-4 whitespace-nowrap">
+                              <button
+                                onClick={() => handleEditClick(product)}
+                                className="px-3 py-1 bg-blue-500 text-white rounded hover:bg-blue-600 text-sm flex items-center"
+                              >
+                                <Settings size={14} className="mr-1" />
+                                Edit
+                              </button>
+                            </td>
+                          </>
+                        )}
                       </tr>
                     ))
                   )}

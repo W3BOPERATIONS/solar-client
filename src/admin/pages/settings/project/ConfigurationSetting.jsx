@@ -80,39 +80,28 @@ const ConfigurationSetting = () => {
     }
   };
 
-  const restoreConfiguration = async (config) => {
-    setSelectedState(config.currentState || '');
-    setSelectedCity(config.currentCity || '');
-    setSelectedDistrict(config.currentDistrict || '');
-    setSelectedDiscom(config.currentDiscom || '');
-    setSelectedProjectType(config.currentProjectType || '');
-
+  const restoreConfiguration = (config) => {
     if (config.selectedSteps) {
       setSelectedSteps(config.selectedSteps);
+    } else {
+      setSelectedSteps([]);
     }
+  };
 
-    // Trigger cascade fetches if values exist
-    if (config.currentState) {
-      try {
-        // Find state object to get ID
-        const allStates = await getStates();
-        const stateObj = allStates.find(s => s.name === config.currentState || s._id === config.currentState);
-
-        if (stateObj) {
-          const fetchedCities = await getCities(stateObj._id);
-          setCities(fetchedCities);
-          setCitySectionVisible(true);
-
-          if (config.currentCity) {
-            const cityObj = fetchedCities.find(c => c.name === config.currentCity || c._id === config.currentCity);
-            if (cityObj) {
-              const fetchedDistricts = await getDistricts(cityObj._id);
-              setDistricts(fetchedDistricts);
-              setDistrictSectionVisible(true);
-            }
-          }
-        }
-      } catch (e) { console.error(e); }
+  // Fetch config for specific type
+  const fetchConfigForType = async (type) => {
+    if (!type) return;
+    try {
+      const configKey = `projectConfig_${type.replace(/\s+/g, '_')}`;
+      const config = await projectApi.getConfigurationByKey(configKey);
+      if (config) {
+        restoreConfiguration(config);
+      } else {
+        setSelectedSteps([]);
+      }
+    } catch (e) {
+      console.error(e);
+      setSelectedSteps([]);
     }
   };
 
@@ -185,6 +174,11 @@ const ConfigurationSetting = () => {
 
   // Save configuration
   const saveConfiguration = async () => {
+    if (!selectedProjectType) {
+      alert('Please select a project type before saving');
+      return;
+    }
+
     const configuration = {
       currentState: selectedState,
       currentCity: selectedCity,
@@ -196,8 +190,9 @@ const ConfigurationSetting = () => {
     };
 
     try {
-      await projectApi.saveConfiguration('projectConfiguration', configuration);
-      alert('Configuration saved successfully!');
+      const configKey = `projectConfig_${selectedProjectType.replace(/\s+/g, '_')}`;
+      await projectApi.saveConfiguration(configKey, configuration);
+      alert(`Configuration for ${selectedProjectType} saved successfully!`);
     } catch (error) {
       console.error(error);
       alert('Failed to save configuration');
@@ -255,7 +250,7 @@ const ConfigurationSetting = () => {
   // Handle project type change
   const handleProjectTypeChange = (type) => {
     setSelectedProjectType(type);
-    setSelectedSteps([]);
+    fetchConfigForType(type);
   };
 
   // Handle row selection

@@ -67,8 +67,8 @@ export const createAppDemoLead = async (data) => {
 };
 
 // --- Dealer KYC ---
-export const getDealerKYCLists = async () => {
-    const response = await axios.get(`${API_URL}/dealer-manager/dealer-kyc`, getAuthHeader());
+export const getDealerKYCLists = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/dealer-manager/dealer-kyc`, { ...getAuthHeader(), params });
     return response.data;
 };
 

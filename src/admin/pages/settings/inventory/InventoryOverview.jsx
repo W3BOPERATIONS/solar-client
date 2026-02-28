@@ -35,10 +35,43 @@ const InventoryManagement = () => {
   });
 
   // Settings / Thresholds
-  const [defaultLowStockThreshold, setDefaultLowStockThreshold] = useState(20);
-  const [brandThresholds, setBrandThresholds] = useState({});
-  const [productThresholds, setProductThresholds] = useState({});
-  const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
+  const [settings, setSettings] = useState({
+    globalLowStockThreshold: 10,
+    brandThresholds: [],
+    productThresholds: []
+  });
+  const [settingsLoading, setSettingsLoading] = useState(true);
+
+  useEffect(() => {
+    fetchSettings();
+  }, []);
+
+  const fetchSettings = async () => {
+    try {
+      const res = await inventoryApi.getSettings();
+      if (res.data?.data) {
+        setSettings(res.data.data);
+      }
+    } catch (err) {
+      console.error("Failed to fetch settings", err);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  const getThresholdForItem = useCallback((item) => {
+    // 1. Product-wise
+    const prodThresh = settings.productThresholds?.find(p => p.productId === item._id);
+    if (prodThresh && prodThresh.threshold !== null && prodThresh.threshold !== undefined) return prodThresh.threshold;
+
+    // 2. Brand-wise
+    const brandId = item.brand?._id || item.brand;
+    const brandThresh = settings.brandThresholds?.find(b => b.brandId === brandId);
+    if (brandThresh && brandThresh.threshold !== null && brandThresh.threshold !== undefined) return brandThresh.threshold;
+
+    // 3. Global
+    return settings.globalLowStockThreshold || 10;
+  }, [settings]);
 
   // Filtering & Sorting
   const [currentSortField, setCurrentSortField] = useState('createdAt');
@@ -53,8 +86,8 @@ const InventoryManagement = () => {
     kitType: ''
   });
 
+  const [showOnlyLowStock, setShowOnlyLowStock] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
-  const [activeSettingsTab, setActiveSettingsTab] = useState('global');
 
   // Fetch Inventory when filters change
   useEffect(() => {
@@ -165,60 +198,171 @@ const InventoryManagement = () => {
 
   // --- Settings Modal ---
   const SettingsModal = () => {
-    // Kept simple for now - just UI as in original, but TODO: persist to backend
-    const [localDefaultThreshold, setLocalDefaultThreshold] = useState(defaultLowStockThreshold);
-    // ... other local states
+    const [localSettings, setLocalSettings] = useState(settings);
+    const [activeTab, setActiveTab] = useState('global');
+    const [brands, setBrands] = useState([]);
+    const [saving, setSaving] = useState(false);
 
-    const handleSaveSettings = () => {
-      setDefaultLowStockThreshold(localDefaultThreshold);
-      // TODO: Save to backend preference?
-      setSettingsModalOpen(false);
-      toast.success("Settings saved locally (Backend integration pending)");
+    useEffect(() => {
+      // Fetch Brands for Brand-wise settings
+      inventoryApi.getBrands().then(res => setBrands(res.data || [])).catch(console.error);
+    }, []);
+
+    const handleSaveSettings = async () => {
+      try {
+        setSaving(true);
+        // Clean up empty thresholds
+        const payload = {
+          globalLowStockThreshold: localSettings.globalLowStockThreshold,
+          brandThresholds: localSettings.brandThresholds.filter(b => b.threshold !== '' && b.threshold !== null && !isNaN(b.threshold)),
+          productThresholds: localSettings.productThresholds.filter(p => p.threshold !== '' && p.threshold !== null && !isNaN(p.threshold))
+        };
+        const res = await inventoryApi.updateSettings(payload);
+        setSettings(res.data.data);
+        setSettingsModalOpen(false);
+        toast.success("Settings saved successfully!");
+      } catch (error) {
+        toast.error("Failed to save settings");
+        console.error(error);
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    const handleBrandChange = (brandId, value) => {
+      const thresholds = [...(localSettings.brandThresholds || [])];
+      const index = thresholds.findIndex(b => b.brandId === brandId);
+      const valNum = value === '' ? '' : Number(value);
+      if (index >= 0) {
+        thresholds[index].threshold = valNum;
+      } else {
+        thresholds.push({ brandId, threshold: valNum });
+      }
+      setLocalSettings({ ...localSettings, brandThresholds: thresholds });
+    };
+
+    const handleProductChange = (productId, value) => {
+      const thresholds = [...(localSettings.productThresholds || [])];
+      const index = thresholds.findIndex(p => p.productId === productId);
+      const valNum = value === '' ? '' : Number(value);
+      if (index >= 0) {
+        thresholds[index].threshold = valNum;
+      } else {
+        thresholds.push({ productId, threshold: valNum });
+      }
+      setLocalSettings({ ...localSettings, productThresholds: thresholds });
+    };
+
+    const getBrandThreshold = (brandId) => {
+      const found = localSettings.brandThresholds?.find(b => b.brandId === brandId);
+      return found ? found.threshold : '';
+    };
+
+    const getProductThreshold = (productId) => {
+      const found = localSettings.productThresholds?.find(p => p.productId === productId);
+      return found ? found.threshold : '';
     };
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-        <div className="bg-white rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-          <div className="p-6 border-b">
-            <div className="flex justify-between items-center">
-              <h3 className="text-xl font-semibold">Inventory Settings</h3>
-              <button
-                onClick={() => setSettingsModalOpen(false)}
-                className="text-gray-500 hover:text-gray-700"
-              >
-                <X size={24} />
-              </button>
-            </div>
+        <div className="bg-white rounded-lg w-[600px] max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <div className="p-4 border-b flex justify-between items-center">
+            <h3 className="text-lg font-bold">Inventory Settings</h3>
+            <button onClick={() => setSettingsModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+              <X size={20} />
+            </button>
           </div>
 
-          <div className="p-6">
-            <div className="mb-4">
-              <label className="block text-sm font-medium mb-2">Default Low Stock Threshold</label>
-              <input
-                type="number"
-                className="w-full border rounded-lg px-3 py-2"
-                value={localDefaultThreshold}
-                onChange={(e) => setLocalDefaultThreshold(parseInt(e.target.value) || 0)}
-                min="1"
-              />
-              <p className="text-sm text-gray-500 mt-1">
-                Visual threshold only.
-              </p>
-            </div>
-          </div>
-
-          <div className="p-6 border-t flex justify-end space-x-3">
-            <button
-              onClick={() => setSettingsModalOpen(false)}
-              className="px-4 py-2 border rounded-lg hover:bg-gray-50"
+          <div className="flex border-b text-sm font-medium text-gray-500">
+            <button 
+              className={`flex-1 py-3 text-center border-b-2 transition-colors ${activeTab === 'global' ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent hover:text-gray-700'}`}
+              onClick={() => setActiveTab('global')}
             >
+              Global Settings
+            </button>
+            <button 
+              className={`flex-1 py-3 text-center border-b-2 transition-colors ${activeTab === 'brand' ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent hover:text-gray-700'}`}
+              onClick={() => setActiveTab('brand')}
+            >
+              Brand-wise Settings
+            </button>
+            <button 
+              className={`flex-1 py-3 text-center border-b-2 transition-colors ${activeTab === 'product' ? 'border-blue-500 text-blue-600 font-semibold' : 'border-transparent hover:text-gray-700'}`}
+              onClick={() => setActiveTab('product')}
+            >
+              Product-wise Settings
+            </button>
+          </div>
+
+          <div className="p-6 overflow-y-auto flex-1">
+            {activeTab === 'global' && (
+              <div>
+                <label className="block text-sm font-semibold mb-2 text-gray-700">Default Low Stock Threshold</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 px-3 py-2"
+                  value={localSettings.globalLowStockThreshold}
+                  onChange={(e) => setLocalSettings({...localSettings, globalLowStockThreshold: Number(e.target.value)})}
+                  min="0"
+                />
+                <p className="text-xs text-gray-400 mt-2">
+                  This threshold will be used for brands and products without specific settings.
+                </p>
+              </div>
+            )}
+
+            {activeTab === 'brand' && (
+              <div>
+                <p className="text-xs text-gray-500 mb-4">Set low stock thresholds specific to each brand. This overrides the global setting.</p>
+                <div className="space-y-3">
+                  {brands.map(brand => (
+                    <div key={brand._id} className="flex justify-between items-center bg-gray-50 p-3 rounded border border-gray-100">
+                      <span className="font-medium text-sm text-gray-700">{brand.brandName || brand.name}</span>
+                      <input 
+                        type="number" 
+                        placeholder="Global Default"
+                        className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500"
+                        value={getBrandThreshold(brand._id)}
+                        onChange={(e) => handleBrandChange(brand._id, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                  {brands.length === 0 && <span className="text-sm text-gray-500">No brands found.</span>}
+                </div>
+              </div>
+            )}
+
+            {activeTab === 'product' && (
+              <div>
+                <p className="text-xs text-gray-500 mb-4">Set low stock thresholds for specific products. This overrides both global and brand settings. Showing products from current view.</p>
+                <div className="space-y-3 max-h-[400px]">
+                  {inventoryData.map(item => (
+                    <div key={item._id} className="flex justify-between items-center bg-gray-50 p-3 rounded border border-gray-100">
+                      <div className="flex flex-col">
+                        <span className="font-medium text-sm text-gray-700">{item.itemName}</span>
+                        <span className="text-xs text-gray-500">{item.sku} | {item.brand?.brandName || 'Unknown'}</span>
+                      </div>
+                      <input 
+                        type="number" 
+                        placeholder="Default"
+                        className="w-32 border border-gray-300 rounded px-2 py-1 text-sm focus:ring-1 focus:ring-blue-500"
+                        value={getProductThreshold(item._id)}
+                        onChange={(e) => handleProductChange(item._id, e.target.value)}
+                      />
+                    </div>
+                  ))}
+                  {inventoryData.length === 0 && <span className="text-sm text-gray-500">No products in current view. Search or filter to find products.</span>}
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 border-t flex justify-end space-x-3 bg-gray-50">
+            <button onClick={() => setSettingsModalOpen(false)} className="px-5 py-2 text-sm font-medium border border-gray-300 rounded shadow-sm hover:bg-white transition-colors">
               Close
             </button>
-            <button
-              onClick={handleSaveSettings}
-              className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center"
-            >
-              <Save size={16} className="mr-2" />
+            <button onClick={handleSaveSettings} disabled={saving} className="px-5 py-2 text-sm font-medium bg-blue-600 text-white rounded shadow-sm hover:bg-blue-700 focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors flex items-center">
+              {saving ? <Loader className="animate-spin mr-2" size={16}/> : null}
               Save Settings
             </button>
           </div>
@@ -468,39 +612,50 @@ const InventoryManagement = () => {
             {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
-                <thead className="bg-gray-100">
+                <thead className="bg-[#2B303B] text-white">
                   <tr>
-                    <th className="p-4 border-b">Name</th>
-                    <th className="p-4 border-b">Brand</th>
-                    <th className="p-4 border-b">SKU</th>
-                    <th className="p-4 border-b">Category</th>
-                    <th className="p-4 border-b text-right">Price</th>
-                    <th className="p-4 border-b text-center">Stock</th>
-                    <th className="p-4 border-b">Status</th>
+                    <th className="p-4 border-b font-medium">#</th>
+                    <th className="p-4 border-b font-medium">Product Name</th>
+                    <th className="p-4 border-b font-medium">Brand</th>
+                    <th className="p-4 border-b font-medium">SKU</th>
+                    <th className="p-4 border-b font-medium text-center">Quantity</th>
+                    <th className="p-4 border-b font-medium text-right">Price (₹)</th>
+                    <th className="p-4 border-b font-medium text-right">Total Value (₹)</th>
+                    <th className="p-4 border-b font-medium text-center">Status</th>
                   </tr>
                 </thead>
                 <tbody>
                   {loading ? (
-                    <tr><td colSpan="7" className="p-8 text-center"><Loader className="animate-spin mx-auto" /></td></tr>
+                    <tr><td colSpan="8" className="p-8 text-center"><Loader className="animate-spin mx-auto" /></td></tr>
                   ) : inventoryData.length === 0 ? (
-                    <tr><td colSpan="7" className="p-8 text-center text-gray-500">No inventory found</td></tr>
+                    <tr><td colSpan="8" className="p-8 text-center text-gray-500">No inventory found</td></tr>
                   ) : (
-                    inventoryData.map(item => (
-                      <tr key={item._id} className="hover:bg-gray-50">
-                        <td className="p-4 border-b font-medium">{item.itemName}</td>
-                        <td className="p-4 border-b">{item.brand?.brandName || 'Unknown'}</td>
-                        <td className="p-4 border-b text-gray-500 font-mono text-sm">{item.sku}</td>
-                        <td className="p-4 border-b">{item.category}</td>
-                        <td className="p-4 border-b text-right">₹{item.price.toLocaleString()}</td>
-                        <td className="p-4 border-b text-center">
-                          <span className={`px-2 py-1 rounded-full text-xs font-semibold ${item.quantity <= (item.minLevel || defaultLowStockThreshold) ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
-                            }`}>
-                            {item.quantity}
-                          </span>
-                        </td>
-                        <td className="p-4 border-b text-sm">{item.status}</td>
-                      </tr>
-                    ))
+                    inventoryData.map((item, index) => {
+                      const isLowStock = item.quantity <= getThresholdForItem(item);
+                      const totalValue = item.price * item.quantity;
+                      
+                      return (
+                        <tr key={item._id} className={isLowStock ? "bg-red-200 hover:bg-red-300 transition-colors" : "bg-[#F3F6F9] hover:bg-gray-200 transition-colors"}>
+                          <td className="p-4 border-b font-medium border-white">{index + 1}</td>
+                          <td className="p-4 border-b font-medium border-white">{item.itemName}</td>
+                          <td className="p-4 border-b border-white">{item.brand?.brandName || 'Unknown'}</td>
+                          <td className="p-4 border-b text-gray-600 font-mono text-sm border-white">{item.sku}</td>
+                          <td className="p-4 border-b text-center font-semibold border-white">
+                            <div className="flex items-center justify-center">
+                              {item.quantity}
+                              {isLowStock && <AlertTriangle className="text-red-600 ml-2" size={16} />}
+                            </div>
+                          </td>
+                          <td className="p-4 border-b text-right border-white">₹{item.price.toLocaleString()}</td>
+                          <td className="p-4 border-b text-right border-white">₹{totalValue.toLocaleString()}</td>
+                          <td className="p-4 border-b text-center border-white">
+                            <span className={`px-3 py-1 rounded text-xs font-semibold text-white ${isLowStock ? 'bg-[#DC3545]' : 'bg-[#28A745]'}`}>
+                              {isLowStock ? 'Low Stock' : 'In Stock'}
+                            </span>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>

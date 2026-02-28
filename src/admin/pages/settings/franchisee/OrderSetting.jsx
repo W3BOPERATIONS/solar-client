@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getStates } from '../../../../services/locationApi';
-import { getSolarKits } from '../../../../services/combokit/combokitApi'; // Assuming this exists or similar
+import { getAssignments } from '../../../../services/combokit/combokitApi';
 import {
   getFranchiseeOrderSettings,
   createFranchiseeOrderSetting,
@@ -41,8 +41,10 @@ export default function OrderSetting() {
 
   useEffect(() => {
     if (selectedState) {
+      fetchKits(selectedState._id);
       fetchSettings(selectedState._id);
     } else {
+      setCombokits([]);
       setSettings([]);
     }
   }, [selectedState]);
@@ -56,11 +58,11 @@ export default function OrderSetting() {
     }
   };
 
-  const fetchKits = async () => {
+  const fetchKits = async (stateId) => {
     setLoading(true);
     try {
-      // Fetch available kits (using SolarKits as main source for now)
-      const data = await getSolarKits();
+      // Fetch available assigned kits for the selected state
+      const data = await getAssignments({ state: stateId });
       setCombokits(data);
     } catch (error) {
       console.error("Error fetching kits:", error);
@@ -124,10 +126,10 @@ export default function OrderSetting() {
       settingType: activeSection,
       planType: currentPlanType,
       itemId: itemId,
-      itemName: itemDetails.kitName || itemDetails.name, // Fallback name
-      // Copy other details from item if creating new
-      district: itemDetails.district,
-      cluster: itemDetails.cluster,
+      itemName: itemDetails.solarkitName || itemDetails.kitName || itemDetails.name || 'Unknown Kit',
+      // Setup location info
+      district: itemDetails.districts?.map(d => d.name).join(', ') || itemDetails.district,
+      cluster: itemDetails.cluster?.name || itemDetails.cluster,
       category: itemDetails.category || 'Solar',
       subCategory: itemDetails.subCategory,
       projectType: itemDetails.projectType,
@@ -285,8 +287,8 @@ export default function OrderSetting() {
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                   <TableHeader headers={[
-                    'Kit ID', 'Active', 'Name', 'Category',
-                    'Sub Category', 'Project Type', 'Order Qty', 'Discount/Kw (Rs)'
+                    'Kit ID', 'Active', 'Name', 'State', 'District', 'Cluster', 'Category',
+                    'Sub Category', 'Project Type', 'Sub Project Type', 'Order Qty', 'Discount/Kw (Rs)'
                   ]} />
                   <tbody>
                     {combokits.length === 0 && (
@@ -303,11 +305,15 @@ export default function OrderSetting() {
                               onChange={(val) => handleSettingChange(item._id, 'isActive', val, item)}
                             />
                           </td>
-                          <td className="px-4 py-3 border">{item.kitName || item.name}</td>
-                          <td className="px-4 py-3 border">{item.category}</td>
-                          <td className="px-4 py-3 border">{item.subCategory}</td>
-                          <td className="px-4 py-3 border">{item.projectType}</td>
-                          <td className="px-4 py-3 border" style={{ width: '120px' }}>
+                          <td className="px-4 py-3 border">{item.solarkitName || item.name || 'N/A'}</td>
+                          <td className="px-4 py-3 border text-xs">{item.state?.name || 'N/A'}</td>
+                          <td className="px-4 py-3 border text-xs">{item.districts?.map(d => d.name).join(', ') || 'N/A'}</td>
+                          <td className="px-4 py-3 border text-xs">{item.cluster?.name || 'N/A'}</td>
+                          <td className="px-4 py-3 border text-xs">{item.category}</td>
+                          <td className="px-4 py-3 border text-xs">{item.subCategory}</td>
+                          <td className="px-4 py-3 border text-xs">{item.projectType}</td>
+                          <td className="px-4 py-3 border text-xs">{item.subProjectType || 'N/A'}</td>
+                          <td className="px-4 py-3 border" style={{ width: '100px' }}>
                             <input
                               type="number"
                               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-blue-500"

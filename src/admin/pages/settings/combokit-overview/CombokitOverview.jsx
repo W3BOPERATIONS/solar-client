@@ -110,14 +110,11 @@ const Notification = ({ message, onClose }) => {
   );
 };
 
-// Helper for placeholder images
+// Helper for placeholder images using inline SVG to prevent network errors
 const getPlaceholderImage = (type) => {
-  switch (type) {
-    case 'panel': return "https://via.placeholder.com/60x40?text=Panel";
-    case 'inverter': return "https://via.placeholder.com/60x40?text=Inverter";
-    case 'boskit': return "https://via.placeholder.com/60x40?text=BOS";
-    default: return "https://via.placeholder.com/60x40?text=Image";
-  }
+  const text = type === 'panel' ? 'Panel' : type === 'inverter' ? 'Inverter' : type === 'boskit' ? 'BOS Kit' : 'Image';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="60" height="40"><rect width="60" height="40" fill="#e2e8f0"/><text x="50%" y="50%" fill="#64748b" font-size="10" font-family="sans-serif" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${text}</text></svg>`;
+  return `data:image/svg+xml;base64,${btoa(svg)}`;
 };
 
 // Main Component
@@ -148,7 +145,8 @@ export default function CombokitOverview() {
   // --- Options Maps (for UI filters) ---
   const userTypeOptions = [
     { value: 'Franchisee', label: 'Franchisee' },
-    { value: 'Dealer', label: 'Dealer' }
+    { value: 'Dealer', label: 'Dealer' },
+    { value: 'Channel Partner', label: 'Channel Partner' }
   ];
 
   const categoryOptions = [
@@ -186,6 +184,7 @@ export default function CombokitOverview() {
   // --- Initial Load ---
   useEffect(() => {
     fetchStates();
+    fetchAssignments(); // Load all by default
   }, []);
 
   const fetchStates = async () => {
@@ -253,12 +252,12 @@ export default function CombokitOverview() {
 
   const fetchAssignments = async (cityId) => {
     try {
-      const response = await getAssignments({ city: cityId });
-      // Filter strictly by city at API level, but we can also filter in UI if needed
-      // API returns array
+      const params = cityId ? { city: cityId } : {};
+      const response = await getAssignments(params);
       setCombokits(response || []);
     } catch (error) {
       console.error("Error fetching assignments:", error);
+      showNotification("Error loading assignments");
     }
   };
 
@@ -290,31 +289,38 @@ export default function CombokitOverview() {
 
   // --- Filtering Logic ---
   const getFilteredCombokits = () => {
-    if (!selectedCity) return [];
+    // Flatten assignments into individual combokits
+    const flattenedCombokits = combokits.flatMap(assignment => {
+      if (!assignment.comboKits || assignment.comboKits.length === 0) return [];
+      return assignment.comboKits.map((kit, index) => ({
+        ...assignment,          // Contains assignment level info (districts, role, cpTypes, status, category etc)
+        comboKitData: kit,      // The individual kit details (name, panelBrand, etc)
+        uniqueId: `${assignment._id}-${index}`
+      }));
+    });
 
-    return combokits.filter(item => {
-      const kit = item.comboKitId;
-      if (!kit) return false;
-
-      // Category
-      if (filters.category && kit.category !== filters.category) return false;
-      // Sub Category
-      if (filters.subCategory && kit.subCategory !== filters.subCategory) return false;
-      // Sub Project Type
-      if (filters.subProjectType && kit.subProjectType !== filters.subProjectType) return false;
-      // Project Type (Capacity)
-      if (filters.projectType && kit.capacity !== filters.projectType) return false;
+    return flattenedCombokits.filter(item => {
+      // Category fields are on the assignment level
+      if (filters.category && item.category !== filters.category) return false;
+      if (filters.subCategory && item.subCategory !== filters.subCategory) return false;
+      if (filters.subProjectType && item.subProjectType !== filters.subProjectType) return false;
+      if (filters.projectType && item.projectType !== filters.projectType) return false;
 
       // District Filter (MultiSelect)
-      if (selectedDistricts.length > 0) {
-        // item.district is populated, check ID or name
-        // MultiSelect values are district IDs (we should set them as IDs)
-        if (!selectedDistricts.includes(item.district?._id)) return false;
+      if (selectedDistricts.length > 0 && item.districts) {
+        // item.districts usually populated array of objects, map to IDs for check
+        const assignmentDistrictIds = item.districts.map(d => typeof d === 'object' ? d._id : d);
+        const hasDistrictMatch = selectedDistricts.some(d => assignmentDistrictIds.includes(d));
+        if (!hasDistrictMatch) return false;
       }
 
-      // User Type (CP Type)
+      // User Type (Role / CP Type) Filter
       if (selectedUserTypes.length > 0) {
-        if (!selectedUserTypes.includes(item.userType)) return false;
+        if (!selectedUserTypes.includes(item.role)) {
+          // Fallback to cpTypes array if role isn't definitively set
+          const hasCpTypeMatch = selectedUserTypes.some(type => item.cpTypes?.includes(type));
+          if (!hasCpTypeMatch) return false;
+        }
       }
 
       return true;
@@ -348,47 +354,57 @@ export default function CombokitOverview() {
       </div>
 
       {/* State Selection */}
-      <div className="mb-3 text-lg font-semibold">Select a State</div>
-      {loading && !states.length ? (
-        <div className="p-4 text-center">Loading Data...</div>
-      ) : (
-        <div className="grid grid-cols-1 gap-3 mb-8 md:grid-cols-4">
-          {states.map((state) => (
-            <div
-              key={state._id}
-              className={`p-6 border rounded-lg cursor-pointer transition-all duration-200 flex flex-col justify-center items-center h-full hover:scale-105 ${selectedState?._id === state._id
-                ? 'border-blue-600 bg-blue-600 text-white'
-                : 'border-blue-600'
-                }`}
-              onClick={() => handleStateSelect(state)}
-            >
-              <p className="mb-1">{state.name}</p>
-              <p className="font-bold">{state.code}</p>
-            </div>
-          ))}
-        </div>
-      )}
+      <div className="mb-6">
+        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-1">Select a State</label>
+        {loading && !states.length ? (
+          <div className="p-4 text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600 mx-auto"></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            {states.map((state) => (
+              <div
+                key={state._id}
+                className={`p-5 rounded-xl border-2 cursor-pointer transition-all duration-300 group ${selectedState?._id === state._id
+                  ? 'border-indigo-600 bg-indigo-600 text-white shadow-lg shadow-indigo-100'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-indigo-300 hover:shadow-md'
+                  }`}
+                onClick={() => handleStateSelect(state)}
+              >
+                <div className="flex flex-col items-center justify-center text-center">
+                  <span className="text-xs font-bold leading-tight">{state.name}</span>
+                  <span className={`text-[10px] font-black uppercase tracking-tighter mt-1 ${selectedState?._id === state._id ? 'text-indigo-100' : 'text-slate-400'}`}>
+                    {state.code}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
-      {/* City Selection (Replaces Cluster) */}
+      {/* City Selection */}
       {selectedState && (
         <div className="mb-8 animate-fadeIn">
-          <div className="mb-3 text-lg font-semibold">
+          <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3 block ml-1">
             Select a City - {selectedState.name}
-          </div>
+          </label>
           {cities.length === 0 && !loading ? (
-            <p className="text-gray-500">No cities found for this state.</p>
+            <div className="p-8 bg-slate-50 rounded-xl border border-dashed border-slate-300 text-center">
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">No cities found for this state.</p>
+            </div>
           ) : (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
               {cities.map((city) => (
                 <div
                   key={city._id}
-                  className={`p-4 border border-gray-300 rounded-lg cursor-pointer text-center transition-all duration-200 hover:scale-105 ${selectedCity?._id === city._id
-                    ? 'bg-[#705ebe] text-white border-[#3d0a77]'
-                    : ''
+                  className={`p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer text-center ${selectedCity?._id === city._id
+                    ? 'bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-100'
+                    : 'bg-white border-slate-200 text-slate-600 hover:border-indigo-300 hover:shadow-md'
                     }`}
                   onClick={() => handleCitySelect(city)}
                 >
-                  {city.name}
+                  <span className="text-xs font-bold">{city.name}</span>
                 </div>
               ))}
             </div>
@@ -397,235 +413,271 @@ export default function CombokitOverview() {
       )}
 
       {/* Filter Section */}
-      {selectedCity && (
-        <div className="p-4 mb-8 bg-gray-50 rounded-lg animate-fadeIn">
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-12">
-            {/* Category */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Category
-              </label>
-              <select
-                className="w-full p-2 border border-gray-300 rounded-lg"
-                value={filters.category}
-                onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-              >
-                {categoryOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+      <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 animate-fadeIn mb-8">
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-12">
+          {/* Category */}
+          <div className="md:col-span-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Category
+            </label>
+            <select
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+              value={filters.category}
+              onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+            >
+              {categoryOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Sub Category */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Sub Category
-              </label>
-              <select
-                className="w-full p-2 border border-gray-300 rounded-lg"
-                value={filters.subCategory}
-                onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
-              >
-                {subCategoryOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Sub Category */}
+          <div className="md:col-span-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Sub Category
+            </label>
+            <select
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+              value={filters.subCategory}
+              onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
+            >
+              {subCategoryOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Sub Project Type */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Sub Project Type
-              </label>
-              <select
-                className="w-full p-2 border border-gray-300 rounded-lg"
-                value={filters.subProjectType}
-                onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
-              >
-                {subProjectTypeOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Sub Project Type */}
+          <div className="md:col-span-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Sub Project Type
+            </label>
+            <select
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+              value={filters.subProjectType}
+              onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
+            >
+              {subProjectTypeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* Project Type */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                Project Type / Capacity
-              </label>
-              <select
-                className="w-full p-2 border border-gray-300 rounded-lg"
-                value={filters.projectType}
-                onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
-              >
-                {projectTypeOptions.map(option => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Project Type */}
+          <div className="md:col-span-3">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              Project Type / Capacity
+            </label>
+            <select
+              className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2.5 text-xs font-bold text-slate-700 focus:outline-none focus:border-indigo-500 transition-all cursor-pointer"
+              value={filters.projectType}
+              onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
+            >
+              {projectTypeOptions.map(option => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </div>
 
-            {/* District Multi-select */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                District
-              </label>
-              <MultiSelect
-                id="district"
-                placeholder="Select Districts"
-                options={districts.map(d => ({
-                  key: d._id,
-                  value: d._id,
-                  label: d.name
-                }))}
-                selected={selectedDistricts}
-                onSelect={(value) => setSelectedDistricts([...selectedDistricts, value])}
-                onRemove={(value) => setSelectedDistricts(selectedDistricts.filter(d => d !== value))}
-              />
-            </div>
+          {/* District Multi-select */}
+          <div className="md:col-span-4">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              District
+            </label>
+            <MultiSelect
+              id="district"
+              placeholder="Select Districts"
+              options={districts.map(d => ({
+                key: d._id,
+                value: d._id,
+                label: d.name
+              }))}
+              selected={selectedDistricts}
+              onSelect={(value) => setSelectedDistricts([...selectedDistricts, value])}
+              onRemove={(value) => setSelectedDistricts(selectedDistricts.filter(d => d !== value))}
+            />
+          </div>
 
-            {/* CP Type (User Type) Multi-select */}
-            <div className="md:col-span-3">
-              <label className="block mb-2 text-sm font-medium text-gray-700">
-                User Type
-              </label>
-              <MultiSelect
-                id="userType"
-                placeholder="Select User Types"
-                options={userTypeOptions}
-                selected={selectedUserTypes}
-                onSelect={(value) => setSelectedUserTypes([...selectedUserTypes, value])}
-                onRemove={(value) => setSelectedUserTypes(selectedUserTypes.filter(c => c !== value))}
-              />
-            </div>
+          {/* CP Type (User Type) Multi-select */}
+          <div className="md:col-span-4">
+            <label className="block text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 ml-1">
+              User Type
+            </label>
+            <MultiSelect
+              id="userType"
+              placeholder="Select User Types"
+              options={userTypeOptions}
+              selected={selectedUserTypes}
+              onSelect={(value) => setSelectedUserTypes([...selectedUserTypes, value])}
+              onRemove={(value) => setSelectedUserTypes(selectedUserTypes.filter(c => c !== value))}
+            />
+          </div>
 
-            {/* Apply Filters Button */}
-            <div className="md:col-span-3 md:col-start-10">
+          {/* Apply Filters Button */}
+          <div className="md:col-span-4 flex items-end">
+            <button
+              className="w-full px-6 py-2.5 text-[11px] font-black uppercase tracking-widest text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 transition-all shadow-lg shadow-indigo-100 flex items-center justify-center gap-2"
+              onClick={() => {
+                showNotification('Filters applied locally');
+              }}
+            >
+              <Filter size={14} />
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Overview Section */}
+      <div className="animate-fadeIn">
+        <div className="p-6 bg-white rounded-xl shadow-md border border-gray-100 mt-6">
+          <div className="flex flex-col justify-between mb-6 md:flex-row md:items-center">
+            <div>
+              <h5 className="text-xl font-bold text-slate-800">Combokit Overview</h5>
+              <p className="text-sm text-slate-500 mt-1">Manage and monitor all combo kit assignments</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {selectedState && selectedCity && (
+                <span className="px-4 py-1.5 text-xs font-black uppercase tracking-widest text-white bg-indigo-600 rounded-lg shadow-sm">
+                  {selectedState?.name} &gt; {selectedCity.name}
+                </span>
+              )}
               <button
-                className="w-full px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700"
-                onClick={() => {
-                  showNotification('Filters applied locally');
-                }}
+                className="px-4 py-2 text-xs font-black uppercase tracking-widest border-2 border-indigo-600 text-indigo-600 rounded-lg hover:bg-indigo-50 transition-all flex items-center gap-2"
+                onClick={handleViewOverview}
               >
-                <Filter size={16} className="inline mr-2" />
-                Apply Filters
+                <Eye size={14} />
+                View Overview
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Overview Section */}
-      {selectedCity && (
-        <div className="animate-fadeIn">
-          <div className="p-4 bg-white rounded-lg shadow-sm">
-            <div className="flex flex-col justify-between mb-4 md:flex-row md:items-center">
-              <h5 className="mb-2 text-lg font-medium md:mb-0">Combokit Overview</h5>
-              <div className="flex items-center gap-2">
-                <span className="px-3 py-1 text-sm text-white bg-blue-600 rounded-full">
-                  {selectedState?.name} &gt; {selectedCity.name}
-                </span>
-                <button
-                  className="px-3 py-1 text-sm border border-blue-600 rounded-lg hover:bg-blue-50"
-                  onClick={handleViewOverview}
-                >
-                  <Eye size={14} className="inline mr-1" />
-                  View Overview
-                </button>
+          <div className="overflow-x-auto rounded-xl border border-slate-200">
+            {filteredCombokits.length === 0 ? (
+              <div className="text-center py-20 bg-slate-50">
+                <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                  <Search size={32} className="text-slate-300" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-700">No combokits found</h3>
+                <p className="text-sm text-slate-400 max-w-xs mx-auto mt-1">Adjust your filters or selection to find what you're looking for.</p>
               </div>
-            </div>
+            ) : (
+              <table className="w-full text-left border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200">
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">combokit Name</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Panel</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Inverter</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Boskit</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">District</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Partner</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Sales Volume</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
+                    <th className="p-4 text-[10px] font-black uppercase tracking-widest text-slate-500 text-center">Toggle</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredCombokits.map((item) => {
+                    const kit = item.comboKitData;
+                    // Get first district name for display if available
+                    const districtName = item.districts && item.districts.length > 0
+                      ? (typeof item.districts[0] === 'object' ? item.districts[0].name : 'District IDs Available')
+                      : '-';
 
-            <div className="overflow-auto max-h-[500px]">
-              {filteredCombokits.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">No combokits found for this selection.</div>
-              ) : (
-                <table className="w-full">
-                  <thead className="bg-blue-50">
-                    <tr>
-                      <th className="p-3 text-left">Combokit Name</th>
-                      <th className="p-3 text-left">Images</th>
-                      <th className="p-3 text-left">Info</th>
-                      <th className="p-3 text-left">District</th>
-                      <th className="p-3 text-left">User Type</th>
-                      <th className="p-3 text-left">Price</th>
-                      <th className="p-3 text-left">Status</th>
-                      <th className="p-3 text-left">Toggle</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredCombokits.map((assignment) => (
-                      <tr key={assignment._id} className="border-b hover:bg-gray-50">
-                        <td className="p-3">{assignment.comboKitId?.name || 'Unknown Kit'}</td>
+                    return (
+                      <tr key={item.uniqueId} className="hover:bg-slate-50/50 transition-colors group">
+                        <td className="p-4">
+                          <span className="text-sm font-bold text-slate-700">{kit.name || 'Standard Kit'}</span>
+                        </td>
 
-                        {/* Images (Placeholder for now as DB doesn't have them yet) */}
-                        <td className="p-3">
-                          <div className="flex gap-2">
-                            <img
-                              src={getPlaceholderImage('panel')}
-                              alt="Panel"
-                              className="object-contain h-8 w-8"
-                              title="Panel"
-                            />
-                            <img
-                              src={getPlaceholderImage('inverter')}
-                              alt="Inverter"
-                              className="object-contain h-8 w-8"
-                              title="Inverter"
-                            />
-                            <img
-                              src={getPlaceholderImage('boskit')}
-                              alt="BOS"
-                              className="object-contain h-8 w-8"
-                              title="BOS"
-                            />
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                              <img src={kit.image || getPlaceholderImage('panel')} alt="Panel" className="w-6 h-6 object-cover rounded" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-600">{kit.panelBrand || 'Not Specified'}</span>
+                              <span className="text-[9px] font-medium text-slate-400">{kit.panelSkus?.length || 0} SKUs</span>
+                            </div>
                           </div>
                         </td>
 
-                        {/* Info (Product details) */}
-                        <td className="p-3 text-sm">
-                          <div><span className="font-semibold">Cap:</span> {assignment.comboKitId?.capacity || 'N/A'}</div>
-                          <div><span className="font-semibold">Type:</span> {assignment.comboKitId?.subProjectType || 'N/A'}</div>
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                              <img src={getPlaceholderImage('inverter')} alt="Inverter" className="w-6 h-6 object-contain" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-600">{kit.inverterBrand || 'Not Specified'}</span>
+                              <span className="text-[9px] font-medium text-slate-400">Brand only</span>
+                            </div>
+                          </div>
                         </td>
 
-                        <td className="p-3 capitalize">{assignment.district?.name}</td>
-
-                        <td className="p-3">{assignment.userType}</td>
-
-                        <td className="p-3">
-                          ₹ {assignment.price?.toLocaleString()}
+                        <td className="p-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 bg-slate-100 rounded-lg flex items-center justify-center border border-slate-200">
+                              <img src={getPlaceholderImage('boskit')} alt="BOS" className="w-6 h-6 object-contain" />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-xs font-bold text-slate-600">BOS Kit Config</span>
+                              <span className="text-[9px] font-medium text-slate-400">{kit.bomSections?.length || 0} Sections</span>
+                            </div>
+                          </div>
                         </td>
 
-                        <td className={`p-3 font-medium ${assignment.status === 'Active' ? 'text-green-600' : 'text-gray-600'}`}>
-                          {assignment.status}
+                        <td className="p-4">
+                          <span className="text-xs font-bold text-slate-600">{districtName}</span>
                         </td>
 
-                        <td className="p-3">
-                          <label className="relative inline-flex items-center cursor-pointer scale-125">
+                        <td className="p-4">
+                          <span className="px-2 py-1 bg-slate-100 rounded text-[10px] font-black text-slate-500 uppercase tracking-tighter">
+                            {item.role || item.cpTypes?.[0] || 'Startup'}
+                          </span>
+                        </td>
+
+                        <td className="p-4">
+                          <div className="flex items-center gap-2">
+                            <span className={`px-2.5 py-1 rounded-full text-[10px] font-black text-white ${getSalesBadgeColor(1250)}`}>
+                              1,250 units
+                            </span>
+                          </div>
+                        </td>
+
+                        <td className="p-4">
+                          <span className={`text-[10px] font-black uppercase tracking-widest ${item.status === 'Active' ? 'text-emerald-500' : 'text-slate-400'}`}>
+                            {item.status}
+                          </span>
+                        </td>
+
+                        <td className="p-4 text-center">
+                          <label className="relative inline-flex items-center cursor-pointer">
                             <input
                               type="checkbox"
                               className="sr-only peer"
-                              checked={assignment.status === 'Active'}
-                              onChange={(e) => toggleStatus(assignment, e.target.checked)}
+                              checked={item.status === 'Active'}
+                              onChange={(e) => toggleStatus(item, e.target.checked)}
                             />
-                            <div className="w-11 h-6 bg-gray-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                            <div className="w-9 h-5 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-emerald-500"></div>
                           </label>
                         </td>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              )}
-            </div>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 }

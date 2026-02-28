@@ -176,9 +176,10 @@ export const createCategory = async (data) => {
     }
 };
 
-export const fetchChecklists = async () => {
+export const fetchChecklists = async (clusterId) => {
     try {
-        const response = await axios.get(CHECKLIST_API_URL);
+        const url = clusterId ? `${CHECKLIST_API_URL}?clusterId=${clusterId}` : CHECKLIST_API_URL;
+        const response = await axios.get(url);
         return response.data;
     } catch (error) {
         throw error;
@@ -235,7 +236,9 @@ const LOAN_API_URL = '/loan';
 
 export const fetchLoanRules = async (clusterId) => {
     try {
-        const response = await axios.get(`${LOAN_API_URL}?clusterId=${clusterId}`);
+        const response = await axios.get(LOAN_API_URL, {
+            params: clusterId ? { clusterId } : {}
+        });
         return response.data;
     } catch (error) {
         throw error;

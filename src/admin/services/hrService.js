@@ -55,6 +55,21 @@ export const getAllModules = async () => {
     return response.data;
 };
 
+export const createModule = async (data) => {
+    const response = await axios.post(`${API_URL}/hr/modules`, data, getAuthHeader());
+    return response.data;
+};
+
+export const updateModule = async (id, data) => {
+    const response = await axios.put(`${API_URL}/hr/modules/${id}`, data, getAuthHeader());
+    return response.data;
+};
+
+export const deleteModule = async (id) => {
+    const response = await axios.delete(`${API_URL}/hr/modules/${id}`, getAuthHeader());
+    return response.data;
+};
+
 export const assignModulesToDepartment = async (departmentId, modules) => {
     const response = await axios.post(`${API_URL}/hr/department/${departmentId}/modules`, { departmentId, modules }, getAuthHeader());
     return response.data;
@@ -77,11 +92,37 @@ export const getTemporaryIncharges = async (departmentId) => {
     return response.data;
 };
 
+export const getTemporaryInchargeDashboard = async () => {
+    const response = await axios.get(`${API_URL}/hr/temporary-incharge/dashboard`, getAuthHeader());
+    return response.data;
+};
+
 // --- Users (Helper for dropdowns) ---
 export const getUsers = async (departmentId) => {
     // Assuming we have a user endpoint that can filter by department
     // If not, we might need to fetch all and filter client side or add query support to userController
     const params = departmentId ? { department: departmentId } : {};
     const response = await axios.get(`${API_URL}/users`, { ...getAuthHeader(), params });
+    return response.data;
+};
+
+// --- Employee Management ---
+export const getHREmployees = async () => {
+    const response = await axios.get(`${API_URL}/hr/employees`, getAuthHeader());
+    return response.data;
+};
+
+export const createHREmployee = async (data) => {
+    const response = await axios.post(`${API_URL}/hr/employees`, data, getAuthHeader());
+    return response.data;
+};
+
+export const updateHREmployee = async (id, data) => {
+    const response = await axios.put(`${API_URL}/hr/employees/${id}`, data, getAuthHeader());
+    return response.data;
+};
+
+export const deleteHREmployee = async (id) => {
+    const response = await axios.delete(`${API_URL}/hr/employees/${id}`, getAuthHeader());
     return response.data;
 };

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import LocationSelector from '../../../../components/common/LocationSelector';
 import {
     ChevronRight,
     Plus,
@@ -31,7 +32,14 @@ import {
 const FranchiseeManagerKYC = () => {
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
     const [selectedDateRange, setSelectedDateRange] = useState('today');
-    const [selectedDistrict, setSelectedDistrict] = useState('');
+    const [locationFilters, setLocationFilters] = useState({
+        country: '',
+        state: '',
+        city: '',
+        district: '',
+        cluster: '',
+        zone: ''
+    });
     const [selectedKycStatus, setSelectedKycStatus] = useState('');
     const [customDate, setCustomDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
@@ -198,22 +206,13 @@ const FranchiseeManagerKYC = () => {
                                         </button>
                                     </div>
 
-                                    {/* District Dropdown */}
+                                    {/* Location Filters */}
                                     <div className="mb-4">
-                                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">
-                                            Select District
-                                        </label>
-                                        <select
-                                            id="city"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                            value={selectedDistrict}
-                                            onChange={(e) => setSelectedDistrict(e.target.value)}
-                                        >
-                                            <option value="">Choose district</option>
-                                            <option value="paddhari">Paddhari</option>
-                                            <option value="tankara">Tankara</option>
-                                            <option value="chotila">Chotila</option>
-                                        </select>
+                                        <LocationSelector
+                                            values={locationFilters}
+                                            onChange={setLocationFilters}
+                                            layout="stack"
+                                        />
                                     </div>
 
                                     {/* Date Range Dropdown */}

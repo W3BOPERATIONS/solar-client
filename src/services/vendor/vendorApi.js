@@ -73,3 +73,23 @@ export const deleteSupplierVendor = async (id) => {
     const response = await axios.delete(`${API_URL}/supplier-vendors/${id}`, getAuthHeaders());
     return response.data;
 };
+
+// ==================== INSTALLER VENDOR PLANS ====================
+
+export const getInstallerVendorPlans = async (districtId) => {
+    const response = await axios.get(`${API_URL}/installer-vendor-plans`, {
+        ...getAuthHeaders(),
+        params: { districtId }
+    });
+    return response.data;
+};
+
+export const saveInstallerVendorPlan = async (data) => {
+    const response = await axios.post(`${API_URL}/installer-vendor-plans`, data, getAuthHeaders());
+    return response.data;
+};
+
+export const deleteInstallerVendorPlan = async (id) => {
+    const response = await axios.delete(`${API_URL}/installer-vendor-plans/${id}`, getAuthHeaders());
+    return response.data;
+};

@@ -1,402 +1,292 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Home, Building2, Factory, Plus, Edit2, Trash2, Save,
-  RotateCcw, ClipboardList, CheckCircle, Clock, MapPin,
-  Compass, Grid3x3, Target, AlertCircle, Loader2
+  Save, RotateCcw, Plus, Trash2, Edit2, CheckCircle, AlertCircle, Loader2,
+  ChevronRight, Building2, Home
 } from 'lucide-react';
 import * as settingsApi from '../../../services/settings/settingsApi';
-import * as locationApi from '../../../services/locationApi';
 
 export default function LoanSetting() {
-  // Regional Scoping State
-  const [countries, setCountries] = useState([]);
-  const [states, setStates] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [clusters, setClusters] = useState([]);
-
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [selectedState, setSelectedState] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
-
-  // Data State
   const [loanRules, setLoanRules] = useState([]);
-  const [activeTab, setActiveTab] = useState('residential');
+  const [activeTab, setActiveTab] = useState('Residential');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
-  const [completions, setCompletions] = useState([]);
 
-  const projectTypes = ['residential', 'commercial', 'industrial'];
-  const [showAddModal, setShowAddModal] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-
-  const [formData, setFormData] = useState({
-    projectType: 'residential',
-    interestRate: '',
-    tenureMonths: '',
-    maxAmount: '',
-    status: 'active',
-    fields: []
+  const [formFields, setFormFields] = useState({
+    'Residential': [],
+    'Commercial': []
   });
 
-  const fieldNames = {
-    'min_cibil': 'Minimum CIBIL Score',
-    'min_bank_balance': 'Min Avg Bank Balance',
-    'min_itr_income': 'Min Declared Income (ITR)',
-    'down_payment_pct': 'Down Payment (%)',
-    'max_ltv_pct': 'Max LTV (%)',
-    'processing_fee_pct': 'Processing Fee (%)',
-    'lockin_months': 'Lock-in Period (months)',
-    'foreclosure_charges_pct': 'Foreclosure Charges (%)'
-  };
+  const fieldOptions = [
+    { id: 'min_cibil', label: 'Minimum CIBIL Score' },
+    { id: 'max_ltv', label: 'Max LTV (%)' },
+    { id: 'min_bank_balance', label: 'Min Avg Bank Balance' },
+    { id: 'processing_fee', label: 'Processing Fee (%)' },
+    { id: 'min_itr', label: 'Min Declared Income (ITR)' },
+    { id: 'lockin_period', label: 'Lock-in Period (months)' },
+    { id: 'down_payment', label: 'Down Payment (%)' },
+    { id: 'foreclosure_charges', label: 'Foreclosure Charges (%)' }
+  ];
 
-  const allFields = Object.keys(fieldNames);
-
-  // Initial load
   useEffect(() => {
-    const loadInitial = async () => {
-      try {
-        setLoading(true);
-        const fetchedCountries = await locationApi.getCountries();
-        setCountries(fetchedCountries || []);
-      } catch (err) {
-        setError('Failed to load countries');
-      } finally {
-        setLoading(false);
-      }
-    };
-    loadInitial();
+    loadData();
   }, []);
 
-  // Fetch regional data when cluster selected
-  useEffect(() => {
-    if (selectedCluster) {
-      loadClusterData();
-    } else {
-      setLoanRules([]);
-      setCompletions([]);
-    }
-  }, [selectedCluster]);
-
-  const loadClusterData = async () => {
+  const loadData = async () => {
     try {
       setLoading(true);
-      const [rules, comps] = await Promise.all([
-        settingsApi.fetchLoanRules(selectedCluster._id),
-        settingsApi.fetchModuleCompletions(selectedCluster._id)
-      ]);
-      setLoanRules(rules || []);
-      setCompletions(comps || []);
+      const rules = await settingsApi.fetchLoanRules();
+      // Filter ONLY global rules (clusterId is missing or null)
+      const globalRules = (rules || []).filter(r => !r.clusterId);
+      setLoanRules(globalRules);
+
+      // Initialize form fields from global rules
+      const newFormFields = { 'Residential': [], 'Commercial': [] };
+      globalRules.forEach(rule => {
+        // Convert 'residential' or 'RESIDENTIAL' to 'Residential'
+        const normalizedType = rule.projectType.charAt(0).toUpperCase() + rule.projectType.slice(1).toLowerCase();
+        if (newFormFields[normalizedType]) {
+          newFormFields[normalizedType] = rule.fields
+            .filter(f => f.selected)
+            .map(f => f.name);
+        }
+      });
+      setFormFields(newFormFields);
+      console.log('Loaded global loan rules:', globalRules);
     } catch (err) {
-      setError('Failed to load cluster data');
+      setError('Failed to load loan settings');
     } finally {
       setLoading(false);
     }
   };
 
-  // Location Handlers
-  const handleCountrySelect = async (country) => {
-    setSelectedCountry(country);
-    setSelectedState(null);
-    setSelectedDistrict(null);
-    setSelectedCluster(null);
-    setStates([]);
-    setDistricts([]);
-    setClusters([]);
-    if (country) {
-      const fetched = await locationApi.getStates(country._id);
-      setStates(fetched || []);
-    }
-  };
-
-  const handleStateSelect = async (state) => {
-    setSelectedState(state);
-    setSelectedDistrict(null);
-    setSelectedCluster(null);
-    setDistricts([]);
-    setClusters([]);
-    if (state) {
-      const fetched = await locationApi.getDistricts({ stateId: state._id });
-      setDistricts(fetched || []);
-    }
-  };
-
-  const handleDistrictSelect = async (district) => {
-    setSelectedDistrict(district);
-    setSelectedCluster(null);
-    setClusters([]);
-    if (district) {
-      const fetched = await locationApi.getClusters(district._id);
-      setClusters(fetched || []);
-    }
-  };
-
-  // CRUD Handlers
-  const handleCheckboxChange = (field) => {
-    setFormData(prev => {
-      const currentFields = prev.fields || [];
-      const exists = currentFields.find(f => f.name === field);
-      if (exists) {
-        return {
-          ...prev,
-          fields: currentFields.map(f => f.name === field ? { ...f, selected: !f.selected } : f)
-        };
+  const handleCheckboxChange = (fieldId) => {
+    setFormFields(prev => {
+      const current = prev[activeTab] || [];
+      if (current.includes(fieldId)) {
+        return { ...prev, [activeTab]: current.filter(id => id !== fieldId) };
       } else {
-        return {
-          ...prev,
-          fields: [...currentFields, { name: field, selected: true }]
-        };
+        return { ...prev, [activeTab]: [...current, fieldId] };
       }
     });
   };
 
-  const handleSave = async (e) => {
-    e.preventDefault();
-    if (!selectedCluster) {
-      setError('Please select a cluster first');
-      return;
-    }
-
+  const handleSave = async () => {
     try {
       setSaving(true);
       setError('');
       setSuccess('');
+      console.log('Saving global settings...', formFields);
 
-      const payload = {
-        ...formData,
-        clusterId: selectedCluster._id
-      };
+      const tasks = Object.keys(formFields).map(async (type) => {
+        const selectedFields = fieldOptions.map(opt => ({
+          name: opt.id,
+          selected: formFields[type].includes(opt.id)
+        }));
 
-      if (editingId) {
-        await settingsApi.updateLoanRule(editingId, payload);
-        setSuccess('Loan rule updated successfully');
-      } else {
-        await settingsApi.createLoanRule(payload);
-        setSuccess('Loan rule created successfully');
-      }
+        const existingRule = loanRules.find(r =>
+          r.projectType.toLowerCase() === type.toLowerCase()
+        );
+        console.log(`Checking ${type}: existingId=`, existingRule?._id);
 
-      resetForm();
-      loadClusterData();
-      setShowAddModal(false);
+        const payload = {
+          projectType: type, // e.g., 'Residential'
+          clusterId: null,   // Explicitly make global
+          interestRate: 0,
+          tenureMonths: 0,
+          maxAmount: 0,
+          fields: selectedFields,
+          status: 'active'
+        };
+
+        if (existingRule) {
+          console.log(`Updating global rule for ${type}: ${existingRule._id}`);
+          return settingsApi.updateLoanRule(existingRule._id, payload);
+        } else {
+          console.log(`Creating new global rule for ${type}`);
+          return settingsApi.createLoanRule(payload);
+        }
+      });
+
+      await Promise.all(tasks);
+      setSuccess('Settings saved successfully');
+      loadData();
     } catch (err) {
-      setError(err.response?.data?.message || 'Failed to save loan rule');
+      console.error('Save failed:', err);
+      setError(err.response?.data?.message || 'Failed to save settings');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this loan rule?')) return;
+  const handleReset = () => {
+    loadData();
+    setSuccess('');
+    setError('');
+  };
+
+  const getLabel = (id) => fieldOptions.find(opt => opt.id === id)?.label || id;
+
+  const handleRemove = async (type) => {
+    if (!window.confirm(`Are you sure you want to remove all fields for ${type}?`)) return;
     try {
-      setLoading(true);
-      await settingsApi.deleteLoanRule(id);
-      setSuccess('Deleted successfully');
-      loadClusterData();
+      setSaving(true);
+      const rule = loanRules.find(r => r.projectType.toLowerCase() === type.toLowerCase());
+      if (rule) {
+        await settingsApi.deleteLoanRule(rule._id);
+        setSuccess(`${type} settings removed`);
+        loadData();
+      }
     } catch (err) {
-      setError('Failed to delete');
+      setError('Failed to remove settings');
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
-  const handleEdit = (rule) => {
-    setFormData({
-      projectType: rule.projectType,
-      interestRate: rule.interestRate,
-      tenureMonths: rule.tenureMonths,
-      maxAmount: rule.maxAmount,
-      status: rule.status,
-      fields: rule.fields || []
-    });
-    setEditingId(rule._id);
-    setActiveTab(rule.projectType);
-    setShowAddModal(true);
-  };
-
-  const resetForm = () => {
-    setFormData({
-      projectType: 'residential',
-      interestRate: '',
-      tenureMonths: '',
-      maxAmount: '',
-      status: 'active',
-      fields: []
-    });
-    setEditingId(null);
-  };
-
-  const handleReset = () => {
-    resetForm();
-    setError('');
-    setSuccess('');
-  };
-
-  const getProjectDisplayName = (type) => {
-    return type.charAt(0).toUpperCase() + type.slice(1);
-  };
-
-  const getProjectIcon = (type) => {
-    if (type === 'residential') return <Home size={18} className="mr-2" />;
-    if (type === 'commercial') return <Building2 size={18} className="mr-2" />;
-    if (type === 'industrial') return <Factory size={18} className="mr-2" />;
-    return <Home size={18} className="mr-2" />;
-  };
-
-  // Stats calculate
-  const currentCompletion = completions.find(c => c.moduleName === 'Loan Setting');
-  const isCompleted = currentCompletion?.completed || false;
-  const progressPercent = currentCompletion?.progressPercent || 0;
-
   return (
-    <div className="container mx-auto px-4 py-6 max-w-6xl">
-      {/* Header */}
-      <div className="mb-6">
-        <nav className="bg-white rounded-lg shadow-sm p-4 flex justify-between items-center">
-          <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-            <ClipboardList className="w-8 h-8 mr-3 text-blue-600" />
-            Loan Provider Settings
-          </h3>
-          <div className="flex items-center space-x-4">
-            {isCompleted ? (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-emerald-100 text-emerald-800 border border-emerald-200">
-                <CheckCircle className="w-4 h-4 mr-1" /> Completed
-              </span>
-            ) : (
-              <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-800 border border-amber-200">
-                <Clock className="w-4 h-4 mr-1" /> Pending
-              </span>
-            )}
-            <div className="w-32 bg-gray-200 rounded-full h-2">
-              <div className="bg-blue-600 h-2 rounded-full transition-all" style={{ width: `${progressPercent}%` }}></div>
-            </div>
-          </div>
-        </nav>
-      </div>
+    <div className="p-6 bg-[#f0f2f5] min-h-screen">
+      <div className="max-w-7xl mx-auto">
+        <h2 className="text-2xl font-bold text-[#003366] mb-6">Loan Provider Settings</h2>
 
-      {/* Regional Scoping */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6 mb-6">
-        <h4 className="text-lg font-bold text-gray-700 mb-4 flex items-center">
-          <Compass className="w-5 h-5 mr-2 text-blue-500" /> Regional Scope
-        </h4>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Country</label>
-            <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm"
-              value={selectedCountry?._id || ''}
-              onChange={(e) => handleCountrySelect(countries.find(c => c._id === e.target.value))}
-            >
-              <option value="">Select Country</option>
-              {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+        {/* Alerts */}
+        {error && (
+          <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex items-center shadow-sm">
+            <AlertCircle className="w-5 h-5 mr-2" /> {error}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">State</label>
-            <select
-              disabled={!selectedCountry}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-50"
-              value={selectedState?._id || ''}
-              onChange={(e) => handleStateSelect(states.find(s => s._id === e.target.value))}
-            >
-              <option value="">Select State</option>
-              {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-            </select>
+        )}
+        {success && (
+          <div className="mb-4 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded flex items-center shadow-sm">
+            <CheckCircle className="w-5 h-5 mr-2" /> {success}
           </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">District</label>
-            <select
-              disabled={!selectedState}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-50"
-              value={selectedDistrict?._id || ''}
-              onChange={(e) => handleDistrictSelect(districts.find(d => d._id === e.target.value))}
-            >
-              <option value="">Select District</option>
-              {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-medium text-gray-500 mb-1 uppercase">Cluster</label>
-            <select
-              disabled={!selectedDistrict}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md text-sm disabled:bg-gray-50"
-              value={selectedCluster?._id || ''}
-              onChange={(e) => setSelectedCluster(clusters.find(c => c._id === e.target.value))}
-            >
-              <option value="">Select Cluster</option>
-              {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
-          </div>
-        </div>
-      </div>
+        )}
 
-      {/* Alerts */}
-      {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg flex items-center">
-          <AlertCircle className="w-5 h-5 mr-3" /> {error}
-        </div>
-      )}
-      {success && (
-        <div className="mb-6 bg-emerald-50 border border-emerald-200 text-emerald-700 px-4 py-3 rounded-lg flex items-center">
-          <CheckCircle className="w-5 h-5 mr-3" /> {success}
-        </div>
-      )}
+        {/* Project Types Card */}
+        <div className="bg-white rounded-lg shadow-md border border-gray-200 mb-8 overflow-hidden">
+          <div className="bg-gray-50 px-6 py-3 border-b flex justify-between items-center">
+            <h3 className="font-semibold text-gray-700">Project Types</h3>
+          </div>
 
-      {!selectedCluster ? (
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-12 text-center text-gray-500">
-          <MapPin className="w-12 h-12 mx-auto mb-4 opacity-20" />
-          <p className="text-lg">Select a cluster to manage loan settings</p>
-        </div>
-      ) : (
-        <div className="space-y-6">
-          {/* Rules List / Grid */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-            <div className="bg-gray-100 px-6 py-4 border-b flex justify-between items-center">
-              <h4 className="font-bold text-gray-700">Loan Rules for {selectedCluster.name}</h4>
-              <button
-                type="button"
-                onClick={() => { resetForm(); setShowAddModal(true); }}
-                className="inline-flex items-center px-3 py-1.5 border border-blue-600 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-50 transition-colors"
-              >
-                <Plus size={16} className="mr-1" /> Add Rule
-              </button>
+          <div className="p-6">
+            {/* Tabs */}
+            <div className="flex space-x-2 mb-6 border-b border-gray-100 pb-4">
+              {['Residential', 'Commercial'].map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`px-6 py-2 rounded-md text-sm font-medium transition-all duration-200 ${activeTab === tab
+                    ? 'bg-[#007bff] text-white shadow-md'
+                    : 'bg-[#f8f9fa] text-gray-500 hover:bg-gray-100'
+                    }`}
+                >
+                  {tab}
+                </button>
+              ))}
             </div>
 
-            <div className="p-6">
+            {/* Field Selection Area */}
+            <div className="bg-gray-50/50 rounded-xl p-6 border border-gray-200 relative mb-8">
+              <h4 className="text-[#003366] font-bold text-lg mb-6 flex items-center">
+                <div className="w-1.5 h-6 bg-blue-500 rounded-full mr-3"></div>
+                Select Fields for {activeTab} Projects
+              </h4>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
+                {fieldOptions.map((opt) => (
+                  <div key={opt.id} className="flex items-center group bg-white p-3 rounded-lg border border-transparent hover:border-blue-200 hover:shadow-sm transition-all">
+                    <div className="relative flex items-center justify-center">
+                      <input
+                        type="checkbox"
+                        id={opt.id}
+                        checked={formFields[activeTab].includes(opt.id)}
+                        onChange={() => handleCheckboxChange(opt.id)}
+                        className="w-5 h-5 border-gray-300 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                      />
+                    </div>
+                    <label htmlFor={opt.id} className="ml-3 text-gray-700 font-medium cursor-pointer group-hover:text-blue-600 transition-colors">
+                      {opt.label}
+                    </label>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Selected Fields Summary Table */}
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+                <h4 className="font-bold text-gray-800 flex items-center">
+                  <ChevronRight size={18} className="mr-2 text-blue-500" />
+                  Selected Fields by Project Type
+                </h4>
+                <button
+                  onClick={() => setActiveTab(activeTab === 'Residential' ? 'Commercial' : 'Residential')}
+                  className="text-blue-600 text-sm font-bold hover:text-blue-700 flex items-center bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                >
+                  <Plus size={14} className="mr-1" /> Add Project Type
+                </button>
+              </div>
+
               <div className="overflow-x-auto">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+                <table className="w-full">
+                  <thead className="bg-[#f8fafc] border-b border-gray-200">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Project Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Int. Rate</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tenure</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Limit</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Actions</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Project Type</th>
+                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Selected Fields</th>
+                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {loanRules.length > 0 ? loanRules.map((rule) => (
-                      <tr key={rule._id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 whitespace-nowrap font-medium text-gray-900 flex items-center">
-                          {getProjectIcon(rule.projectType)} {getProjectDisplayName(rule.projectType)}
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap">{rule.interestRate}%</td>
-                        <td className="px-4 py-3 whitespace-nowrap">{rule.tenureMonths} Mo</td>
-                        <td className="px-4 py-3 whitespace-nowrap">₹{rule.maxAmount}</td>
-                        <td className="px-4 py-3 whitespace-nowrap">
-                          <span className={`px-2 py-1 rounded-full text-xs ${rule.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>
-                            {rule.status}
-                          </span>
-                        </td>
-                        <td className="px-4 py-3 whitespace-nowrap flex space-x-2">
-                          <button onClick={() => handleEdit(rule)} className="text-blue-600 hover:text-blue-900"><Edit2 size={16} /></button>
-                          <button onClick={() => handleDelete(rule._id)} className="text-red-600 hover:text-red-900"><Trash2 size={16} /></button>
+                  <tbody className="divide-y divide-gray-100">
+                    {['Residential', 'Commercial'].map(type => (
+                      formFields[type].length > 0 && (
+                        <tr key={type} className="hover:bg-blue-50/30 transition-colors">
+                          <td className="px-6 py-5 align-top">
+                            <div className="flex items-center">
+                              {type === 'Residential' ? <Home size={18} className="mr-2 text-blue-500" /> : <Building2 size={18} className="mr-2 text-blue-500" />}
+                              <span className="text-gray-900 font-bold">{type}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-5">
+                            <div className="flex flex-wrap gap-2">
+                              {formFields[type].map(id => (
+                                <span key={id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
+                                  {getLabel(id)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-6 py-5 align-top">
+                            <div className="flex justify-center space-x-3">
+                              <button
+                                onClick={() => {
+                                  setActiveTab(type);
+                                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                                }}
+                                className="flex items-center px-3 py-1 bg-blue-50 text-blue-600 rounded-md text-xs font-bold hover:bg-blue-100 transition-colors"
+                              >
+                                <Edit2 size={12} className="mr-1" /> Edit
+                              </button>
+                              <button
+                                onClick={() => handleRemove(type)}
+                                className="flex items-center px-3 py-1 bg-red-50 text-red-600 rounded-md text-xs font-bold hover:bg-red-100 transition-colors"
+                              >
+                                <Trash2 size={12} className="mr-1" /> Remove
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      )
+                    ))}
+                    {!formFields['Residential'].length && !formFields['Commercial'].length && (
+                      <tr>
+                        <td colSpan="3" className="px-6 py-16 text-center">
+                          <div className="flex flex-col items-center opacity-40">
+                            <Plus size={48} className="mb-2 text-gray-300" />
+                            <p className="text-gray-500 font-medium">No project types configured</p>
+                            <p className="text-xs text-gray-400 mt-1">Select fields above and click Save Settings</p>
+                          </div>
                         </td>
                       </tr>
-                    )) : (
-                      <tr><td colSpan="6" className="px-4 py-8 text-center text-gray-500">No loan rules found for this cluster</td></tr>
                     )}
                   </tbody>
                 </table>
@@ -404,95 +294,32 @@ export default function LoanSetting() {
             </div>
           </div>
         </div>
-      )}
 
-      {/* Add / Edit Modal */}
-      {showAddModal && (
-        <div className="fixed inset-0 bg-gray-500/75 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="px-6 py-4 border-b flex justify-between items-center bg-gray-50 rounded-t-xl">
-              <h3 className="text-xl font-bold text-gray-900">{editingId ? 'Edit' : 'Add'} Loan Rule</h3>
-              <button onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600"><Plus className="rotate-45" /></button>
-            </div>
-
-            <form onSubmit={handleSave} className="p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Project Type</label>
-                  <select
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    value={formData.projectType}
-                    onChange={(e) => setFormData({ ...formData, projectType: e.target.value })}
-                    required
-                  >
-                    {projectTypes.map(t => <option key={t} value={t}>{getProjectDisplayName(t)}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Interest Rate (%)</label>
-                  <input
-                    type="number" step="0.01"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    value={formData.interestRate}
-                    onChange={(e) => setFormData({ ...formData, interestRate: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Tenure (Months)</label>
-                  <input
-                    type="number"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    value={formData.tenureMonths}
-                    onChange={(e) => setFormData({ ...formData, tenureMonths: e.target.value })}
-                    required
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-bold text-gray-700 mb-2">Maximum Amount (₹)</label>
-                  <input
-                    type="number"
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg"
-                    value={formData.maxAmount}
-                    onChange={(e) => setFormData({ ...formData, maxAmount: e.target.value })}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="mb-6">
-                <h5 className="font-bold text-gray-700 mb-3">Field Selection Configuration</h5>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-gray-50 p-4 rounded-lg">
-                  {allFields.map(field => (
-                    <div key={field} className="flex items-center">
-                      <input
-                        type="checkbox"
-                        id={`field-${field}`}
-                        checked={formData.fields?.find(f => f.name === field)?.selected || false}
-                        onChange={() => handleCheckboxChange(field)}
-                        className="h-4 w-4 text-blue-600 rounded border-gray-300"
-                      />
-                      <label htmlFor={`field-${field}`} className="ml-2 text-sm text-gray-700">{fieldNames[field]}</label>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-end space-x-3 pt-4 border-t">
-                <button type="button" onClick={() => setShowAddModal(false)} className="px-4 py-2 text-gray-700 font-medium hover:bg-gray-100 rounded-lg">Cancel</button>
-                <button type="submit" disabled={saving} className="bg-blue-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-blue-700 flex items-center">
-                  {saving && <Loader2 className="animate-spin mr-2" size={20} />}
-                  {editingId ? 'Update Rule' : 'Save Rule'}
-                </button>
-              </div>
-            </form>
-          </div>
+        {/* Bottom Actions */}
+        <div className="flex justify-end space-x-3">
+          <button
+            onClick={handleReset}
+            className="px-6 py-2 bg-gray-500 text-white rounded font-bold hover:bg-gray-600 transition-all flex items-center shadow-md"
+          >
+            <RotateCcw size={18} className="mr-2" /> Reset
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-2 bg-[#007bff] text-white rounded font-bold hover:bg-[#0069d9] transition-all flex items-center shadow-md disabled:bg-blue-300"
+          >
+            {saving ? <Loader2 size={18} className="animate-spin mr-2" /> : <Save size={18} className="mr-2" />}
+            Save Settings
+          </button>
         </div>
-      )}
+      </div>
 
       {loading && (
-        <div className="fixed inset-0 bg-white/50 backdrop-blur-sm flex items-center justify-center z-[60]">
-          <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+        <div className="fixed inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-[100]">
+          <div className="bg-white p-5 rounded-xl shadow-2xl flex flex-col items-center border border-blue-50">
+            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
+            <span className="mt-3 text-blue-600 font-bold tracking-wide">Loading Settings...</span>
+          </div>
         </div>
       )}
     </div>

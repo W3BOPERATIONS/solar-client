@@ -1,22 +1,33 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Check, Loader } from 'lucide-react';
-import {
-  getInstallerVendors,
-  createInstallerVendor,
-  updateInstallerVendor,
-  deleteInstallerVendor
-} from '../../../../services/vendor/vendorApi';
-import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
-import { useLocations } from '../../../../hooks/useLocations';
+import { Plus, ChevronDown, Trash2, X, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useLocations } from '../../../../hooks/useLocations';
+import {
+  getInstallerVendorPlans,
+  saveInstallerVendorPlan,
+  deleteInstallerVendorPlan
+} from '../../../../services/vendor/vendorApi';
+
+const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
+  <div
+    onClick={onClick}
+    className={`p-6 rounded-md border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+      ? 'border-[#007bff] bg-white'
+      : 'border-transparent bg-white'
+      }`}
+  >
+    <div className="font-bold text-base text-[#333] mb-1">{title}</div>
+    <div className="text-xs text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
+  </div>
+);
 
 export default function InstallerVendors() {
-  const [vendors, setVendors] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState(null);
-  const [submitting, setSubmitting] = useState(false);
+  const [activePlan, setActivePlan] = useState('Starter Plan');
+  const [showLocationCards, setShowLocationCards] = useState(true);
+  const [loadingPlans, setLoadingPlans] = useState(false);
+  const [isAddPlanModalOpen, setIsAddPlanModalOpen] = useState(false);
+  const [newPlanName, setNewPlanName] = useState('');
+  const [plans, setPlans] = useState(["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"]);
 
   const {
     states,
@@ -27,436 +38,501 @@ export default function InstallerVendors() {
     selectedCluster,
     setSelectedCluster,
     selectedDistrict,
-    setSelectedDistrict,
-    loading: locationsLoading
+    setSelectedDistrict
   } = useLocations();
 
-  // Form State
-  const [formData, setFormData] = useState({
-    name: '',
-    contact: '',
-    email: '',
-    state: '',
-    cluster: '',
-    district: '',
-    status: 'Active'
+  // Initialize state for a plan
+  const getDefaultPlanState = () => ({
+    requirements: [],
+    coverage: "1 District",
+    projectTypes: [],
+    subscription: "0",
+    paymentMethods: [],
+    teams: { residential: 0, commercial: 0 },
+    rates: {
+      resOnGrid: "0", resOffGrid: "0",
+      comOnGrid: "0", comOffGrid: "0"
+    },
+    weeklyKWAssign: { residential: "0", commercial: "0" }
   });
 
-  // Local state for formdropdowns
-  const [formClusters, setFormClusters] = useState([]);
-  const [formDistricts, setFormDistricts] = useState([]);
+  const [planSettings, setPlanSettings] = useState({});
 
+  // Fetch plans from DB when district changes
   useEffect(() => {
-    fetchVendors();
-  }, [selectedState, selectedCluster, selectedDistrict]);
+    if (selectedDistrict) {
+      fetchPlans();
+    } else {
+      setPlans(["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"]);
+      setPlanSettings({});
+      setActivePlan('Starter Plan');
+    }
+  }, [selectedDistrict]);
 
-  const fetchVendors = async () => {
+  const fetchPlans = async () => {
     try {
-      setLoading(true);
-      const params = {
-        state: selectedState,
-        cluster: selectedCluster,
-        district: selectedDistrict
-      };
-      const res = await getInstallerVendors(params);
-      if (res.success) {
-        setVendors(res.data);
-      }
-    } catch (error) {
-      console.error('Error fetching vendors:', error);
-      toast.error('Failed to load vendors');
-    } finally {
-      setLoading(false);
-    }
-  };
+      setLoadingPlans(true);
+      const response = await getInstallerVendorPlans(selectedDistrict);
+      if (response.success && response.data.length > 0) {
+        const dbPlans = response.data;
+        const planNames = dbPlans.map(p => p.name);
 
-  const resetForm = () => {
-    setFormData({ name: '', contact: '', email: '', state: '', cluster: '', district: '', status: 'Active' });
-    setFormClusters([]);
-    setFormDistricts([]);
-    setEditingId(null);
-    setShowModal(false);
-  };
+        const defaultNames = ["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"];
+        const combinedNames = Array.from(new Set([...defaultNames, ...planNames]));
 
-  const handleFormStateChange = async (e) => {
-    const newStateId = e.target.value;
-    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
-    setFormClusters([]);
-    setFormDistricts([]);
+        setPlans(combinedNames);
 
-    if (newStateId) {
-      try {
-        const data = await getClustersHierarchy(newStateId);
-        setFormClusters(data || []);
-      } catch (error) {
-        console.error('Error fetching clusters:', error);
-        toast.error('Failed to load clusters');
-      }
-    }
-  };
-
-  const handleFormClusterChange = async (e) => {
-    const newClusterId = e.target.value;
-    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
-    setFormDistricts([]);
-
-    if (newClusterId) {
-      try {
-        const data = await getDistrictsHierarchy(newClusterId);
-        setFormDistricts(data || []);
-      } catch (error) {
-        console.error('Error fetching districts:', error);
-        toast.error('Failed to load districts');
-      }
-    }
-  };
-
-  const handleEdit = async (vendor) => {
-    setEditingId(vendor._id);
-    setShowModal(true);
-
-    // Set basic data first
-    setFormData({
-      name: vendor.name,
-      contact: vendor.contact,
-      email: vendor.email,
-      state: vendor.state?._id || vendor.state || '',
-      cluster: vendor.cluster?._id || vendor.cluster || '',
-      district: vendor.district?._id || vendor.district || '',
-      status: vendor.status
-    });
-
-    // Fetch dependent data
-    try {
-      const stateId = vendor.state?._id || vendor.state;
-      if (stateId) {
-        const clustersData = await getClustersHierarchy(stateId);
-        setFormClusters(clustersData || []);
-
-        const clusterId = vendor.cluster?._id || vendor.cluster;
-        if (clusterId) {
-          const districtsData = await getDistrictsHierarchy(clusterId);
-          setFormDistricts(districtsData || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching dependent location data:', error);
-      toast.error('Failed to load location data for editing');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this vendor?')) return;
-    try {
-      await deleteInstallerVendor(id);
-      toast.success('Vendor deleted successfully');
-      fetchVendors();
-    } catch (error) {
-      console.error('Error deleting vendor:', error);
-      toast.error('Failed to delete vendor');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      if (editingId) {
-        await updateInstallerVendor(editingId, formData);
-        toast.success('Vendor updated successfully');
+        const settings = {};
+        combinedNames.forEach(name => {
+          const dbPlan = dbPlans.find(p => p.name === name);
+          settings[name] = dbPlan ? { ...dbPlan } : getDefaultPlanState();
+        });
+        setPlanSettings(settings);
       } else {
-        await createInstallerVendor(formData);
-        toast.success('Vendor created successfully');
+        const defaultNames = ["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"];
+        setPlans(defaultNames);
+        setPlanSettings(defaultNames.reduce((acc, name) => ({ ...acc, [name]: getDefaultPlanState() }), {}));
       }
-      fetchVendors();
-      resetForm();
     } catch (error) {
-      console.error('Error saving vendor:', error);
-      toast.error(error.response?.data?.message || 'Failed to save vendor');
+      console.error('Error fetching plans:', error);
+      toast.error('Failed to load plans');
     } finally {
-      setSubmitting(false);
+      setLoadingPlans(false);
     }
   };
 
-  const filteredVendors = vendors.filter(v =>
-    v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.state?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.cluster?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.district?.name?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const handleInputChange = (field, value, subfield = null) => {
+    setPlanSettings(prev => ({
+      ...prev,
+      [activePlan]: {
+        ...prev[activePlan],
+        [field]: subfield ? { ...prev[activePlan][field], [subfield]: value } : value
+      }
+    }));
+  };
+
+  const handleCheckboxToggle = (field, value) => {
+    const current = planSettings[activePlan][field] || [];
+    const updated = current.includes(value)
+      ? current.filter(i => i !== value)
+      : [...current, value];
+    handleInputChange(field, updated);
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      const currentPlanData = planSettings[activePlan];
+      const payload = {
+        ...currentPlanData,
+        name: activePlan,
+        stateId: selectedState,
+        clusterId: selectedCluster,
+        districtId: selectedDistrict
+      };
+
+      const response = await saveInstallerVendorPlan(payload);
+      if (response.success) {
+        toast.success(`${activePlan} settings saved!`);
+        fetchPlans();
+      }
+    } catch (error) {
+      console.error('Error saving plan:', error);
+      toast.error('Failed to save settings');
+    }
+  };
+
+  const handleAddPlan = () => {
+    if (!newPlanName.trim()) {
+      toast.error('Plan name is required');
+      return;
+    }
+    if (plans.includes(newPlanName.trim())) {
+      toast.error('Plan already exists');
+      return;
+    }
+
+    const name = newPlanName.trim();
+    setPlans(prev => [...prev, name]);
+    setPlanSettings(prev => ({ ...prev, [name]: getDefaultPlanState() }));
+    setActivePlan(name);
+    setNewPlanName('');
+    setIsAddPlanModalOpen(false);
+    toast.success(`Plan "${name}" added.`);
+  };
+
+  const handleDeletePlan = async (planName) => {
+    if (["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"].includes(planName)) {
+      toast.error('Default plans cannot be deleted');
+      return;
+    }
+
+    try {
+      const planId = planSettings[planName]?._id;
+      if (planId) {
+        await deleteInstallerVendorPlan(planId);
+      }
+      setPlans(prev => prev.filter(p => p !== planName));
+      if (activePlan === planName) setActivePlan('Starter Plan');
+      toast.success('Plan deleted');
+    } catch (error) {
+      toast.error('Failed to delete plan');
+    }
+  };
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Installer Vendor Management</h1>
+    <div className="bg-[#f4f7fa] min-h-screen font-sans">
+      {/* Header Block */}
+      <div className="bg-white p-6 border-b border-gray-200 mb-8 px-12">
+        <h1 className="text-xl font-bold text-[#14233c]">Installer Vendor Management</h1>
         <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          onClick={() => setShowLocationCards(!showLocationCards)}
+          className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-[#0076a8] text-white rounded text-[10px] font-bold shadow-sm hover:bg-blue-800 transition-all uppercase tracking-wider"
         >
-          <Plus size={20} className="mr-2" />
-          Add Vendor
+          {showLocationCards ? <EyeOff size={14} /> : <Eye size={14} />} {showLocationCards ? 'Hide Location Cards' : 'Show Location Cards'}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {/* Search & Filters */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search vendors by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+      <div className="max-w-[1400px] mx-auto px-12 pb-20">
+
+        {/* Location Selection Section */}
+        {showLocationCards && (
+          <div className="space-y-10 mb-16">
+            {/* States */}
+            <div>
+              <h2 className="text-xl font-bold text-[#333] mb-6">Select State</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                {states.map(s => (
+                  <LocationCard
+                    key={s._id}
+                    title={s.name}
+                    subtitle={s.code || s.name.substring(0, 2)}
+                    isSelected={selectedState === s._id}
+                    onClick={() => setSelectedState(s._id)}
+                  />
+                ))}
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <select
-                value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">All States</option>
-                {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+            {/* Clusters */}
+            {selectedState && (
+              <div>
+                <h2 className="text-xl font-bold text-[#333] mb-6">Select Cluster</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {clusters.map(c => (
+                    <LocationCard
+                      key={c._id}
+                      title={c.name}
+                      subtitle={states.find(s => s._id === selectedState)?.name || 'CL'}
+                      isSelected={selectedCluster === c._id}
+                      onClick={() => setSelectedCluster(c._id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
 
-              <select
-                value={selectedCluster}
-                onChange={(e) => setSelectedCluster(e.target.value)}
-                disabled={!selectedState}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
-              >
-                <option value="">All Clusters</option>
-                {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </select>
-
-              <select
-                value={selectedDistrict}
-                onChange={(e) => setSelectedDistrict(e.target.value)}
-                disabled={!selectedCluster}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
-              >
-                <option value="">All Districts</option>
-                {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-              </select>
-            </div>
+            {/* Districts */}
+            {selectedCluster && (
+              <div>
+                <h2 className="text-xl font-bold text-[#333] mb-6">Select District</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {districts.map(d => (
+                    <LocationCard
+                      key={d._id}
+                      title={d.name}
+                      subtitle={clusters.find(c => c._id === selectedCluster)?.name || 'DT'}
+                      isSelected={selectedDistrict === d._id}
+                      onClick={() => setSelectedDistrict(d._id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Name</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Contact</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Email</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Location (S/C/D)</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    <div className="flex justify-center items-center gap-2">
-                      <Loader className="animate-spin" size={20} /> Loading...
-                    </div>
-                  </td>
-                </tr>
-              ) : filteredVendors.length === 0 ? (
-                <tr>
-                  <td colSpan="6" className="px-6 py-8 text-center text-gray-500">
-                    No vendors found.
-                  </td>
-                </tr>
-              ) : (
-                filteredVendors.map((vendor) => (
-                  <tr key={vendor._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">{vendor.name}</td>
-                    <td className="px-6 py-4 text-gray-600">{vendor.contact}</td>
-                    <td className="px-6 py-4 text-gray-600">{vendor.email}</td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">
-                      <div className="font-semibold">{vendor.state?.name || '---'}</div>
-                      <div className="text-xs">{vendor.cluster?.name || '---'} / {vendor.district?.name || '---'}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${vendor.status === 'Active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                        }`}>
-                        {vendor.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(vendor)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                        >
-                          <Edit2 size={18} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(vendor._id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal / Form */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-              <h3 className="text-lg font-bold text-gray-800">
-                {editingId ? 'Edit Vendor' : 'Add New Vendor'}
-              </h3>
+        {/* Plan Configuration Area */}
+        {selectedDistrict && (
+          <div className="animate-in fade-in zoom-in-95 duration-500">
+            {/* Plan Tabs */}
+            <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+              {plans.map(plan => (
+                <div key={plan} className="relative group">
+                  <button
+                    onClick={() => setActivePlan(plan)}
+                    className={`px-8 py-2.5 rounded-md text-sm font-bold transition-all shadow-sm tracking-wide ${activePlan === plan
+                      ? 'bg-[#0d6efd] text-white scale-105'
+                      : 'bg-[#2c3e50] text-gray-200 hover:bg-gray-700'
+                      }`}
+                  >
+                    {plan}
+                  </button>
+                  {!["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"].includes(plan) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeletePlan(plan); }}
+                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                    >
+                      <Trash2 size={10} />
+                    </button>
+                  )}
+                </div>
+              ))}
               <button
-                onClick={resetForm}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
+                onClick={() => setIsAddPlanModalOpen(true)}
+                className="px-8 py-2.5 rounded-md text-sm font-bold transition-all shadow-sm tracking-wide border-2 border-dashed border-[#2c3e50] text-[#2c3e50] hover:bg-gray-100 flex items-center gap-2"
               >
-                <X size={24} />
+                <Plus size={16} /> Add Other Plan
               </button>
             </div>
 
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Name</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="Enter vendor name"
-                />
+            {loadingPlans ? (
+              <div className="flex justify-center py-20">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
               </div>
+            ) : planSettings[activePlan] ? (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 max-w-6xl mx-auto overflow-hidden mb-16 px-8 py-10">
+                <div className="grid grid-cols-3 gap-x-12 gap-y-10">
+                  {/* Row 1 */}
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Signup Requirements</h5>
+                    <div className="space-y-3">
+                      {["Aadhar Card", "PAN Card", "GST Number", "Electronic Licence"].map(item => (
+                        <label key={item} className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={planSettings[activePlan].requirements.includes(item)}
+                            onChange={() => handleCheckboxToggle('requirements', item)}
+                            className="w-4 h-4 accent-green-600 rounded"
+                          />
+                          <span className="text-gray-700 text-sm">{item}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
 
-              <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Coverage</h5>
+                    <div className="relative">
+                      <select
+                        value={planSettings[activePlan].coverage}
+                        onChange={(e) => handleInputChange('coverage', e.target.value)}
+                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                      >
+                        <option>1 District</option>
+                        <option>2 Districts</option>
+                        <option>3 Districts</option>
+                      </select>
+                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Project Types</h5>
+                    <div className="space-y-3">
+                      {["Residential", "Commercial", "Street Light", "Solar Pump"].map(item => (
+                        <label key={item} className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={planSettings[activePlan].projectTypes.includes(item)}
+                            onChange={() => handleCheckboxToggle('projectTypes', item)}
+                            className="w-4 h-4 accent-green-600 rounded"
+                          />
+                          <span className="text-gray-700 text-sm">{item}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Row 2 */}
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Monthly Subscription (₹)</h5>
+                    <input
+                      type="number"
+                      value={planSettings[activePlan].subscription}
+                      onChange={(e) => handleInputChange('subscription', e.target.value)}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                    />
+                  </div>
+
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Payment Methods</h5>
+                    <div className="flex gap-6">
+                      {["Cash", "UPI"].map(method => (
+                        <label key={method} className="flex items-center gap-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={planSettings[activePlan].paymentMethods.includes(method)}
+                            onChange={() => handleCheckboxToggle('paymentMethods', method)}
+                            className="w-4 h-4 accent-green-600 rounded"
+                          />
+                          <span className="text-gray-700 text-sm">{method}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Team Allocation</h5>
+                    <div className="flex items-center gap-8">
+                      <div className="flex items-center gap-4">
+                        <span className="text-gray-600 text-sm">Residential</span>
+                        <input
+                          type="number"
+                          value={planSettings[activePlan].teams.residential}
+                          onChange={(e) => handleInputChange('teams', parseInt(e.target.value) || 0, 'residential')}
+                          className="w-16 px-2 py-2 border border-blue-200 rounded text-center text-sm font-medium"
+                        />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-gray-600 text-sm">Commercial</span>
+                        <input
+                          type="number"
+                          value={planSettings[activePlan].teams.commercial}
+                          onChange={(e) => handleInputChange('teams', parseInt(e.target.value) || 0, 'commercial')}
+                          className="w-16 px-2 py-2 border border-blue-200 rounded text-center text-sm font-medium"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Row 3 */}
+                  <div className="col-span-1">
+                    <h5 className="font-bold text-gray-800 mb-3 text-base">Rate Setting</h5>
+                    <div className="space-y-4">
+                      <div>
+                        <p className="text-gray-700 font-medium text-sm mb-3">Residential (Per KW)</p>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-4 pl-4">
+                            <span className="w-20 text-gray-600 text-xs">On-Grid</span>
+                            <input
+                              type="text"
+                              value={planSettings[activePlan].rates.resOnGrid}
+                              onChange={(e) => handleInputChange('rates', e.target.value, 'resOnGrid')}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-4 pl-4">
+                            <span className="w-20 text-gray-600 text-xs">Off-Grid</span>
+                            <input
+                              type="text"
+                              value={planSettings[activePlan].rates.resOffGrid}
+                              onChange={(e) => handleInputChange('rates', e.target.value, 'resOffGrid')}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                      <div>
+                        <p className="text-gray-700 font-medium text-sm mb-3">Commercial (Per KW)</p>
+                        <div className="space-y-3">
+                          <div className="flex items-center gap-4 pl-4">
+                            <span className="w-20 text-gray-600 text-xs">On-Grid</span>
+                            <input
+                              type="text"
+                              value={planSettings[activePlan].rates.comOnGrid}
+                              onChange={(e) => handleInputChange('rates', e.target.value, 'comOnGrid')}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                          <div className="flex items-center gap-4 pl-4">
+                            <span className="w-20 text-gray-600 text-xs">Off-Grid</span>
+                            <input
+                              type="text"
+                              value={planSettings[activePlan].rates.comOffGrid}
+                              onChange={(e) => handleInputChange('rates', e.target.value, 'comOffGrid')}
+                              className="flex-1 px-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-1 focus:ring-blue-500"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="col-span-2">
+                    <h5 className="font-bold text-gray-800 mb-6 text-base">Weekly KW Assign</h5>
+                    <div className="space-y-8 pl-4">
+                      <div className="flex items-center gap-4">
+                        <span className="w-56 text-gray-600 text-sm">Residential(25Kw * 1Team)</span>
+                        <input
+                          type="text"
+                          value={planSettings[activePlan].weeklyKWAssign.residential}
+                          onChange={(e) => handleInputChange('weeklyKWAssign', e.target.value, 'residential')}
+                          className="w-24 px-4 py-3 border border-gray-300 rounded-xl text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                        />
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="w-56 text-gray-600 text-sm">Commercial(25Kw * 1Team)</span>
+                        <div className="relative w-24">
+                          <input
+                            type="number"
+                            value={planSettings[activePlan].weeklyKWAssign.commercial}
+                            onChange={(e) => handleInputChange('weeklyKWAssign', e.target.value, 'commercial')}
+                            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="mt-12 flex justify-start">
+                  <button
+                    onClick={handleSaveSettings}
+                    className="bg-[#0076a8] hover:bg-blue-800 text-white font-bold py-2.5 px-8 rounded-md shadow-sm transition-all text-sm"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        )}
+
+        {/* Add Plan Modal */}
+        {isAddPlanModalOpen && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="flex items-center justify-between p-6 border-b border-gray-100">
+                <h3 className="text-xl font-bold text-[#0b386a]">Add New Plan</h3>
+                <button onClick={() => setIsAddPlanModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                  <X size={20} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
+                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Plan Name</label>
                   <input
                     type="text"
-                    required
-                    value={formData.contact}
-                    onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Phone number"
+                    value={newPlanName}
+                    onChange={(e) => setNewPlanName(e.target.value)}
+                    placeholder="e.g. Platinum Plan"
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                   />
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Email address"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <select
-                    required
-                    value={formData.state}
-                    onChange={handleFormStateChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                <div className="pt-4 flex gap-3">
+                  <button
+                    onClick={() => setIsAddPlanModalOpen(false)}
+                    className="flex-1 px-4 py-3 bg-gray-100 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-200 transition-all font-sans"
                   >
-                    <option value="">Select State</option>
-                    {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
-                    <select
-                      required
-                      value={formData.cluster}
-                      onChange={handleFormClusterChange}
-                      disabled={!formData.state}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
-                    >
-                      <option value="">Select Cluster</option>
-                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
-                    <select
-                      required
-                      value={formData.district}
-                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                      disabled={!formData.cluster}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
-                    >
-                      <option value="">Select District</option>
-                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                  </div>
+                    Cancel
+                  </button>
+                  <button
+                    onClick={handleAddPlan}
+                    className="flex-1 px-4 py-3 bg-[#0d6efd] text-white rounded-lg text-sm font-bold shadow-md hover:bg-blue-600 transition-all font-sans"
+                  >
+                    Create Plan
+                  </button>
                 </div>
               </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader className="animate-spin" size={18} />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Check size={18} />
-                      Save Vendor
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+            </div>
           </div>
+        )}
+
+        {/* Footer */}
+        <div className="py-10 border-t border-gray-200 text-center">
+          <p className="text-[10px] text-gray-400 font-medium tracking-widest uppercase">Copyright © 2025, Solarkits. All Rights Reserved.</p>
         </div>
-      )}
+      </div>
     </div>
   );
 }

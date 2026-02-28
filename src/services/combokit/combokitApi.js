@@ -121,3 +121,9 @@ export const deleteAssignment = async (id) => {
     const response = await api.delete(`/combokit/assignments/${id}`);
     return response.data;
 };
+
+// Role Plans API
+export const getPlansByRole = async (role) => {
+    const response = await api.get('/combokit/plans', { params: { role } });
+    return response.data;
+};

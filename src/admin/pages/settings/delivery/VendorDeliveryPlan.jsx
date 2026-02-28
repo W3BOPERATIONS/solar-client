@@ -1,62 +1,46 @@
 import React, { useState, useEffect } from 'react';
 import {
-  FileText,
-  Plus,
-  Edit,
-  Trash2,
-  CheckCircle,
-  XCircle,
-  Search,
-  Loader,
-  User,
-  Truck,
-  Box
+  FileText, Plus, Edit, Trash2, Search, Loader, User, Truck, Box
 } from 'lucide-react';
 import {
-  getVendorDeliveryPlans,
-  createVendorDeliveryPlan,
-  updateVendorDeliveryPlan,
-  deleteVendorDeliveryPlan,
-  getDeliveryTypes,
-  getVehicles
+  getVendorDeliveryConfig, upsertVendorDeliveryConfig,
+  getVendorDeliveryPlans, createVendorDeliveryPlan, updateVendorDeliveryPlan, deleteVendorDeliveryPlan,
+  getDeliveryTypes, getVehicles
 } from '../../../../services/delivery/deliveryApi';
-import {
-  getInstallerVendors,
-  getSupplierVendors
-} from '../../../../services/vendor/vendorApi';
+import { getInstallerVendors, getSupplierVendors } from '../../../../services/vendor/vendorApi';
 
 const VendorDeliveryPlan = () => {
-  // State
+  // Config state
+  const [configLoading, setConfigLoading] = useState(true);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [config, setConfig] = useState({ distanceThreshold: 50, allowPickup: true, allowDelivery: true });
+
+  // Plans state
   const [plans, setPlans] = useState([]);
   const [vendors, setVendors] = useState([]);
   const [deliveryTypes, setDeliveryTypes] = useState([]);
   const [vehicles, setVehicles] = useState([]);
-
-  const [loading, setLoading] = useState(true);
+  const [plansLoading, setPlansLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editingPlan, setEditingPlan] = useState(null);
-
   const [formData, setFormData] = useState({
-    vendor: '',
-    vendorModel: 'InstallerVendor',
-    deliveryType: '',
-    vehicle: '',
-    pricePerDelivery: '',
-    status: 'active'
+    vendor: '', vendorModel: 'InstallerVendor', deliveryType: '', vehicle: '', pricePerDelivery: '', status: 'active'
   });
-
   const [searchTerm, setSearchTerm] = useState('');
+
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
 
-  // Fetch Data
   useEffect(() => {
-    loadData();
+    loadAllData();
   }, []);
 
-  const loadData = async () => {
+  const loadAllData = async () => {
     try {
-      setLoading(true);
-      const [plansRes, installersRes, suppliersRes, typesRes, vehiclesRes] = await Promise.all([
+      setConfigLoading(true);
+      setPlansLoading(true);
+
+      const [configRes, plansRes, installersRes, suppliersRes, typesRes, vehiclesRes] = await Promise.all([
+        getVendorDeliveryConfig(),
         getVendorDeliveryPlans(),
         getInstallerVendors(),
         getSupplierVendors(),
@@ -64,23 +48,28 @@ const VendorDeliveryPlan = () => {
         getVehicles()
       ]);
 
+      if (configRes.success && configRes.data) {
+        setConfig({
+          distanceThreshold: configRes.data.distanceThreshold,
+          allowPickup: configRes.data.allowPickup,
+          allowDelivery: configRes.data.allowDelivery
+        });
+      }
+
       if (plansRes.success) setPlans(plansRes.data);
 
-      // Combine vendors
       const installers = (installersRes.data || []).map(v => ({ ...v, type: 'Installer', model: 'InstallerVendor' }));
       const suppliers = (suppliersRes.data || []).map(v => ({ ...v, type: 'Supplier', model: 'SupplierVendor' }));
-
-      const combinedVendors = [...installers, ...suppliers];
-      setVendors(combinedVendors);
+      setVendors([...installers, ...suppliers]);
 
       if (typesRes.success) setDeliveryTypes(typesRes.data);
       if (vehiclesRes.success) setVehicles(vehiclesRes.data);
 
     } catch (error) {
       showNotification('Failed to load data', 'error');
-      console.error(error);
     } finally {
-      setLoading(false);
+      setConfigLoading(false);
+      setPlansLoading(false);
     }
   };
 
@@ -93,7 +82,6 @@ const VendorDeliveryPlan = () => {
     }
   };
 
-  // Notification Helper
   const showNotification = (message, type) => {
     setNotification({ show: true, message, type });
     setTimeout(() => {
@@ -101,11 +89,43 @@ const VendorDeliveryPlan = () => {
     }, 3000);
   };
 
-  // Form Handling
-  const handleInputChange = (e) => {
-    const { name, value } = e.target;
+  // Config Handlers
+  const handleConfigInputChange = (e) => {
+    let { name, value, type, checked } = e.target;
+    if (type === 'checkbox') value = checked;
+    else if (type === 'number') value = value === '' ? '' : Number(value);
 
-    // Special handling for vendor select to capture model type
+    setConfig(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleSaveConfig = async () => {
+    if (config.distanceThreshold === '' || isNaN(config.distanceThreshold)) {
+      showNotification('Please enter a valid distance threshold', 'error');
+      return;
+    }
+    try {
+      setConfigSaving(true);
+      const response = await upsertVendorDeliveryConfig(config);
+      if (response.success) {
+        showNotification('Configuration saved successfully', 'success');
+        if (response.data) {
+          setConfig({
+            distanceThreshold: response.data.distanceThreshold,
+            allowPickup: response.data.allowPickup,
+            allowDelivery: response.data.allowDelivery
+          });
+        }
+      }
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to save configuration', 'error');
+    } finally {
+      setConfigSaving(false);
+    }
+  };
+
+  // Plan Handlers
+  const handlePlanInputChange = (e) => {
+    const { name, value } = e.target;
     if (name === 'vendor') {
       const selectedVendor = vendors.find(v => v._id === value);
       setFormData({
@@ -120,12 +140,7 @@ const VendorDeliveryPlan = () => {
 
   const resetForm = () => {
     setFormData({
-      vendor: '',
-      vendorModel: 'InstallerVendor',
-      deliveryType: '',
-      vehicle: '',
-      pricePerDelivery: '',
-      status: 'active'
+      vendor: '', vendorModel: 'InstallerVendor', deliveryType: '', vehicle: '', pricePerDelivery: '', status: 'active'
     });
     setEditingPlan(null);
   };
@@ -152,14 +167,12 @@ const VendorDeliveryPlan = () => {
     resetForm();
   };
 
-  // CRUD Operations
-  const handleSubmit = async (e) => {
+  const handleSavePlan = async (e) => {
     e.preventDefault();
     if (!formData.vendor || !formData.deliveryType || !formData.vehicle || !formData.pricePerDelivery) {
       showNotification('All fields are required', 'error');
       return;
     }
-
     try {
       if (editingPlan) {
         await updateVendorDeliveryPlan(editingPlan._id, formData);
@@ -175,7 +188,7 @@ const VendorDeliveryPlan = () => {
     }
   };
 
-  const handleDelete = async (id) => {
+  const handleDeletePlan = async (id) => {
     if (window.confirm('Are you sure you want to delete this plan?')) {
       try {
         await deleteVendorDeliveryPlan(id);
@@ -187,7 +200,7 @@ const VendorDeliveryPlan = () => {
     }
   };
 
-  const handleStatusToggle = async (plan) => {
+  const handlePlanStatusToggle = async (plan) => {
     try {
       const newStatus = plan.status === 'active' ? 'inactive' : 'active';
       await updateVendorDeliveryPlan(plan._id, { status: newStatus });
@@ -198,42 +211,121 @@ const VendorDeliveryPlan = () => {
     }
   };
 
-  // Filter
   const filteredPlans = plans.filter(plan =>
     plan.vendor?.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     plan.vehicle?.name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
+  if (configLoading || plansLoading) {
+    return (
+      <div className="min-h-[60vh] flex items-center justify-center bg-gray-50">
+        <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-gray-50 p-6">
+    <div className="min-h-screen bg-gray-50 p-6 md:p-8 font-sans">
       {/* Notification Toast */}
       {notification.show && (
-        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
+        <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-4 ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'
           }`}>
           {notification.message}
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-800 flex items-center">
-            <FileText className="w-8 h-8 text-blue-600 mr-3" />
-            Vendor Delivery Plans
-          </h1>
-          <p className="text-gray-600">Manage delivery rates for vendors</p>
+      {/* 1. Global Setup Configuration Card */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden mb-8">
+        <div className="bg-[#0284c7] px-6 py-4">
+          <h2 className="text-xl font-bold text-white tracking-wide">
+            Delivery Type Configuration
+          </h2>
         </div>
-        <button
-          onClick={() => handleOpenModal()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors"
-        >
-          <Plus className="w-5 h-5 mr-2" />
-          Add New Plan
-        </button>
+        <div className="p-8">
+          <div className="mb-8 border-b border-gray-100 pb-8">
+            <h3 className="text-lg font-bold text-gray-800 mb-4">Set Distance Threshold</h3>
+            <div className="flex items-center">
+              <span className="text-gray-600 text-[15px] font-medium mr-4">
+                Auto-select pickup if distance is under
+              </span>
+              <div className="relative flex items-center">
+                <input
+                  type="number"
+                  name="distanceThreshold"
+                  value={config.distanceThreshold}
+                  onChange={handleConfigInputChange}
+                  min="0"
+                  className="w-24 text-center border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 focus:border-blue-500 px-3 py-2 outline-none text-gray-800"
+                />
+              </div>
+              <span className="text-gray-600 text-[15px] ml-4 font-medium">km</span>
+            </div>
+            <p className="text-gray-400 text-sm mt-4 tracking-wide font-medium">
+              Orders under this distance will default to pickup
+            </p>
+          </div>
+
+          <div className="mb-8 border border-gray-100 rounded-lg p-5">
+            <h3 className="text-[16px] font-bold text-[#1e293b] mb-4">Current Configuration</h3>
+            <div className="flex items-center space-x-6 mb-6 mt-2 ml-1 text-sm font-medium text-[#0284c7]">
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="allowPickup"
+                  checked={config.allowPickup}
+                  onChange={handleConfigInputChange}
+                  className="w-3 h-3 mr-2 border-gray-300 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                Pickup
+              </label>
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="allowDelivery"
+                  checked={config.allowDelivery}
+                  onChange={handleConfigInputChange}
+                  className="w-3 h-3 mr-2 border-gray-300 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
+                />
+                Delivery
+              </label>
+            </div>
+            <div className="text-[15px] text-gray-500 mt-2">
+              Currently: <span className="font-bold text-gray-700">Pickup</span> for &lt;{config.distanceThreshold}km, <span className="font-bold text-gray-700">Delivery</span> for &ge;{config.distanceThreshold}km
+            </div>
+          </div>
+          <div>
+            <button
+              onClick={handleSaveConfig}
+              disabled={configSaving}
+              className="bg-[#0284c7] hover:bg-[#0369a1] text-white font-bold py-2 px-5 rounded text-sm transition-colors tracking-wide disabled:opacity-70 disabled:cursor-not-allowed flex items-center"
+            >
+              {configSaving ? (
+                <><Loader className="w-4 h-4 mr-2 animate-spin" /> Saving...</>
+              ) : 'Save Configuration'}
+            </button>
+          </div>
+        </div>
       </div>
 
-      {/* Search and List */}
-      <div className="bg-white rounded-xl shadow-sm p-6">
+      {/* 2. Vendor Specific Plans Restored Section */}
+      <div className="bg-white rounded-xl shadow-sm p-6 mt-8">
+        <div className="mb-6 flex justify-between items-center border-b pb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+              <FileText className="w-6 h-6 text-blue-600 mr-3" />
+              Vendor Delivery Plans Map
+            </h1>
+            <p className="text-gray-600 text-sm mt-1">Manage unique delivery rates for individual vendors</p>
+          </div>
+          <button
+            onClick={() => handleOpenModal()}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center transition-colors text-sm font-medium"
+          >
+            <Plus className="w-4 h-4 mr-2" />
+            Add New Plan
+          </button>
+        </div>
+
         <div className="mb-6 relative">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
           <input
@@ -245,30 +337,26 @@ const VendorDeliveryPlan = () => {
           />
         </div>
 
-        {loading ? (
-          <div className="flex justify-center py-12">
-            <Loader className="w-8 h-8 text-blue-600 animate-spin" />
-          </div>
-        ) : filteredPlans.length === 0 ? (
-          <div className="text-center py-12 text-gray-500">
+        {filteredPlans.length === 0 ? (
+          <div className="text-center py-12 text-gray-500 bg-gray-50 rounded-lg">
             No vendor delivery plans found.
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="overflow-x-auto border border-gray-200 rounded-lg">
             <table className="w-full">
-              <thead className="bg-gray-50 text-gray-600 text-sm">
+              <thead className="bg-gray-50 text-gray-600 text-sm border-b border-gray-200">
                 <tr>
-                  <th className="px-6 py-3 text-left">Vendor</th>
-                  <th className="px-6 py-3 text-left">Delivery Type</th>
-                  <th className="px-6 py-3 text-left">Vehicle</th>
-                  <th className="px-6 py-3 text-left">Price/Delivery</th>
-                  <th className="px-6 py-3 text-left">Status</th>
-                  <th className="px-6 py-3 text-right">Actions</th>
+                  <th className="px-6 py-3 text-left font-semibold">Vendor</th>
+                  <th className="px-6 py-3 text-left font-semibold">Delivery Type</th>
+                  <th className="px-6 py-3 text-left font-semibold">Vehicle</th>
+                  <th className="px-6 py-3 text-left font-semibold">Price/Delivery</th>
+                  <th className="px-6 py-3 text-left font-semibold">Status</th>
+                  <th className="px-6 py-3 text-right font-semibold">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {filteredPlans.map((plan) => (
-                  <tr key={plan._id} className="hover:bg-gray-50">
+                  <tr key={plan._id} className="hover:bg-gray-50 transition-colors">
                     <td className="px-6 py-4">
                       <div className="flex items-center">
                         <div className="bg-blue-100 p-2 rounded-full mr-3">
@@ -297,7 +385,7 @@ const VendorDeliveryPlan = () => {
                     </td>
                     <td className="px-6 py-4">
                       <button
-                        onClick={() => handleStatusToggle(plan)}
+                        onClick={() => handlePlanStatusToggle(plan)}
                         className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium cursor-pointer ${plan.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
                           }`}
                       >
@@ -308,14 +396,14 @@ const VendorDeliveryPlan = () => {
                       <div className="flex justify-end space-x-2">
                         <button
                           onClick={() => handleOpenModal(plan)}
-                          className="p-1 text-blue-600 hover:bg-blue-50 rounded"
+                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
                           title="Edit"
                         >
                           <Edit className="w-4 h-4" />
                         </button>
                         <button
-                          onClick={() => handleDelete(plan._id)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
+                          onClick={() => handleDeletePlan(plan._id)}
+                          className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
                           title="Delete"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -330,14 +418,14 @@ const VendorDeliveryPlan = () => {
         )}
       </div>
 
-      {/* Modal */}
+      {/* Modal for Creating/Editing Individual Vendor Plans */}
       {showModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-xl font-bold text-gray-800 mb-4">
-              {editingPlan ? 'Edit Plan' : 'Add New Plan'}
+            <h2 className="text-xl font-bold text-gray-800 mb-4 border-b pb-2">
+              {editingPlan ? 'Edit Vendor Plan' : 'Add New Vendor Plan'}
             </h2>
-            <form onSubmit={handleSubmit}>
+            <form onSubmit={handleSavePlan}>
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -346,8 +434,8 @@ const VendorDeliveryPlan = () => {
                   <select
                     name="vendor"
                     value={formData.vendor}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={handlePlanInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     required
                   >
                     <option value="">Select Vendor</option>
@@ -364,8 +452,8 @@ const VendorDeliveryPlan = () => {
                   <select
                     name="deliveryType"
                     value={formData.deliveryType}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={handlePlanInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     required
                   >
                     <option value="">Select Delivery Type</option>
@@ -382,8 +470,8 @@ const VendorDeliveryPlan = () => {
                   <select
                     name="vehicle"
                     value={formData.vehicle}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={handlePlanInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     required
                   >
                     <option value="">Select Vehicle</option>
@@ -401,8 +489,8 @@ const VendorDeliveryPlan = () => {
                     type="number"
                     name="pricePerDelivery"
                     value={formData.pricePerDelivery}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={handlePlanInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                     placeholder="0.00"
                     min="0"
                     required
@@ -416,8 +504,8 @@ const VendorDeliveryPlan = () => {
                   <select
                     name="status"
                     value={formData.status}
-                    onChange={handleInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    onChange={handlePlanInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
                   >
                     <option value="active">Active</option>
                     <option value="inactive">Inactive</option>
@@ -429,15 +517,15 @@ const VendorDeliveryPlan = () => {
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors"
+                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors text-sm font-medium"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors"
+                  className="px-4 py-2 text-white bg-blue-600 hover:bg-blue-700 rounded-lg transition-colors text-sm font-medium cursor-pointer"
                 >
-                  {editingPlan ? 'Update' : 'Create'}
+                  {editingPlan ? 'Update Plan' : 'Create Plan'}
                 </button>
               </div>
             </form>

@@ -38,6 +38,8 @@ import ChecklistSetting from './admin/pages/settings/ChecklistSetting';
 // HR Settings
 import RoleSettings from './admin/pages/settings/hr/RoleSettings';
 import CreateDepartment from './admin/pages/settings/hr/CreateDepartment';
+import ManageEmployees from './admin/pages/settings/hr/ManageEmployees';
+import ManageModules from './admin/pages/settings/hr/ManageModules';
 import DepartmentWiseModules from './admin/pages/settings/hr/DepartmentWiseModules';
 import TemporaryInchargeSetting from './admin/pages/settings/hr/TemporaryInchargeSetting';
 
@@ -64,8 +66,10 @@ import VendorDeliveryPlan from './admin/pages/settings/delivery/VendorDeliveryPl
 // Installer Settings
 import SolarInstaller from './admin/pages/settings/installer/SolarInstaller';
 import ToolRequirements from './admin/pages/settings/installer/ToolRequirements';
-import RateSetting from './admin/pages/settings/installer/RateSetting';
+import RatingSetting from './admin/pages/settings/installer/RatingSetting';
 import Agency from './admin/pages/settings/installer/Agency';
+import AgencyPlan from './admin/pages/settings/installer/AgencyPlan';
+
 
 // Inventory Settings
 import InventoryOverview from './admin/pages/settings/inventory/InventoryOverview';
@@ -90,8 +94,7 @@ import CreateSolarkit from './admin/pages/settings/combokit/CreateSolarkit';
 import CreateAmc from './admin/pages/settings/combokit/CreateAmc';
 import AmcServices from './admin/pages/settings/combokit/AmcServices';
 import BundlePlans from './admin/pages/settings/combokit/BundlePlans';
-import ForFranchisee from './admin/pages/settings/combokit/ForFranchisee';
-import ForDealer from './admin/pages/settings/combokit/ForDealer';
+import AddComboKit from './admin/pages/settings/combokit/AddComboKit';
 import Customize from './admin/pages/settings/combokit/Customize';
 
 // ComboKit Overview Settings (direct file)
@@ -371,6 +374,8 @@ function App() {
             {/* HR Settings */}
             <Route path="settings/hr/role-settings" element={<RoleSettings />} />
             <Route path="settings/hr/create-department" element={<CreateDepartment />} />
+            <Route path="settings/hr/manage-employees" element={<ManageEmployees />} />
+            <Route path="settings/hr/manage-modules" element={<ManageModules />} />
             <Route path="settings/hr/department-wise-modules" element={<DepartmentWiseModules />} />
             <Route path="settings/hr/temporary-incharge-setting" element={<TemporaryInchargeSetting />} />
 
@@ -397,8 +402,10 @@ function App() {
             {/* Installer Settings */}
             <Route path="settings/installer/solar-installer" element={<SolarInstaller />} />
             <Route path="settings/installer/tool-requirements" element={<ToolRequirements />} />
-            <Route path="settings/installer/rate-setting" element={<RateSetting />} />
+            <Route path="settings/installer/rating-setting" element={<RatingSetting />} />
             <Route path="settings/installer/agency" element={<Agency />} />
+            <Route path="settings/installer/agency-plans" element={<AgencyPlan />} />
+
 
             {/* Inventory Settings */}
             <Route path="settings/inventory/inventory-overview" element={<InventoryOverview />} />
@@ -423,8 +430,7 @@ function App() {
             <Route path="settings/combokit/create-amc" element={<CreateAmc />} />
             <Route path="settings/combokit/amc-services" element={<AmcServices />} />
             <Route path="settings/combokit/bundle-plans" element={<BundlePlans />} />
-            <Route path="settings/combokit/for-franchisee" element={<ForFranchisee />} />
-            <Route path="settings/combokit/for-dealer" element={<ForDealer />} />
+            <Route path="settings/combokit/add-combokit" element={<AddComboKit />} />
             <Route path="settings/combokit/customize" element={<Customize />} />
 
             {/* ComboKit Overview Settings */}

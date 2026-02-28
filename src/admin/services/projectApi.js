@@ -21,10 +21,12 @@ export const getAllProjects = async (filters = {}) => {
     }
 };
 
-export const getProjectStats = async (stateId) => {
+export const getProjectStats = async (filters = {}) => {
     try {
         const queryParams = new URLSearchParams();
-        if (stateId) queryParams.append('stateId', stateId);
+        Object.keys(filters).forEach(key => {
+            if (filters[key]) queryParams.append(key, filters[key]);
+        });
 
         const response = await axios.get(`${API_URL}/stats?${queryParams.toString()}`);
         return response.data;

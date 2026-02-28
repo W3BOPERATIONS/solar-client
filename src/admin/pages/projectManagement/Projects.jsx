@@ -11,6 +11,7 @@ import { useLocations } from '../../../hooks/useLocations';
 import { getAllProjects, getProjectStats, createProject, updateProject, deleteProject } from '../../services/projectApi';
 import { X, Plus, Edit2, Trash2, Save } from 'lucide-react'; // Added icons for CRUD
 
+import { useLocation } from 'react-router-dom';
 import './Projects.css';
 
 export default function AdminProjectManagement() {
@@ -20,6 +21,7 @@ export default function AdminProjectManagement() {
   const [currentDistrict, setCurrentDistrict] = useState(null);
   const [mainContainerVisible, setMainContainerVisible] = useState(false);
   const [selectedStateCard, setSelectedStateCard] = useState(null);
+  const location = useLocation();
   const [selectedStatus, setSelectedStatus] = useState("all");
   const [selectedCP, setSelectedCP] = useState("all");
   const [selectedDistrict, setSelectedDistrict] = useState("all");
@@ -56,8 +58,17 @@ export default function AdminProjectManagement() {
 
   useEffect(() => {
     fetchStates();
+
+    // Check for status in URL query params
+    const params = new URLSearchParams(location.search);
+    const statusParam = params.get('status');
+    if (statusParam) {
+      setSelectedStatus(statusParam);
+      setMainContainerVisible(true);
+      setLocationCardsVisible(false);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [location.search]);
 
   // Fetch initial stats or overall stats
   useEffect(() => {

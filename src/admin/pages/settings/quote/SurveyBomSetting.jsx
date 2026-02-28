@@ -76,35 +76,17 @@ export default function SurveyBomSetting() {
         getStructureTypes()
       ]);
 
-      // Process Project Types from Quote Settings
-      // We want uniqueness based on Category, SubCategory, ProjectType, SubProjectType
-      const uniqueProjects = [];
-      const seen = new Set();
-
-      quotesData.forEach(q => {
-        const key = `${q.category}-${q.subCategory}-${q.projectType}-${q.subProjectType}`;
-        if (!seen.has(key)) {
-          seen.add(key);
-          uniqueProjects.push({
-            id: q._id, // Use the quote setting ID as a reference, or generate one
-            category: q.category,
-            subCategory: q.subCategory,
-            projectType: q.projectType,
-            subProjectType: q.subProjectType,
-            // Calculate total BOMs later
-          });
-        }
-      });
-
-      // Calculate totals
-      const projectsWithCounts = uniqueProjects.map(p => {
-        const count = bomsData.filter(b =>
-          b.category === p.category &&
-          b.subCategory === p.subCategory &&
-          b.projectType === p.projectType &&
-          b.subProjectType === p.subProjectType
-        ).length;
-        return { ...p, totalBom: count };
+      // Automatic Table Row Generation: Use all active combinations from QuoteSettings
+      const projectsWithCounts = quotesData.filter(q => q.isActive !== false).map(q => {
+        const count = bomsData.filter(b => b.quoteSettingsId === q._id).length;
+        return {
+          id: q._id,
+          category: q.category,
+          subCategory: q.subCategory,
+          projectType: q.projectType,
+          subProjectType: q.subProjectType,
+          totalBom: count
+        };
       });
 
       setProjectTypes(projectsWithCounts);
@@ -218,6 +200,7 @@ export default function SurveyBomSetting() {
     if (!selectedProject) return;
 
     const payload = {
+      quoteSettingsId: selectedProject.id,
       category: selectedProject.category,
       subCategory: selectedProject.subCategory,
       projectType: selectedProject.projectType,
@@ -295,73 +278,87 @@ export default function SurveyBomSetting() {
   };
 
   // Filter BOMs for the currently selected project for the list view
-  const projectBoms = selectedProject ? surveyBoms.filter(b =>
-    b.category === selectedProject.category &&
-    b.subCategory === selectedProject.subCategory &&
-    b.projectType === selectedProject.projectType &&
-    b.subProjectType === selectedProject.subProjectType
-  ) : [];
+  const projectBoms = selectedProject ? surveyBoms.filter(b => b.quoteSettingsId === selectedProject.id) : [];
+
+  const tableHeaderStyle = "px-6 py-4 text-xs font-black text-white uppercase tracking-widest text-center border-r border-[#4db2eb]/30 last:border-r-0";
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
       {/* Header */}
-      <div className="mb-6">
-        <nav className="bg-white rounded-lg shadow-sm p-4">
-          <h1 className="text-2xl font-bold text-gray-800">Survey BOM Settings</h1>
-        </nav>
+      <div className="mb-8">
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-blue-600 p-2.5 rounded-xl text-white shadow-lg shadow-blue-100">
+              <Settings size={28} />
+            </div>
+            <h1 className="text-3xl font-black text-gray-800 tracking-tight">Survey BOM Settings</h1>
+          </div>
+        </div>
       </div>
 
       {/* Project Type Table */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 overflow-hidden">
-        <table className="min-w-full border-collapse">
-          <thead className="bg-gray-50">
-            <tr>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Create BOM</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Category</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Sub Category</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Project Type</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Sub Project Type</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Total BOM Created</th>
-              <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {projectTypes.length === 0 ? (
-              <tr>
-                <td colSpan="7" className="p-4 text-center text-gray-500">No project types found. Please configure Quote Settings first.</td>
+      <div className="bg-white rounded-3xl shadow-xl shadow-gray-200/50 border border-gray-100 mb-8 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-[#4db2eb]">
+                <th className={tableHeaderStyle}>Create BOM</th>
+                <th className={tableHeaderStyle}>Category</th>
+                <th className={tableHeaderStyle}>Sub Category</th>
+                <th className={tableHeaderStyle}>Project Type</th>
+                <th className={tableHeaderStyle}>Sub Project Type</th>
+                <th className={tableHeaderStyle}>Total BOM Created</th>
+                <th className={tableHeaderStyle}>Actions</th>
               </tr>
-            ) : projectTypes.map((project, idx) => (
-              <tr key={idx} className="hover:bg-gray-50">
-                <td className="border border-gray-300 px-4 py-3">
-                  <button
-                    className="bg-blue-600 text-white px-3 py-1.5 rounded hover:bg-blue-700 flex items-center gap-1 text-sm"
-                    onClick={() => handleOpenCreateModal(project)}
-                  >
-                    <Plus size={14} />
-                    Create BOM
-                  </button>
-                </td>
-                <td className="border border-gray-300 px-4 py-3 text-center">{project.category}</td>
-                <td className="border border-gray-300 px-4 py-3 text-center">{project.subCategory}</td>
-                <td className="border border-gray-300 px-4 py-3 text-center">{project.projectType}</td>
-                <td className="border border-gray-300 px-4 py-3 text-center">{project.subProjectType}</td>
-                <td className="border border-gray-300 px-4 py-3 text-center font-medium">{project.totalBom}</td>
-                <td className="border border-gray-300 px-4 py-3">
-                  <div className="flex justify-center">
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {projectTypes.length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="p-12 text-center">
+                    <div className="flex flex-col items-center gap-3 text-gray-400">
+                      <Package size={48} strokeWidth={1.5} />
+                      <p className="font-bold">No project types found. Configure Quote Settings first.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : projectTypes.map((project, idx) => (
+                <tr key={idx} className="hover:bg-blue-50/30 transition-colors group">
+                  <td className="px-6 py-5 border-r border-gray-50">
                     <button
-                      className={`flex items-center gap-1 px-3 py-1.5 rounded text-sm ${project.totalBom > 0 ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'bg-gray-100 text-gray-400 cursor-not-allowed'}`}
+                      className="w-full bg-blue-600 text-white px-4 py-2.5 rounded-xl font-bold hover:bg-blue-700 transition-all active:scale-95 flex items-center justify-center gap-2 text-xs shadow-md shadow-blue-100"
+                      onClick={() => handleOpenCreateModal(project)}
+                    >
+                      <Plus size={16} strokeWidth={3} />
+                      CREATE BOM
+                    </button>
+                  </td>
+                  <td className="px-6 py-5 text-center font-bold text-gray-600 text-sm border-r border-gray-50">{project.category}</td>
+                  <td className="px-6 py-5 text-center font-bold text-gray-600 text-sm border-r border-gray-50">{project.subCategory}</td>
+                  <td className="px-6 py-5 text-center font-bold text-gray-600 text-sm border-r border-gray-50">{project.projectType}</td>
+                  <td className="px-6 py-5 text-center font-bold text-gray-600 text-sm border-r border-gray-50">{project.subProjectType}</td>
+                  <td className="px-6 py-5 text-center border-r border-gray-50">
+                    <span className="inline-flex items-center justify-center min-w-[32px] h-8 bg-blue-100 text-blue-700 rounded-full text-sm font-black shadow-inner">
+                      {project.totalBom}
+                    </span>
+                  </td>
+                  <td className="px-6 py-5 text-center">
+                    <button
+                      className={`inline-flex items-center gap-2 px-6 py-2.5 rounded-xl text-xs font-black transition-all ${project.totalBom > 0
+                        ? 'bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white shadow-sm ring-1 ring-blue-100'
+                        : 'bg-gray-50 text-gray-300 cursor-not-allowed'
+                        }`}
                       onClick={() => project.totalBom > 0 && handleViewBomDetails(project)}
                       disabled={project.totalBom === 0}
                     >
-                      <Eye size={14} />
-                      View
+                      <Eye size={16} strokeWidth={2.5} />
+                      VIEW
                     </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
 
       {/* BOM Configurations List */}
@@ -410,81 +407,72 @@ export default function SurveyBomSetting() {
           )}
 
           {/* Detailed View Section */}
-          {showDetailedView && currentBom && (
-            <div className="bg-white rounded-lg border border-gray-200 p-6 mt-6 shadow-sm">
-              <div className="bg-gray-600 text-white rounded-t-lg p-3 mb-4">
-                <h3 className="text-lg font-semibold flex items-center gap-2">
-                  <FileText size={20} />
-                  Detailed BOM View
-                </h3>
-              </div>
+          {showDetailedView && currentBom && (() => {
+            const allItems = [
+              ...(currentBom.pipes || []).map(p => ({ ...p, category: 'Standard Pipes' })),
+              ...(currentBom.accessories || []).map(a => ({ ...a, category: 'Accessories' })),
+              ...(currentBom.wires || []).map(w => ({ ...w, category: 'Wires' }))
+            ];
 
-              <div className="bg-gray-50 rounded-lg p-4 mb-4">
-                <h4 className="text-gray-700 font-semibold mb-3 flex items-center gap-2">
-                  <Building size={16} />
-                  Configuration Details
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="flex">
-                    <span className="font-semibold text-gray-600 w-32">Terrace Type:</span>
-                    <span className="text-gray-800">{currentBom.terraceType}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold text-gray-600 w-32">Building Type:</span>
-                    <span className="text-gray-800">{currentBom.buildingType}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold text-gray-600 w-32">Structure Type:</span>
-                    <span className="text-gray-800">{currentBom.structureType}</span>
-                  </div>
-                  <div className="flex">
-                    <span className="font-semibold text-gray-600 w-32">Floors:</span>
-                    <span className="text-gray-800">{currentBom.floorCount || 'N/A'}</span>
-                  </div>
+            const totalQty = allItems.reduce((acc, item) => acc + (item.formulaQty || item.qty || 0), 0);
+            const grandTotal = allItems.reduce((acc, item) => acc + ((item.formulaQty || item.qty || 0) * (item.price || 0)), 0);
+
+            return (
+              <div className="bg-white rounded-3xl border border-gray-100 mt-8 shadow-2xl shadow-gray-200/50 overflow-hidden">
+                {/* Dark Grey Header Bar */}
+                <div className="bg-[#5e666d] px-8 py-5 flex justify-between items-center">
+                  <h3 className="text-xl font-black text-white tracking-tight uppercase">
+                    Detailed BOM View
+                  </h3>
                 </div>
-              </div>
 
-              <div className="space-y-4">
-                {/* Detailed Tables for Pipes, Accessories, Wires */}
-                {['pipes', 'accessories', 'wires'].map(type => (
-                  <div key={type} className="bg-white border border-gray-200 rounded-lg p-4">
-                    <h4 className="font-semibold text-gray-800 mb-3 capitalize">{type}</h4>
-                    <table className="min-w-full border border-gray-300 text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          <th className="border px-2 py-1">Item</th>
-                          <th className="border px-2 py-1">Qty</th>
-                          <th className="border px-2 py-1">Price</th>
-                          <th className="border px-2 py-1">Total</th>
+                <div className="p-8">
+                  {/* Close Button Row */}
+                  <div className="flex justify-end mb-6">
+                    <button
+                      className="bg-[#5e666d] text-white px-8 py-2.5 rounded-xl font-black text-xs hover:bg-gray-800 transition-all active:scale-95 shadow-md"
+                      onClick={() => setShowDetailedView(false)}
+                    >
+                      Close
+                    </button>
+                  </div>
+
+                  <div className="rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-[#72b5f1]">
+                          <th className="px-6 py-5 text-sm font-black text-white border-r border-white/20 last:border-r-0">Category</th>
+                          <th className="px-6 py-5 text-sm font-black text-white border-r border-white/20 last:border-r-0">Item Name</th>
+                          <th className="px-6 py-5 text-sm font-black text-white text-center border-r border-white/20 last:border-r-0">Quantity</th>
+                          <th className="px-6 py-5 text-sm font-black text-white text-center border-r border-white/20 last:border-r-0">Price</th>
+                          <th className="px-6 py-5 text-sm font-black text-white text-right last:border-r-0">Total Price</th>
                         </tr>
                       </thead>
-                      <tbody>
-                        {currentBom[type]?.map((item, i) => (
-                          <tr key={i}>
-                            <td className="border px-2 py-1">{item.price ? item.product : item.item}</td>
-                            <td className="border px-2 py-1 text-center">{item.formulaQty || item.qty}</td>
-                            <td className="border px-2 py-1 text-right">{item.price}</td>
-                            <td className="border px-2 py-1 text-right">{((item.formulaQty || item.qty) * item.price).toFixed(2)}</td>
+                      <tbody className="divide-y divide-gray-100">
+                        {allItems.map((item, i) => (
+                          <tr key={i} className={i % 2 === 1 ? 'bg-[#f8fafd]' : 'bg-white'}>
+                            <td className="px-6 py-4 font-black text-gray-400 text-sm border-r border-gray-50">{item.category}</td>
+                            <td className="px-6 py-4 font-bold text-gray-700 text-sm border-r border-gray-50">{item.product || item.item || item.formulaItem}</td>
+                            <td className="px-6 py-4 text-center font-bold text-gray-600 text-sm border-r border-gray-50">{item.formulaQty || item.qty}</td>
+                            <td className="px-6 py-4 text-center font-bold text-gray-600 text-sm border-r border-gray-50">${(item.price || 0).toFixed(2)}</td>
+                            <td className="px-6 py-4 text-right font-black text-blue-600 text-sm">${((item.formulaQty || item.qty || 0) * (item.price || 0)).toFixed(2)}</td>
                           </tr>
                         ))}
                       </tbody>
+                      <tfoot>
+                        <tr className="bg-[#72b5f1]/10">
+                          <td colSpan="2" className="px-6 py-6 font-black text-blue-600 uppercase tracking-widest bg-[#72b5f1] text-white">Grand Total</td>
+                          <td className="px-6 py-6 text-center font-black text-white bg-[#72b5f1]">{totalQty}</td>
+                          <td className="bg-[#72b5f1]"></td>
+                          <td className="px-6 py-6 text-right font-black text-white bg-[#72b5f1] tracking-widest">${grandTotal.toFixed(2)}</td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
-                ))}
+                </div>
               </div>
-
-              <div className="flex justify-end mt-4">
-                <button
-                  className="bg-gray-200 text-gray-700 px-3 py-1.5 rounded hover:bg-gray-300 flex items-center gap-1 text-sm"
-                  onClick={() => setShowDetailedView(false)}
-                >
-                  <X size={14} />
-                  Close Detail
-                </button>
-              </div>
-
-            </div>
-          )}
+            );
+          })()}
         </div>
       )}
 
@@ -505,6 +493,35 @@ export default function SurveyBomSetting() {
 
             {/* Modal Body */}
             <div className="p-6">
+              {selectedProject && (
+                <div className="bg-blue-50/50 border border-blue-100 rounded-2xl p-4 mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 ml-1">Category</label>
+                    <div className="bg-white border border-blue-100 rounded-xl px-4 py-2 font-bold text-gray-700 text-xs shadow-sm shadow-blue-50">
+                      {selectedProject.category}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 ml-1">Sub Category</label>
+                    <div className="bg-white border border-blue-100 rounded-xl px-4 py-2 font-bold text-gray-700 text-xs shadow-sm shadow-blue-50">
+                      {selectedProject.subCategory}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 ml-1">Project Type</label>
+                    <div className="bg-white border border-blue-100 rounded-xl px-4 py-2 font-bold text-gray-700 text-xs shadow-sm shadow-blue-50">
+                      {selectedProject.projectType}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-black text-blue-400 uppercase tracking-widest mb-1 ml-1">Sub Proj Type</label>
+                    <div className="bg-white border border-blue-100 rounded-xl px-4 py-2 font-bold text-gray-700 text-xs shadow-sm shadow-blue-50">
+                      {selectedProject.subProjectType}
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <form id="bomForm">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div>

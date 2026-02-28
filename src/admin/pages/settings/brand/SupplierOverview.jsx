@@ -10,7 +10,8 @@ import {
   X,
   Plus,
   Edit2,
-  Trash2
+  Trash2,
+  ChevronDown
 } from 'lucide-react';
 import axios from 'axios';
 import {
@@ -72,6 +73,49 @@ const BrandSupplierOverview = () => {
   // --- Modal Location Options ---
   const [modalCities, setModalCities] = useState([]);
   const [modalDistricts, setModalDistricts] = useState([]);
+
+  // --- Dropdown States ---
+  const [openDropdown, setOpenDropdown] = useState(null);
+
+  // Reusable Filter Dropdown Component
+  const FilterDropdown = ({ label, options, selectedValues, onSelect, isOpen, onToggle }) => {
+    return (
+      <div className="relative">
+        <label className="block text-sm font-medium mb-2 text-gray-700">{label}</label>
+        <div
+          className="w-full border border-gray-300 rounded-md p-2 bg-white flex justify-between items-center cursor-pointer hover:border-blue-500 transition-colors"
+          onClick={onToggle}
+        >
+          <span className="text-sm text-gray-600 truncate">
+            {selectedValues.length === 0
+              ? `Select ${label}`
+              : `${selectedValues.length} Selected`}
+          </span>
+          <ChevronDown size={18} className={`text-gray-400 transition-transform ${isOpen ? 'rotate-180' : ''}`} />
+        </div>
+
+        {isOpen && (
+          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-y-auto">
+            {options.map((option) => (
+              <div
+                key={option}
+                className="flex items-center gap-3 p-3 hover:bg-blue-50 cursor-pointer border-b last:border-0"
+                onClick={() => onSelect(option)}
+              >
+                <div className={`w-4 h-4 border rounded flex items-center justify-center transition-colors ${selectedValues.includes(option) ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
+                  {selectedValues.includes(option) && <Check size={12} className="text-white" />}
+                </div>
+                <span className="text-sm text-gray-700">{option}</span>
+              </div>
+            ))}
+            {options.length === 0 && (
+              <div className="p-4 text-center text-sm text-gray-500 italic">No options available</div>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   // --- Initial Fetch ---
   useEffect(() => {
@@ -405,33 +449,165 @@ const BrandSupplierOverview = () => {
         </div>
       )}
 
-      {/* Filter Section (Simplified Multi-selects for demo, can be expanded) */}
+      {/* Filter Section */}
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Filter Section</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Advanced Filters</h2>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
           {/* Supplier Type */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Supplier Type</label>
-            <select multiple className="w-full border rounded h-32 p-2" onChange={e => setSupplierTypes(Array.from(e.target.selectedOptions, o => o.value))}>
-              <option value="Dealer">Dealer</option>
-              <option value="Distributor">Distributor</option>
-            </select>
-          </div>
-          {/* Products */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Products</label>
-            <select multiple className="w-full border rounded h-32 p-2" onChange={e => setProducts(Array.from(e.target.selectedOptions, o => o.value))}>
-              {Array.from(new Set(suppliers.map(s => s.product))).map(p => <option key={p} value={p}>{p}</option>)}
-            </select>
-          </div>
-          {/* Categories */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Categories</label>
-            <select multiple className="w-full border rounded h-32 p-2" onChange={e => setCategories(Array.from(e.target.selectedOptions, o => o.value))}>
-              {Array.from(new Set(suppliers.map(s => s.category))).map(c => <option key={c} value={c}>{c}</option>)}
-            </select>
-          </div>
+          <FilterDropdown
+            label="Supplier Type"
+            options={['Dealer', 'Distributor']}
+            selectedValues={supplierTypes}
+            onSelect={(val) => {
+              const newTypes = supplierTypes.includes(val)
+                ? supplierTypes.filter(t => t !== val)
+                : [...supplierTypes, val];
+              setSupplierTypes(newTypes);
+            }}
+            isOpen={openDropdown === 'type'}
+            onToggle={() => setOpenDropdown(openDropdown === 'type' ? null : 'type')}
+          />
+
+          {/* Helper function for dynamic options */}
+          {(() => {
+            const getDynamicOptions = (field, currentFilters) => {
+              return Array.from(new Set(
+                suppliers
+                  .filter(s => {
+                    // Filter by location
+                    if (selectedStates.size > 0 && !selectedStates.has(s.state?._id || s.state)) return false;
+                    if (selectedCities.size > 0 && !selectedCities.has(s.cluster?._id || s.cluster)) return false;
+                    if (selectedDistricts.size > 0 && !selectedDistricts.has(s.district?._id || s.district)) return false;
+
+                    // Filter by ALL other advanced filters except the current one
+                    if (currentFilters.supplierTypes?.length > 0 && !currentFilters.supplierTypes.includes(s.type)) return false;
+                    if (field !== 'product' && products.length > 0 && !products.includes(s.product)) return false;
+                    if (field !== 'category' && categories.length > 0 && !categories.includes(s.category)) return false;
+                    if (field !== 'subCategory' && subCategories.length > 0 && !subCategories.includes(s.subCategory)) return false;
+                    if (field !== 'projectType' && projectTypes.length > 0 && !projectTypes.includes(s.projectType)) return false;
+                    if (field !== 'subProjectType' && subProjectTypes.length > 0 && !subProjectTypes.includes(s.subProjectType)) return false;
+                    if (field !== 'procurementType' && procurementTypes.length > 0 && !procurementTypes.includes(s.procurementType)) return false;
+
+                    return true;
+                  })
+                  .map(s => s[field])
+              )).filter(val => val).sort();
+            };
+
+            return (
+              <>
+                {/* Products */}
+                <FilterDropdown
+                  label="Products"
+                  options={getDynamicOptions('product', { supplierTypes })}
+                  selectedValues={products}
+                  onSelect={(val) => {
+                    const newProds = products.includes(val)
+                      ? products.filter(p => p !== val)
+                      : [...products, val];
+                    setProducts(newProds);
+                  }}
+                  isOpen={openDropdown === 'product'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'product' ? null : 'product')}
+                />
+
+                {/* Categories */}
+                <FilterDropdown
+                  label="Categories"
+                  options={getDynamicOptions('category', { supplierTypes })}
+                  selectedValues={categories}
+                  onSelect={(val) => {
+                    const newCats = categories.includes(val)
+                      ? categories.filter(c => c !== val)
+                      : [...categories, val];
+                    setCategories(newCats);
+                  }}
+                  isOpen={openDropdown === 'category'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'category' ? null : 'category')}
+                />
+
+                {/* Sub Categories */}
+                <FilterDropdown
+                  label="Sub Categories"
+                  options={getDynamicOptions('subCategory', { supplierTypes })}
+                  selectedValues={subCategories}
+                  onSelect={(val) => {
+                    const newSubCats = subCategories.includes(val)
+                      ? subCategories.filter(c => c !== val)
+                      : [...subCategories, val];
+                    setSubCategories(newSubCats);
+                  }}
+                  isOpen={openDropdown === 'subCategory'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'subCategory' ? null : 'subCategory')}
+                />
+
+                {/* Project Types */}
+                <FilterDropdown
+                  label="Project Types"
+                  options={getDynamicOptions('projectType', { supplierTypes })}
+                  selectedValues={projectTypes}
+                  onSelect={(val) => {
+                    const newTypes = projectTypes.includes(val)
+                      ? projectTypes.filter(c => c !== val)
+                      : [...projectTypes, val];
+                    setProjectTypes(newTypes);
+                  }}
+                  isOpen={openDropdown === 'projectType'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'projectType' ? null : 'projectType')}
+                />
+
+                {/* Sub Project Types */}
+                <FilterDropdown
+                  label="Sub Project Types"
+                  options={getDynamicOptions('subProjectType', { supplierTypes })}
+                  selectedValues={subProjectTypes}
+                  onSelect={(val) => {
+                    const newTypes = subProjectTypes.includes(val)
+                      ? subProjectTypes.filter(c => c !== val)
+                      : [...subProjectTypes, val];
+                    setSubProjectTypes(newTypes);
+                  }}
+                  isOpen={openDropdown === 'subProjectType'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'subProjectType' ? null : 'subProjectType')}
+                />
+
+                {/* Procurement Types */}
+                <FilterDropdown
+                  label="Procurement Types"
+                  options={getDynamicOptions('procurementType', { supplierTypes })}
+                  selectedValues={procurementTypes}
+                  onSelect={(val) => {
+                    const newTypes = procurementTypes.includes(val)
+                      ? procurementTypes.filter(c => c !== val)
+                      : [...procurementTypes, val];
+                    setProcurementTypes(newTypes);
+                  }}
+                  isOpen={openDropdown === 'procurementType'}
+                  onToggle={() => setOpenDropdown(openDropdown === 'procurementType' ? null : 'procurementType')}
+                />
+              </>
+            );
+          })()}
         </div>
+        {/* Reset All Filters Button */}
+        {(supplierTypes.length > 0 || products.length > 0 || categories.length > 0 || subCategories.length > 0 || projectTypes.length > 0 || subProjectTypes.length > 0 || procurementTypes.length > 0) && (
+          <div className="mt-6 flex justify-end">
+            <button
+              onClick={() => {
+                setSupplierTypes([]);
+                setProducts([]);
+                setCategories([]);
+                setSubCategories([]);
+                setProjectTypes([]);
+                setSubProjectTypes([]);
+                setProcurementTypes([]);
+              }}
+              className="text-sm text-red-500 hover:text-red-700 flex items-center gap-1 font-medium"
+            >
+              <X size={16} /> Reset Filters
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Results Table */}
@@ -451,30 +627,42 @@ const BrandSupplierOverview = () => {
         <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Supplier Results</h2>
         <div className="overflow-x-auto max-h-[500px] border rounded-lg">
           <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-blue-50 sticky top-0">
+            <thead className="bg-blue-50 sticky top-0 z-0">
               <tr>
-                {['Type', 'Name', 'State', 'Cluster', 'District', 'Manufacture', 'Product', 'Category', 'Action'].map(h => (
-                  <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase">{h}</th>
+                {['Type', 'Name', 'State', 'Cluster', 'District', 'Manufacture', 'Product', 'Category', 'Sub Category', 'Project Type', 'Sub Project Type', 'Procurement Type', 'Action'].map(h => (
+                  <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {filteredSuppliers.map(supplier => (
-                <tr key={supplier._id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 text-sm">{supplier.type}</td>
-                  <td className="px-6 py-4 text-sm font-medium">{supplier.name}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.state?.name || '-'}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.cluster?.name || '-'}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.district?.name || '-'}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.manufacturer?.companyName || '-'}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.product}</td>
-                  <td className="px-6 py-4 text-sm">{supplier.category}</td>
-                  <td className="px-6 py-4 text-sm flex gap-2">
-                    <button onClick={() => handleEdit(supplier)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16} /></button>
-                    <button onClick={() => handleDelete(supplier._id)} className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
+              {filteredSuppliers.length > 0 ? (
+                filteredSuppliers.map(supplier => (
+                  <tr key={supplier._id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4 text-sm">{supplier.type}</td>
+                    <td className="px-6 py-4 text-sm font-medium">{supplier.name}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.state?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.cluster?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.district?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.manufacturer?.companyName || '-'}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.product}</td>
+                    <td className="px-6 py-4 text-sm">{supplier.category}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.subCategory || '-'}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.projectType || '-'}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.subProjectType || '-'}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.procurementType || '-'}</td>
+                    <td className="px-6 py-4 text-sm flex gap-2">
+                      <button onClick={() => handleEdit(supplier)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16} /></button>
+                      <button onClick={() => handleDelete(supplier._id)} className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
+                <tr>
+                  <td colSpan="13" className="px-6 py-10 text-center text-gray-500 italic">
+                    No suppliers found matching the selected criteria.
                   </td>
                 </tr>
-              ))}
+              )}
             </tbody>
           </table>
         </div>

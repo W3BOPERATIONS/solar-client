@@ -55,17 +55,27 @@ const AdminHrmssettings = () => {
 
   const [recruitmentForm, setRecruitmentForm] = useState({
     recruitmentProbation: '',
-    recruitmentTraining: ''
+    recruitmentTraining: '',
+    recruitmentPayrollType: 'monthly'
   });
 
   const [performanceForm, setPerformanceForm] = useState({
+    performancePayrollType: 'monthly',
     performanceEfficiency: '',
     performanceAttendance: '',
     performanceLeaveImpact: '',
     performanceOverdue: '',
     performanceProductivity: '',
     performanceBreakTime: '',
-    performanceIdealTime: '3'
+    performanceIdealTime: '3',
+    efficiencyDecreaseGrid: Array.from({ length: 10 }, (_, i) => ({
+      range: `${i * 5 + 1}-${(i + 1) * 5}`,
+      decrease: ''
+    }))
+  });
+
+  const [testForm, setTestForm] = useState({
+    selectedTests: []
   });
 
   const [vacancyForm, setVacancyForm] = useState({
@@ -209,19 +219,34 @@ const AdminHrmssettings = () => {
     if (settings.recruitment) {
       setRecruitmentForm({
         recruitmentProbation: settings.recruitment.probation || '',
-        recruitmentTraining: settings.recruitment.training || ''
+        recruitmentTraining: settings.recruitment.training || '',
+        recruitmentPayrollType: settings.recruitment.payrollType || 'monthly'
       });
     }
 
     if (settings.performance) {
+      const defaultGrid = Array.from({ length: 10 }, (_, i) => ({
+        range: `${i * 5 + 1}-${(i + 1) * 5}`,
+        decrease: ''
+      }));
       setPerformanceForm({
+        performancePayrollType: settings.performance.payrollType || 'monthly',
         performanceEfficiency: settings.performance.efficiencyFormula || '',
         performanceAttendance: settings.performance.attendanceReq || '',
         performanceLeaveImpact: settings.performance.leaveImpact || '',
         performanceOverdue: settings.performance.overdueImpact || '',
         performanceProductivity: settings.performance.productivity || '',
         performanceBreakTime: settings.performance.breakTime || '',
-        performanceIdealTime: settings.performance.idealTime || '3'
+        performanceIdealTime: settings.performance.idealTime || '3',
+        efficiencyDecreaseGrid: settings.performance.efficiencyDecreaseGrid?.length === 10
+          ? settings.performance.efficiencyDecreaseGrid
+          : defaultGrid
+      });
+    }
+
+    if (settings.test) {
+      setTestForm({
+        selectedTests: settings.test.selectedTests || []
       });
     }
 
@@ -260,16 +285,25 @@ const AdminHrmssettings = () => {
     });
     setRecruitmentForm({
       recruitmentProbation: '',
-      recruitmentTraining: ''
+      recruitmentTraining: '',
+      recruitmentPayrollType: 'monthly'
     });
     setPerformanceForm({
+      performancePayrollType: 'monthly',
       performanceEfficiency: '',
       performanceAttendance: '',
       performanceLeaveImpact: '',
       performanceOverdue: '',
       performanceProductivity: '',
       performanceBreakTime: '',
-      performanceIdealTime: '3'
+      performanceIdealTime: '3',
+      efficiencyDecreaseGrid: Array.from({ length: 10 }, (_, i) => ({
+        range: `${i * 5 + 1}-${(i + 1) * 5}`,
+        decrease: ''
+      }))
+    });
+    setTestForm({
+      selectedTests: []
     });
     setVacancyForm({
       vacancyCount: '',
@@ -337,7 +371,10 @@ const AdminHrmssettings = () => {
       const payload = {
         department: currentDepartment._id,
         position: currentPosition.name,
-        payroll: {
+      };
+
+      if (activeTab === 'payroll') {
+        payload.payroll = {
           payrollType: payrollForm.payrollType,
           salary: payrollForm.payrollSalary,
           peCheck: payrollForm.peCheck,
@@ -353,21 +390,27 @@ const AdminHrmssettings = () => {
           activeCpField: payrollForm.activeCpField,
           salaryIncrement: payrollForm.salaryIncrement,
           cpOnboardingGoal: payrollForm.cpOnboardingGoal
-        },
-        recruitment: {
+        };
+      } else if (activeTab === 'recruitment') {
+        payload.recruitment = {
           probation: recruitmentForm.recruitmentProbation,
-          training: recruitmentForm.recruitmentTraining
-        },
-        performance: {
+          training: recruitmentForm.recruitmentTraining,
+          payrollType: recruitmentForm.recruitmentPayrollType
+        };
+      } else if (activeTab === 'performance') {
+        payload.performance = {
+          payrollType: performanceForm.performancePayrollType,
           efficiencyFormula: performanceForm.performanceEfficiency,
           attendanceReq: performanceForm.performanceAttendance,
           leaveImpact: performanceForm.performanceLeaveImpact,
           overdueImpact: performanceForm.performanceOverdue,
           productivity: performanceForm.performanceProductivity,
           breakTime: performanceForm.performanceBreakTime,
-          idealTime: performanceForm.performanceIdealTime
-        },
-        vacancy: {
+          idealTime: performanceForm.performanceIdealTime,
+          efficiencyDecreaseGrid: performanceForm.efficiencyDecreaseGrid
+        };
+      } else if (activeTab === 'vacancy') {
+        payload.vacancy = {
           count: vacancyForm.vacancyCount,
           experience: vacancyForm.vacancyExperience,
           skills: skills.filter(s => s.trim() !== ''),
@@ -377,13 +420,15 @@ const AdminHrmssettings = () => {
           jobType: vacancyForm.vacancyJobType,
           description: vacancyForm.vacancyDescription,
           responsibilities: vacancyForm.vacancyResponsibilities
-        }
-      };
+        };
+      } else if (activeTab === 'test') {
+        payload.test = {
+          selectedTests: testForm.selectedTests
+        };
+      }
 
       const response = await saveHRMSSettings(payload);
-      console.log("Data successfully stored in DB:", response.data);
       await loadSettings(); // Refresh saved settings display
-      resetForms(); // Clear form fields
       setShowSuccessModal(true); // Show Success Modal
     } catch (error) {
       console.error("Error saving settings:", error);
@@ -729,7 +774,7 @@ const AdminHrmssettings = () => {
                     </div>
                   </div>
 
-                  <div className="marginTop-6 text-right mt-6">
+                  <div className="marginTop-6 text-right mt-6 mb-8">
                     <button
                       type="submit"
                       disabled={isSaving}
@@ -741,10 +786,92 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
+              {/* Saved Payroll Settings Summary Card */}
+              {activeTab === 'payroll' && savedSettings?.payroll && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                    Saved Payroll Configuration
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                      <p className="font-medium capitalize">{savedSettings.payroll.payrollType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Salary Range</p>
+                      <p className="font-medium">{savedSettings.payroll.salary || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Working Hours</p>
+                      <p className="font-medium">{savedSettings.payroll.performanceWorkingHours ? `${savedSettings.payroll.performanceWorkingHours} hrs` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Login Time</p>
+                      <p className="font-medium">{savedSettings.payroll.performanceLoginTime || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">ESOPs</p>
+                      <p className="font-medium capitalize">{savedSettings.payroll.esops || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Monthly Leaves</p>
+                      <p className="font-medium">{savedSettings.payroll.leaves || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">PE Tax (%)</p>
+                      <p className="font-medium">{savedSettings.payroll.peCheck ? `${savedSettings.payroll.peInput}%` : 'Disabled'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">ESIC Tax (%)</p>
+                      <p className="font-medium">{savedSettings.payroll.esicCheck ? `${savedSettings.payroll.esicInput}%` : 'Disabled'}</p>
+                    </div>
+                    {savedSettings.payroll.activeCpField && (
+                      <div>
+                        <p className="font-semibold text-gray-500 text-xs">Active CP Goal</p>
+                        <p className="font-medium">{savedSettings.payroll.activeCpField}</p>
+                      </div>
+                    )}
+                    {savedSettings.payroll.salaryIncrement && (
+                      <div>
+                        <p className="font-semibold text-gray-500 text-xs">Salary Increment</p>
+                        <p className="font-medium">{savedSettings.payroll.salaryIncrement}</p>
+                      </div>
+                    )}
+                    {savedSettings.payroll.cpOnboardingGoal && (
+                      <div>
+                        <p className="font-semibold text-gray-500 text-xs">CP Onboarding Goal</p>
+                        <p className="font-medium">{savedSettings.payroll.cpOnboardingGoal}</p>
+                      </div>
+                    )}
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Perks</p>
+                      <p className="font-medium">{savedSettings.payroll.perks || 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Benefits</p>
+                      <p className="font-medium">{savedSettings.payroll.benefits || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Recruitment Settings */}
               {activeTab === 'recruitment' && (
                 <form onSubmit={handleSaveAll}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Type</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                        value={recruitmentForm.recruitmentPayrollType}
+                        onChange={(e) => setRecruitmentForm({ ...recruitmentForm, recruitmentPayrollType: e.target.value })}
+                      >
+                        <option value="monthly">Monthly</option>
+                        <option value="hourly">Hourly</option>
+                        <option value="commisionbased">Commission Based</option>
+                        <option value="hybrid">Hybrid</option>
+                      </select>
+                    </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Probation Period (Months)</label>
                       <input
@@ -766,7 +893,7 @@ const AdminHrmssettings = () => {
                       />
                     </div>
                   </div>
-                  <div className="marginTop-6 text-right mt-6">
+                  <div className="marginTop-6 text-right mt-6 mb-8">
                     <button type="submit" disabled={isSaving} className="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50">
                       {isSaving ? 'Saving...' : 'Save Recruitment Settings'}
                     </button>
@@ -774,69 +901,155 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
+              {/* Saved Recruitment Settings Summary Card */}
+              {activeTab === 'recruitment' && savedSettings?.recruitment && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                    Saved Recruitment Configuration
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                      <p className="font-medium capitalize">{savedSettings.recruitment.payrollType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Probation Period</p>
+                      <p className="font-medium">{savedSettings.recruitment.probation ? `${savedSettings.recruitment.probation} Months` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Training</p>
+                      <p className="font-medium">{savedSettings.recruitment.training || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Performance Settings */}
               {activeTab === 'performance' && (
                 <form onSubmit={handleSaveAll}>
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Efficiency Formula</label>
-                      <input
-                        type="text"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceEfficiency}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceEfficiency: e.target.value })}
-                        placeholder="(Tasks/Target)*100"
-                      />
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+                    {/* Column 1 */}
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Type</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                          value={performanceForm.performancePayrollType}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performancePayrollType: e.target.value })}
+                        >
+                          <option value="monthly">Monthly</option>
+                          <option value="hourly">Hourly</option>
+                          <option value="commisionbased">Commission Based</option>
+                          <option value="hybrid">Hybrid</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Attendance Required (%)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceAttendance}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceAttendance: e.target.value })}
+                          placeholder="95"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Overdue Task Impact (%)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceOverdue}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceOverdue: e.target.value })}
+                          placeholder="e.g. 5%"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Break Time Allowed (in minutes)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceBreakTime}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceBreakTime: e.target.value })}
+                          placeholder="30"
+                        />
+                      </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Attendance Req (%)</label>
-                      <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceAttendance}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceAttendance: e.target.value })}
-                        placeholder="95"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Leave Impact (pts)</label>
-                      <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceLeaveImpact}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceLeaveImpact: e.target.value })}
-                        placeholder="5"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Overdue Impact (pts)</label>
-                      <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceOverdue}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceOverdue: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Productivity Target</label>
-                      <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceProductivity}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceProductivity: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Break Time (mins)</label>
-                      <input
-                        type="number"
-                        className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={performanceForm.performanceBreakTime}
-                        onChange={(e) => setPerformanceForm({ ...performanceForm, performanceBreakTime: e.target.value })}
-                      />
+
+                    {/* Column 2 */}
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Efficiency Score Formula</label>
+                        <input
+                          type="text"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceEfficiency}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceEfficiency: e.target.value })}
+                          placeholder="(TasksCompleted/Target)*100"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Unauthorized Leave Impact (%)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceLeaveImpact}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceLeaveImpact: e.target.value })}
+                          placeholder="5"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Productivity Target (%)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceProductivity}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceProductivity: e.target.value })}
+                          placeholder="90"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-2">Set Productivity Ideal Time (in minutes)</label>
+                        <input
+                          type="number"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                          value={performanceForm.performanceIdealTime}
+                          onChange={(e) => setPerformanceForm({ ...performanceForm, performanceIdealTime: e.target.value })}
+                          placeholder="3"
+                        />
+                      </div>
                     </div>
                   </div>
-                  <div className="marginTop-6 text-right mt-6">
+
+                  {/* Efficiency Decrease Grid */}
+                  <div className="mb-6">
+                    <h4 className="text-center font-semibold text-blue-600 mb-4">Efficiency Decrease Based on Overdue Tasks</h4>
+                    <div className="border rounded-md overflow-hidden">
+                      <div className="grid grid-cols-2 bg-blue-400 text-white font-medium text-sm">
+                        <div className="p-3 border-r border-blue-300">Overdue Task Range</div>
+                        <div className="p-3">Efficiency Decrease (%)</div>
+                      </div>
+                      {performanceForm.efficiencyDecreaseGrid.map((row, index) => (
+                        <div key={index} className="grid grid-cols-2 border-t border-gray-200 bg-white">
+                          <div className="p-2 border-r border-gray-200 flex items-center">
+                            <span className="text-sm text-gray-700 ml-2">{row.range}</span>
+                          </div>
+                          <div className="p-2">
+                            <input
+                              type="number"
+                              className="w-full px-3 py-1.5 border border-gray-300 rounded-md text-sm"
+                              value={row.decrease}
+                              onChange={(e) => {
+                                const newGrid = [...performanceForm.efficiencyDecreaseGrid];
+                                newGrid[index].decrease = e.target.value;
+                                setPerformanceForm({ ...performanceForm, efficiencyDecreaseGrid: newGrid });
+                              }}
+                            />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <div className="marginTop-6 text-right mt-6 mb-8">
                     <button type="submit" disabled={isSaving} className="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50">
                       {isSaving ? 'Saving...' : 'Save Performance Settings'}
                     </button>
@@ -844,10 +1057,57 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
+              {/* Saved Performance Settings Summary Card */}
+              {activeTab === 'performance' && savedSettings?.performance && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                    Saved Performance Configuration
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                      <p className="font-medium capitalize">{savedSettings.performance.payrollType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Efficiency Formula</p>
+                      <p className="font-medium">{savedSettings.performance.efficiencyFormula || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Attendance Req (%)</p>
+                      <p className="font-medium">{savedSettings.performance.attendanceReq ? `${savedSettings.performance.attendanceReq}%` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Leave Impact</p>
+                      <p className="font-medium">{savedSettings.performance.leaveImpact || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Overdue Impact</p>
+                      <p className="font-medium">{savedSettings.performance.overdueImpact || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Productivity Target (%)</p>
+                      <p className="font-medium">{savedSettings.performance.productivity ? `${savedSettings.performance.productivity}%` : 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Break Time (mins)</p>
+                      <p className="font-medium">{savedSettings.performance.breakTime || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Ideal Time (mins)</p>
+                      <p className="font-medium">{savedSettings.performance.idealTime || 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-4">
+                      <p className="font-semibold text-gray-500 text-xs">Efficiency Decrease Grid</p>
+                      <p className="font-medium">{savedSettings.performance.efficiencyDecreaseGrid?.length ? 'Configured (10 Rows)' : 'Not Configured'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {/* Vacancy Settings */}
               {activeTab === 'vacancy' && (
                 <form onSubmit={handleSaveAll}>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-2">Number of Vacancies</label>
                       <input
@@ -858,7 +1118,63 @@ const AdminHrmssettings = () => {
                       />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Deadline</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Experience Required (years)</label>
+                      <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        value={vacancyForm.vacancyExperience}
+                        onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyExperience: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Required Skills</label>
+                    {skills.map((skill, index) => (
+                      <div key={index} className="flex mb-2">
+                        <input
+                          type="text"
+                          className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md"
+                          value={skill}
+                          onChange={(e) => handleSkillChange(index, e.target.value)}
+                          placeholder="e.g. React.js"
+                        />
+                        <button
+                          type="button"
+                          className="px-4 py-2 bg-red-50 text-red-500 rounded-r-md hover:bg-red-100 border border-red-200"
+                          onClick={() => removeSkillField(index)}
+                        >
+                          <X className="w-5 h-5" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      className="mt-2 text-blue-600 hover:text-blue-800 flex items-center text-sm font-medium"
+                      onClick={addSkillField}
+                    >
+                      <Plus className="w-4 h-4 mr-1" /> Add Skill
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Education Qualification</label>
+                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        value={vacancyForm.vacancyEducation}
+                        onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyEducation: e.target.value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Certifications Required</label>
+                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md"
+                        value={vacancyForm.vacancyCertifications}
+                        onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyCertifications: e.target.value })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">Application Deadline</label>
                       <input
                         type="date"
                         className="w-full px-3 py-2 border border-gray-300 rounded-md"
@@ -882,52 +1198,24 @@ const AdminHrmssettings = () => {
                   </div>
 
                   <div className="mb-6">
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Required Skills</label>
-                    {skills.map((skill, index) => (
-                      <div key={index} className="flex mb-2">
-                        <input
-                          type="text"
-                          className="flex-grow px-3 py-2 border border-gray-300 rounded-l-md"
-                          value={skill}
-                          onChange={(e) => handleSkillChange(index, e.target.value)}
-                          placeholder="e.g. React.js"
-                        />
-                        <button
-                          type="button"
-                          className="px-4 py-2 bg-red-500 text-white rounded-r-md hover:bg-red-600"
-                          onClick={() => removeSkillField(index)}
-                        >
-                          <X className="w-5 h-5" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      className="mt-2 text-blue-600 hover:text-blue-800 flex items-center"
-                      onClick={addSkillField}
-                    >
-                      <Plus className="w-4 h-4 mr-1" /> Add Skill
-                    </button>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Job Description</label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md h-24"
+                      value={vacancyForm.vacancyDescription}
+                      onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyDescription: e.target.value })}
+                    />
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Experience (Years)</label>
-                      <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={vacancyForm.vacancyExperience}
-                        onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyExperience: e.target.value })}
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-2">Education</label>
-                      <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                        value={vacancyForm.vacancyEducation}
-                        onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyEducation: e.target.value })}
-                      />
-                    </div>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Responsibilities</label>
+                    <textarea
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md h-24"
+                      value={vacancyForm.vacancyResponsibilities}
+                      onChange={(e) => setVacancyForm({ ...vacancyForm, vacancyResponsibilities: e.target.value })}
+                    />
                   </div>
 
-                  <div className="marginTop-6 text-right mt-6">
+                  <div className="marginTop-6 text-right mt-6 mb-8">
                     <button type="submit" disabled={isSaving} className="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50">
                       {isSaving ? 'Saving...' : 'Save Vacancy Settings'}
                     </button>
@@ -935,17 +1223,110 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Test Settings - Placeholder to redirect */}
+              {/* Saved Vacancy Settings Summary Card */}
+              {activeTab === 'vacancy' && savedSettings?.vacancy && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                    Saved Vacancy Configuration
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Number of Vacancies</p>
+                      <p className="font-medium">{savedSettings.vacancy.count || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Experience (years)</p>
+                      <p className="font-medium">{savedSettings.vacancy.experience || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Job Type</p>
+                      <p className="font-medium capitalize">{savedSettings.vacancy.jobType || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="font-semibold text-gray-500 text-xs">Deadline</p>
+                      <p className="font-medium">{savedSettings.vacancy.deadline ? new Date(savedSettings.vacancy.deadline).toLocaleDateString() : 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Education</p>
+                      <p className="font-medium">{savedSettings.vacancy.education || 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Certifications</p>
+                      <p className="font-medium">{savedSettings.vacancy.certifications || 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-4">
+                      <p className="font-semibold text-gray-500 text-xs">Required Skills</p>
+                      <div className="flex flex-wrap gap-2 mt-1">
+                        {savedSettings.vacancy.skills?.length > 0 && savedSettings.vacancy.skills[0] !== '' ? (
+                          savedSettings.vacancy.skills.map((skill, idx) => (
+                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs">{skill}</span>
+                          ))
+                        ) : (
+                          <span className="font-medium">N/A</span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Job Description</p>
+                      <p className="font-medium line-clamp-3">{savedSettings.vacancy.description || 'N/A'}</p>
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="font-semibold text-gray-500 text-xs">Responsibilities</p>
+                      <p className="font-medium line-clamp-3">{savedSettings.vacancy.responsibilities || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Test Settings */}
               {activeTab === 'test' && (
-                <div className="text-center p-8 bg-gray-50 rounded-lg border border-dashed border-gray-300">
-                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-3" />
-                  <h3 className="text-lg font-medium text-gray-900">Manage Candidate Tests</h3>
-                  <p className="text-gray-500 mb-4">Configure test questions and parameters for this position.</p>
-                  <button
-                    onClick={() => navigate('/admin/settings/hrms/candidate-test-setting')}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                    Go to Candidate Test Settings
-                  </button>
+                <form onSubmit={handleSaveAll}>
+                  <div className="mb-6">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">Test Configuration</label>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-gray-50 border border-gray-200 rounded-md">
+                      {['Aptitude Test', 'Technical Test', 'Behavioral Test', 'Domain Knowledge Test', 'Soft Skills Test'].map(testName => (
+                        <label key={testName} className="flex items-center space-x-3 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                            checked={testForm.selectedTests.includes(testName)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setTestForm(prev => {
+                                const newTests = checked
+                                  ? [...prev.selectedTests, testName]
+                                  : prev.selectedTests.filter(t => t !== testName);
+                                return { selectedTests: newTests };
+                              });
+                            }}
+                          />
+                          <span className="text-sm font-medium text-gray-700">{testName}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="marginTop-6 text-right mt-6 mb-8">
+                    <button type="submit" disabled={isSaving} className="px-6 py-2 bg-green-600 text-white font-medium rounded-md hover:bg-green-700 disabled:opacity-50">
+                      {isSaving ? 'Saving...' : 'Save Test Settings'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Saved Test Settings Summary Card */}
+              {activeTab === 'test' && savedSettings?.test?.selectedTests && savedSettings.test.selectedTests.length > 0 && (
+                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
+                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                    Saved Test Configuration
+                  </h4>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    {savedSettings.test.selectedTests.map((t, idx) => (
+                      <li key={idx} className="bg-white border border-gray-200 rounded-md p-3 text-sm text-gray-700 shadow-sm flex items-center">
+                        <CheckCircle className="w-5 h-5 text-green-500 mr-3" /> {t}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>

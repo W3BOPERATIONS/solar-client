@@ -475,7 +475,11 @@ const DealerLoan = () => {
                                                 {loanOffers.map(offer => (
                                                     <div key={offer.id} className={`border-2 rounded-xl p-6 transition-all cursor-pointer hover:shadow-md ${formData.loanOption === offer.id ? 'border-blue-600 bg-blue-50' : 'border-gray-100 bg-white'}`} onClick={() => handleLoanOptionSelect(offer.id)}>
                                                         <div className="flex justify-between items-start mb-4">
-                                                            <img src={offer.logo} alt={offer.bank} className="h-8 object-contain" onError={(e) => { e.target.src = 'https://via.placeholder.com/100x40?text=' + offer.bank }} />
+                                                            <img src={offer.logo} alt={offer.bank} className="h-8 object-contain" onError={(e) => {
+                                                                const text = offer.bank || 'Bank';
+                                                                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><rect width="100" height="40" fill="#e2e8f0"/><text x="50%" y="50%" fill="#64748b" font-size="10" font-family="sans-serif" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${text}</text></svg>`;
+                                                                e.target.src = `data:image/svg+xml;base64,${btoa(svg)}`;
+                                                            }} />
                                                             {offer.recommended && <span className="bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-bold uppercase">Recommended</span>}
                                                         </div>
                                                         <h5 className="font-bold text-gray-800 text-lg">{offer.bank}</h5>

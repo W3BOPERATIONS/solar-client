@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Trash2, Edit, Download, Printer,
   Save, Calculator, Eye,
-  BarChart3, LineChart, Settings
+  BarChart3, LineChart, Settings, CheckCircle
 } from 'lucide-react';
 import Chart from 'chart.js/auto';
 import {
@@ -22,7 +22,8 @@ export default function QuoteSetting() {
   });
 
   const [quoteType, setQuoteType] = useState('');
-  const [cpType, setCpType] = useState('');
+  const [partnerType, setPartnerType] = useState('');
+  const [planType, setPlanType] = useState('');
   const [selectedPages, setSelectedPages] = useState([]);
   const [colorSettings, setColorSettings] = useState({
     brandColor: false,
@@ -66,7 +67,8 @@ export default function QuoteSetting() {
   const projectTypes = ['3kw - 5kw', '10kw - 15kw', '10kw - 20kw'];
   const subProjectTypes = ['On Grid', 'Off Grid', 'Hybrid'];
   const quoteTypes = ['Survey Quote', 'Quick Quote'];
-  const cpTypes = ['Startup', 'Basic', 'Enterprise', 'Solar Business'];
+  const partnerTypes = ['Dealer', 'Franchisee', 'Channel Partner', 'Employee'];
+  const planTypes = ['Startup', 'Basic', 'Enterprise', 'Solar Business'];
 
   useEffect(() => {
     fetchQuotes();
@@ -209,7 +211,7 @@ export default function QuoteSetting() {
   };
 
   const handleSaveQuote = async () => {
-    if (!filters.category || !filters.subCategory || !filters.projectType || !filters.subProjectType || !quoteType || !cpType) {
+    if (!filters.category || !filters.subCategory || !filters.projectType || !filters.subProjectType || !quoteType || !partnerType || !planType) {
       toast.error("Please fill all fields before saving the quote.");
       return;
     }
@@ -217,7 +219,8 @@ export default function QuoteSetting() {
     const payload = {
       ...filters,
       quoteType,
-      cpType,
+      partnerType,
+      planType,
       selectedPages,
       solarSettings,
       monthlyIsolation: monthlyIsolation.map(m => ({
@@ -256,7 +259,8 @@ export default function QuoteSetting() {
       subProjectType: ''
     });
     setQuoteType('');
-    setCpType('');
+    setPartnerType('');
+    setPlanType('');
     setSelectedPages([]);
     setSolarSettings({
       projectKW: 10,
@@ -295,7 +299,8 @@ export default function QuoteSetting() {
       subProjectType: quote.subProjectType
     });
     setQuoteType(quote.quoteType);
-    setCpType(quote.cpType);
+    setPartnerType(quote.partnerType || '');
+    setPlanType(quote.planType || '');
     setSelectedPages(quote.selectedPages || []);
 
     if (quote.solarSettings) {
@@ -323,7 +328,7 @@ export default function QuoteSetting() {
     updateBOMVisibility();
   }, [quoteType]);
 
-  const isAdvancedSettingsEnabled = ['Basic', 'Enterprise', 'Solar Business'].includes(cpType);
+  const isAdvancedSettingsEnabled = ['Basic', 'Enterprise', 'Solar Business'].includes(planType);
 
   return (
     <div className="p-4 bg-gray-50 min-h-screen">
@@ -350,11 +355,11 @@ export default function QuoteSetting() {
 
             <div className="p-6">
               {/* Filters */}
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Category</label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                     value={filters.category}
                     onChange={(e) => setFilters({ ...filters, category: e.target.value })}
                   >
@@ -366,9 +371,9 @@ export default function QuoteSetting() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sub Category</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sub Category</label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                     value={filters.subCategory}
                     onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
                   >
@@ -380,13 +385,13 @@ export default function QuoteSetting() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Project Type</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Project Type</label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                     value={filters.projectType}
                     onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
                   >
-                    <option value="" disabled>Select Project Type</option>
+                    <option value="" disabled>Select Type</option>
                     {projectTypes.map(type => (
                       <option key={type} value={type}>{type}</option>
                     ))}
@@ -394,13 +399,13 @@ export default function QuoteSetting() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">Sub Project Type</label>
+                  <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sub Proj Type</label>
                   <select
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
                     value={filters.subProjectType}
                     onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
                   >
-                    <option value="" disabled>Select Project Type</option>
+                    <option value="" disabled>Select Type</option>
                     {subProjectTypes.map(sub => (
                       <option key={sub} value={sub}>{sub}</option>
                     ))}
@@ -408,33 +413,64 @@ export default function QuoteSetting() {
                 </div>
               </div>
 
-              {/* Quote Type */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">Quote Type</label>
-                <div className="flex flex-wrap gap-2">
-                  {quoteTypes.map(type => (
-                    <button
-                      key={type}
-                      className={`px-4 py-2 rounded-lg border ${quoteType === type ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                      onClick={() => setQuoteType(type)}
+              {/* Selections Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 items-stretch">
+                {/* Quote Type */}
+                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
+                  <label className="block text-sm font-bold text-gray-700 mb-3 text-center uppercase tracking-tight">Quote Type</label>
+                  <div className="grid grid-cols-2 gap-3 flex-1">
+                    {quoteTypes.map(type => (
+                      <button
+                        key={type}
+                        className={`flex flex-col items-center justify-center gap-2 px-3 py-4 rounded-xl border-2 transition-all duration-200 text-xs font-bold shadow-sm ${quoteType === type ? 'bg-blue-600 text-white border-blue-600 scale-[1.02]' : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'}`}
+                        onClick={() => setQuoteType(type)}
+                      >
+                        <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center ${quoteType === type ? 'border-white' : 'border-gray-300'}`}>
+                          {quoteType === type && <div className="w-2 h-2 bg-white rounded-full" />}
+                        </div>
+                        {type}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Partner Type */}
+                <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
+                  <label className="block text-sm font-bold text-gray-700 mb-3 text-center uppercase tracking-tight">Partner Type</label>
+                  <div className="flex-1 flex flex-col justify-center">
+                    <select
+                      className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-3.5 focus:outline-none focus:border-blue-500 font-bold text-gray-700 shadow-sm text-sm"
+                      value={partnerType}
+                      onChange={(e) => setPartnerType(e.target.value)}
                     >
-                      {type}
-                    </button>
-                  ))}
+                      <option value="" disabled>Select Partner Type</option>
+                      {partnerTypes.map(type => (
+                        <option key={type} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               </div>
 
-              {/* CP Type */}
-              <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">CP Type</label>
-                <div className="flex flex-wrap gap-2">
-                  {cpTypes.map(type => (
+              {/* Plan Type Selection */}
+              <div className="bg-gray-50/50 p-6 rounded-2xl border-2 border-dashed border-gray-200 mb-8">
+                <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
+                  <div className="w-2 h-2 bg-blue-500 rounded-full" />
+                  Select Plan Type
+                </label>
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {planTypes.map(type => (
                     <button
                       key={type}
-                      className={`px-4 py-2 rounded-lg border ${cpType === type ? 'bg-blue-600 text-white border-blue-600' : 'border-gray-300 text-gray-700 hover:bg-gray-50'}`}
-                      onClick={() => setCpType(type)}
+                      className={`relative px-4 py-5 rounded-xl border-2 transition-all duration-300 text-[11px] font-black flex flex-col items-center justify-center gap-2 shadow-sm uppercase tracking-wider ${planType === type ? 'bg-blue-600 text-white border-blue-600 scale-[1.05] z-10 shadow-blue-200 shadow-lg' : 'bg-white border-gray-100 text-gray-500 hover:border-blue-400 hover:bg-blue-50/50'}`}
+                      onClick={() => setPlanType(type)}
                     >
-                      {type}
+                      {planType === type && (
+                        <div className="absolute -top-2 -right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
+                          <CheckCircle size={12} className="text-white" />
+                        </div>
+                      )}
+                      <span>{type}</span>
                     </button>
                   ))}
                 </div>
@@ -615,7 +651,8 @@ export default function QuoteSetting() {
                       <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Sub Category</th>
                       <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Project Type</th>
                       <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Sub Project Type</th>
-                      <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">CP Type</th>
+                      <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Partner Type</th>
+                      <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Plan Type</th>
                       {/* <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Quote Pages</th> */}
                       <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Actions</th>
                     </tr>
@@ -633,7 +670,12 @@ export default function QuoteSetting() {
                         <td className="border border-gray-300 px-4 py-3 text-center">{quote.subCategory}</td>
                         <td className="border border-gray-300 px-4 py-3 text-center">{quote.projectType}</td>
                         <td className="border border-gray-300 px-4 py-3 text-center">{quote.subProjectType}</td>
-                        <td className="border border-gray-300 px-4 py-3 text-center">{quote.cpType}</td>
+                        <td className="border border-gray-300 px-4 py-3 text-center text-xs font-semibold text-blue-700">{quote.partnerType}</td>
+                        <td className="border border-gray-300 px-4 py-3 text-center">
+                          <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
+                            {quote.planType}
+                          </span>
+                        </td>
                         {/* <td className="border border-gray-300 px-4 py-3">{quote.pages || '-'}</td> */}
                         <td className="border border-gray-300 px-4 py-3">
                           <div className="flex justify-center gap-2">
@@ -679,159 +721,189 @@ export default function QuoteSetting() {
               {/* Preview Content */}
               <div className="transform scale-90 origin-top">
                 {/* Page 1: Title */}
-                <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
-                  <div className="relative h-64 rounded-lg overflow-hidden mb-6">
+                <div className="bg-white border rounded-3xl overflow-hidden shadow-2xl mb-8 border-gray-100">
+                  {/* Hero Banner Section */}
+                  <div className="relative h-64 w-full">
                     <img
-                      src="https://placehold.co/800x300"
+                      src="https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"
                       alt="Solar Roof"
-                      className="w-full h-full object-cover opacity-60"
+                      className="w-full h-full object-cover"
                     />
-                    <div className="absolute top-1/4 left-10">
-                      <h2 className="text-2xl font-bold text-black mb-2">{filters.category || 'Category'} {filters.projectType || 'Project Type'}</h2>
-                      <h4 className="text-xl font-bold text-black mb-2">Proposal</h4>
-                      <p className="text-black font-bold">SOLAR ENERGY FOR A BETTER TOMORROW</p>
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-6">
+                      <h2 className="text-3xl font-black text-white mb-1 uppercase tracking-tighter drop-shadow-lg">
+                        {filters.category || 'Residential'} {filters.projectType || '3 To 10 KW'}
+                      </h2>
+                      <h3 className="text-2xl font-black text-yellow-400 mb-2 uppercase tracking-wide drop-shadow-md">
+                        ({filters.subProjectType || 'National Portal'})
+                      </h3>
+                      <h4 className="text-4xl font-extrabold text-white mb-2 tracking-[0.2em]">PROPOSAL</h4>
+                      <p className="text-xs font-bold text-gray-200 tracking-widest uppercase border-t border-gray-400/50 pt-2 transition-all duration-300 hover:text-white">
+                        SOLAR ENERGY FOR A BETTER TOMORROW
+                      </p>
                     </div>
                   </div>
 
-                  <div className="mt-4">
-                    <h6 className="font-bold mb-2">
-                      <strong>{filters.category} {filters.projectType} Proposal No:</strong> # qua/24-25/002
-                    </h6>
-                    <p className="mb-1"><strong>Name of Customer:</strong> Demo Customer</p>
-                    <p className="mb-1"><strong>KW Required:</strong> 4 KW</p>
-                    <p className="mb-1"><strong>Residential / Commercial:</strong> {filters.category}</p>
-                    <p className="mb-1"><strong>City:</strong> Rajkot</p>
-                  </div>
-                </div>
-
-                {/* Page 2: Quote */}
-                <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
-                  <div className="flex justify-between mb-4">
-                    <div>
-                      <p className="mb-1"><strong>Prepared by:</strong> {cpType} User</p>
-                      <p className="mb-1"><strong>Date:</strong> 16 July 2025</p>
-                      <p className="mb-1"><strong>Valid Upto:</strong> 10 Days</p>
-                    </div>
-                  </div>
-
-                  <hr className="border-t-2 border-red-500 mb-4" />
-
-                  <h5 className="text-blue-600 font-bold mb-2">Quote Type</h5>
-                  <p className="mb-4">{quoteType}</p>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="text-center">
-                      <p className="font-bold mb-2">Project: {filters.projectType}</p>
-                      <img
-                        src="https://placehold.co/300x200"
-                        alt="Combo Kit"
-                        className="w-full h-auto rounded-lg"
-                      />
-                    </div>
-
-                    <div>
-                      <table className="w-full border border-gray-300">
-                        <tbody>
-                          <tr className="border-b border-gray-300">
-                            <td className="p-2">Total Cost</td>
-                            <td className="p-2 font-medium">Rs. 195008 /-</td>
-                          </tr>
-                          <tr className="border-b border-gray-300">
-                            <td className="p-2">Govt MNRE Subsidy</td>
-                            <td className="p-2 font-medium">Rs. 78000 /-</td>
-                          </tr>
-                          <tr className="border-b border-gray-300">
-                            <td className="p-2">Govt State Subsidy</td>
-                            <td className="p-2 font-medium">Rs. 0 /-</td>
-                          </tr>
-                          <tr className="bg-blue-50">
-                            <td className="p-2 font-bold">Net Cost</td>
-                            <td className="p-2 font-bold">Rs. 117008 /-</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Page 3: BOM (Conditional) */}
-                {quoteType === 'Survey Quote' && selectedPages.includes('Financial Summary') && (
-                  <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
-                    <h5 className="text-blue-600 font-bold mb-4">Residential Solar BOM</h5>
-
-                    <table className="w-full border border-gray-300 mb-6">
-                      <tbody>
-                        <tr className="border-b border-gray-300">
-                          <td className="p-2">Solar Structure</td>
-                          <td className="p-2">HOT DIP GALVANIZE</td>
-                        </tr>
-                        <tr className="border-b border-gray-300">
-                          <td className="p-2">Solar DC Cable</td>
-                          <td className="p-2">Polycab 4 Sq mm</td>
-                        </tr>
-                        <tr className="border-b border-gray-300">
-                          <td className="p-2">Solar AC Cable</td>
-                          <td className="p-2">Polycab 4 Sq mm</td>
-                        </tr>
-                        <tr className="border-b border-gray-300">
-                          <td className="p-2">Earthing Kit + LA</td>
-                          <td className="p-2">Standard</td>
-                        </tr>
-                        <tr>
-                          <td className="p-2">Electrical Components</td>
-                          <td className="p-2">L & T / Similar</td>
-                        </tr>
-                      </tbody>
-                    </table>
-
-                    <p className="text-sm mb-4">
-                      <strong>*Structure Height 6 x 8 Feet is included.</strong> Extra pipes beyond this will be paid by the customer.
-                    </p>
-                  </div>
-                )}
-
-                {/* Page 4: Generation Graph and ROI Chart (Conditional) */}
-                {selectedPages.includes('Generation Graph') && (
-                  <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
-                    <h3 className="text-blue-600 font-bold mb-4">Performance Analysis</h3>
-
-                    {/* Generation Graph */}
-                    <div className="mb-6">
-                      <h5 className="font-medium mb-3">Monthly Generation (Units)</h5>
-                      <div className="h-64 w-full border border-gray-300 rounded-lg p-4">
-                        <canvas id="generationChart" />
+                  {/* Customer Info Section */}
+                  <div className="p-8 bg-white">
+                    <div className="flex flex-col gap-3">
+                      <div className="flex items-baseline gap-2 pb-2 border-b border-gray-50">
+                        <span className="text-sm font-black text-gray-800 uppercase min-w-[150px]">Proposal No:</span>
+                        <span className="text-sm font-bold text-blue-600"># qua/24-25/002</span>
                       </div>
-                    </div>
-
-                    {/* ROI Chart */}
-                    <div className="mb-6">
-                      <h5 className="font-medium mb-3">ROI Analysis (Payback Period)</h5>
-                      <div className="h-64 w-full border border-gray-300 rounded-lg p-4">
-                        <canvas id="roiChart" />
+                      <div className="flex items-baseline gap-2 pb-2 border-b border-gray-50">
+                        <span className="text-sm font-black text-gray-800 uppercase min-w-[150px]">Name of Customer:</span>
+                        <span className="text-sm font-bold text-gray-600">Pradip Sharma</span>
+                      </div>
+                      <div className="flex items-baseline gap-2 pb-2 border-b border-gray-50">
+                        <span className="text-sm font-black text-gray-800 uppercase min-w-[150px]">KW Required:</span>
+                        <span className="text-sm font-bold text-gray-600">{solarSettings.projectKW} KW</span>
+                      </div>
+                      <div className="flex items-baseline gap-2 pb-2 border-b border-gray-50">
+                        <span className="text-sm font-black text-gray-800 uppercase min-w-[150px]">Residential / Commercial:</span>
+                        <span className="text-sm font-bold text-gray-600">{filters.category} {filters.projectType}</span>
+                      </div>
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-sm font-black text-gray-800 uppercase min-w-[150px]">City:</span>
+                        <span className="text-sm font-bold text-gray-600">Rajkot</span>
                       </div>
                     </div>
                   </div>
-                )}
 
-                {/* Page 5: Advanced Options (Conditional) */}
-                {selectedPages.includes('Advanced Settings') && (
-                  <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
-                    <h3 className="text-blue-600 font-bold mb-4">Advanced Options</h3>
-
-                    {/* Selected Advanced Options */}
-                    <div className="mb-6">
-                      <h5 className="font-medium mb-3">Selected Options</h5>
-                      <div className="space-y-3">
-                        <div className="bg-gray-50 border-l-4 border-blue-600 p-3 rounded">
-                          {Object.entries(colorSettings).map(([key, value]) => (
-                            value && <div key={key}>{key.replace(/([A-Z])/g, ' $1').trim()} Enabled</div>
-                          ))}
+                  {/* Footer Stats Section */}
+                  <div className="grid grid-cols-2 border-t border-gray-100 bg-gray-50/50">
+                    <div className="p-6 border-r border-gray-100">
+                      <div className="flex flex-col gap-1">
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prepared by</p>
+                        <p className="text-sm font-bold text-gray-700 uppercase">{partnerType || 'Demo'} User</p>
+                      </div>
+                    </div>
+                    <div className="p-6">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Date</p>
+                          <p className="text-sm font-bold text-gray-700 uppercase">16 July 2025</p>
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          <p className="text-[10px] font-black text-red-400 uppercase tracking-widest text-right">Valid Upto</p>
+                          <p className="text-sm font-bold text-red-600 text-right">10 Days</p>
                         </div>
                       </div>
                     </div>
                   </div>
-                )}
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="text-center">
+                    <p className="font-bold mb-2">Project: {filters.projectType}</p>
+                    <img
+                      src="https://placehold.co/300x200"
+                      alt="Combo Kit"
+                      className="w-full h-auto rounded-lg"
+                    />
+                  </div>
+
+                  <div>
+                    <table className="w-full border border-gray-300">
+                      <tbody>
+                        <tr className="border-b border-gray-300">
+                          <td className="p-2">Total Cost</td>
+                          <td className="p-2 font-medium">Rs. 195008 /-</td>
+                        </tr>
+                        <tr className="border-b border-gray-300">
+                          <td className="p-2">Govt MNRE Subsidy</td>
+                          <td className="p-2 font-medium">Rs. 78000 /-</td>
+                        </tr>
+                        <tr className="border-b border-gray-300">
+                          <td className="p-2">Govt State Subsidy</td>
+                          <td className="p-2 font-medium">Rs. 0 /-</td>
+                        </tr>
+                        <tr className="bg-blue-50">
+                          <td className="p-2 font-bold">Net Cost</td>
+                          <td className="p-2 font-bold">Rs. 117008 /-</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
               </div>
+
+              {/* Page 3: BOM (Conditional) */}
+              {quoteType === 'Survey Quote' && selectedPages.includes('Financial Summary') && (
+                <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
+                  <h5 className="text-blue-600 font-bold mb-4">Residential Solar BOM</h5>
+
+                  <table className="w-full border border-gray-300 mb-6">
+                    <tbody>
+                      <tr className="border-b border-gray-300">
+                        <td className="p-2">Solar Structure</td>
+                        <td className="p-2">HOT DIP GALVANIZE</td>
+                      </tr>
+                      <tr className="border-b border-gray-300">
+                        <td className="p-2">Solar DC Cable</td>
+                        <td className="p-2">Polycab 4 Sq mm</td>
+                      </tr>
+                      <tr className="border-b border-gray-300">
+                        <td className="p-2">Solar AC Cable</td>
+                        <td className="p-2">Polycab 4 Sq mm</td>
+                      </tr>
+                      <tr className="border-b border-gray-300">
+                        <td className="p-2">Earthing Kit + LA</td>
+                        <td className="p-2">Standard</td>
+                      </tr>
+                      <tr>
+                        <td className="p-2">Electrical Components</td>
+                        <td className="p-2">L & T / Similar</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <p className="text-sm mb-4">
+                    <strong>*Structure Height 6 x 8 Feet is included.</strong> Extra pipes beyond this will be paid by the customer.
+                  </p>
+                </div>
+              )}
+
+              {/* Page 4: Generation Graph and ROI Chart (Conditional) */}
+              {selectedPages.includes('Generation Graph') && (
+                <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
+                  <h3 className="text-blue-600 font-bold mb-4">Performance Analysis</h3>
+
+                  {/* Generation Graph */}
+                  <div className="mb-6">
+                    <h5 className="font-medium mb-3">Monthly Generation (Units)</h5>
+                    <div className="h-64 w-full border border-gray-300 rounded-lg p-4">
+                      <canvas id="generationChart" />
+                    </div>
+                  </div>
+
+                  {/* ROI Chart */}
+                  <div className="mb-6">
+                    <h5 className="font-medium mb-3">ROI Analysis (Payback Period)</h5>
+                    <div className="h-64 w-full border border-gray-300 rounded-lg p-4">
+                      <canvas id="roiChart" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Page 5: Advanced Options (Conditional) */}
+              {selectedPages.includes('Advanced Settings') && (
+                <div className="bg-white border border-gray-300 rounded-lg p-6 mb-4">
+                  <h3 className="text-blue-600 font-bold mb-4">Advanced Options</h3>
+
+                  {/* Selected Advanced Options */}
+                  <div className="mb-6">
+                    <h5 className="font-medium mb-3">Selected Options</h5>
+                    <div className="space-y-3">
+                      <div className="bg-gray-50 border-l-4 border-blue-600 p-3 rounded">
+                        {Object.entries(colorSettings).map(([key, value]) => (
+                          value && <div key={key}>{key.replace(/([A-Z])/g, ' $1').trim()} Enabled</div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>

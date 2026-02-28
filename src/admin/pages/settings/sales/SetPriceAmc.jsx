@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Filter, CheckCircle, RefreshCw, MapPin, Layers, Tag, Save, X, Plus, Trash2, Edit } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import salesSettingsService from '../../../../admin/services/salesSettingsService';
+import { getQuoteSettings } from '../../../../services/quote/quoteApi';
 
 export default function SetPriceAmc() {
   const [showLocationCards, setShowLocationCards] = useState(true);
@@ -18,8 +19,9 @@ export default function SetPriceAmc() {
   // New state for Add AMC Price Modal
   const [showAddModal, setShowAddModal] = useState(false);
   const [newPriceForm, setNewPriceForm] = useState({
-    productType: 'Solar Panel',
-    brand: '',
+    quoteSettingsId: '',
+    productType: 'Service',
+    brand: '-',
     category: '',
     subCategory: '',
     projectType: '',
@@ -90,36 +92,61 @@ export default function SetPriceAmc() {
   const fetchPrices = async () => {
     setLoading(true);
     try {
-      // Construct Query
+      // 1. Fetch all active Quote Settings
+      const quotesData = await getQuoteSettings();
+      const activeQuotes = quotesData.filter(q => q.isActive !== false);
+
+      // 2. Fetch existing AMC Price settings for the selected location
       const query = {};
       if (selectedStateId) query.state = selectedStateId;
       if (selectedDistrictId) query.district = selectedDistrictId;
       if (selectedClusterId) query.cluster = selectedClusterId;
 
-      if (filters.category !== 'All Categories') query.category = filters.category;
-      // Add more filters as needed
+      const amcPrices = await salesSettingsService.getSetPricesAmc(query);
 
-      const data = await salesSettingsService.getSetPricesAmc(query);
+      // 3. Automatic Row Generation: Map Quote Settings to rows, merge with existing prices
+      const processedData = activeQuotes.map(q => {
+        // Find existing price for this quote setting
+        const existingPrice = amcPrices.find(p => p.quoteSettingsId === q._id);
 
-      // Map to table format and calculating background color
-      const processedData = data.map(item => {
-        const isRed = item.latestBuyingPrice > item.amcPrice;
-        const isGreen = item.latestBuyingPrice <= item.amcPrice;
-
-        return {
-          ...item,
-          comboKit: item.comboKit || `${item.brand} Kit`, // Fallback
-          id: item._id, // Use MongoDB ID
-          backgroundColor: isRed ? 'rgb(247, 186, 186)' : isGreen ? 'rgb(186, 240, 202)' : '',
-          isEditing: false
+        const row = {
+          id: existingPrice?._id || `temp-${q._id}`,
+          quoteSettingsId: q._id,
+          category: q.category,
+          subCategory: q.subCategory,
+          projectType: q.projectType,
+          subProjectType: q.subProjectType,
+          brand: existingPrice?.brand || '-',
+          productType: existingPrice?.productType || '-',
+          comboKit: existingPrice?.comboKit || `${q.projectType} Kit`,
+          amcPrice: existingPrice?.amcPrice || 0,
+          latestBuyingPrice: existingPrice?.latestBuyingPrice || 0,
+          gst: existingPrice?.gst || 18,
+          status: existingPrice?.status || 'Active',
+          isEditing: false,
+          isNew: !existingPrice
         };
+
+        const isRed = row.latestBuyingPrice > row.amcPrice;
+        const isGreen = row.latestBuyingPrice <= row.amcPrice && row.amcPrice > 0;
+        row.backgroundColor = isRed ? 'rgb(247, 186, 186)' : isGreen ? 'rgb(186, 240, 202)' : '';
+
+        return row;
       });
 
-      setTableData(processedData);
-      calculateSummary(processedData);
+      // Filter by frontend filters if applied
+      const filteredData = processedData.filter(item => {
+        if (filters.category !== 'All Categories' && item.category !== filters.category) return false;
+        // Add more filter logic if needed
+        return true;
+      });
+
+      setTableData(filteredData);
+      calculateSummary(filteredData);
 
     } catch (error) {
-      console.error("Error fetching AMC prices:", error);
+      console.error("Error fetching AMC data:", error);
+      alert("Failed to load AMC settings");
     } finally {
       setLoading(false);
     }
@@ -167,15 +194,31 @@ export default function SetPriceAmc() {
     if (item.isEditing) {
       // Saving changes
       try {
-        await salesSettingsService.updateSetPriceAmc(id, {
+        const payload = {
+          quoteSettingsId: item.quoteSettingsId,
           amcPrice: item.amcPrice,
           latestBuyingPrice: item.latestBuyingPrice,
-          gst: item.gst
-        });
-        // Reflect save success UI?
+          gst: item.gst,
+          category: item.category,
+          subCategory: item.subCategory,
+          projectType: item.projectType,
+          subProjectType: item.subProjectType,
+          brand: item.brand !== '-' ? item.brand : 'Default',
+          productType: item.productType !== '-' ? item.productType : 'Service',
+          state: selectedStateId || undefined,
+          district: selectedDistrictId || undefined,
+          cluster: selectedClusterId || undefined
+        };
+
+        if (item.isNew) {
+          await salesSettingsService.createSetPriceAmc(payload);
+        } else {
+          await salesSettingsService.updateSetPriceAmc(id, payload);
+        }
+        await fetchPrices(); // Refresh data to get real IDs
       } catch (error) {
-        console.error("Error updating price:", error);
-        alert("Failed to update price");
+        console.error("Error saving AMC price:", error);
+        alert("Failed to save price");
         return;
       }
     }
@@ -473,23 +516,22 @@ export default function SetPriceAmc() {
             </div>
           </div>
 
-          {/* AMC Price Table */}
-          <div className="bg-white rounded-lg shadow-sm overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-800 text-white">
-                  <tr>
-                    <th className="px-4 py-3 text-center font-semibold">Combo Kit</th>
-                    <th className="px-4 py-3 text-center font-semibold">Brand</th>
-                    <th className="px-4 py-3 text-center font-semibold">Product Type</th>
-                    <th className="px-4 py-3 text-center font-semibold">Category</th>
-                    <th className="px-4 py-3 text-center font-semibold">Sub Category</th>
-                    <th className="px-4 py-3 text-center font-semibold">Project Type</th>
-                    <th className="px-4 py-3 text-center font-semibold">Sub Project Type</th>
-                    <th className="px-4 py-3 text-center font-semibold">AMC Price</th>
-                    <th className="px-4 py-3 text-center font-semibold">Latest Buying Price</th>
-                    <th className="px-4 py-3 text-center font-semibold">Company Margin (per KW)</th>
-                    <th className="px-4 py-3 text-center font-semibold">GST (%)</th>
+              <table className="min-w-full border-collapse">
+                <thead>
+                  <tr className="bg-[#4db2eb] text-white">
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Combo Kit</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Brand</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Product Type</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Category</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Sub Category</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Project Type</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Sub Project Type</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">AMC Price</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Latest Buying Price</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">Company Margin (per KW)</th>
+                    <th className="px-4 py-3 text-center font-semibold border-r border-white/20">GST (%)</th>
                     <th className="px-4 py-3 text-center font-semibold">Actions</th>
                   </tr>
                 </thead>
@@ -631,19 +673,57 @@ export default function SetPriceAmc() {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Category</label>
-                  <input className="w-full border rounded p-2" value={newPriceForm.category} onChange={e => setNewPriceForm({ ...newPriceForm, category: e.target.value })} />
+                  <select
+                    className="w-full border rounded p-2"
+                    value={newPriceForm.category}
+                    onChange={e => {
+                      const cat = e.target.value;
+                      const related = tableData.find(t => t.category === cat);
+                      setNewPriceForm({
+                        ...newPriceForm,
+                        category: cat,
+                        subCategory: related?.subCategory || '',
+                        projectType: related?.projectType || '',
+                        subProjectType: related?.subProjectType || '',
+                        quoteSettingsId: related?.quoteSettingsId || ''
+                      });
+                    }}
+                  >
+                    <option value="">Select Category</option>
+                    {[...new Set(tableData.map(t => t.category))].map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Sub Category</label>
-                  <input className="w-full border rounded p-2" value={newPriceForm.subCategory} onChange={e => setNewPriceForm({ ...newPriceForm, subCategory: e.target.value })} />
+                  <input className="w-full border rounded p-2 bg-gray-50" value={newPriceForm.subCategory} readOnly />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Project Type</label>
-                  <input className="w-full border rounded p-2" value={newPriceForm.projectType} onChange={e => setNewPriceForm({ ...newPriceForm, projectType: e.target.value })} />
+                  <select
+                    className="w-full border rounded p-2"
+                    value={newPriceForm.projectType}
+                    onChange={e => {
+                      const pt = e.target.value;
+                      const related = tableData.find(t => t.category === newPriceForm.category && t.projectType === pt);
+                      setNewPriceForm({
+                        ...newPriceForm,
+                        projectType: pt,
+                        subProjectType: related?.subProjectType || '',
+                        quoteSettingsId: related?.quoteSettingsId || ''
+                      });
+                    }}
+                  >
+                    <option value="">Select Project Type</option>
+                    {tableData.filter(t => t.category === newPriceForm.category).map(t => (
+                      <option key={t.projectType} value={t.projectType}>{t.projectType}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">Sub Project Type</label>
-                  <input className="w-full border rounded p-2" value={newPriceForm.subProjectType} onChange={e => setNewPriceForm({ ...newPriceForm, subProjectType: e.target.value })} />
+                  <input className="w-full border rounded p-2 bg-gray-50" value={newPriceForm.subProjectType} readOnly />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700">AMC Price</label>

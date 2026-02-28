@@ -101,7 +101,7 @@ export default function DiscomMaster() {
   // Handle show project table
   const handleShowProjectTable = () => {
     if (!discomName.trim()) {
-      alert('Enter Discomm Name');
+      alert('Enter Discom Name');
       return;
     }
     setShowProjectTable(true);
@@ -219,7 +219,7 @@ export default function DiscomMaster() {
               <div className="inline-flex items-center bg-white p-4 shadow-sm rounded-lg w-full">
                 <h3 className="text-2xl font-bold text-gray-800 flex items-center">
                   <Building2 className="mr-3" size={28} />
-                  Discomm Master
+                  Discom Master
                 </h3>
               </div>
             </li>
@@ -256,7 +256,7 @@ export default function DiscomMaster() {
         </div>
       </div>
 
-      {/* Discomm Input Section */}
+      {/* Discom Input Section */}
       {showDiscomSection && (
         <div className="container mx-auto mb-8 bg-white p-6 rounded-lg shadow-lg">
           <h4 className="text-xl font-bold text-gray-700 mb-4">
@@ -265,15 +265,15 @@ export default function DiscomMaster() {
           </h4>
 
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="discommName">
-              Discomm Name
+            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="discomName">
+              Discom Name
             </label>
             <input
               type="text"
-              id="discommName"
+              id="discomName"
               value={discomName}
               onChange={(e) => setDiscomName(e.target.value)}
-              placeholder="Enter Discomm Name"
+              placeholder="Enter Discom Name"
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition duration-200"
             />
           </div>
@@ -283,7 +283,7 @@ export default function DiscomMaster() {
             className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-6 rounded-lg flex items-center transition duration-200"
           >
             <CheckCircle className="mr-2" size={20} />
-            {showProjectTable ? 'Refresh Project Types' : 'Configure Project Rates'}
+            {showProjectTable ? 'Refresh Project Types' : 'Save & project types'}
           </button>
         </div>
       )}
@@ -362,61 +362,85 @@ export default function DiscomMaster() {
         </div>
       )}
 
-      {/* Existing Discoms List */}
+      {/* Existing Discoms List (Restyled as Summary Mockup) */}
       {selectedStateId && (
-        <div className="container mx-auto mb-8 bg-white p-6 rounded-lg shadow-lg">
-          <div className="flex justify-between items-center mb-6">
-            <h4 className="text-xl font-bold text-gray-700">Existing Discoms for {selectedStateName}</h4>
-            <div className="bg-blue-100 text-blue-800 py-1 px-3 rounded-full text-sm font-semibold">
-              Count: {existingDiscoms.length}
+        <div className="container mx-auto mb-8 bg-gray-50/50">
+          <div className="flex flex-col space-y-4 mb-6">
+            <button
+              onClick={handleSaveDiscom}
+              className="w-fit bg-[#1a202c] hover:bg-gray-800 text-white font-bold py-2 px-4 rounded shadow-md transition duration-200 text-sm"
+            >
+              Save Summary
+            </button>
+            <div className="flex justify-between items-end">
+              <h2 className="text-3xl font-bold text-[#1e293b]">Summary</h2>
+              <div className="bg-blue-100 text-blue-800 py-1 px-3 rounded-full text-xs font-bold mb-1">
+                Found for {selectedStateName}: {existingDiscoms.length}
+              </div>
             </div>
           </div>
 
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white border border-gray-200">
-              <thead className="bg-gray-100">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-[#72b5f1]">
                 <tr>
-                  <th className="py-3 px-4 border-b text-left font-bold text-gray-700">#</th>
-                  <th className="py-3 px-4 border-b text-left font-bold text-gray-700">Discom Name</th>
-                  <th className="py-3 px-4 border-b text-left font-bold text-gray-700">Configured Projects</th>
-                  <th className="py-3 px-4 border-b text-center font-bold text-gray-700">Actions</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">#</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Discom Name</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Category</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Sub Category</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Project Type</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Sub Project Type</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Unit Price</th>
+                  <th className="px-4 py-4 text-left text-[10px] font-bold text-white uppercase tracking-wider border-r border-blue-300/30">Bill Tariff</th>
+                  <th className="px-4 py-4 text-center text-[10px] font-bold text-white uppercase tracking-wider">Action</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="bg-white divide-y divide-gray-100">
                 {existingDiscoms.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="py-8 text-center text-gray-500">
+                    <td colSpan="9" className="py-12 text-center text-gray-500 italic">
                       No Discoms found for this state.
                     </td>
                   </tr>
                 ) : (
-                  existingDiscoms.map((discom, index) => (
-                    <tr key={discom._id} className="hover:bg-gray-50 transition duration-150">
-                      <td className="py-3 px-4 border-b text-gray-600">{index + 1}</td>
-                      <td className="py-3 px-4 border-b font-medium text-gray-800">{discom.name}</td>
-                      <td className="py-3 px-4 border-b text-gray-600">
-                        {discom.projects ? discom.projects.length : 0} Types
-                      </td>
-                      <td className="py-3 px-4 border-b text-center">
-                        <div className="flex justify-center space-x-2">
-                          <button
-                            onClick={() => handleEditDiscom(discom)}
-                            className="text-blue-600 hover:text-blue-800 bg-blue-50 p-2 rounded-full transition"
-                            title="Edit"
-                          >
-                            <Edit2 size={18} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteDiscom(discom._id)}
-                            className="text-red-600 hover:text-red-800 bg-red-50 p-2 rounded-full transition"
-                            title="Delete"
-                          >
-                            <Trash2 size={18} />
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                  existingDiscoms.flatMap((discom, dIndex) =>
+                    (discom.projects && discom.projects.length > 0 ? discom.projects : [{}]).map((proj, pIndex) => (
+                      <tr key={`${discom._id}-${pIndex}`} className="hover:bg-blue-50/30 transition-colors duration-200">
+                        {pIndex === 0 ? (
+                          <>
+                            <td rowSpan={Math.max(1, discom.projects?.length || 0)} className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-600 border-r border-gray-100 align-top">
+                              {dIndex + 1}
+                            </td>
+                            <td rowSpan={Math.max(1, discom.projects?.length || 0)} className="px-4 py-5 whitespace-nowrap text-xs font-bold text-gray-800 border-r border-gray-100 align-top">
+                              {discom.name}
+                            </td>
+                          </>
+                        ) : null}
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-700 border-r border-gray-100">{proj.category || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-700 border-r border-gray-100">{proj.subCategory || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-700 border-r border-gray-100">{proj.projectType || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-700 border-r border-gray-100">{proj.subProjectType || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-semibold text-gray-800 border-r border-gray-100">{proj.unitPrice || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-xs font-semibold text-gray-800 border-r border-gray-100">{proj.billTariff || '-'}</td>
+                        <td className="px-4 py-5 whitespace-nowrap text-center">
+                          <div className="flex flex-col items-center space-y-2">
+                            <button
+                              onClick={() => handleEditDiscom(discom)}
+                              className="w-14 bg-[#ffc107] hover:bg-yellow-500 text-gray-800 text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleDeleteDiscom(discom._id)}
+                              className="w-14 bg-[#dc3545] hover:bg-red-600 text-white text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )
                 )}
               </tbody>
             </table>
