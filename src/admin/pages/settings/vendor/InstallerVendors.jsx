@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Plus, ChevronDown, Trash2, X, Eye, EyeOff } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { useLocations } from '../../../../hooks/useLocations';
+import { locationAPI } from '../../../../api/api';
 import {
   getInstallerVendorPlans,
   saveInstallerVendorPlan,
@@ -27,19 +27,22 @@ export default function InstallerVendors() {
   const [loadingPlans, setLoadingPlans] = useState(false);
   const [isAddPlanModalOpen, setIsAddPlanModalOpen] = useState(false);
   const [newPlanName, setNewPlanName] = useState('');
-  const [plans, setPlans] = useState(["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"]);
+  const [plans, setPlans] = useState(["Starter Plan", "Silver Plan", "Gold Plan", "Platinum Plan"]);
+  const [allFetchedPlans, setAllFetchedPlans] = useState([]); // Array of all saved plan objects
+  const [globalPlanNames, setGlobalPlanNames] = useState([]);
 
-  const {
-    states,
-    clusters,
-    districts,
-    selectedState,
-    setSelectedState,
-    selectedCluster,
-    setSelectedCluster,
-    selectedDistrict,
-    setSelectedDistrict
-  } = useLocations();
+  // Location Hierarchy State
+  const [locationData, setLocationData] = useState({
+    states: [],
+    clusters: [],
+    districts: []
+  });
+
+  const [selectedLocation, setSelectedLocation] = useState({
+    state: '',
+    cluster: '',
+    district: ''
+  });
 
   // Initialize state for a plan
   const getDefaultPlanState = () => ({
@@ -58,40 +61,133 @@ export default function InstallerVendors() {
 
   const [planSettings, setPlanSettings] = useState({});
 
-  // Fetch plans from DB when district changes
   useEffect(() => {
-    if (selectedDistrict) {
+    fetchGlobalNames();
+  }, []);
+
+  const fetchGlobalNames = async () => {
+    try {
+      const response = await getInstallerVendorPlans({ fetchAllNames: true });
+      if (response.success && response.data) {
+        setGlobalPlanNames(response.data);
+      }
+    } catch (err) {
+      console.error('Failed to fetch global names', err);
+    }
+  };
+
+  // Location Fetching Logic (similar to RoleSettings)
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const res = await locationAPI.getAllStates({ isActive: true });
+        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
+      } catch (error) {
+        console.error('Failed to fetch states', error);
+      }
+    };
+    fetchStates();
+  }, []);
+
+  useEffect(() => {
+    const fetchClusters = async () => {
+      if (selectedLocation.state) {
+        try {
+          const params = { isActive: true };
+          if (selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+          const res = await locationAPI.getAllClusters(params);
+          setLocationData(prev => ({ ...prev, clusters: res.data?.data || [] }));
+        } catch (error) {
+          setLocationData(prev => ({ ...prev, clusters: [] }));
+        }
+      } else setLocationData(prev => ({ ...prev, clusters: [] }));
+    };
+    fetchClusters();
+  }, [selectedLocation.state]);
+
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      if (selectedLocation.cluster) {
+        try {
+          if (selectedLocation.cluster !== 'all') {
+            const res = await locationAPI.getClusterById(selectedLocation.cluster);
+            if (res.data?.data?.districts) {
+              setLocationData(prev => ({ ...prev, districts: res.data.data.districts }));
+            } else setLocationData(prev => ({ ...prev, districts: [] }));
+          } else {
+            const params = { isActive: true };
+            if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+            const res = await locationAPI.getAllDistricts(params);
+            setLocationData(prev => ({ ...prev, districts: res.data?.data || [] }));
+          }
+        } catch (error) {
+          setLocationData(prev => ({ ...prev, districts: [] }));
+        }
+      } else setLocationData(prev => ({ ...prev, districts: [] }));
+    };
+    fetchDistricts();
+  }, [selectedLocation.cluster, selectedLocation.state]);
+
+  // Fetch plans from DB
+  useEffect(() => {
+    if (selectedLocation.district) {
       fetchPlans();
     } else {
-      setPlans(["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"]);
-      setPlanSettings({});
-      setActivePlan('Starter Plan');
+      const baseOrder = ["Starter Plan", "Silver Plan", "Gold Plan", "Platinum Plan"];
+      const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseOrder;
+      const sortedNames = Array.from(new Set([...baseOrder, ...fetchedNames]));
+      setPlans(sortedNames);
+      setPlanSettings(sortedNames.reduce((acc, name) => ({ ...acc, [name]: getDefaultPlanState() }), {}));
+      setActivePlan(sortedNames[0] || 'Starter Plan');
+      setAllFetchedPlans([]);
     }
-  }, [selectedDistrict]);
+  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, globalPlanNames]);
 
   const fetchPlans = async () => {
     try {
       setLoadingPlans(true);
-      const response = await getInstallerVendorPlans(selectedDistrict);
+      const params = {};
+      if (selectedLocation.district && selectedLocation.district !== 'all') {
+        params.districtId = selectedLocation.district;
+      } else if (selectedLocation.cluster && selectedLocation.cluster !== 'all') {
+        params.clusterId = selectedLocation.cluster;
+      } else if (selectedLocation.state && selectedLocation.state !== 'all') {
+        params.stateId = selectedLocation.state;
+      }
+
+      const response = await getInstallerVendorPlans(params);
       if (response.success && response.data.length > 0) {
         const dbPlans = response.data;
-        const planNames = dbPlans.map(p => p.name);
+        setAllFetchedPlans(dbPlans);
+        
+        // If specific district is selected, populate form. If "all", just list them (or populate if they want to mass-edit one).
+        // Standardizing on always populating form with the FIRST available plan match or defaults.
+        const districtPlans = selectedLocation.district !== 'all' 
+          ? dbPlans.filter(p => p.districtId?._id === selectedLocation.district || p.districtId === selectedLocation.district)
+          : dbPlans; // Just take any to populate form
 
-        const defaultNames = ["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"];
-        const combinedNames = Array.from(new Set([...defaultNames, ...planNames]));
-
-        setPlans(combinedNames);
+        // Ensure defaults are always shown in tabs
+        const baseOrder = ["Starter Plan", "Silver Plan", "Gold Plan", "Platinum Plan"];
+        const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseOrder;
+        const planNames = Array.from(new Set([...baseOrder, ...fetchedNames, ...districtPlans.map(p => p.name)]));
+        setPlans(planNames);
+        if(!activePlan || !planNames.includes(activePlan)) setActivePlan(planNames[0]);
 
         const settings = {};
-        combinedNames.forEach(name => {
-          const dbPlan = dbPlans.find(p => p.name === name);
+        planNames.forEach(name => {
+          const dbPlan = districtPlans.find(p => p.name === name);
           settings[name] = dbPlan ? { ...dbPlan } : getDefaultPlanState();
         });
         setPlanSettings(settings);
       } else {
-        const defaultNames = ["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"];
-        setPlans(defaultNames);
-        setPlanSettings(defaultNames.reduce((acc, name) => ({ ...acc, [name]: getDefaultPlanState() }), {}));
+        const baseOrder = ["Starter Plan", "Silver Plan", "Gold Plan", "Platinum Plan"];
+        const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseOrder;
+        const sortedNames = Array.from(new Set([...baseOrder, ...fetchedNames]));
+
+        setPlans(sortedNames);
+        setPlanSettings(sortedNames.reduce((acc, name) => ({ ...acc, [name]: getDefaultPlanState() }), {}));
+        setAllFetchedPlans([]);
+        setActivePlan(sortedNames[0] || 'Starter Plan');
       }
     } catch (error) {
       console.error('Error fetching plans:', error);
@@ -122,13 +218,19 @@ export default function InstallerVendors() {
   const handleSaveSettings = async () => {
     try {
       const currentPlanData = planSettings[activePlan];
+      
       const payload = {
         ...currentPlanData,
         name: activePlan,
-        stateId: selectedState,
-        clusterId: selectedCluster,
-        districtId: selectedDistrict
+        stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
+        clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
       };
+
+      if (selectedLocation.district === 'all') {
+         payload.districtId = null;
+      } else {
+         payload.districtId = selectedLocation.district;
+      }
 
       const response = await saveInstallerVendorPlan(payload);
       if (response.success) {
@@ -141,7 +243,7 @@ export default function InstallerVendors() {
     }
   };
 
-  const handleAddPlan = () => {
+  const handleAddPlan = async () => {
     if (!newPlanName.trim()) {
       toast.error('Plan name is required');
       return;
@@ -152,29 +254,54 @@ export default function InstallerVendors() {
     }
 
     const name = newPlanName.trim();
-    setPlans(prev => [...prev, name]);
-    setPlanSettings(prev => ({ ...prev, [name]: getDefaultPlanState() }));
-    setActivePlan(name);
-    setNewPlanName('');
-    setIsAddPlanModalOpen(false);
-    toast.success(`Plan "${name}" added.`);
+    
+    try {
+      // Save globally so it persists
+      const payload = {
+        ...getDefaultPlanState(),
+        name,
+        stateId: null,
+        clusterId: null,
+        districtId: null
+      };
+      await saveInstallerVendorPlan(payload);
+
+      setPlans(prev => [...prev, name]);
+      setPlanSettings(prev => ({ ...prev, [name]: getDefaultPlanState() }));
+      setActivePlan(name);
+      setNewPlanName('');
+      setIsAddPlanModalOpen(false);
+      toast.success(`Plan "${name}" added.`);
+      fetchGlobalNames();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to add plan globally');
+    }
   };
 
-  const handleDeletePlan = async (planName) => {
-    if (["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"].includes(planName)) {
-      toast.error('Default plans cannot be deleted');
-      return;
-    }
-
+  const handleDeletePlan = async (planName, providedPlanId) => {
     try {
-      const planId = planSettings[planName]?._id;
-      if (planId) {
-        await deleteInstallerVendorPlan(planId);
+      if (providedPlanId) {
+        await deleteInstallerVendorPlan(providedPlanId);
+        toast.success(`Configuration for ${planName} deleted`);
+      } else {
+        if (!window.confirm(`Are you sure you want to completely delete "${planName}" and all its configurations?`)) return;
+        
+        await deleteInstallerVendorPlan('by-name', { name: planName });
+        toast.success(`Plan "${planName}" entirely deleted`);
+        
+        // Remove from local states
+        setPlans(prev => prev.filter(p => p !== planName));
+        if (activePlan === planName) {
+          const remainingPlans = plans.filter(p => p !== planName);
+          setActivePlan(remainingPlans.length > 0 ? remainingPlans[0] : null);
+        }
       }
-      setPlans(prev => prev.filter(p => p !== planName));
-      if (activePlan === planName) setActivePlan('Starter Plan');
-      toast.success('Plan deleted');
+      
+      await fetchGlobalNames();
+      fetchPlans(); // Refresh the table immediately
     } catch (error) {
+      console.error(error);
       toast.error('Failed to delete plan');
     }
   };
@@ -201,87 +328,120 @@ export default function InstallerVendors() {
             <div>
               <h2 className="text-xl font-bold text-[#333] mb-6">Select State</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                {states.map(s => (
+                <LocationCard
+                  title="All States"
+                  subtitle="ALL"
+                  isSelected={selectedLocation.state === 'all'}
+                  onClick={() => setSelectedLocation({ state: 'all', cluster: '', district: '' })}
+                />
+                {locationData.states.map(s => (
                   <LocationCard
                     key={s._id}
                     title={s.name}
-                    subtitle={s.code || s.name.substring(0, 2)}
-                    isSelected={selectedState === s._id}
-                    onClick={() => setSelectedState(s._id)}
+                    subtitle={s.code || s.name.substring(0, 2).toUpperCase()}
+                    isSelected={selectedLocation.state === s._id}
+                    onClick={() => setSelectedLocation({ state: s._id, cluster: '', district: '' })}
                   />
                 ))}
               </div>
             </div>
 
             {/* Clusters */}
-            {selectedState && (
+            {selectedLocation.state && (
               <div>
                 <h2 className="text-xl font-bold text-[#333] mb-6">Select Cluster</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {clusters.map(c => (
-                    <LocationCard
-                      key={c._id}
-                      title={c.name}
-                      subtitle={states.find(s => s._id === selectedState)?.name || 'CL'}
-                      isSelected={selectedCluster === c._id}
-                      onClick={() => setSelectedCluster(c._id)}
-                    />
-                  ))}
+                  <LocationCard
+                    title="All Clusters"
+                    subtitle="ALL"
+                    isSelected={selectedLocation.cluster === 'all'}
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))}
+                  />
+                  {locationData.clusters.map(c => {
+                    const parentState = locationData.states.find(s => s._id === c.state) || locationData.states.find(s => s._id === selectedLocation.state);
+                    return (
+                      <LocationCard
+                        key={c._id}
+                        title={c.name}
+                        subtitle={parentState ? (parentState.code || parentState.name.substring(0,2).toUpperCase()) : 'CL'}
+                        isSelected={selectedLocation.cluster === c._id}
+                        onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, district: '' }))}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {/* Districts */}
-            {selectedCluster && (
+            {selectedLocation.cluster && (
               <div>
                 <h2 className="text-xl font-bold text-[#333] mb-6">Select District</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  {districts.map(d => (
-                    <LocationCard
-                      key={d._id}
-                      title={d.name}
-                      subtitle={clusters.find(c => c._id === selectedCluster)?.name || 'DT'}
-                      isSelected={selectedDistrict === d._id}
-                      onClick={() => setSelectedDistrict(d._id)}
-                    />
-                  ))}
+                  <LocationCard
+                    title="All Districts"
+                    subtitle="ALL"
+                    isSelected={selectedLocation.district === 'all'}
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))}
+                  />
+                  {locationData.districts.map(d => {
+                    const parentCluster = locationData.clusters.find(c => c._id === selectedLocation.cluster);
+                    return (
+                      <LocationCard
+                        key={d._id}
+                        title={d.name}
+                        subtitle={parentCluster ? parentCluster.name : 'DT'}
+                        isSelected={selectedLocation.district === d._id}
+                        onClick={() => setSelectedLocation(prev => ({ ...prev, district: d._id }))}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* Plan Configuration Area */}
-        {selectedDistrict && (
-          <div className="animate-in fade-in zoom-in-95 duration-500">
-            {/* Plan Tabs */}
-            <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
-              {plans.map(plan => (
-                <div key={plan} className="relative group">
-                  <button
-                    onClick={() => setActivePlan(plan)}
-                    className={`px-8 py-2.5 rounded-md text-sm font-bold transition-all shadow-sm tracking-wide ${activePlan === plan
-                      ? 'bg-[#0d6efd] text-white scale-105'
-                      : 'bg-[#2c3e50] text-gray-200 hover:bg-gray-700'
-                      }`}
-                  >
-                    {plan}
-                  </button>
-                  {!["Starter Plan", "Basic Plan", "Gold Plan", "Diamond Plan"].includes(plan) && (
+          {/* Plan Configuration Area */}
+          {(selectedLocation.district && plans.length > 0) && (
+            <div className="animate-in fade-in zoom-in-95 duration-500">
+              {/* Plan Tabs */}
+              <div className="flex flex-wrap items-center justify-center gap-3 mb-10">
+              {plans.map(plan => {
+                const isActive = activePlan === plan;
+                let textStyle = "text-gray-600";
+                if (!isActive) {
+                  if (plan === "Starter Plan") textStyle = "text-[#3b8bc6]";
+                  else if (plan === "Silver Plan") textStyle = "text-gray-500";
+                  else if (plan === "Gold Plan") textStyle = "text-[#fbbf24]";
+                  else if (plan === "Platinum Plan") textStyle = "text-[#10b981]";
+                }
+
+                return (
+                  <div key={plan} className="relative group">
+                    <button
+                      onClick={() => setActivePlan(plan)}
+                      className={`px-6 py-2 rounded-md text-[15px] font-bold transition-all tracking-wide ${isActive
+                        ? 'bg-[#4096d2] text-white ring-2 ring-blue-200 shadow-sm'
+                        : `bg-transparent ${textStyle} hover:bg-gray-100`
+                        }`}
+                    >
+                      {plan}
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleDeletePlan(plan); }}
                       className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
                     >
                       <Trash2 size={10} />
                     </button>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
               <button
                 onClick={() => setIsAddPlanModalOpen(true)}
-                className="px-8 py-2.5 rounded-md text-sm font-bold transition-all shadow-sm tracking-wide border-2 border-dashed border-[#2c3e50] text-[#2c3e50] hover:bg-gray-100 flex items-center gap-2"
+                className="px-6 py-2 rounded-md text-[15px] font-bold bg-[#343a40] text-white hover:bg-gray-800 transition-all shadow-md ml-2"
               >
-                <Plus size={16} /> Add Other Plan
+                Add More Plan
               </button>
             </div>
 
@@ -291,6 +451,11 @@ export default function InstallerVendors() {
               </div>
             ) : planSettings[activePlan] ? (
               <div className="bg-white rounded-xl shadow-sm border border-gray-100 max-w-6xl mx-auto overflow-hidden mb-16 px-8 py-10">
+                {/* Plan Title Header to replicate PHP layout */}
+                <div className="mb-8 border-b-2 border-blue-500 pb-4">
+                  <h2 className="text-3xl font-bold text-gray-500">{activePlan}</h2>
+                </div>
+
                 <div className="grid grid-cols-3 gap-x-12 gap-y-10">
                   {/* Row 1 */}
                   <div>
@@ -373,8 +538,8 @@ export default function InstallerVendors() {
 
                   <div>
                     <h5 className="font-bold text-gray-800 mb-4 text-base">Team Allocation</h5>
-                    <div className="flex items-center gap-8">
-                      <div className="flex items-center gap-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <div className="flex items-center gap-2">
                         <span className="text-gray-600 text-sm">Residential</span>
                         <input
                           type="number"
@@ -383,7 +548,7 @@ export default function InstallerVendors() {
                           className="w-16 px-2 py-2 border border-blue-200 rounded text-center text-sm font-medium"
                         />
                       </div>
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
                         <span className="text-gray-600 text-sm">Commercial</span>
                         <input
                           type="number"
@@ -485,6 +650,81 @@ export default function InstallerVendors() {
                 </div>
               </div>
             ) : null}
+
+            {/* Display Saved Plans (Summary) */}
+            {!loadingPlans && allFetchedPlans.length > 0 && (
+              <div className="bg-white rounded-xl shadow-sm border border-gray-100 max-w-[100%] mx-auto overflow-hidden mt-10 p-6">
+                <h3 className="font-bold text-lg text-[#0b386a] mb-4 border-b pb-2">Saved Configuration Overview</h3>
+                <div className="overflow-x-auto pb-4">
+                    <table className="w-full text-left border-collapse text-sm min-w-[1200px]">
+                        <thead className="bg-[#82c5fa] text-white">
+                            <tr>
+                                <th className="p-3 border-r border-white/20 whitespace-nowrap">Plan Name</th>
+                                    <th className="p-3 border-r border-white/20">State</th>
+                                <th className="p-3 border-r border-white/20">Cluster</th>
+                                <th className="p-3 border-r border-white/20">District</th>
+                                <th className="p-3 border-r border-white/20 text-center">Sub. (₹)</th>
+                                <th className="p-3 border-r border-white/20 text-center">Coverage</th>
+                                <th className="p-3 border-r border-white/20 text-center">Payment</th>
+                                <th className="p-3 border-r border-white/20 text-center">Teams (R/C)</th>
+                                <th className="p-3 border-r border-white/20 text-center">WK Assign (R/C)</th>
+                                <th className="p-3 border-r border-white/20 text-center">Res Rates</th>
+                                <th className="p-3 border-r border-white/20 text-center">Com Rates</th>
+                                <th className="p-3 text-center">Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {allFetchedPlans.map((plan, idx) => (
+                                <tr key={plan._id || idx} className="border-b border-gray-100 hover:bg-gray-50">
+                                    <td className="p-3 border-r border-gray-100 font-bold text-gray-800 whitespace-nowrap">{plan.name}</td>
+                                    <td className="p-3 border-r border-gray-100 text-gray-600">
+                                        {plan.stateId?.name || 'All States'}
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-gray-600">
+                                        {plan.clusterId?.name || 'All Clusters'}
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-gray-600">
+                                        {plan.districtId?.name || 'All Districts'}
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 font-semibold">{plan.subscription}</td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 whitespace-nowrap">{plan.coverage}</td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 text-xs">
+                                      {Array.isArray(plan.paymentMethods) 
+                                          ? plan.paymentMethods.join(' / ') || '-' 
+                                          : Object.entries(plan.paymentMethods || {})
+                                          .filter(([_, v]) => v)
+                                          .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
+                                          .join(' / ') || '-'}
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 whitespace-nowrap">
+                                        <span className="text-blue-600 font-medium">{plan.teams.residential}</span> / <span className="text-orange-600 font-medium">{plan.teams.commercial}</span>
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 whitespace-nowrap">
+                                        <span className="text-blue-600 font-medium">{plan.weeklyKWAssign.residential}</span> / <span className="text-orange-600 font-medium">{plan.weeklyKWAssign.commercial}</span>
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 text-xs whitespace-nowrap">
+                                        On-Grid: <span className="font-medium text-gray-800">{plan.rates.resOnGrid}</span><br/>
+                                        Off-Grid: <span className="font-medium text-gray-800">{plan.rates.resOffGrid}</span>
+                                    </td>
+                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 text-xs whitespace-nowrap">
+                                        On-Grid: <span className="font-medium text-gray-800">{plan.rates.comOnGrid}</span><br/>
+                                        Off-Grid: <span className="font-medium text-gray-800">{plan.rates.comOffGrid}</span>
+                                    </td>
+                                    <td className="p-3 text-center">
+                                       <button 
+                                          onClick={() => handleDeletePlan(plan.name, plan._id)}
+                                          className="text-red-500 hover:text-red-700 mx-auto"
+                                        >
+                                          <Trash2 size={16} />
+                                       </button>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
+              </div>
+            )}
           </div>
         )}
 

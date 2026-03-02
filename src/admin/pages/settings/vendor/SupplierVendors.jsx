@@ -1,509 +1,541 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit2, Trash2, X, Check, Loader } from 'lucide-react';
+import { Plus, Eye, EyeOff, Loader, Trash2 } from 'lucide-react';
 import {
-  getSupplierVendors,
-  createSupplierVendor,
-  updateSupplierVendor,
-  deleteSupplierVendor,
-  getSupplierTypes
+  getSupplierVendorPlans,
+  saveSupplierVendorPlan,
+  deleteSupplierVendorPlan
 } from '../../../../services/vendor/vendorApi';
-import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
-import { useLocations } from '../../../../hooks/useLocations';
+import { locationAPI } from '../../../../api/api';
 import toast from 'react-hot-toast';
 
+const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
+  <div
+    onClick={onClick}
+    className={`p-6 rounded-md border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+      ? 'border-[#007bff] bg-white'
+      : 'border-transparent bg-white'
+      }`}
+  >
+    <div className="font-bold text-base text-[#333] mb-1">{title}</div>
+    <div className="text-xs text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
+  </div>
+);
+
 export default function SupplierVendors() {
-  const [vendors, setVendors] = useState([]);
-  const [types, setTypes] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [showModal, setShowModal] = useState(false);
-  const [editingId, setEditingId] = useState(null);
+  const [activeTab, setActiveTab] = useState('Manufacturer');
+  const [tabs, setTabs] = useState(['Manufacturer', 'Distributor', 'Dealer']);
+  const [showLocationCards, setShowLocationCards] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [allFetchedPlans, setAllFetchedPlans] = useState([]);
+  const [globalPlanNames, setGlobalPlanNames] = useState([]);
 
-  const {
-    states,
-    clusters,
-    districts,
-    selectedState,
-    setSelectedState,
-    selectedCluster,
-    setSelectedCluster,
-    selectedDistrict,
-    setSelectedDistrict,
-    loading: locationsLoading
-  } = useLocations();
-
-  // Form State
-  const [formData, setFormData] = useState({
-    name: '',
-    supplierTypeId: '',
-    contact: '',
-    email: '',
-    state: '',
-    cluster: '',
-    district: '',
-    status: 'Active'
-  });
-
-  // Local state for formdropdowns
-  const [formClusters, setFormClusters] = useState([]);
-  const [formDistricts, setFormDistricts] = useState([]);
-
-  useEffect(() => {
-    fetchData();
-  }, [selectedState, selectedCluster, selectedDistrict]);
-
-  const fetchData = async () => {
+  const fetchGlobalNames = async () => {
     try {
-      setLoading(true);
-      const params = {
-        state: selectedState,
-        cluster: selectedCluster,
-        district: selectedDistrict
-      };
-
-      const [vendorsRes, typesRes] = await Promise.all([
-        getSupplierVendors(params),
-        getSupplierTypes()
-      ]);
-
-      if (vendorsRes.success) {
-        setVendors(vendorsRes.data);
-      }
-      if (typesRes.success) {
-        setTypes(typesRes.data.filter(t => t.status === 'Active'));
+      const res = await getSupplierVendorPlans({ fetchAllNames: true });
+      if (res.success && res.data) {
+        setGlobalPlanNames(res.data);
       }
     } catch (error) {
-      console.error('Error fetching data:', error);
-      toast.error('Failed to load data');
+      console.error('Error fetching global plan names', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchGlobalNames();
+  }, []);
+
+  // Form State
+  const getDefaultFormState = () => ({
+      kycDetails: [],
+      subloginRole: '',
+      subloginLimit: '',
+      accessType: 'Full Access'
+  });
+
+  const [formSettings, setFormSettings] = useState({
+      'Manufacturer': getDefaultFormState(),
+      'Distributor': getDefaultFormState(),
+      'Dealer': getDefaultFormState(),
+  });
+
+  const kycOptions = [
+      "Company Name", "Company Address", "Email Address", "Contact Person", "Phone Number",
+      "KYC Documents (Aadhar, PAN)", "Warehouse Image (JPG, PNG)", "Unit Details", "GST Number"
+  ];
+
+  // Location Hierarchy State
+  const [locationData, setLocationData] = useState({ states: [], clusters: [], districts: [] });
+  const [selectedLocation, setSelectedLocation] = useState({ state: '', cluster: '', district: '' });
+
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const res = await locationAPI.getAllStates({ isActive: true });
+        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
+      } catch (error) { console.error(error); }
+    };
+    fetchStates();
+  }, []);
+
+  useEffect(() => {
+    const fetchClusters = async () => {
+      if (selectedLocation.state) {
+        try {
+          const params = { isActive: true };
+          if (selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+          const res = await locationAPI.getAllClusters(params);
+          setLocationData(prev => ({ ...prev, clusters: res.data?.data || [] }));
+        } catch (error) { setLocationData(prev => ({ ...prev, clusters: [] })); }
+      } else setLocationData(prev => ({ ...prev, clusters: [] }));
+    };
+    fetchClusters();
+  }, [selectedLocation.state]);
+
+  useEffect(() => {
+    const fetchDistricts = async () => {
+      if (selectedLocation.cluster) {
+        try {
+          if (selectedLocation.cluster !== 'all') {
+            const res = await locationAPI.getClusterById(selectedLocation.cluster);
+            if (res.data?.data?.districts) setLocationData(prev => ({ ...prev, districts: res.data.data.districts }));
+            else setLocationData(prev => ({ ...prev, districts: [] }));
+          } else {
+            const params = { isActive: true };
+            if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+            const res = await locationAPI.getAllDistricts(params);
+            setLocationData(prev => ({ ...prev, districts: res.data?.data || [] }));
+          }
+        } catch (error) { setLocationData(prev => ({ ...prev, districts: [] })); }
+      } else setLocationData(prev => ({ ...prev, districts: [] }));
+    };
+    fetchDistricts();
+  }, [selectedLocation.cluster, selectedLocation.state]);
+
+  useEffect(() => {
+    if (selectedLocation.district) fetchPlans();
+    else resetToDefaults();
+  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, globalPlanNames]);
+
+  const resetToDefaults = () => {
+      const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
+      const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
+      const sortedTabs = Array.from(new Set([...baseTabs, ...fetchedNames]));
+
+      setTabs(sortedTabs);
+      setActiveTab(sortedTabs[0] || 'Manufacturer');
+      setAllFetchedPlans([]);
+      setFormSettings(sortedTabs.reduce((acc, tab) => ({ ...acc, [tab]: getDefaultFormState() }), {}));
+  };
+
+  const fetchPlans = async () => {
+    try {
+      setLoading(true);
+      const params = {};
+      if (selectedLocation.district && selectedLocation.district !== 'all') params.districtId = selectedLocation.district;
+      else if (selectedLocation.cluster && selectedLocation.cluster !== 'all') params.clusterId = selectedLocation.cluster;
+      else if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+
+      const res = await getSupplierVendorPlans(params);
+      if (res.success && res.data.length > 0) {
+        const dbPlans = res.data;
+        setAllFetchedPlans(dbPlans);
+        
+        const districtPlans = selectedLocation.district !== 'all' 
+          ? dbPlans.filter(p => p.districtId?._id === selectedLocation.district || p.districtId === selectedLocation.district)
+          : dbPlans;
+
+        const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
+        const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
+        const uniqueTabs = Array.from(new Set([...baseTabs, ...fetchedNames, ...districtPlans.map(p => p.name)]));
+        setTabs(uniqueTabs);
+        if (!uniqueTabs.includes(activeTab)) setActiveTab(uniqueTabs[0]);
+
+        const settings = {};
+        uniqueTabs.forEach(name => {
+            const match = districtPlans.find(p => p.name === name);
+            settings[name] = match ? { ...match } : getDefaultFormState();
+        });
+        setFormSettings(settings);
+      } else {
+        resetToDefaults();
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to load supplier vendor settings');
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchVendors = async () => {
-    try {
-      const params = {
-        state: selectedState,
-        cluster: selectedCluster,
-        district: selectedDistrict
-      };
-      const res = await getSupplierVendors(params);
-      if (res.success) {
-        setVendors(res.data);
+  const handleCheckboxToggle = (value) => {
+      const current = formSettings[activeTab].kycDetails || [];
+      const updated = current.includes(value) ? current.filter(i => i !== value) : [...current, value];
+      setFormSettings(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], kycDetails: updated } }));
+  };
+
+  const handleInputChange = (field, value) => {
+      setFormSettings(prev => ({ ...prev, [activeTab]: { ...prev[activeTab], [field]: value } }));
+  };
+
+  const handleSave = async () => {
+      setSubmitting(true);
+      try {
+          const payload = {
+              ...formSettings[activeTab],
+              name: activeTab,
+              stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
+              clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
+          };
+          if (selectedLocation.district === 'all') payload.districtId = null;
+          else payload.districtId = selectedLocation.district;
+
+          const response = await saveSupplierVendorPlan(payload);
+          if (response.success) {
+              toast.success(`${activeTab} saved successfully`);
+              fetchPlans();
+          }
+      } catch (error) {
+          console.error(error);
+          toast.error('Failed to save settings');
+      } finally {
+          setSubmitting(false);
       }
-    } catch (error) {
-      console.error("Error fetching vendors", error);
-    }
+  };
+
+  const handleDelete = async (planName, providedId) => {
+      try {
+          const planId = providedId || allFetchedPlans.find(p => p.name === planName)?._id;
+          if (planId) {
+              await deleteSupplierVendorPlan(planId);
+              toast.success('Configuration deleted');
+          } else {
+              // Delete globally
+              await deleteSupplierVendorPlan('by-name', { name: planName });
+              toast.success('Plan deleted globally');
+          }
+
+          if (["Manufacturer", "Distributor", "Dealer"].includes(planName)) {
+              setFormSettings(prev => ({ ...prev, [planName]: getDefaultFormState() }));
+          } else {
+              setTabs(prev => prev.filter(t => t !== planName));
+              if (activeTab === planName) setActiveTab(tabs.length > 0 ? tabs[0] : 'Manufacturer');
+          }
+          await fetchGlobalNames();
+          fetchPlans();
+      } catch (error) {
+          console.error(error);
+          toast.error('Failed to delete configuration');
+      }
+  };
+
+  const [isAddOpen, setIsAddOpen] = useState(false);
+  const [newTabName, setNewTabName] = useState('');
+
+  const handleAddTab = async () => {
+      if (!newTabName.trim()) return toast.error('Name required');
+      if (tabs.includes(newTabName.trim())) return toast.error('Already exists');
+      const name = newTabName.trim();
+      
+      try {
+          setSubmitting(true);
+          const payload = {
+              ...getDefaultFormState(),
+              name: name,
+              stateId: null,
+              clusterId: null,
+              districtId: null
+          };
+          
+          const response = await saveSupplierVendorPlan(payload);
+          if (response.success) {
+              toast.success('Plan added');
+              await fetchGlobalNames();
+              setTabs(prev => Array.from(new Set([...prev, name])));
+              setFormSettings(prev => ({ ...prev, [name]: getDefaultFormState() }));
+              setActiveTab(name);
+              setNewTabName('');
+              setIsAddOpen(false);
+          }
+      } catch (error) {
+          console.error(error);
+          toast.error('Failed to add plan globally');
+      } finally {
+          setSubmitting(false);
+      }
   }
 
-  const resetForm = () => {
-    setFormData({ name: '', supplierTypeId: '', contact: '', email: '', state: '', cluster: '', district: '', status: 'Active' });
-    setFormClusters([]);
-    setFormDistricts([]);
-    setEditingId(null);
-    setShowModal(false);
-  };
-
-  const handleFormStateChange = async (e) => {
-    const newStateId = e.target.value;
-    setFormData(prev => ({ ...prev, state: newStateId, cluster: '', district: '' }));
-    setFormClusters([]);
-    setFormDistricts([]);
-
-    if (newStateId) {
-      try {
-        const data = await getClustersHierarchy(newStateId);
-        setFormClusters(data || []);
-      } catch (error) {
-        console.error('Error fetching clusters:', error);
-        toast.error('Failed to load clusters');
-      }
-    }
-  };
-
-  const handleFormClusterChange = async (e) => {
-    const newClusterId = e.target.value;
-    setFormData(prev => ({ ...prev, cluster: newClusterId, district: '' }));
-    setFormDistricts([]);
-
-    if (newClusterId) {
-      try {
-        const data = await getDistrictsHierarchy(newClusterId);
-        setFormDistricts(data || []);
-      } catch (error) {
-        console.error('Error fetching districts:', error);
-        toast.error('Failed to load districts');
-      }
-    }
-  };
-
-  const handleEdit = async (vendor) => {
-    setEditingId(vendor._id);
-    setShowModal(true);
-
-    // Set basic data
-    setFormData({
-      name: vendor.name,
-      supplierTypeId: vendor.supplierTypeId?._id || vendor.supplierTypeId,
-      contact: vendor.contact,
-      email: vendor.email,
-      state: vendor.state?._id || vendor.state || '',
-      cluster: vendor.cluster?._id || vendor.cluster || '',
-      district: vendor.district?._id || vendor.district || '',
-      status: vendor.status
-    });
-
-    // Fetch dependent data
-    try {
-      const stateId = vendor.state?._id || vendor.state;
-      if (stateId) {
-        const clustersData = await getClustersHierarchy(stateId);
-        setFormClusters(clustersData || []);
-
-        const clusterId = vendor.cluster?._id || vendor.cluster;
-        if (clusterId) {
-          const districtsData = await getDistrictsHierarchy(clusterId);
-          setFormDistricts(districtsData || []);
-        }
-      }
-    } catch (error) {
-      console.error('Error fetching dependent location data:', error);
-      toast.error('Failed to load location data for editing');
-    }
-  };
-
-  const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this vendor?')) return;
-    try {
-      await deleteSupplierVendor(id);
-      toast.success('Vendor deleted successfully');
-      fetchVendors();
-    } catch (error) {
-      console.error('Error deleting vendor:', error);
-      toast.error('Failed to delete vendor');
-    }
-  };
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setSubmitting(true);
-    try {
-      if (editingId) {
-        await updateSupplierVendor(editingId, formData);
-        toast.success('Vendor updated successfully');
-      } else {
-        await createSupplierVendor(formData);
-        toast.success('Vendor created successfully');
-      }
-      fetchVendors();
-      resetForm();
-    } catch (error) {
-      console.error('Error saving vendor:', error);
-      toast.error(error.response?.data?.message || 'Failed to save vendor');
-    } finally {
-      setSubmitting(false);
-    }
-  };
-
-  const filteredVendors = vendors.filter(v =>
-    v.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    v.supplierTypeId?.typeName?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
-
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-800">Supplier Vendor Management</h1>
+    <div className="bg-[#f4f7fa] min-h-screen font-sans">
+      <div className="bg-white p-6 border-b border-gray-200 mb-8 px-12">
+        <h1 className="text-xl font-bold text-[#14233c]">Supplier Vendor Management</h1>
         <button
-          onClick={() => setShowModal(true)}
-          className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+          onClick={() => setShowLocationCards(!showLocationCards)}
+          className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-[#0076a8] text-white rounded text-[10px] font-bold shadow-sm hover:bg-blue-800 transition-all uppercase tracking-wider"
         >
-          <Plus size={20} className="mr-2" />
-          Add Supplier Vendor
+          {showLocationCards ? <EyeOff size={14} /> : <Eye size={14} />} {showLocationCards ? 'Hide Location Cards' : 'Show Location Cards'}
         </button>
       </div>
 
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        {/* Search & Filters */}
-        <div className="p-4 border-b border-gray-200">
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={20} />
-              <input
-                type="text"
-                placeholder="Search vendors by name or email..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
+      <div className="max-w-[1400px] mx-auto px-12 pb-20">
+        
+        {/* Locations */}
+        {showLocationCards && (
+          <div className="space-y-10 mb-10">
+            <div>
+              <h2 className="text-xl font-bold text-[#333] mb-6">Select State</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation({ state: 'all', cluster: '', district: '' })} />
+                {locationData.states.map(s => (
+                  <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation({ state: s._id, cluster: '', district: '' })} />
+                ))}
+              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <select
-                value={selectedState}
-                onChange={(e) => setSelectedState(e.target.value)}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              >
-                <option value="">All States</option>
-                {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+            {selectedLocation.state && (
+              <div>
+                <h2 className="text-xl font-bold text-[#333] mb-6">Select Cluster</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedLocation.cluster === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))} />
+                  {locationData.clusters.map(c => {
+                    const parentState = locationData.states.find(s => s._id === c.state) || locationData.states.find(s => s._id === selectedLocation.state);
+                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'} isSelected={selectedLocation.cluster === c._id} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, district: '' }))} />;
+                  })}
+                </div>
+              </div>
+            )}
 
-              <select
-                value={selectedCluster}
-                onChange={(e) => setSelectedCluster(e.target.value)}
-                disabled={!selectedState}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
-              >
-                <option value="">All Clusters</option>
-                {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </select>
-
-              <select
-                value={selectedDistrict}
-                onChange={(e) => setSelectedDistrict(e.target.value)}
-                disabled={!selectedCluster}
-                className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm disabled:opacity-50"
-              >
-                <option value="">All Districts</option>
-                {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-              </select>
-            </div>
+            {selectedLocation.cluster && (
+              <div>
+                <h2 className="text-xl font-bold text-[#333] mb-6">Select District</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <LocationCard title="All Districts" subtitle="ALL" isSelected={selectedLocation.district === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))} />
+                  {locationData.districts.map(d => {
+                    const parentCluster = locationData.clusters.find(c => c._id === selectedLocation.cluster);
+                    return <LocationCard key={d._id} title={d.name} subtitle={parentCluster ? parentCluster.name : 'DIST'} isSelected={selectedLocation.district === d._id} onClick={() => setSelectedLocation(prev => ({ ...prev, district: d._id }))} />;
+                  })}
+                </div>
+              </div>
+            )}
           </div>
-        </div>
+        )}
 
-        {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left">
-            <thead className="bg-gray-50 border-b border-gray-200">
-              <tr>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Name</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Type</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Contact</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Email</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Location (S/C/D)</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700">Status</th>
-                <th className="px-6 py-3 text-sm font-semibold text-gray-700 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-200">
-              {loading ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
-                    <div className="flex justify-center items-center gap-2">
-                      <Loader className="animate-spin" size={20} /> Loading...
+        {/* Form Container */}
+        {selectedLocation.district && (
+          <div className="bg-white rounded-md shadow-sm border border-gray-200 pt-8 pb-10 px-10 mb-16 relative">
+             <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-2">
+                 {tabs.map(tab => (
+                    <div key={tab} className="relative group">
+                        <button
+                            onClick={() => setActiveTab(tab)}
+                            className={`px-6 py-2 rounded font-bold text-sm shadow-sm transition-all ${activeTab === tab ? 'bg-[#007bff] text-white' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+                        >
+                            {tab}
+                        </button>
+                        <button
+                            onClick={(e) => { e.stopPropagation(); handleDelete(tab); }}
+                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                        >
+                            <Trash2 size={10} />
+                        </button>
                     </div>
-                  </td>
-                </tr>
-              ) : filteredVendors.length === 0 ? (
-                <tr>
-                  <td colSpan="7" className="px-6 py-8 text-center text-gray-500">
-                    No vendors found.
-                  </td>
-                </tr>
-              ) : (
-                filteredVendors.map((vendor) => (
-                  <tr key={vendor._id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4 font-medium text-gray-900">{vendor.name}</td>
-                    <td className="px-6 py-4 text-gray-600">
-                      <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded text-xs font-medium">
-                        {vendor.supplierTypeId?.typeName || 'Unknown'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-gray-600">{vendor.contact}</td>
-                    <td className="px-6 py-4 text-gray-600">{vendor.email}</td>
-                    <td className="px-6 py-4 text-gray-600 text-sm">
-                      <div className="font-semibold">{vendor.state?.name || '---'}</div>
-                      <div className="text-xs">{vendor.cluster?.name || '---'} / {vendor.district?.name || '---'}</div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={`px-2 py-1 text-xs font-semibold rounded-full ${vendor.status === 'Active'
-                        ? 'bg-green-100 text-green-800'
-                        : 'bg-red-100 text-red-800'
-                        }`}>
-                        {vendor.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <div className="flex justify-end gap-2">
-                        <button
-                          onClick={() => handleEdit(vendor)}
-                          className="p-1.5 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                ))}
+                {isAddOpen ? (
+                    <div className="flex bg-[#2c3e50] p-1 rounded">
+                        <input className="px-2 py-1 text-sm rounded-l outline-none text-black w-32" value={newTabName} onChange={e=>setNewTabName(e.target.value)} placeholder="Name..." autoFocus />
+                        <button className="bg-green-500 text-white px-3 font-bold text-xs" onClick={handleAddTab}>Add</button>
+                        <button className="bg-red-500 text-white px-2 font-bold text-xs rounded-r" onClick={() => setIsAddOpen(false)}>X</button>
+                    </div>
+                ) : (
+                    <button onClick={() => setIsAddOpen(true)} className="bg-[#2c3e50] text-white px-6 py-2 rounded font-bold text-sm shadow-sm hover:bg-[#1a252f] transition-colors">
+                        Add More
+                    </button>
+                )}
+             </div>
+
+             {loading ? (
+                <div className="py-20 flex justify-center"><Loader className="animate-spin text-blue-500" size={40} /></div>
+             ) : formSettings[activeTab] && (
+                <div className="mt-6 space-y-8">
+                    {/* Header line mimicking PHP */}
+                    <div className="border-b border-gray-200 pb-2">
+                        <label className="text-sm font-bold text-gray-700">Type of Login</label>
+                        <h2 className="text-xl font-bold text-[#007bff] mt-2">{activeTab} Type</h2>
+                    </div>
+
+                    {/* KYC Details Card */}
+                    <div className="border border-gray-200 rounded-md bg-gray-50 p-6">
+                        <h3 className="text-[15px] font-bold text-gray-800 mb-4 border-b border-gray-200 pb-3">KYC Details</h3>
+                        <div className="grid grid-cols-2 gap-x-10 gap-y-4">
+                            {kycOptions.map(option => (
+                                <label key={option} className="flex items-center gap-3 cursor-pointer">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={(formSettings[activeTab].kycDetails || []).includes(option)}
+                                        onChange={() => handleCheckboxToggle(option)}
+                                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500" 
+                                    />
+                                    <span className="text-sm font-medium text-[#2c3e50]">{option}</span>
+                                </label>
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Sublogin Details Card */}
+                    <div className="border border-gray-200 rounded-md bg-gray-50 p-6">
+                        <h3 className="text-[15px] font-bold text-gray-800 mb-4 border-b border-gray-200 pb-3">Sublogin Details</h3>
+                        
+                        <div className="grid grid-cols-2 gap-10 mb-6">
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-bold text-[#2c3e50] mb-2 pointer-events-none">
+                                    <input type="checkbox" checked={true} readOnly className="w-4 h-4 text-blue-600 rounded" />
+                                    Assign Sublogin Role
+                                </label>
+                                <div className="pl-6">
+                                    <select 
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+                                        value={formSettings[activeTab].subloginRole}
+                                        onChange={e => handleInputChange('subloginRole', e.target.value)}
+                                    >
+                                        <option value="">Choose sublogin type</option>
+                                        <option value="Distributor">Distributor</option>
+                                        <option value="Dealer">Dealer</option>
+                                        <option value="Sales Agent">Sales Agent</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-bold text-[#2c3e50] mb-2 pointer-events-none">
+                                    <input type="checkbox" checked={true} readOnly className="w-4 h-4 text-blue-600 rounded" />
+                                    Sublogin Limit (Max Allowed)
+                                </label>
+                                <div className="pl-6">
+                                    <input 
+                                        placeholder="e.g. 5"
+                                        type="number"
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+                                        value={formSettings[activeTab].subloginLimit}
+                                        onChange={e => handleInputChange('subloginLimit', e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-10">
+                            <div>
+                                <label className="flex items-center gap-2 text-sm font-bold text-[#2c3e50] mb-2 pointer-events-none">
+                                    <input type="checkbox" checked={true} readOnly className="w-4 h-4 text-blue-600 rounded" />
+                                    Access Type
+                                </label>
+                                <div className="pl-6">
+                                    <select 
+                                        className="w-full border border-gray-300 rounded px-3 py-2 text-sm outline-none focus:border-blue-500 bg-white"
+                                        value={formSettings[activeTab].accessType}
+                                        onChange={e => handleInputChange('accessType', e.target.value)}
+                                    >
+                                        <option value="Full Access">Full Access</option>
+                                        <option value="View Only">View Only</option>
+                                        <option value="Create Orders">Create Orders</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="pt-2">
+                        <button 
+                            onClick={handleSave}
+                            disabled={submitting}
+                            className={`bg-[#007bff] text-white px-6 py-2 rounded text-sm font-bold hover:bg-blue-700 transition ${submitting ? 'opacity-50' : ''}`}
                         >
-                          <Edit2 size={18} />
+                            {submitting ? 'Saving...' : 'Save'}
                         </button>
-                        <button
-                          onClick={() => handleDelete(vendor._id)}
-                          className="p-1.5 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Modal / Form */}
-      {showModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center bg-gray-50">
-              <h3 className="text-lg font-bold text-gray-800">
-                {editingId ? 'Edit Vendor' : 'Add New Vendor'}
-              </h3>
-              <button
-                onClick={resetForm}
-                className="text-gray-400 hover:text-gray-600 transition-colors"
-              >
-                <X size={24} />
-              </button>
-            </div>
-
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Vendor Name</label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  placeholder="Enter vendor name"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Type</label>
-                <select
-                  required
-                  value={formData.supplierTypeId}
-                  onChange={(e) => setFormData({ ...formData, supplierTypeId: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                >
-                  <option value="">Select a Type</option>
-                  {types.map(t => (
-                    <option key={t._id} value={t._id}>{t.typeName}</option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Contact</label>
-                  <input
-                    type="text"
-                    required
-                    value={formData.contact}
-                    onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Phone number"
-                  />
+                    </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Email</label>
-                  <input
-                    type="email"
-                    required
-                    value={formData.email}
-                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    placeholder="Email address"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
-                  <select
-                    required
-                    value={formData.state}
-                    onChange={handleFormStateChange}
-                    className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                  >
-                    <option value="">Select State</option>
-                    {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
-                    <select
-                      required
-                      value={formData.cluster}
-                      onChange={handleFormClusterChange}
-                      disabled={!formData.state}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
-                    >
-                      <option value="">Select Cluster</option>
-                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
-                    <select
-                      required
-                      value={formData.district}
-                      onChange={(e) => setFormData({ ...formData, district: e.target.value })}
-                      disabled={!formData.cluster}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all disabled:bg-gray-50"
-                    >
-                      <option value="">Select District</option>
-                      {formDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
-                <select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                >
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                </select>
-              </div>
-
-              <div className="pt-4 flex justify-end gap-3">
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="px-4 py-2 text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={submitting}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors font-medium flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                >
-                  {submitting ? (
-                    <>
-                      <Loader className="animate-spin" size={18} />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Check size={18} />
-                      Save Vendor
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
+             )}
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Dashboard table mapping the saved forms */}
+        {selectedLocation.district && !loading && allFetchedPlans.length > 0 && (
+          <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden mb-10">
+            <div className="bg-gray-50 border-b border-gray-200 p-4">
+              <h3 className="font-bold text-gray-800">Saved Configurations Overview</h3>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm min-w-max">
+                <thead className="bg-[#2c3e50] text-white">
+                  <tr>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">State</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">Cluster</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">District</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">Role Type</th>
+                    {kycOptions.map(opt => (
+                        <th key={opt} className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap text-center max-w-[150px] truncate" title={opt}>{opt}</th>
+                    ))}
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Sublogin Role</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Limit</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Access</th>
+                    <th className="p-4 font-semibold text-center whitespace-nowrap">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-200">
+                  {allFetchedPlans.map(plan => (
+                    <tr key={plan._id} className="hover:bg-gray-50 border-b border-gray-200">
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200">
+                        {plan.stateId ? plan.stateId.name : <span className="text-blue-600">All States</span>}
+                      </td>
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200">
+                        {plan.clusterId ? plan.clusterId.name : <span className="text-blue-600">All Clusters</span>}
+                      </td>
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200">
+                        {plan.districtId ? plan.districtId.name : <span className="text-blue-600">All Districts</span>}
+                      </td>
+                      <td className="p-4 font-bold text-[#007bff] border-r border-gray-200">{plan.name}</td>
+                      
+                      {kycOptions.map(opt => {
+                          const hasKyc = plan.kycDetails && plan.kycDetails.includes(opt);
+                          return (
+                              <td key={opt} className="p-4 border-r border-gray-200 text-center">
+                                  {hasKyc ? (
+                                      <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-100 text-blue-600 rounded-full font-bold">✓</span>
+                                  ) : (
+                                      <span className="text-gray-300 font-bold">-</span>
+                                  )}
+                              </td>
+                          )
+                      })}
+
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200 text-center">
+                        {plan.subloginRole ? plan.subloginRole : '---'}
+                      </td>
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200 text-center">
+                        {plan.subloginLimit || '0'}
+                      </td>
+                      <td className="p-4 text-gray-800 font-bold border-r border-gray-200 text-center">
+                        <span className="bg-gray-100 px-3 py-1 rounded-full text-xs uppercase tracking-wide">
+                          {plan.accessType}
+                        </span>
+                      </td>
+                      <td className="p-4 text-center">
+                        <button 
+                          onClick={() => handleDelete(plan.name, plan._id)}
+                          className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white p-2 rounded transition-colors"
+                          title="Delete Configuration"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

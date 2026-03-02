@@ -1,73 +1,111 @@
 import React, { useState, useEffect } from 'react';
-import { Gift, Zap, Package, Share2, Copy, Calendar, Award, Trash2, Eye } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import salesSettingsService from '../../../../admin/services/salesSettingsService';
+import { EyeOff, Eye, MapPin, Layers, Trash2 } from 'lucide-react';
 
-const AdminOffers = () => {
-  const [activeTab, setActiveTab] = useState('solar');
+const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
+  <div
+    onClick={onClick}
+    className={`p-4 rounded-md transition-all cursor-pointer flex flex-col items-center justify-center text-center h-20 shadow-sm hover:shadow-md ${
+      isSelected
+      ? isState ? 'border-2 border-[#007bff] bg-[#8ccdfa]' : 'border-2 border-[#007bff] bg-[#eef6ff]'
+      : 'border border-gray-200 bg-white'
+      }`}
+  >
+    <div className="font-bold text-[14px] text-[#2c3e50] mb-0">{title}</div>
+    <div className="text-[11px] text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
+  </div>
+);
+
+export default function AdminOffers() {
+  const [showLocationCards, setShowLocationCards] = useState(true);
+  const [selectedStateId, setSelectedStateId] = useState('');
+  const [selectedDistrictId, setSelectedDistrictId] = useState('');
+  const [selectedClusterId, setSelectedClusterId] = useState('');
+
+  const [activeTab, setActiveTab] = useState('solar'); // 'solar', 'loyalty', 'limited'
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Location Hook
-  const { states, districts, clusters, fetchDistricts, fetchClusters } = useLocations();
+  const { states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  const selectedStateObj = states.find((s) => s._id === selectedStateId) || null;
+  const selectedClusterObj = clusters.find((c) => c._id === selectedClusterId) || null;
+  const selectedDistrictObj = districts.find((d) => d._id === selectedDistrictId) || null;
 
-  // Solar Cashback Form State
+  // Global Location Logic
+  useEffect(() => {
+    fetchStates();
+    fetchClusters();
+  }, []);
+
+  // Form States
   const [solarForm, setSolarForm] = useState({
-    offerName: '',
-    cpType: 'Starter',
-    projectType: 'Residential',
-    brand: 'Tata',
-    kwSelection: '1-3KW',
-    cashbackAmount: '',
-    targetKw: '',
-    validity: '', // Using as EndDate
-    state: '',
-    district: '',
-    cluster: ''
+    cpType: 'Starter', projectType: 'All', cluster: 'All',
+    brand: 'Adani', kwSelection: '1-3 kW', targetKw: 5,
+    cashbackDetails: 1500, startDate: '', endDate: '', autoRenew: false
   });
 
-  // Loyalty Program Form State
   const [loyaltyForm, setLoyaltyForm] = useState({
-    offerName: '',
-    programName: '', // Mapping to offerName in backend
-    targetAudience: 'All Customers', // Mapping to cpType or projectType
-    minOrderValue: '', // Maybe description or dedicated field if Schema updated, mapping to cashbackAmount for now as generic value
-    pointsMultiplier: '1x', // specific field
-    validityPeriod: '',
-    yearCashbacks: [{ years: 1, cashback: 0 }],
-    state: '',
-    district: '',
-    cluster: ''
+    cpType: 'Starter', projectType: 'All', cluster: 'All',
+    brand: 'Adani', kwSelection: '1-3 kW',
+    yearCashbacks: [{ years: 1, cashback: 1500 }, { years: 3, cashback: 3000 }, { years: 5, cashback: 5000 }]
   });
 
-  // Limited Stock Form State
   const [stockForm, setStockForm] = useState({
-    offerName: '',
-    bundlePlan: '',
-    currentStock: '',
-    product: '',
-    deadline: '',
-    cashbackValue: '',
-    state: '',
-    district: '',
-    cluster: ''
+    cluster: 'Ahmedabad', bundlePlan: 'Basic Solar Bundle', currentStock: 50,
+    product: 'Solar Panel', deadline: '', brand: 'Adani', cashbackValue: 1000
   });
+
+  const [showNewOfferModal, setShowNewOfferModal] = useState(false);
+  const [newOfferForm, setNewOfferForm] = useState({
+    offerName: '', offerType: 'Referral Bonus'
+  });
+
+  // Global Location Logic
+  useEffect(() => {
+    if (selectedStateId) {
+      setSelectedClusterId('');
+      setSelectedDistrictId('');
+      if (selectedStateId !== 'all') {
+        fetchClusters({ stateId: selectedStateId }); 
+      } else {
+        fetchClusters(); // Fetch all clusters
+      }
+    }
+  }, [selectedStateId]);
+
+  useEffect(() => {
+    if (selectedClusterId) {
+       setSelectedDistrictId('');
+       if (selectedClusterId !== 'all') {
+         fetchDistricts({ clusterId: selectedClusterId }); 
+       } else {
+         fetchDistricts(); // Fetch all districts
+       }
+    }
+  }, [selectedClusterId]);
 
   useEffect(() => {
     fetchOffers();
-  }, [activeTab]); // Refresh when tab changes or generally on mount
+  }, [selectedStateId, selectedClusterId, selectedDistrictId, activeTab]);
 
   const fetchOffers = async () => {
     setLoading(true);
     try {
-      // Mapping tab to backend offerType enum
       let type = '';
       if (activeTab === 'solar') type = 'Solar Cashback';
-      if (activeTab === 'loyalty') type = 'Loyalty Program';
-      if (activeTab === 'limited') type = 'Limited Stock';
+      else if (activeTab === 'loyalty') type = 'Loyalty Program';
+      else if (activeTab === 'limited') type = 'Limited Stock';
+      
+      const res = await salesSettingsService.getOffers({ type });
+      // Keep it simple and filter by active locations on frontend if backend doesn't handle fully natively yet
+      // Backend actually handles it via basic query.
+      let filtered = res || [];
+      if (selectedStateId && selectedStateId !== 'all') filtered = filtered.filter(o => o.location?.state === selectedStateId);
+      if (selectedClusterId && selectedClusterId !== 'all') filtered = filtered.filter(o => o.location?.cluster === selectedClusterId);
+      if (selectedDistrictId && selectedDistrictId !== 'all') filtered = filtered.filter(o => o.location?.district === selectedDistrictId);
 
-      const data = await salesSettingsService.getOffers({ type });
-      setOffers(data);
+      setOffers(filtered);
     } catch (error) {
       console.error("Error fetching offers:", error);
     } finally {
@@ -75,123 +113,8 @@ const AdminOffers = () => {
     }
   };
 
-  // Location Handlers (Generic)
-  const handleLocationChange = (section, field, value) => {
-    if (section === 'solar') {
-      setSolarForm(prev => ({ ...prev, [field]: value }));
-      if (field === 'state') fetchDistricts({ stateId: value });
-      if (field === 'district') fetchClusters({ districtId: value });
-    } else if (section === 'loyalty') {
-      setLoyaltyForm(prev => ({ ...prev, [field]: value }));
-      if (field === 'state') fetchDistricts({ stateId: value });
-      if (field === 'district') fetchClusters({ districtId: value });
-    } else if (section === 'limited') {
-      setStockForm(prev => ({ ...prev, [field]: value }));
-      if (field === 'state') fetchDistricts({ stateId: value });
-      if (field === 'district') fetchClusters({ districtId: value });
-    }
-  };
-
-  // Form Submissions
-  const handleSolarSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        offerName: solarForm.offerName,
-        offerType: 'Solar Cashback',
-        cpType: solarForm.cpType,
-        projectType: solarForm.projectType,
-        brand: solarForm.brand,
-        kwSelection: solarForm.kwSelection,
-        cashbackAmount: Number(solarForm.cashbackAmount),
-        targetKw: Number(solarForm.targetKw),
-        endDate: solarForm.validity,
-        location: {
-          state: solarForm.state, // Ideally pass ID, but schema supports string
-          district: solarForm.district,
-          cluster: solarForm.cluster
-        },
-        status: 'Active'
-      };
-      await salesSettingsService.createOffer(payload);
-      alert("Solar Cashback Offer Created!");
-      fetchOffers();
-      // Reset form if needed
-    } catch (error) {
-      console.error("Error creating offer:", error);
-      alert("Failed to create offer");
-    }
-  };
-
-  const handleLoyaltySubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        offerName: loyaltyForm.programName,
-        offerType: 'Loyalty Program',
-        cpType: loyaltyForm.targetAudience, // Approximate mapping
-        yearCashbacks: loyaltyForm.yearCashbacks,
-        endDate: loyaltyForm.validityPeriod,
-        location: {
-          state: loyaltyForm.state,
-          district: loyaltyForm.district,
-          cluster: loyaltyForm.cluster
-        },
-        status: 'Active'
-      };
-      await salesSettingsService.createOffer(payload);
-      alert("Loyalty Program Created!");
-      fetchOffers();
-    } catch (error) {
-      console.error("Error creating loyalty offer:", error);
-      alert("Failed to create offer");
-    }
-  };
-
-  // Helper for loyalty dynamic rows
-  const addLoyaltyYear = () => {
-    setLoyaltyForm(prev => ({
-      ...prev,
-      yearCashbacks: [...prev.yearCashbacks, { years: prev.yearCashbacks.length + 1, cashback: 0 }]
-    }));
-  };
-
-  const updateLoyaltyYear = (index, value) => {
-    const newYears = [...loyaltyForm.yearCashbacks];
-    newYears[index].cashback = Number(value);
-    setLoyaltyForm(prev => ({ ...prev, yearCashbacks: newYears }));
-  };
-
-
-  const handleStockSubmit = async (e) => {
-    e.preventDefault();
-    try {
-      const payload = {
-        offerName: stockForm.offerName,
-        offerType: 'Limited Stock',
-        bundlePlan: stockForm.bundlePlan,
-        currentStock: Number(stockForm.currentStock),
-        product: stockForm.product,
-        deadline: stockForm.deadline,
-        cashbackAmount: Number(stockForm.cashbackValue), // Mapping cashbackValue to cashbackAmount
-        location: {
-          state: stockForm.state,
-          district: stockForm.district,
-          cluster: stockForm.cluster
-        },
-        status: 'Active'
-      };
-      await salesSettingsService.createOffer(payload);
-      alert("Limited Stock Offer Created!");
-      fetchOffers();
-    } catch (error) {
-      console.error("Error creating stock offer:", error);
-      alert("Failed to create offer");
-    }
-  };
-
   const handleDelete = async (id) => {
-    if (confirm("Delete this offer?")) {
+    if (window.confirm("Are you sure you want to delete this offer?")) {
       try {
         await salesSettingsService.deleteOffer(id);
         fetchOffers();
@@ -201,357 +124,624 @@ const AdminOffers = () => {
     }
   };
 
+  const handleSolarSubmit = async () => {
+    try {
+      const payload = {
+        offerName: "Solar Panel Bundle Cashback",
+        offerType: 'Solar Cashback',
+        cpType: solarForm.cpType,
+        projectType: solarForm.projectType,
+        brand: solarForm.brand,
+        kwSelection: solarForm.kwSelection,
+        targetKw: Number(solarForm.targetKw),
+        cashbackAmount: Number(solarForm.cashbackDetails),
+        startDate: solarForm.startDate,
+        endDate: solarForm.endDate,
+        autoRenew: solarForm.autoRenew,
+        location: {
+          state: selectedStateId || 'All',
+          district: selectedDistrictId || 'All',
+          cluster: solarForm.cluster === 'All' ? 'All' : solarForm.cluster
+        },
+        status: 'Active'
+      };
+      await salesSettingsService.createOffer(payload);
+      alert("Solar Cashback Offer Saved!");
+      fetchOffers();
+    } catch (error) {
+      console.error("Error saving offer:", error);
+      alert("Failed to save offer");
+    }
+  };
+
+  const handleLoyaltySubmit = async () => {
+    try {
+      const payload = {
+        offerName: "Loyalty Cashback",
+        offerType: 'Loyalty Program',
+        cpType: loyaltyForm.cpType,
+        projectType: loyaltyForm.projectType,
+        brand: loyaltyForm.brand,
+        kwSelection: loyaltyForm.kwSelection,
+        yearCashbacks: loyaltyForm.yearCashbacks,
+        location: {
+          state: selectedStateId || 'All',
+          district: selectedDistrictId || 'All',
+          cluster: loyaltyForm.cluster === 'All' ? 'All' : loyaltyForm.cluster
+        },
+        status: 'Active'
+      };
+      await salesSettingsService.createOffer(payload);
+      alert("Loyalty Program Saved!");
+      fetchOffers();
+    } catch (error) {
+      console.error("Error saving loyalty offer:", error);
+      alert("Failed to save offer");
+    }
+  };
+
+  const handleStockSubmit = async () => {
+    try {
+      const payload = {
+        offerName: "Limited Stock Offer",
+        offerType: 'Limited Stock',
+        bundlePlan: stockForm.bundlePlan,
+        currentStock: Number(stockForm.currentStock),
+        product: stockForm.product,
+        deadline: stockForm.deadline,
+        brand: stockForm.brand,
+        cashbackValue: Number(stockForm.cashbackValue),
+        location: {
+          state: selectedStateId || 'All',
+          district: selectedDistrictId || 'All',
+          cluster: stockForm.cluster === 'All' ? 'All' : stockForm.cluster
+        },
+        status: 'Active'
+      };
+      await salesSettingsService.createOffer(payload);
+      alert("Limited Stock Offer Saved!");
+      fetchOffers();
+    } catch (error) {
+      console.error("Error saving stock offer:", error);
+      alert("Failed to save offer");
+    }
+  };
+
+  const handleNewOfferSubmit = async () => {
+    if (!newOfferForm.offerName) return alert("Offer name is required");
+    try {
+      const payload = {
+        offerName: newOfferForm.offerName,
+        offerType: newOfferForm.offerType,
+        status: 'Active'
+      };
+      await salesSettingsService.createOffer(payload);
+      alert("New Offer Saved!");
+      setShowNewOfferModal(false);
+      setNewOfferForm({ offerName: '', offerType: 'Referral Bonus' });
+      fetchOffers();
+    } catch (error) {
+      console.error("Error saving new offer:", error);
+      alert("Failed to save offer");
+    }
+  };
 
   return (
-    <div className="p-4 bg-gray-50 min-h-screen">
-      <h2 className="text-2xl font-bold text-gray-800 mb-6">Offers & Rewards Settings</h2>
-
-      {/* Tabs */}
-      <div className="flex space-x-4 border-b border-gray-200 mb-6">
+    <div className="bg-[#f4f7fa] min-h-screen font-sans">
+      {/* Header Block */}
+      <div className="bg-white p-6 border-b border-gray-200 mb-8 px-12">
+        <h1 className="text-[22px] font-bold text-[#14233c] mb-2">Offers Management</h1>
         <button
-          className={`pb-2 px-4 transition-colors duration-300 font-medium ${activeTab === 'solar' ? 'border-b-2 border-green-600 text-green-600' : 'text-gray-500 hover:text-green-600'}`}
-          onClick={() => setActiveTab('solar')}
+          onClick={() => setShowLocationCards(!showLocationCards)}
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0076a8] text-white rounded text-xs font-bold shadow-sm hover:bg-blue-800 transition-all"
         >
-          <div className="flex items-center gap-2">
-            <Zap size={18} /> Solar Cashback
-          </div>
-        </button>
-        <button
-          className={`pb-2 px-4 transition-colors duration-300 font-medium ${activeTab === 'loyalty' ? 'border-b-2 border-purple-600 text-purple-600' : 'text-gray-500 hover:text-purple-600'}`}
-          onClick={() => setActiveTab('loyalty')}
-        >
-          <div className="flex items-center gap-2">
-            <Gift size={18} /> Loyalty Program
-          </div>
-        </button>
-        <button
-          className={`pb-2 px-4 transition-colors duration-300 font-medium ${activeTab === 'limited' ? 'border-b-2 border-red-600 text-red-600' : 'text-gray-500 hover:text-red-600'}`}
-          onClick={() => setActiveTab('limited')}
-        >
-          <div className="flex items-center gap-2">
-            <Package size={18} /> Limited Stock
-          </div>
+          {showLocationCards ? <EyeOff size={14} /> : <Eye size={14} />}
+          {showLocationCards ? 'Hide Location Cards' : 'Show Location Cards'}
         </button>
       </div>
 
-      {/* Content */}
-      <div className="transition-all duration-300">
-
-        {/* Solar Cashback Tab */}
-        {activeTab === 'solar' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            {/* Form */}
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg font-semibold text-gray-800 flex items-center gap-2">
-                  <Zap className="text-green-500" size={20} /> New Solar Cashback
-                </h3>
-              </div>
-
-              <form onSubmit={handleSolarSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Offer Name</label>
-                  <input type="text" className="w-full border rounded p-2" value={solarForm.offerName} onChange={e => handleLocationChange('solar', 'offerName', e.target.value)} required />
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">CP Type</label>
-                    <select className="w-full border rounded p-2" value={solarForm.cpType} onChange={(e) => handleLocationChange('solar', 'cpType', e.target.value)}>
-                      <option>Starter</option>
-                      <option>Pro</option>
-                      <option>Enterprise</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Project Type</label>
-                    <select className="w-full border rounded p-2" value={solarForm.projectType} onChange={(e) => handleLocationChange('solar', 'projectType', e.target.value)}>
-                      <option>Residential</option>
-                      <option>Commercial</option>
-                      <option>Industrial</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Location Selectors */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">State</label>
-                    <select className="w-full border rounded p-2" value={solarForm.state} onChange={e => handleLocationChange('solar', 'state', e.target.value)}>
-                      <option value="">Select State</option>
-                      {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">District</label>
-                    <select className="w-full border rounded p-2" value={solarForm.district} onChange={e => handleLocationChange('solar', 'district', e.target.value)}>
-                      <option value="">Select District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Cluster</label>
-                    <select className="w-full border rounded p-2" value={solarForm.cluster} onChange={e => handleLocationChange('solar', 'cluster', e.target.value)}>
-                      <option value="">Select Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Brand</label>
-                  <input type="text" className="w-full border rounded p-2" value={solarForm.brand} onChange={(e) => handleLocationChange('solar', 'brand', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">KW Selection</label>
-                  <select className="w-full border rounded p-2" value={solarForm.kwSelection} onChange={(e) => handleLocationChange('solar', 'kwSelection', e.target.value)}>
-                    <option>1-3KW</option>
-                    <option>3-10KW</option>
-                    <option>10KW+</option>
-                  </select>
-                </div>
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Target KW</label>
-                    <input type="number" className="w-full border rounded p-2" value={solarForm.targetKw} onChange={(e) => handleLocationChange('solar', 'targetKw', e.target.value)} />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700">Cashback Amount (₹)</label>
-                    <input type="number" className="w-full border rounded p-2" value={solarForm.cashbackAmount} onChange={(e) => handleLocationChange('solar', 'cashbackAmount', e.target.value)} />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Validity (Date)</label>
-                  <input type="date" className="w-full border rounded p-2" value={solarForm.validity} onChange={(e) => handleLocationChange('solar', 'validity', e.target.value)} />
-                </div>
-                <button type="submit" className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 flex justify-center items-center gap-2">
-                  <Share2 size={16} /> Publish Offer
-                </button>
-              </form>
-            </div>
-
-            {/* Preview/List */}
-            <div className="space-y-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-green-500">
-                <h3 className="font-semibold text-gray-800 mb-4">Active Solar Cashback Offers</h3>
-                {loading ? <p>Loading...</p> : (
-                  <div className="space-y-4 max-h-[500px] overflow-auto">
-                    {offers.map((offer) => (
-                      <div key={offer._id} className="bg-green-50 p-4 rounded-lg flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-green-900">{offer.offerName}</h4>
-                          <p className="text-sm text-green-700">Type: {offer.cpType}</p>
-                          <p className="text-sm text-green-700">Details: {offer.brand} | {offer.kwSelection}</p>
-                          <p className="text-sm font-bold mt-1">Get ₹{offer.cashbackAmount} Cashback on {offer.targetKw}KW</p>
-                          <p className="text-xs text-green-600 mt-1">Valid until: {new Date(offer.endDate).toLocaleDateString()}</p>
-                        </div>
-                        <button onClick={() => handleDelete(offer._id)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-                      </div>
-                    ))}
-                    {offers.length === 0 && <p className="text-gray-500 text-center">No active offers.</p>}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+      <div className="px-12 pb-12">
+        {/* Dynamic Location Path Display */}
+        {selectedStateObj && !showLocationCards && (
+           <div className="mb-4 text-sm text-gray-600 flex items-center gap-2">
+             <MapPin size={14} className="text-gray-400" />
+             Filtering by: 
+             <span className="font-bold text-[#14233c]">{selectedStateObj?.name}</span>
+             {selectedClusterObj && <><span className="text-gray-400">&gt;</span><span className="font-bold text-[#14233c]">{selectedClusterObj.name}</span></>}
+             {selectedDistrictObj && <><span className="text-gray-400">&gt;</span><span className="font-bold text-[#14233c]">{selectedDistrictObj.name}</span></>}
+           </div>
         )}
 
-        {/* Loyalty Program Tab */}
-        {activeTab === 'loyalty' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <Award className="text-purple-500" size={20} /> Create Loyalty Program
-              </h3>
-              <form onSubmit={handleLoyaltySubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Program Name</label>
-                  <input type="text" className="w-full border rounded p-2" value={loyaltyForm.programName} onChange={e => handleLocationChange('loyalty', 'programName', e.target.value)} required />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Target Audience</label>
-                  <select className="w-full border rounded p-2" value={loyaltyForm.targetAudience} onChange={e => handleLocationChange('loyalty', 'targetAudience', e.target.value)}>
-                    <option>All Customers</option>
-                    <option>High Volume Buyers</option>
-                  </select>
-                </div>
-                {/* Location Selectors */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <select className="w-full border rounded p-2" value={loyaltyForm.state} onChange={e => handleLocationChange('loyalty', 'state', e.target.value)}>
-                      <option value="">State</option>
-                      {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <select className="w-full border rounded p-2" value={loyaltyForm.district} onChange={e => handleLocationChange('loyalty', 'district', e.target.value)}>
-                      <option value="">District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <select className="w-full border rounded p-2" value={loyaltyForm.cluster} onChange={e => handleLocationChange('loyalty', 'cluster', e.target.value)}>
-                      <option value="">Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="border p-3 rounded bg-purple-50">
-                  <label className="block text-sm font-medium text-purple-900 mb-2">Yearly Cashback Structure</label>
-                  {loyaltyForm.yearCashbacks.map((item, index) => (
-                    <div key={index} className="flex gap-2 mb-2 items-center">
-                      <span className="text-sm font-bold w-16">Year {item.years}</span>
-                      <input
-                        type="number"
-                        placeholder="Cashback Amount"
-                        className="w-full border rounded p-1"
-                        value={item.cashback}
-                        onChange={(e) => updateLoyaltyYear(index, e.target.value)}
+        {/* Location Selection Cards */}
+        {showLocationCards && (
+          <div className="mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+             {/* State Select */}
+             <div className="mb-6">
+                <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
+                  <MapPin className="text-[#007bff]" size={16} /> Select State
+                </h2>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    <LocationCard 
+                      title="All States" subtitle="ALL" isSelected={selectedStateId === 'all' || selectedStateId === ''} isState={true}
+                      onClick={() => { setSelectedStateId('all'); setSelectedClusterId(''); setSelectedDistrictId(''); }} 
+                    />
+                    {states.map((s) => (
+                      <LocationCard 
+                         key={s._id} title={s.name} subtitle={s.code || s.name.substring(0,2).toUpperCase()} 
+                         isSelected={selectedStateId === s._id} isState={true}
+                         onClick={() => setSelectedStateId(s._id)} 
                       />
-                    </div>
-                  ))}
-                  <button type="button" onClick={addLoyaltyYear} className="text-xs text-purple-600 font-bold hover:underline">+ Add Year</button>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Validity Period (Date)</label>
-                  <input type="date" className="w-full border rounded p-2" value={loyaltyForm.validityPeriod} onChange={e => handleLocationChange('loyalty', 'validityPeriod', e.target.value)} />
-                </div>
-                <button type="submit" className="w-full bg-purple-600 text-white py-2 rounded hover:bg-purple-700 flex justify-center items-center gap-2">
-                  <Share2 size={16} /> Launch Program
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-purple-500">
-                <h3 className="font-semibold text-gray-800 mb-4">Active Loyalty Programs</h3>
-                {loading ? <p>Loading...</p> : (
-                  <div className="space-y-4 max-h-[500px] overflow-auto">
-                    {offers.map((offer) => (
-                      <div key={offer._id} className="bg-purple-50 p-4 rounded-lg flex justify-between items-start">
-                        <div>
-                          <h4 className="font-bold text-purple-900">{offer.offerName}</h4>
-                          <p className="text-sm text-purple-700">Audience: {offer.cpType}</p>
-                          <div className="mt-2 text-sm text-purple-800">
-                            {offer.yearCashbacks && offer.yearCashbacks.map(y => (
-                              <div key={y.years}>Year {y.years}: ₹{y.cashback}</div>
-                            ))}
-                          </div>
-                          <p className="text-xs text-purple-600 mt-1">Valid until: {new Date(offer.endDate).toLocaleDateString()}</p>
-                        </div>
-                        <button onClick={() => handleDelete(offer._id)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-                      </div>
                     ))}
+                </div>
+             </div>
+
+             {/* Cluster Select */}
+             {selectedStateId && (
+                <div className="mb-6 border-t border-gray-100 pt-6 animate-in slide-in-from-left duration-300">
+                  <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
+                    <Layers className="text-[#007bff]" size={16} /> Select Cluster
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                     <LocationCard 
+                        title="All Clusters" subtitle="ALL" isSelected={selectedClusterId === 'all' || selectedClusterId === ''} 
+                        onClick={() => { setSelectedClusterId('all'); setSelectedDistrictId(''); }} 
+                     />
+                     {clusters.map((c) => (
+                        <LocationCard 
+                          key={c._id} title={c.name} subtitle={selectedStateObj?.name || 'State'} 
+                          isSelected={selectedClusterId === c._id} 
+                          onClick={() => setSelectedClusterId(c._id)} 
+                        />
+                     ))}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+             )}
+
+             {/* District Select */}
+             {selectedClusterId && (
+                <div className="border-t border-gray-100 pt-6 animate-in slide-in-from-left duration-300">
+                  <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
+                    <MapPin className="text-[#007bff]" size={16} /> Select District
+                  </h2>
+                  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                     <LocationCard 
+                        title="All Districts" subtitle="ALL" isSelected={selectedDistrictId === 'all' || selectedDistrictId === ''} 
+                        onClick={() => setSelectedDistrictId('all')} 
+                     />
+                     {districts.map((d) => (
+                        <LocationCard 
+                          key={d._id} title={d.name} subtitle={selectedClusterObj?.name || 'Cluster'} 
+                          isSelected={selectedDistrictId === d._id} 
+                          onClick={() => setSelectedDistrictId(d._id)} 
+                        />
+                     ))}
+                  </div>
+                </div>
+             )}
           </div>
         )}
 
-        {/* Limited Stock Tab */}
-        {activeTab === 'limited' && (
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white p-6 rounded-lg shadow-sm">
-              <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-                <Package className="text-red-500" size={20} /> Create Limited Stock Offer
-              </h3>
-              <form onSubmit={handleStockSubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Offer Name</label>
-                  <input type="text" className="w-full border rounded p-2" value={stockForm.offerName} onChange={e => handleLocationChange('limited', 'offerName', e.target.value)} required />
-                </div>
-                {/* Location Selectors */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div>
-                    <select className="w-full border rounded p-2" value={stockForm.state} onChange={e => handleLocationChange('limited', 'state', e.target.value)}>
-                      <option value="">State</option>
-                      {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <select className="w-full border rounded p-2" value={stockForm.district} onChange={e => handleLocationChange('limited', 'district', e.target.value)}>
-                      <option value="">District</option>
-                      {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <select className="w-full border rounded p-2" value={stockForm.cluster} onChange={e => handleLocationChange('limited', 'cluster', e.target.value)}>
-                      <option value="">Cluster</option>
-                      {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                    </select>
-                  </div>
-                </div>
+        {/* Tab Selection */}
+        <div className="flex gap-4 mb-6 mt-4">
+          <button 
+             className={`px-5 py-2.5 rounded-full font-bold text-sm shadow-sm transition-colors flex items-center gap-2 ${activeTab === 'solar' ? 'bg-[#28a745] text-white' : 'bg-[#e5f5ea] text-[#28a745] hover:bg-[#d4eddb]'}`}
+             onClick={() => setActiveTab('solar')}
+          >
+             Solar Cashback <span className="bg-white text-[#28a745] px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider">Active</span>
+          </button>
+          <button 
+             className={`px-5 py-2.5 rounded-full font-bold text-sm shadow-sm transition-colors flex items-center gap-2 ${activeTab === 'loyalty' ? 'bg-[#ffc107] text-[#343a40]' : 'bg-[#fff8e5] text-[#d39e00] hover:bg-[#ffefc2]'}`}
+             onClick={() => setActiveTab('loyalty')}
+          >
+             Loyalty Program <span className="bg-white text-[#ffc107] px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider shadow-sm">New</span>
+          </button>
+          <button onClick={() => setActiveTab('limited')}
+             className={`px-5 py-2.5 rounded-full font-bold text-sm shadow-sm transition-colors flex items-center gap-2 ${activeTab === 'limited' ? 'bg-[#dc3545] text-white' : 'bg-[#fceeed] text-[#dc3545] hover:bg-[#fadbd8]'}`}
+          >
+             Limited Stock <span className="bg-white text-[#dc3545] px-2 py-0.5 rounded-full text-[10px] uppercase tracking-wider shadow-sm">Hurry!</span>
+          </button>
+          <button onClick={() => setShowNewOfferModal(true)} className="px-5 py-2.5 rounded font-bold text-sm bg-[#343a40] text-white hover:bg-black transition-colors shadow-sm ml-2">
+             New Offer
+          </button>
+        </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Select Product</label>
-                  <select className="w-full border rounded p-2" value={stockForm.product} onChange={e => handleLocationChange('limited', 'product', e.target.value)}>
-                    <option>Solar Panel</option>
-                    <option>Inverter</option>
-                    <option>Battery</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Current Stock</label>
-                  <input type="number" className="w-full border rounded p-2" value={stockForm.currentStock} onChange={e => handleLocationChange('limited', 'currentStock', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Bundle Plan</label>
-                  <input type="text" className="w-full border rounded p-2" value={stockForm.bundlePlan} onChange={e => handleLocationChange('limited', 'bundlePlan', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Cashback Value (₹)</label>
-                  <input type="number" className="w-full border rounded p-2" value={stockForm.cashbackValue} onChange={e => handleLocationChange('limited', 'cashbackValue', e.target.value)} />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700">Deadline</label>
-                  <input type="date" className="w-full border rounded p-2" value={stockForm.deadline} onChange={e => handleLocationChange('limited', 'deadline', e.target.value)} />
-                </div>
-                <button type="submit" className="w-full bg-red-600 text-white py-2 rounded hover:bg-red-700 flex justify-center items-center gap-2">
-                  <Share2 size={16} /> Create Flash Sale
-                </button>
-              </form>
-            </div>
-
-            <div className="space-y-6">
-              <div className="bg-white p-6 rounded-lg shadow-sm border-l-4 border-red-500">
-                <h3 className="font-semibold text-gray-800 mb-4">Active Limited Stock Offers</h3>
-                {loading ? <p>Loading...</p> : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead className="bg-red-50">
-                        <tr>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Name</th>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Product</th>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Stock</th>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Cashback</th>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Deadline</th>
-                          <th className="p-2 text-left text-sm font-semibold text-gray-700">Action</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {offers.map(offer => (
-                          <tr key={offer._id} className="hover:bg-gray-50 border-b">
-                            <td className="p-2 text-sm">{offer.offerName}</td>
-                            <td className="p-2 text-sm">{offer.product}</td>
-                            <td className="p-2 text-sm">{offer.currentStock}</td>
-                            <td className="p-2 text-sm">₹{offer.cashbackAmount}</td>
-                            <td className="p-2 text-sm">{new Date(offer.deadline).toLocaleDateString()}</td>
-                            <td className="p-2 text-sm"><button onClick={() => handleDelete(offer._id)} className="text-red-500"><Trash2 size={14} /></button></td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+        {/* Form Area */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 mb-8">
+           
+           {/* Solar Cashback Form */}
+           {activeTab === 'solar' && (
+             <div className="animate-in fade-in zoom-in-95 duration-300">
+               <div className="flex justify-between items-center mb-8 border-b pb-4">
+                 <h2 className="text-2xl font-bold text-[#28a745]">Solar Panel Bundle Cashback</h2>
+                 <span className="bg-[#28a745] text-white text-xs font-bold px-3 py-1.5 rounded">Active Until: 31 Dec 2025</span>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-6">
+                  {/* Col 1 */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">CP Type</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.cpType} onChange={e => setSolarForm({...solarForm, cpType: e.target.value})}>
+                        <option>Starter</option>
+                        <option>Pro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Project Type</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.projectType} onChange={e => setSolarForm({...solarForm, projectType: e.target.value})}>
+                        <option>All</option>
+                        <option>Residential</option>
+                        <option>Commercial</option>
+                      </select>
+                    </div>
+                    <div>
+                         {/* Notice: Screenshot shows Cluster inside the form as well. */}
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Cluster</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.cluster} onChange={e => setSolarForm({...solarForm, cluster: e.target.value})}>
+                        <option>All</option>
+                        {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Cashback Details</label>
+                      <div className="flex items-center gap-3">
+                         <div className="relative flex-1">
+                            <span className="absolute left-3 top-2.5 text-gray-500 font-medium">₹</span>
+                            <input type="number" className="w-full border border-gray-200 rounded p-2.5 pl-8 text-sm" value={solarForm.cashbackDetails} onChange={e => setSolarForm({...solarForm, cashbackDetails: e.target.value})} />
+                         </div>
+                         <span className="text-sm text-gray-500 w-16">per kW</span>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
+
+                  {/* Col 2 */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Brand-wise Selection</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.brand} onChange={e => setSolarForm({...solarForm, brand: e.target.value})}>
+                        <option>Adani</option>
+                        <option>Tata Power</option>
+                        <option>Waaree</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">kW-wise Selection</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.kwSelection} onChange={e => setSolarForm({...solarForm, kwSelection: e.target.value})}>
+                        <option>1-3 kW</option>
+                        <option>3-5 kW</option>
+                        <option>5-10 kW</option>
+                        <option>10+ kW</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Target Kw</label>
+                      <input type="number" className="w-full border border-gray-200 rounded p-2.5 text-sm" value={solarForm.targetKw} onChange={e => setSolarForm({...solarForm, targetKw: e.target.value})} />
+                      <p className="text-xs text-gray-400 mt-1.5">Minimum kW capacity for eligibility</p>
+                    </div>
+                  </div>
+
+                  {/* Col 3 */}
+                  <div className="space-y-6">
+                     <label className="block text-sm font-bold text-[#14233c]">Offer Duration</label>
+                     <div>
+                       <label className="block text-xs text-gray-500 mb-1">Start Date</label>
+                       <input type="date" className="w-full border border-gray-200 rounded p-2.5 text-sm" value={solarForm.startDate} onChange={e => setSolarForm({...solarForm, startDate: e.target.value})} />
+                     </div>
+                     <div>
+                       <label className="block text-xs text-gray-500 mb-1">End Date</label>
+                       <input type="date" className="w-full border border-gray-200 rounded p-2.5 text-sm" value={solarForm.endDate} onChange={e => setSolarForm({...solarForm, endDate: e.target.value})} />
+                     </div>
+                     <div className="flex items-center gap-2 mt-4 cursor-pointer" onClick={() => setSolarForm({...solarForm, autoRenew: !solarForm.autoRenew})}>
+                       <div className={`w-4 h-4 border rounded flex items-center justify-center ${solarForm.autoRenew ? 'bg-[#0076a8] border-[#0076a8]' : 'border-gray-400'}`}>
+                          {solarForm.autoRenew && <div className="w-2 h-2 bg-white shrink-0" />}
+                       </div>
+                       <span className="text-sm text-gray-700">Auto-renew Offer</span>
+                     </div>
+                  </div>
+               </div>
+               
+               <div className="flex justify-end mt-8">
+                 <button onClick={handleSolarSubmit} className="bg-[#28a745] text-white px-6 py-2.5 rounded font-bold shadow hover:bg-green-600 transition-colors text-sm">
+                   Save Solar Offer
+                 </button>
+               </div>
+             </div>
+           )}
+
+           {/* Loyalty Program Form */}
+           {activeTab === 'loyalty' && (
+             <div className="animate-in fade-in zoom-in-95 duration-300">
+               <div className="flex justify-between items-center mb-8 border-b pb-4">
+                 <h2 className="text-2xl font-bold text-[#ffc107]">Loyalty Cashback</h2>
+                 <span className="bg-[#ffc107] text-[#343a40] text-xs font-bold px-3 py-1.5 rounded">Ongoing</span>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-16 gap-y-6">
+                  {/* Col 1 */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">CP Type</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.cpType} onChange={e => setLoyaltyForm({...loyaltyForm, cpType: e.target.value})}>
+                        <option>Starter</option>
+                        <option>Pro</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Project Type</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.projectType} onChange={e => setLoyaltyForm({...loyaltyForm, projectType: e.target.value})}>
+                        <option>All</option>
+                        <option>Residential</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Cluster</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.cluster} onChange={e => setLoyaltyForm({...loyaltyForm, cluster: e.target.value})}>
+                         <option>All</option>
+                         {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Brand-wise Selection</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.brand} onChange={e => setLoyaltyForm({...loyaltyForm, brand: e.target.value})}>
+                        <option>Adani</option>
+                        <option>Tata Power</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">kW-wise Selection</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.kwSelection} onChange={e => setLoyaltyForm({...loyaltyForm, kwSelection: e.target.value})}>
+                        <option>1-3 kW</option>
+                        <option>3-5 kW</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Col 2 - Yearwise Cashback */}
+                  <div>
+                    <div className="bg-[#f0f9ff] rounded-lg p-5 border border-blue-50 h-full">
+                       <h3 className="font-bold text-[#14233c] mb-6 flex items-center gap-2 text-base">
+                         <span className="text-[#007bff]">📅</span> Year-wise Cashback
+                       </h3>
+                       <div className="grid grid-cols-2 gap-4 mb-3">
+                          <span className="text-xs font-bold text-gray-400">Years</span>
+                          <span className="text-xs font-bold text-gray-400">Cashback (₹)</span>
+                       </div>
+                       
+                       {loyaltyForm.yearCashbacks.map((yc, idx) => (
+                          <div key={idx} className="grid grid-cols-2 gap-4 mb-4">
+                            <input 
+                              type="number" 
+                              className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" 
+                              value={yc.years} 
+                              onChange={e => {
+                                const newArr = [...loyaltyForm.yearCashbacks];
+                                newArr[idx].years = Number(e.target.value);
+                                setLoyaltyForm({...loyaltyForm, yearCashbacks: newArr});
+                              }}
+                            />
+                            <input 
+                              type="number" 
+                              className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" 
+                              value={yc.cashback}
+                              onChange={e => {
+                                const newArr = [...loyaltyForm.yearCashbacks];
+                                newArr[idx].cashback = Number(e.target.value);
+                                setLoyaltyForm({...loyaltyForm, yearCashbacks: newArr});
+                              }} 
+                            />
+                          </div>
+                       ))}
+                       <button 
+                         className="text-xs font-bold text-[#007bff] hover:underline"
+                         onClick={() => setLoyaltyForm({...loyaltyForm, yearCashbacks: [...loyaltyForm.yearCashbacks, {years: 0, cashback: 0}]})}
+                       >
+                         + Add Year
+                       </button>
+                    </div>
+                  </div>
+               </div>
+               
+               <div className="flex justify-center mt-8">
+                 <button onClick={handleLoyaltySubmit} className="bg-[#ffc107] text-[#343a40] px-8 py-2.5 rounded font-bold shadow hover:bg-yellow-500 transition-colors text-sm">
+                   Save Program
+                 </button>
+               </div>
+             </div>
+           )}
+
+           {/* Limited Stock Form */}
+           {activeTab === 'limited' && (
+             <div className="animate-in fade-in zoom-in-95 duration-300">
+               <div className="flex justify-between items-center mb-8 border-b pb-4">
+                 <h2 className="text-2xl font-bold text-[#dc3545]">Limited Stock Offer</h2>
+                 <span className="bg-[#dc3545] text-white text-xs font-bold px-3 py-1.5 rounded">Limited Time</span>
+               </div>
+               
+               <div className="grid grid-cols-1 md:grid-cols-3 gap-x-12 gap-y-6">
+                  {/* Col 1 */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Cluster</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={stockForm.cluster} onChange={e => setStockForm({...stockForm, cluster: e.target.value})}>
+                         <option>Ahmedabad</option>
+                         <option>Rajkot</option>
+                         {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Bundle Plan</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={stockForm.bundlePlan} onChange={e => setStockForm({...stockForm, bundlePlan: e.target.value})}>
+                        <option>Basic Solar Bundle</option>
+                        <option>Premium Panel Bundle</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Current Stock</label>
+                      <input type="number" className="w-full border border-gray-200 rounded p-2.5 text-sm" value={stockForm.currentStock} onChange={e => setStockForm({...stockForm, currentStock: e.target.value})} />
+                    </div>
+                  </div>
+
+                  {/* Col 2 */}
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Product</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={stockForm.product} onChange={e => setStockForm({...stockForm, product: e.target.value})}>
+                        <option>Solar Panel</option>
+                        <option>Inverter</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Deadline</label>
+                      <input type="date" className="w-full border border-gray-200 rounded p-2.5 text-sm" value={stockForm.deadline} onChange={e => setStockForm({...stockForm, deadline: e.target.value})} />
+                    </div>
+                  </div>
+
+                  {/* Col 3 */}
+                  <div className="space-y-6">
+                     <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Brand</label>
+                      <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={stockForm.brand} onChange={e => setStockForm({...stockForm, brand: e.target.value})}>
+                        <option>Adani</option>
+                        <option>Waaree</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-[#14233c] mb-2">Cashback Value</label>
+                      <div className="flex items-center gap-3">
+                         <div className="relative flex-1">
+                            <span className="absolute left-3 top-2.5 text-gray-500 font-medium">₹</span>
+                            <input type="number" className="w-full border border-gray-200 rounded p-2.5 pl-8 text-sm" value={stockForm.cashbackValue} onChange={e => setStockForm({...stockForm, cashbackValue: e.target.value})} />
+                         </div>
+                         <span className="text-gray-400 font-medium">₹</span>
+                      </div>
+                    </div>
+                  </div>
+               </div>
+               
+               <div className="flex justify-center mt-8">
+                 <button onClick={handleStockSubmit} className="bg-[#dc3545] text-white px-8 py-2.5 rounded font-bold shadow hover:bg-red-700 transition-colors text-sm">
+                   Save Limited Stock Offer
+                 </button>
+               </div>
+             </div>
+           )}
+
+        </div>
+
+        {/* Global Offers Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+             <div className="p-5 border-b border-gray-100 bg-gray-50 flex justify-between items-center">
+                 <h3 className="text-lg font-bold text-[#14233c]">Saved Offers</h3>
+             </div>
+             <div className="overflow-x-auto">
+                 <table className="w-full text-left text-sm whitespace-nowrap">
+                     <thead className="bg-[#343a40] text-white">
+                         <tr>
+                             <th className="p-3 border-r border-white/20 font-bold">Offer Name</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Offer Type</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Brand/Plan</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Target</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Cashback / Value</th>
+                             <th className="p-3 border-r border-white/20 font-bold">State</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Cluster</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Deadline / Status</th>
+                             <th className="p-3 font-bold text-center">Actions</th>
+                         </tr>
+                     </thead>
+                     <tbody>
+                         {loading ? (
+                             <tr><td colSpan="9" className="text-center p-6 text-gray-500">Loading offers...</td></tr>
+                         ) : offers.length === 0 ? (
+                             <tr><td colSpan="9" className="text-center p-6 text-gray-500">No offers found holding current filter criteria.</td></tr>
+                         ) : (
+                             offers.map(offer => (
+                                 <tr key={offer._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                                     <td className="p-3 border-r border-gray-100 font-bold text-[#0076a8]">{offer.offerName}</td>
+                                     <td className="p-3 border-r border-gray-100 font-medium">
+                                        <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                            offer.offerType === 'Solar Cashback' ? 'bg-[#e5f5ea] text-[#28a745]' :
+                                            offer.offerType === 'Loyalty Program' ? 'bg-[#fff8e5] text-[#d39e00]' :
+                                            'bg-[#fceeed] text-[#dc3545]'
+                                        }`}>
+                                          {offer.offerType}
+                                        </span>
+                                     </td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600">{offer.brand || offer.bundlePlan || 'N/A'}</td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600">
+                                         {offer.cpType}{offer.projectType ? `, ${offer.projectType}` : ''}
+                                         {offer.kwSelection ? ` (${offer.kwSelection})` : ''}
+                                     </td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-800 font-bold text-center">
+                                         {offer.cashbackAmount ? `₹${offer.cashbackAmount}` : offer.yearCashbacks?.length ? `${offer.yearCashbacks.length} Tiers` : '-'}
+                                     </td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.state !== 'All' ? states.find(s => s._id === offer.location?.state)?.name || offer.location?.state : 'All'}</td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.cluster || 'All'}</td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">
+                                         {offer.endDate ? new Date(offer.endDate).toLocaleDateString() : offer.deadline ? new Date(offer.deadline).toLocaleDateString() : 'N/A'}
+                                     </td>
+                                     <td className="p-3 text-center">
+                                         <button onClick={() => handleDelete(offer._id)} className="text-red-500 hover:text-red-700 bg-red-50 p-2 rounded-full transition-colors">
+                                            <Trash2 size={16} />
+                                         </button>
+                                     </td>
+                                 </tr>
+                             ))
+                         )}
+                     </tbody>
+                 </table>
+             </div>
+        </div>
+
       </div>
+
+      {/* New Offer Modal */}
+      {showNewOfferModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+           <div className="bg-white rounded-lg shadow-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
+              <div className="p-6 pb-4">
+                 <div className="mb-4">
+                    <label className="block text-sm font-bold text-[#14233c] mb-2">Offer Name</label>
+                    <input 
+                      type="text" 
+                      placeholder="e.g., Festival Special Discount" 
+                      className="w-full border border-gray-300 rounded p-2.5 text-sm focus:outline-none focus:border-[#007bff] focus:ring-1 focus:ring-[#007bff]"
+                      value={newOfferForm.offerName}
+                      onChange={(e) => setNewOfferForm({...newOfferForm, offerName: e.target.value})}
+                    />
+                 </div>
+                 <div className="mb-4">
+                    <label className="block text-sm font-bold text-[#14233c] mb-2">Offer Type</label>
+                    <select 
+                      className="w-full border border-gray-300 rounded p-2.5 text-sm bg-white focus:outline-none focus:border-[#007bff] focus:ring-1 focus:ring-[#007bff]"
+                      value={newOfferForm.offerType}
+                      onChange={(e) => setNewOfferForm({...newOfferForm, offerType: e.target.value})}
+                    >
+                      <option>Referral Bonus</option>
+                      <option>Cashback Offer</option>
+                      <option>Loyalty Program</option>
+                      <option>Limited Stock Offer</option>
+                      <option>Seasonal Discount</option>
+                    </select>
+                 </div>
+              </div>
+              <div className="p-4 border-t border-gray-100 flex justify-end gap-3 bg-gray-50">
+                <button 
+                  className="px-4 py-2 bg-[#6c757d] text-white text-sm font-bold rounded hover:bg-gray-600 transition-colors"
+                  onClick={() => setShowNewOfferModal(false)}
+                >
+                  Close
+                </button>
+                <button 
+                  className="px-4 py-2 bg-[#007bff] text-white text-sm font-bold rounded hover:bg-blue-600 transition-colors"
+                  onClick={handleNewOfferSubmit}
+                >
+                  Save
+                </button>
+              </div>
+           </div>
+        </div>
+      )}
+
     </div>
   );
-};
-
-export default AdminOffers;
+}

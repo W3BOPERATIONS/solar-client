@@ -74,12 +74,32 @@ export const deleteSupplierVendor = async (id) => {
     return response.data;
 };
 
+// ==================== SUPPLIER VENDOR PLANS ====================
+
+export const getSupplierVendorPlans = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/supplier-vendor-plans`, { ...getAuthHeaders(), params });
+    return response.data;
+};
+
+export const saveSupplierVendorPlan = async (data) => {
+    const response = await axios.post(`${API_URL}/supplier-vendor-plans`, data, getAuthHeaders());
+    return response.data;
+};
+
+export const deleteSupplierVendorPlan = async (id, params = {}) => {
+    const response = await axios.delete(`${API_URL}/supplier-vendor-plans/${id}`, {
+        ...getAuthHeaders(),
+        params
+    });
+    return response.data;
+};
+
 // ==================== INSTALLER VENDOR PLANS ====================
 
-export const getInstallerVendorPlans = async (districtId) => {
+export const getInstallerVendorPlans = async (params = {}) => {
     const response = await axios.get(`${API_URL}/installer-vendor-plans`, {
         ...getAuthHeaders(),
-        params: { districtId }
+        params
     });
     return response.data;
 };
@@ -89,7 +109,10 @@ export const saveInstallerVendorPlan = async (data) => {
     return response.data;
 };
 
-export const deleteInstallerVendorPlan = async (id) => {
-    const response = await axios.delete(`${API_URL}/installer-vendor-plans/${id}`, getAuthHeaders());
+export const deleteInstallerVendorPlan = async (id, params = {}) => {
+    const response = await axios.delete(`${API_URL}/installer-vendor-plans/${id}`, {
+        ...getAuthHeaders(),
+        params
+    });
     return response.data;
 };
