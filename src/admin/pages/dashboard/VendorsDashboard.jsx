@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
 import { getDashboardMetrics, getOrders } from '../../../services/dashboard/vendorsApi';
-import { getStates, getClusters } from '../../../services/locationApi';
+import { getStates, getClusters } from '../../../services/core/locationApi';
 
 const VendorsDashboard = () => {
   const [stateFilter, setStateFilter] = useState('');
@@ -65,7 +65,7 @@ const VendorsDashboard = () => {
       // Usually Cluster is under District. if UI skips District, we might need a way to get all clusters in a state.
       // For now, I'll attempt to use the existing hierarchy or just don't filter clusters by state in the dropdown if API doesn't support it directly easily.
       // Actually, looking at `locationApi.js`: `getClustersHierarchy(stateId)` exists! Perfect.
-      const data = await import('../../../services/locationApi').then(mod => mod.getClustersHierarchy(stateId));
+      const data = await import('../../../services/core/locationApi').then(mod => mod.getClustersHierarchy(stateId));
       // Hierarchy might return structure like State -> District -> Cluster. 
       // Or just a list. Let's assume list or extract it. 
       // If hierarchy returns complex tree, I might need to flatten it. 

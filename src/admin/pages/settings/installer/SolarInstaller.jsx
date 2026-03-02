@@ -22,7 +22,7 @@ import {
   updateSolarInstaller,
   deleteSolarInstaller
 } from '../../../../services/installer/installerApi';
-import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 import { useLocations } from '../../../../hooks/useLocations';
 import toast from 'react-hot-toast';
 

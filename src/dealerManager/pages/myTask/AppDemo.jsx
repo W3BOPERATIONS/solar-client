@@ -24,7 +24,7 @@ import {
     getDistrictsHierarchy,
     getCitiesHierarchy,
     getDistricts
-} from '../../../services/locationApi';
+} from '../../../services/core/locationApi';
 
 const DealerManagerAppDemo = () => {
     // State for modals

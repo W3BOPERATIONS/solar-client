@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Settings, Rocket, Layers, Building, Sun, Plus, Check, List, Globe, Users, Tags, Star, DollarSign, HandCoins, Percent, Video, History, Eye, Save, Calculator, FileText, Briefcase, Home, Store, ArrowUp, Clock, Trash2, CheckCircle, Image as ImageIcon, UserCircle, UserCog, Smartphone, Monitor, Server, Target, Award, ClipboardCheck, Grid, X, ChevronRight, Zap, Battery, Cpu, Package, Truck, Wrench, Box, Factory, Layers as LayersIcon, ShoppingCart, CreditCard, BookOpen
 } from 'lucide-react';
-import { getStates } from '../../../../services/locationApi';
+import { getStates } from '../../../../services/core/locationApi';
 import { getProPlans, createProPlan, updateProPlan } from '../../../../services/franchisee/franchiseeApi';
 import toast from 'react-hot-toast';
 

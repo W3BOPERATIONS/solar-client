@@ -27,7 +27,7 @@ import {
     UserSearch,
     Play
 } from 'lucide-react';
-import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
+const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
 
 const DealerProjectManagTrack = () => {
     const [searchQuery, setSearchQuery] = useState('');

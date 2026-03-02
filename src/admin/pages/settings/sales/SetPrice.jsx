@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, Filter, CheckCircle, RefreshCw, MapPin, Layers, Tag, Save, X, Plus, Trash2, Edit } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
-import salesSettingsService from '../../../../admin/services/salesSettingsService';
+import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { productApi } from '../../../../api/productApi';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (

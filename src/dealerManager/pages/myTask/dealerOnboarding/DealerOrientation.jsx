@@ -16,7 +16,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { getDealerKYCLists } from '../../../services/leadService';
-import { getDistricts } from '../../../../services/locationApi';
+import { getDistricts } from '../../../../services/core/locationApi';
 
 const DealerManagerOrientation = () => {
     // State for filters

@@ -11,7 +11,7 @@ import {
   Plus, Trash2, Edit2, X, AlertCircle, Search
 } from 'lucide-react';
 import * as settingsApi from '../../../services/settings/settingsApi';
-import * as locationApi from '../../../services/locationApi';
+import * as locationApi from '../../../services/core/locationApi';
 
 export default function ChecklistSetting() {
   // Hierarchical Location Data

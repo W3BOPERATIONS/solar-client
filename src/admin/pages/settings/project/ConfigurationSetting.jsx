@@ -16,8 +16,8 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
-import { getProjectTypes } from '../../../../services/masterApi';
-import { getStates, getCities, getDistricts } from '../../../../services/locationApi';
+import { getProjectTypes } from '../../../../services/core/masterApi';
+import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
 
 const ConfigurationSetting = () => {
   // State for location selection

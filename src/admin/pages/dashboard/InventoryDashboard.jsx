@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Chart from 'react-apexcharts';
 import { dashboardApi } from '../../../services/dashboard/dashboardApi';
-import { getStates, getDistricts, getClusters } from '../../../services/locationApi';
+import { getStates, getDistricts, getClusters } from '../../../services/core/locationApi';
 import {
   Package,
   IndianRupee,

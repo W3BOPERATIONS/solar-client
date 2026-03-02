@@ -7,9 +7,9 @@ import {
     Loader
 } from 'lucide-react';
 import { dealerManagerApi } from '../../../services/dealerManager/dealerManagerApi';
-import { ticketApi } from '../../../services/ticketApi';
-import { disputeApi } from '../../../services/disputeApi';
-import { getCategories, getProjectTypes, getSubCategories, getSubProjectTypes } from '../../../services/masterApi';
+import { ticketApi } from '../../../services/tickets/ticketApi';
+import { disputeApi } from '../../../services/tickets/disputeApi';
+import { getCategories, getProjectTypes, getSubCategories, getSubProjectTypes } from '../../../services/core/masterApi';
 
 const DealerManagerServiceTicket = () => {
     // Dropdown Data States

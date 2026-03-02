@@ -14,7 +14,7 @@ import {
   Youtube,
   Loader
 } from 'lucide-react';
-import { getStates, getCities, getDistricts, getClusters } from '../../../services/locationApi';
+import { getStates, getCities, getDistricts, getClusters } from '../../../services/core/locationApi';
 import { fetchFranchiseeManagerSettings, updateFranchiseeManagerSettings } from '../../../services/settings/settingsApi';
 
 const FranchiseeManagerSetting = () => {

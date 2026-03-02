@@ -11,7 +11,7 @@ import {
   Loader
 } from 'lucide-react';
 import { getDepartments } from '../../../services/hr/departmentModuleApi';
-import { getStates, getCities } from '../../../services/locationApi';
+import { getStates, getCities } from '../../../services/core/locationApi';
 import { fetchOverdueStatusSettings, updateOverdueStatusSettings } from '../../../services/settings/settingsApi';
 import axios from '../../../api/axios';
 

@@ -6,7 +6,7 @@ import {
   updateInstallerAgency,
   deleteInstallerAgency
 } from '../../../../services/installer/installerApi';
-import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/locationApi';
+import { getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 import toast from 'react-hot-toast';
 import { Building2, Plus, Edit, Trash2, Search, Filter, Phone, MapPin, FileText, Save, X, Layers } from 'lucide-react';
 

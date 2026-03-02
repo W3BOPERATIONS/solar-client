@@ -13,7 +13,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getStates, getCities, getDistricts } from '../../../../services/locationApi';
+import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
 import { getOnboardingGoals, createOnboardingGoal, updateOnboardingGoal } from '../../../../services/franchisee/franchiseeApi';
 
 export default function FranchiseeOnboardingGoals() {

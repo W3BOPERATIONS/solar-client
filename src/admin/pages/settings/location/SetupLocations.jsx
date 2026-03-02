@@ -14,7 +14,7 @@ import {
 } from 'lucide-react';
 
 import { locationAPI } from '../../../../api/api';
-import LocationSelector from '../../../../components/common/LocationSelector';
+import LocationSelector from './LocationSelector';
 
 const toId = (v) => {
   if (!v) return '';

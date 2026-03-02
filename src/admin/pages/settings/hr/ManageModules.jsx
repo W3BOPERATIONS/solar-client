@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Layers, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { getAllModules, createModule, updateModule, deleteModule } from '../../../services/hrService';
+import { getModules, createModule, updateModule, deleteModule } from '../../../../services/hr/hrApi';
 import { toast } from 'react-hot-toast';
 
 export default function ManageModules() {

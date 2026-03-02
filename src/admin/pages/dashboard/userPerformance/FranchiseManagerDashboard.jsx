@@ -8,7 +8,7 @@ import {
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
 import performanceApi from '../../../../services/performance/performanceApi';
-import * as locationApi from '../../../../services/locationApi';
+import * as locationApi from '../../../../services/core/locationApi';
 
 // Google Maps Script Loader
 const loadGoogleMapsScript = (callback) => {

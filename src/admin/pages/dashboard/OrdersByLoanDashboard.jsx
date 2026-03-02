@@ -19,7 +19,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useLocations } from '../../../hooks/useLocations';
-import { getLoanApplications, getLoanStats } from '../../../services/loanApi';
+import { getLoanApplications, getLoanStats } from '../../../services/loan/loanApi';
 
 function Badge({ tone = 'gray', children, className = '' }) {
   const map = {

@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocations } from '../../../hooks/useLocations';
 import inventoryApi from '../../../services/inventory/inventoryApi';
 import * as procurementApi from '../../../services/procurement/procurementApi';
-import { getCategories, getProjectTypes } from '../../../services/masterApi';
+import { getCategories, getProjectTypes } from '../../../services/core/masterApi';
 import {
   MapPin,
   Filter,

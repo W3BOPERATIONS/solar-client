@@ -7,7 +7,7 @@ import {
   Loader
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getStates } from '../../../../services/locationApi';
+import { getStates } from '../../../../services/core/locationApi';
 import { getAssignments } from '../../../../services/combokit/combokitApi';
 import {
   getFranchiseeOrderSettings,

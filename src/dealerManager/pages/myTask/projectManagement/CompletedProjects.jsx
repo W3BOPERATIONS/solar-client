@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { getProjects } from '../../../../services/projectService';
+import { getProjects } from '../../../../services/project/projectService';
 import { Search, ChevronDown, CheckCircle, Clock, FileText } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 

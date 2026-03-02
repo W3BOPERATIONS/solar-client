@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
-import { getTemporaryInchargeDashboard, getDepartments, createTemporaryIncharge, getUsers } from '../../../services/hrService'; // Adjust path
-import { getStates } from '../../../../services/locationApi';
+import { getDepartments } from '../../../../services/core/masterApi';
+import { getEmployees as getUsers, getTemporaryInchargeDashboard, createTemporaryIncharge } from '../../../../services/hr/hrApi';
+import { getStates } from '../../../../services/core/locationApi';
 import { X, ChevronDown, Clock } from 'lucide-react';
 
 export default function TemporaryInchargeSetting() {

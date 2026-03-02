@@ -25,7 +25,7 @@ import {
     Loader2
 } from 'lucide-react';
 import { getDealerKYCLists, updateDealerKYC } from '../../../services/leadService';
-import LocationSelector from '../../../../components/common/LocationSelector';
+import LocationSelector from './LocationSelector';
 
 const DealerManagerDealerKYC = () => {
     // State for filters

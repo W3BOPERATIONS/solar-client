@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { getProjects } from '../../../../services/projectService';
+import { getProjects } from '../../../../services/project/projectService';
 import {
     Home,
     Building2,

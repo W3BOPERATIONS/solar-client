@@ -4,8 +4,8 @@ import {
   Plus, X, Save, ArrowLeft, CheckCircle,
   Trash2, Clock, Percent, ListChecks, Edit, Loader, GraduationCap, ChevronLeft
 } from 'lucide-react';
-import { getStates, getCities, getDistricts } from '../../../../services/locationApi';
-import { getDepartments } from '../../../../services/masterApi';
+import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getDepartments } from '../../../../services/core/masterApi';
 import { getCandidateTests, createCandidateTest, deleteCandidateTest } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 

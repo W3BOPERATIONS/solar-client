@@ -5,7 +5,7 @@ import Chart from 'chart.js/auto';
 import { useLocations } from '../../../hooks/useLocations';
 import inventoryApi from '../../../services/inventory/inventoryApi';
 import { productAPI } from '../../../api/api';
-import { getProjectTypes, getCategories, getSKUs } from '../../../services/masterApi';
+import { getProjectTypes, getCategories, getSKUs } from '../../../services/core/masterApi';
 
 export default function AddInventory() {
   // Location hook

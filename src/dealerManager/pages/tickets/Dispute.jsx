@@ -18,7 +18,7 @@ import {
     User,
     Upload
 } from 'lucide-react';
-import { disputeApi } from '../../../services/disputeApi';
+import { disputeApi } from '../../../services/tickets/disputeApi';
 
 const DealerManagerDispute = () => {
     // State for filters

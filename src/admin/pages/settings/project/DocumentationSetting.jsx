@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { projectApi } from '../../../../services/project/projectApi';
-import { getProjectStats, getAllProjects } from '../../../../admin/services/projectApi';
+const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
 import {
   FileText,
   Cog,

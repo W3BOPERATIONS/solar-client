@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Trash2, Edit } from 'lucide-react';
-import { getHREmployees, createHREmployee, updateHREmployee, deleteHREmployee, getDepartments } from '../../../services/hrService';
-import { getStates } from '../../../../services/locationApi';
+import { getDepartments } from '../../../../services/core/masterApi';
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee } from '../../../../services/hr/hrApi';
+import { getStates } from '../../../../services/core/locationApi';
 import { toast } from 'react-hot-toast';
 
 export default function ManageEmployees() {

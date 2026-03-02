@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import Chart from 'react-apexcharts';
 import { getDashboardStats } from '../../services/dashboardService';
-import { getClustersHierarchy, getDistricts } from '../../../services/locationApi';
+import { getClustersHierarchy, getDistricts } from '../../../services/core/locationApi';
 
 const DealerManagerDashboard = () => {
     const mapRef = useRef(null);

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useLocations } from '../../../../hooks/useLocations';
-import salesSettingsService from '../../../../admin/services/salesSettingsService';
+import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { EyeOff, Eye, MapPin, Layers, Trash2 } from 'lucide-react';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
@@ -101,9 +101,9 @@ export default function AdminOffers() {
       // Keep it simple and filter by active locations on frontend if backend doesn't handle fully natively yet
       // Backend actually handles it via basic query.
       let filtered = res || [];
-      if (selectedStateId && selectedStateId !== 'all') filtered = filtered.filter(o => o.location?.state === selectedStateId);
-      if (selectedClusterId && selectedClusterId !== 'all') filtered = filtered.filter(o => o.location?.cluster === selectedClusterId);
-      if (selectedDistrictId && selectedDistrictId !== 'all') filtered = filtered.filter(o => o.location?.district === selectedDistrictId);
+      if (selectedStateId && selectedStateId !== 'all') filtered = filtered.filter(o => o.location?.state === selectedStateId || o.location?.state === 'All');
+      if (selectedClusterId && selectedClusterId !== 'all') filtered = filtered.filter(o => o.location?.cluster === selectedClusterId || o.location?.cluster === 'All');
+      if (selectedDistrictId && selectedDistrictId !== 'all') filtered = filtered.filter(o => o.location?.district === selectedDistrictId || o.location?.district === 'All');
 
       setOffers(filtered);
     } catch (error) {
@@ -379,7 +379,7 @@ export default function AdminOffers() {
                       <label className="block text-sm font-bold text-[#14233c] mb-2">Cluster</label>
                       <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={solarForm.cluster} onChange={e => setSolarForm({...solarForm, cluster: e.target.value})}>
                         <option>All</option>
-                        {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                         {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -477,7 +477,7 @@ export default function AdminOffers() {
                       <label className="block text-sm font-bold text-[#14233c] mb-2">Cluster</label>
                       <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={loyaltyForm.cluster} onChange={e => setLoyaltyForm({...loyaltyForm, cluster: e.target.value})}>
                          <option>All</option>
-                         {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                         {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -565,7 +565,7 @@ export default function AdminOffers() {
                       <select className="w-full border border-gray-200 rounded p-2.5 text-sm bg-white" value={stockForm.cluster} onChange={e => setStockForm({...stockForm, cluster: e.target.value})}>
                          <option>Ahmedabad</option>
                          <option>Rajkot</option>
-                         {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                         {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -675,7 +675,7 @@ export default function AdminOffers() {
                                          {offer.cashbackAmount ? `₹${offer.cashbackAmount}` : offer.yearCashbacks?.length ? `${offer.yearCashbacks.length} Tiers` : '-'}
                                      </td>
                                      <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.state !== 'All' ? states.find(s => s._id === offer.location?.state)?.name || offer.location?.state : 'All'}</td>
-                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.cluster || 'All'}</td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.cluster !== 'All' ? clusters.find(c => c._id === offer.location?.cluster)?.name || offer.location?.cluster : 'All'}</td>
                                      <td className="p-3 border-r border-gray-100 text-gray-600 text-center">
                                          {offer.endDate ? new Date(offer.endDate).toLocaleDateString() : offer.deadline ? new Date(offer.deadline).toLocaleDateString() : 'N/A'}
                                      </td>

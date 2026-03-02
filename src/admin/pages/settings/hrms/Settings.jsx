@@ -6,8 +6,8 @@ import {
   Loader, CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getStates, getCities, getDistricts } from '../../../../services/locationApi';
-import { getDepartments, getDesignationsByDepartment } from '../../../../services/masterApi';
+import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getDepartments, getDesignationsByDepartment } from '../../../../services/core/masterApi';
 import { getHRMSSettings, saveHRMSSettings } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 

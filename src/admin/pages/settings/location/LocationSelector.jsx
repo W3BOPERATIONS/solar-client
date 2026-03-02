@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { locationAPI } from '../../api/api';
+import { locationAPI } from '../../../../api/api';
 
 /**
  * LocationSelector Component

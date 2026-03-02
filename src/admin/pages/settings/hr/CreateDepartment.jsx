@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { Building2, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { createDepartment, getDepartments, deleteDepartment } from '../../../services/hrService'; // Adjust path as needed
-import { getCountries } from '../../../../services/locationApi';
+import { createDepartment, getDepartments, deleteDepartment, getRoles } from '../../../../services/core/masterApi';
+import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getModules, createModule, updateModule, deleteModule, assignTemporaryIncharge, getTemporaryIncharges, deleteTemporaryIncharge } from '../../../../services/hr/hrApi';
+import { getCountries } from '../../../../services/core/locationApi';
 import { toast } from 'react-hot-toast';
 
 export default function CreateDepartment() {

@@ -5,7 +5,7 @@ import {
   updateInstallerAgencyPlan,
   deleteInstallerAgencyPlan
 } from '../../../../services/installer/installerApi';
-import { getStates } from '../../../../services/locationApi';
+import { getStates } from '../../../../services/core/locationApi';
 import toast from 'react-hot-toast';
 import { Plus, ChevronRight } from 'lucide-react';
 

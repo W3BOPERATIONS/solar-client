@@ -5,8 +5,8 @@ import {
   CheckCircle, Trash2, Edit, Plus, BarChart3,
   GraduationCap, Upload, Link, Loader
 } from 'lucide-react';
-import { getStates, getCities, getDistricts } from '../../../../services/locationApi';
-import { getDepartments, getDesignationsByDepartment } from '../../../../services/masterApi';
+import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getDepartments, getDesignationsByDepartment } from '../../../../services/core/masterApi';
 import { getCandidateTrainings, createCandidateTraining, updateCandidateTraining } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 

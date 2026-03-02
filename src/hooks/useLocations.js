@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import * as locationApi from '../services/locationApi';
+import * as locationApi from '../services/core/locationApi';
 
 export const useLocations = () => {
   const [countries, setCountries] = useState([]);

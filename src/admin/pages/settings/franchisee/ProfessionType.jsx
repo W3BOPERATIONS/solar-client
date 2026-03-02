@@ -10,7 +10,7 @@ import {
   X
 } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { getStates } from '../../../../services/locationApi';
+import { getStates } from '../../../../services/core/locationApi';
 import { getProfessionTypes, createProfessionType, deleteProfessionType } from '../../../../services/franchisee/franchiseeApi';
 
 export default function ProfessionType() {

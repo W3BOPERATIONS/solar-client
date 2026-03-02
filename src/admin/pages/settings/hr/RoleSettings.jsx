@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, EyeOff, X, Trash2, Edit, ChevronDown, ChevronRight } from 'lucide-react';
-import { getRoles, createRole, updateRole, deleteRole, getDepartments } from '../../../services/hrService';
+import { getDepartments, getRoles, createRole, updateRole, deleteRole } from '../../../../services/core/masterApi';
+import { getModules } from '../../../../services/hr/hrApi';
 import { locationAPI } from '../../../../api/api';
-import { getDepartmentModules, getModules } from '../../../../services/hr/departmentModuleApi';
+import { getDepartmentModules } from '../../../../services/hr/departmentModuleApi';
 import { toast } from 'react-hot-toast';
 
 const SIDEBAR_MODULES = [

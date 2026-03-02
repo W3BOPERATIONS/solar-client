@@ -11,8 +11,8 @@ import {
   HardHat,
   Store
 } from 'lucide-react';
-import { getApprovals, updateApprovalStatus } from "../../../services/approvalsApi";
-import { getStates, getClusters, getDistricts } from "../../../services/locationApi";
+import { getApprovals, updateApprovalStatus } from "../../../services/approvals/approvalsApi";
+import { getStates, getClusters, getDistricts } from "../../../services/core/locationApi";
 
 // Define table headers for each approval type
 const tableHeaders = {
@@ -207,7 +207,7 @@ export default function AdminApproval() {
             // `getDistrictsHierarchy(clusterId)` exists!
             // So it supports the hierarchy.
 
-            const clusters = await import('../../../services/locationApi').then(m => m.getClustersHierarchy(selectedStateObj._id));
+            const clusters = await import('../../../services/core/locationApi').then(m => m.getClustersHierarchy(selectedStateObj._id));
             setClustersList(clusters);
             console.log("📍 Location Clusters loaded", clusters.length);
           }
@@ -228,7 +228,7 @@ export default function AdminApproval() {
         try {
           const selectedClusterObj = clustersList.find(c => c.name === currentCluster);
           if (selectedClusterObj) {
-            const districts = await import('../../../services/locationApi').then(m => m.getDistrictsHierarchy(selectedClusterObj._id));
+            const districts = await import('../../../services/core/locationApi').then(m => m.getDistrictsHierarchy(selectedClusterObj._id));
             setDistrictsList(districts);
             console.log("📍 Location Districts loaded", districts.length);
           }

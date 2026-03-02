@@ -27,7 +27,7 @@ import {
     getDistrictsHierarchy,
     getCitiesHierarchy,
     getDistricts
-} from '../../../services/locationApi';
+} from '../../../services/core/locationApi';
 const DealerManagerMyLeads = () => {
     // State for modals
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);

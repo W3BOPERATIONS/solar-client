@@ -354,6 +354,7 @@ const CreateSolarkit = () => {
                 <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Category</th>
                 <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Sub Category</th>
                 <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Project Type</th>
+                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Sub Project Type</th>
                 <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">View</th>
               </tr>
             </thead>
@@ -411,6 +412,7 @@ const CreateSolarkit = () => {
                     <td className="px-4 py-3 text-gray-600 text-sm">{kit.category}</td>
                     <td className="px-4 py-3 text-gray-600 text-sm">{kit.subCategory}</td>
                     <td className="px-4 py-3 text-gray-600 text-sm">{kit.projectType}</td>
+                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.subProjectType}</td>
                     <td className="px-4 py-3 text-center">
                       <button
                         onClick={() => openViewModal(kit)}
@@ -424,7 +426,7 @@ const CreateSolarkit = () => {
               )}
 
               <tr className="bg-gray-50/30">
-                <td colSpan="8" className="px-6 py-6 text-center">
+                <td colSpan="9" className="px-6 py-6 text-center">
                   <button
                     onClick={() => {
                       setSolarkitForm({

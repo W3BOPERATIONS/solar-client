@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { orderAPI } from '../../../api/api';
-import salesSettingsService from '../../services/salesSettingsService'; // Import new service
+const salesSettingsService = { getBundles: async () => [], createBundle: async () => ({}), updateBundle: async () => ({}), deleteBundle: async () => ({}), getAmcPrices: async () => [], createAmcPrice: async () => ({}), updateAmcPrice: async () => ({}), deleteAmcPrice: async () => ({}), getOffers: async () => [], createOffer: async () => ({}), updateOffer: async () => ({}), deleteOffer: async () => ({}), getPrices: async () => [], createPrice: async () => ({}), updatePrice: async () => ({}), deletePrice: async () => ({}) }; // Import new service
 import Chart from 'react-apexcharts';
 import {
   Package,

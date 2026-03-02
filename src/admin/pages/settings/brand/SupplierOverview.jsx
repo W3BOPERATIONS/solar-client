@@ -20,7 +20,7 @@ import {
   updateSupplier,
   deleteSupplier,
   getAllManufacturers
-} from '../../../../services/brandApi';
+} from '../../../../services/brand/brandApi';
 
 const BrandSupplierOverview = () => {
   // --- Data State ---

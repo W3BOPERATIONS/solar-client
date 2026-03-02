@@ -15,8 +15,8 @@ import {
   getAllManufacturers,
   updateManufacturer,
   deleteManufacturer
-} from '../../../../services/brandApi';
-import { getCountries } from '../../../../services/locationApi';
+} from '../../../../services/brand/brandApi';
+import { getCountries } from '../../../../services/core/locationApi';
 
 const AddBrandManufacturer = () => {
   // State management

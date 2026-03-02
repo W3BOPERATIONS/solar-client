@@ -4,7 +4,7 @@ import {
   Edit2, Trash2, CheckSquare, X,
   Search, Filter, MoreVertical, ChevronRight,
   AlertCircle, Info, Settings, Eye, Package,
-  Loader
+  Loader, ChevronDown, ShieldAlert
 } from 'lucide-react';
 import {
   createAMCService,
@@ -246,54 +246,30 @@ const AmcServices = () => {
   return (
     <div className="min-h-screen bg-slate-50/50 pb-12">
       {/* Premium Header */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-30 mb-6">
-        <div className="max-w-[1600px] mx-auto px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center border border-blue-100 shadow-sm">
-                <Cog className="text-blue-600" size={22} />
-              </div>
-              <div>
-                <h1 className="text-lg font-bold text-slate-800 tracking-tight">AMC Services Management</h1>
-                <p className="text-[11px] text-slate-500 font-medium font-inter">Add and manage AMC services, visits, and power generation guarantee</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                onClick={fetchServices}
-                className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all"
-                title="Refresh Data"
-              >
-                <RefreshCw size={18} className={loading ? "animate-spin" : ""} />
-              </button>
-              <div className="h-6 w-[1px] bg-slate-200 mx-1"></div>
-              <div className="flex items-center gap-2 px-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg">
-                <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse"></div>
-                <span className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">System Operational</span>
-              </div>
-            </div>
+      <div className="bg-white px-6 py-6 mb-6">
+        <div className="flex items-center gap-3">
+          <Cog className="text-blue-600" size={28} />
+          <div>
+            <h1 className="text-2xl font-bold text-[#1e3a8a] tracking-tight">AMC Services Management</h1>
+            <p className="text-sm text-slate-500 font-medium font-inter mt-1">Add and manage AMC services, visits, and power generation guarantee</p>
           </div>
         </div>
       </div>
 
       <div className="max-w-[1600px] mx-auto px-6">
-        <div className="row">
+        <div className="flex flex-col lg:flex-row gap-6 mb-8">
           {/* Left Column: Add New Service Form */}
-          <div className="col-lg-7 mb-4">
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-              <div className="bg-blue-600 px-6 py-4 flex items-center justify-between">
-                <h5 className="text-white text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <PlusCircle size={18} />
-                  Add New AMC Service
-                </h5>
-                <span className="text-[10px] font-bold text-blue-100 uppercase tracking-tighter bg-blue-700/50 px-2 py-1 rounded">Primary Setup</span>
+          <div className="w-full lg:w-[55%]">
+            <div className="bg-white rounded border border-slate-200 overflow-hidden">
+              <div className="bg-[#0c6baf] px-4 py-3 flex items-center gap-2">
+                <PlusCircle size={18} className="text-slate-800 bg-[#0c6baf] text-slate-800 rounded-full bg-slate-800 text-[#0c6baf]" style={{ fill: "#1e293b", stroke: "#0c6baf" }}/>
+                <h5 className="text-[#1e293b] font-bold text-lg">Add New AMC Service</h5>
               </div>
-              <div className="p-8">
+              <div className="p-6">
                 <form id="serviceForm" onSubmit={addService}>
-                  <div className="grid grid-cols-2 gap-6 mb-6">
-                    <div className="col-span-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Identity</label>
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2">Service Name</label>
                       <input
                         type="text"
                         id="serviceNameInput"
@@ -301,108 +277,108 @@ const AmcServices = () => {
                         value={formData.serviceName}
                         onChange={handleInputChange}
                         placeholder="Enter service name (e.g., Cleaning, Maintenance)"
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                         required
                       />
                     </div>
 
-                    <div className="col-span-2">
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Description</label>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2">Service Description</label>
                       <textarea
                         name="serviceDescription"
                         value={formData.serviceDescription}
                         onChange={handleInputChange}
                         rows="3"
-                        placeholder="Define the scope of this AMC service..."
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-600 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all resize-none"
+                        placeholder="Enter service description"
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Classification</label>
-                      <select
-                        name="serviceType"
-                        value={formData.serviceType}
-                        onChange={handleInputChange}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all appearance-none cursor-pointer"
-                      >
-                        <option value="regular">Regular Service</option>
-                        <option value="preventive">Preventive Maintenance</option>
-                        <option value="emergency">Emergency Service</option>
-                        <option value="special">Special Service</option>
-                      </select>
+                      <label className="block text-sm font-bold text-slate-800 mb-2">Service Type</label>
+                      <div className="relative">
+                        <select
+                          name="serviceType"
+                          value={formData.serviceType}
+                          onChange={handleInputChange}
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 appearance-none pr-10"
+                        >
+                          <option value="regular">Regular Service</option>
+                          <option value="preventive">Preventive Maintenance</option>
+                          <option value="emergency">Emergency Service</option>
+                          <option value="special">Special Service</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Base Price (₹)</label>
+                        <label className="block text-sm font-bold text-slate-800 mb-2">Base Price (₹)</label>
                         <input
                           type="number"
                           name="basePrice"
                           value={formData.basePrice}
                           onChange={handleInputChange}
                           placeholder="0"
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all"
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Price Model</label>
-                        <select
-                          name="priceType"
-                          value={formData.priceType}
-                          onChange={handleInputChange}
-                          className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all appearance-none cursor-pointer"
-                        >
-                          <option value="fixed">Fixed</option>
-                          <option value="per_visit">Per Visit</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="yearly">Yearly</option>
-                        </select>
+                        <label className="block text-sm font-bold text-slate-800 mb-2">Price Type</label>
+                        <div className="relative">
+                          <select
+                            name="priceType"
+                            value={formData.priceType}
+                            onChange={handleInputChange}
+                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 appearance-none pr-10"
+                          >
+                            <option value="fixed">Fixed</option>
+                            <option value="per_visit">Per Visit</option>
+                            <option value="monthly">Monthly</option>
+                            <option value="yearly">Yearly</option>
+                          </select>
+                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Standard Visits</label>
-                      <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-xl px-4 py-1">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-sm font-bold text-slate-800 mb-2">Visits Per Year</label>
                         <input
-                          type="range"
+                          type="number"
                           name="visitsPerYear"
                           min="0"
-                          max="12"
-                          value={formData.visitsPerYear || 0}
+                          value={formData.visitsPerYear}
                           onChange={handleInputChange}
-                          className="flex-1 accent-blue-600"
+                          placeholder="0"
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 mb-1"
                         />
-                        <span className="w-8 h-8 bg-white border border-slate-100 rounded-lg flex items-center justify-center text-xs font-black text-blue-600 shadow-sm">{formData.visitsPerYear || 0}</span>
+                        <p className="text-xs text-slate-500">Number of visits include_onced in service</p>
                       </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Extra Visit Charge (₹)</label>
-                      <input
-                        type="number"
-                        name="additionalVisitCharge"
-                        value={formData.additionalVisitCharge}
-                        onChange={handleInputChange}
-                        placeholder="0"
-                        className="w-full bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 transition-all"
-                      />
+                      <div>
+                        <label className="block text-sm font-bold text-slate-800 mb-2">Additional Visit Charge (₹)</label>
+                        <input
+                          type="number"
+                          name="additionalVisitCharge"
+                          value={formData.additionalVisitCharge}
+                          onChange={handleInputChange}
+                          placeholder="0"
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 mb-1"
+                        />
+                        <p className="text-xs text-slate-500">Charge for extra visits</p>
+                      </div>
                     </div>
                   </div>
 
                   {/* Power Generation Guarantee Section */}
-                  <div className={`mb-8 rounded-2xl border transition-all duration-500 ${formData.includePowerGuarantee ? 'border-emerald-200 bg-emerald-50/30' : 'border-slate-100 bg-slate-50/50'}`}>
-                    <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${formData.includePowerGuarantee ? 'bg-emerald-500 text-white shadow-emerald-200 shadow-lg' : 'bg-slate-200 text-slate-500'}`}>
-                          <CheckSquare size={16} />
-                        </div>
-                        <div>
-                          <h6 className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Power Generation Guarantee</h6>
-                          <p className="text-[10px] text-slate-500 font-medium">Include performance security for large systems</p>
-                        </div>
-                      </div>
-                      <label className="relative inline-flex items-center cursor-pointer">
+                  <div className="mb-6 rounded border border-slate-200 bg-slate-50/50">
+                    <div className="p-3 border-b border-slate-200 bg-slate-100/50">
+                      <h6 className="text-sm font-bold text-slate-800">Power Generation Guarantee (Optional)</h6>
+                    </div>
+                    <div className="p-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
                         <input
                           type="checkbox"
                           name="includePowerGuarantee"
@@ -411,17 +387,17 @@ const AmcServices = () => {
                             handleInputChange(e);
                             setShowPowerGuarantee(e.target.checked);
                           }}
-                          className="sr-only peer"
+                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
                         />
-                        <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-emerald-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-500"></div>
+                        <span className="text-sm text-slate-700">include_once Power Generation Guarantee</span>
                       </label>
                     </div>
 
                     {showPowerGuarantee && (
-                      <div className="p-6 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                      <div className="p-4 pt-0 space-y-4">
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <label className="block text-[10px] font-black text-emerald-700 uppercase mb-1.5 ml-1">System Limit (Min kW)</label>
+                            <label className="block text-sm font-bold text-slate-800 mb-2">System Limit (Min kW)</label>
                             <input
                               type="number"
                               name="guaranteeMinKW"
@@ -429,11 +405,11 @@ const AmcServices = () => {
                               onChange={handleInputChange}
                               placeholder="0"
                               step="0.1"
-                              className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500 transition-all"
+                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 pt-1"
                             />
                           </div>
                           <div>
-                            <label className="block text-[10px] font-black text-emerald-700 uppercase mb-1.5 ml-1">System Limit (Max kW)</label>
+                            <label className="block text-sm font-bold text-slate-800 mb-2">System Limit (Max kW)</label>
                             <input
                               type="number"
                               name="guaranteeMaxKW"
@@ -441,53 +417,52 @@ const AmcServices = () => {
                               onChange={handleInputChange}
                               placeholder="0"
                               step="0.1"
-                              className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-2.5 text-sm font-bold text-slate-800 focus:outline-none focus:border-emerald-500 transition-all"
+                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 pt-1"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-black text-emerald-700 uppercase mb-1.5 ml-1">Guarantee Price (₹ / kW)</label>
+                          <label className="block text-sm font-bold text-slate-800 mb-2">Guarantee Price (₹ / kW)</label>
                           <input
                             type="number"
                             name="guaranteePerUnitPrice"
                             value={formData.guaranteePerUnitPrice}
                             onChange={handleInputChange}
                             placeholder="0"
-                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-2.5 text-sm font-black text-slate-800 focus:outline-none focus:border-emerald-500 transition-all"
+                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                           />
                         </div>
 
                         <div>
-                          <label className="block text-[10px] font-black text-emerald-700 uppercase mb-1.5 ml-1">Guarantee Policy Details</label>
+                          <label className="block text-sm font-bold text-slate-800 mb-2">Guarantee Policy Details</label>
                           <textarea
                             name="guaranteeDescription"
                             value={formData.guaranteeDescription}
                             onChange={handleInputChange}
                             rows="2"
                             placeholder="Describe the generation security terms..."
-                            className="w-full bg-white border border-emerald-100 rounded-xl px-4 py-2.5 text-xs font-medium text-slate-600 focus:outline-none focus:border-emerald-500 transition-all resize-none"
+                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
                           />
                         </div>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex items-center justify-between pt-6 border-t border-slate-100">
+                  <div className="flex items-center justify-between pt-2">
                     <button
                       type="button"
                       onClick={resetForm}
-                      className="flex items-center gap-2 px-6 py-3 text-[11px] font-black text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-widest"
+                      className="px-6 py-2 bg-[#6c7b8e] text-white text-sm font-bold rounded hover:bg-[#5b6a7a] transition-all"
                     >
-                      <RefreshCw size={14} />
-                      Reset Fields
+                      Reset
                     </button>
                     <button
                       type="submit"
-                      className="flex items-center gap-2 px-8 py-3 bg-blue-600 text-white text-[11px] font-black rounded-xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 uppercase tracking-widest"
+                      className="flex items-center gap-2 px-6 py-2 bg-[#0c6baf] text-white text-sm font-bold rounded shadow hover:bg-[#0a5890] transition-all"
                     >
-                      <Save size={16} />
-                      Generate Service
+                      <PlusCircle size={16} />
+                      Add Service
                     </button>
                   </div>
                 </form>
@@ -496,15 +471,15 @@ const AmcServices = () => {
           </div>
 
           {/* Right Column: Services Summary */}
-          <div className="col-lg-5 mb-4" >
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden h-full flex flex-col">
-              <div className="bg-emerald-600 px-6 py-4 flex items-center justify-between">
-                <h5 className="text-white text-sm font-black uppercase tracking-widest flex items-center gap-2">
-                  <List size={18} />
+          <div className="w-full lg:w-[45%]">
+            <div className="bg-white rounded border border-slate-200 overflow-hidden h-full flex flex-col">
+              <div className="bg-[#28a745] px-4 py-3 flex items-center justify-between">
+                <h5 className="text-white font-bold text-lg flex items-center gap-2">
+                  <List size={20} />
                   AMC Services Summary
                 </h5>
-                <span className="text-[10px] font-black text-emerald-100 uppercase tracking-tighter bg-emerald-700 px-3 py-1 rounded-full">
-                  {services.length} Active
+                <span className="text-sm font-bold text-slate-800 bg-white px-3 py-1 rounded">
+                  {services.length} Services
                 </span>
               </div>
 
@@ -525,53 +500,52 @@ const AmcServices = () => {
                 ) : (
                   <div className="space-y-4">
                     {services.map((service) => (
-                      <div key={service._id} className="group bg-white border border-slate-100 rounded-2xl p-5 hover:border-emerald-200 hover:shadow-md hover:shadow-emerald-50/50 transition-all duration-300 relative">
-                        <div className="flex justify-between items-start mb-3">
-                          <div className="flex-1">
-                            <div className="flex items-center gap-2 mb-1">
-                              <h6 className="text-sm font-black text-slate-800 tracking-tight">{service.serviceName}</h6>
-                              {service.hasPowerGuarantee && (
-                                <span className="bg-emerald-100 text-emerald-700 text-[8px] font-black uppercase px-2 py-0.5 rounded tracking-tighter border border-emerald-200">Power Guard</span>
-                              )}
-                            </div>
-                            <p className="text-[11px] text-slate-500 font-medium leading-relaxed line-clamp-2">
-                              {service.description || 'Standard solar maintenance protocol.'}
-                            </p>
-                          </div>
-                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div key={service._id} className="bg-white border border-slate-200 rounded p-5 relative">
+                        <div className="flex justify-between items-start mb-1">
+                          <h6 className="text-lg font-bold text-[#1e293b]">{service.serviceName}</h6>
+                          <div className="flex gap-2">
                             <button
                               onClick={() => editService(service._id)}
-                              className="w-7 h-7 bg-white border border-slate-100 rounded-lg flex items-center justify-center text-amber-500 hover:bg-amber-50 hover:border-amber-100 transition-all shadow-sm"
+                              className="text-[#ffc107] hover:text-yellow-600 transition-colors"
                             >
-                              <Edit2 size={14} />
+                              <Edit2 size={16} />
                             </button>
                             <button
                               onClick={() => deleteService(service._id)}
-                              className="w-7 h-7 bg-white border border-slate-100 rounded-lg flex items-center justify-center text-rose-500 hover:bg-rose-50 hover:border-rose-100 transition-all shadow-sm"
+                              className="text-[#dc3545] hover:text-red-700 transition-colors"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </div>
 
+                        <p className="text-sm text-slate-500 mb-3">
+                          {service.description || 'Standard solar maintenance protocol.'}
+                        </p>
+
                         <div className="flex flex-wrap items-center gap-2 mb-3">
-                          <span className="bg-slate-100 text-slate-500 text-[9px] font-black uppercase px-2 py-1 rounded-md border border-slate-200">
+                          <span className="bg-[#6c7b8e] text-white text-xs font-bold px-2 py-1 rounded">
                             {service.serviceType}
                           </span>
-                          <span className="bg-blue-50 text-blue-600 text-[9px] font-black uppercase px-2 py-1 rounded-md border border-blue-100">
-                            {service.visitsPerYear} visits / year
+                          <span className="bg-[#0c6baf] text-white text-xs font-bold px-2 py-1 rounded">
+                            {service.visitsPerYear} visits/year
                           </span>
                         </div>
 
-                        <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                          <div className="flex items-baseline gap-1">
-                            <span className="text-base font-black text-slate-900 tracking-tighter">₹{service.basePrice?.toLocaleString()}</span>
-                            <span className="text-[10px] font-bold text-slate-400 border-l border-slate-200 pl-2 uppercase">{service.priceType}</span>
+                        {service.hasPowerGuarantee && (
+                          <div className="mb-3">
+                            <span className="bg-[#17a2b8] text-white text-xs font-bold px-3 py-1 rounded">
+                              Power Guarantee: {service.guaranteeMinKW}-{service.guaranteeMaxKW} kW
+                            </span>
                           </div>
+                        )}
+
+                        <div className="flex items-baseline gap-1 text-slate-800 font-bold">
+                          <span>₹{service.basePrice?.toLocaleString()}/{service.priceType === 'per_visit' ? 'visit' : service.priceType === 'monthly' ? 'month' : service.priceType === 'yearly' ? 'year' : 'fixed'}</span>
                           {service.additionalVisitCharge > 0 && (
-                            <div className="text-[10px] font-bold text-slate-400 bg-slate-50 px-2 py-1 rounded border border-dotted border-slate-200">
-                              +₹{service.additionalVisitCharge} extra
-                            </div>
+                            <span className="text-slate-500 ml-1 font-normal text-sm">
+                              + ₹{service.additionalVisitCharge}/extra visit
+                            </span>
                           )}
                         </div>
                       </div>
@@ -584,89 +558,85 @@ const AmcServices = () => {
         </div>
 
         {/* Services Table */}
-        <div className="mt-8" >
-          <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-            <div className="bg-slate-800 px-6 py-4 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-slate-700 rounded-lg flex items-center justify-center">
-                  <Settings className="text-slate-300" size={18} />
-                </div>
-                <h5 className="text-white text-sm font-black uppercase tracking-widest">System Master Registry</h5>
+        <div className="mt-6 mb-12 w-full overflow-hidden">
+          <div className="bg-white rounded border border-slate-200 overflow-hidden">
+            <div className="px-6 py-4 flex justify-between items-center border-b border-slate-200">
+              <div className="flex items-center gap-2">
+                <List size={20} className="text-slate-800" />
+                <h5 className="text-lg font-bold text-slate-800">All AMC Services</h5>
               </div>
               <button
                 type="button"
-                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white text-[10px] font-black rounded-lg hover:bg-blue-700 transition-all uppercase tracking-widest shadow-lg shadow-blue-900/20"
+                className="flex items-center gap-1 text-sm font-bold text-[#0c6baf] hover:text-[#0a5890] transition-colors"
                 onClick={scrollToForm}
               >
-                <PlusCircle size={14} />
-                Register New Service
+                <PlusCircle size={16} />
+                Add New Service
               </button>
             </div>
             <div className="p-0">
-              <div className="table-responsive">
-                <table className="w-full text-left border-collapse">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-100">
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">ID Reference</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Service Identification</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Asset Type</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Premium Structure</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-center">Protocol Visits</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Security Coverage</th>
-                      <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">System Control</th>
+                    <tr className="bg-slate-50/50 border-b border-slate-200">
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">#</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Service Name</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Type</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Price</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Visits/Year</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Power<br/>Guarantee</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Description</th>
+                      <th className="px-6 py-4 text-sm font-bold text-slate-600 text-center">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-50">
+                  <tbody className="divide-y divide-slate-200">
                     {services.map((service, index) => (
-                      <tr key={service._id} className="group hover:bg-slate-50/50 transition-colors">
-                        <td className="px-6 py-4">
-                          <span className="text-[10px] font-black text-slate-300 font-mono">#{index + 1}</span>
+                      <tr key={service._id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-slate-800">
+                          {index + 1}
                         </td>
                         <td className="px-6 py-4">
-                          <h6 className="text-xs font-black text-slate-800 uppercase tracking-tight">{service.serviceName}</h6>
-                          <p className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter mt-0.5 max-w-[200px] truncate">{service.description || 'Global Service Protocol'}</p>
+                          <h6 className="text-sm font-bold text-slate-800">{service.serviceName}</h6>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="inline-flex items-center px-2 py-0.5 bg-slate-100 text-slate-600 text-[9px] font-black rounded uppercase border border-slate-200">
+                          <span className="inline-flex items-center px-2 py-1 bg-[#6c7b8e] text-white text-xs font-bold rounded">
                             {service.serviceType}
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <div className="flex flex-col">
-                            <span className="text-xs font-black text-slate-800">₹{service.basePrice?.toLocaleString()}</span>
-                            <span className="text-[8px] font-black text-slate-400 uppercase tracking-widest">{service.priceType} Billing</span>
-                          </div>
+                          <span className="text-sm text-slate-800">₹{service.basePrice?.toLocaleString()}/{service.priceType === 'per_visit' ? 'visit' : service.priceType === 'monthly' ? 'month' : service.priceType === 'yearly' ? 'year' : 'fixed'}</span>
                         </td>
-                        <td className="px-6 py-4 text-center">
-                          <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-50 text-blue-600 rounded-lg text-xs font-black border border-blue-100 shadow-sm">
-                            {service.visitsPerYear}
-                          </span>
+                        <td className="px-6 py-4 text-sm text-slate-800">
+                          {service.visitsPerYear}
                         </td>
                         <td className="px-6 py-4">
                           {service.hasPowerGuarantee ? (
-                            <div className="flex flex-col">
-                              <span className="text-[10px] font-black text-emerald-600 uppercase">Active Coverage</span>
-                              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter">{service.guaranteeMinKW}-{service.guaranteeMaxKW} kW Registry</span>
+                            <div className="text-sm text-slate-800 flex flex-col whitespace-nowrap">
+                              <span>{service.guaranteeMinKW}-{service.guaranteeMaxKW} kW @</span>
+                              <span>₹{service.guaranteePerUnitPrice}/kW</span>
                             </div>
                           ) : (
-                            <span className="text-[10px] font-black text-slate-300 uppercase tracking-widest">Standard Pack</span>
+                            <span className="text-sm text-slate-800">No</span>
                           )}
                         </td>
-                        <td className="px-6 py-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
+                        <td className="px-6 py-4 text-sm text-slate-600 max-w-[200px]">
+                          {service.description}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col items-center justify-center gap-2">
                             <button
-                              className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-amber-500 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-all shadow-sm"
+                              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#ffc107] text-white rounded text-xs font-bold hover:bg-yellow-500 transition-colors"
                               onClick={() => editService(service._id)}
-                              title="Edit Registry"
                             >
-                              <Edit2 size={14} />
+                              <Edit2 size={12} />
+                              Edit
                             </button>
                             <button
-                              className="p-2 bg-slate-50 border border-slate-100 rounded-lg text-rose-500 hover:bg-rose-500 hover:text-white hover:border-rose-500 transition-all shadow-sm"
+                              className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 bg-[#dc3545] text-white rounded text-xs font-bold hover:bg-red-700 transition-colors"
                               onClick={() => deleteService(service._id)}
-                              title="Revoke Service"
                             >
-                              <Trash2 size={14} />
+                              <Trash2 size={12} />
+                              Delete
                             </button>
                           </div>
                         </td>
@@ -683,127 +653,126 @@ const AmcServices = () => {
       {/* Premium Edit Service Modal */}
       {isEditModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300">
-          <div className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
-            <div className="bg-amber-500 px-8 py-5 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-amber-400 rounded-xl flex items-center justify-center shadow-lg shadow-amber-600/20">
-                  <Edit2 className="text-white" size={20} />
-                </div>
-                <div>
-                  <h3 className="text-white text-lg font-black uppercase tracking-tight">Modify Registry</h3>
-                  <p className="text-amber-100 text-[10px] font-bold uppercase tracking-widest">Service Item Refinement</p>
-                </div>
-              </div>
+          <div className="bg-white w-full max-w-4xl max-h-[90vh] flex flex-col rounded-xl shadow-2xl border border-slate-200 overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-[#f39c12] px-6 py-4 flex justify-between items-center shrink-0">
+              <h3 className="text-white text-lg font-bold tracking-tight">SERVICE ITEM REFINEMENT</h3>
               <button
                 onClick={() => setIsEditModalOpen(false)}
-                className="w-8 h-8 flex items-center justify-center rounded-full bg-amber-600/30 text-white hover:bg-amber-600 transition-colors"
+                className="w-8 h-8 flex items-center justify-center rounded text-white hover:bg-black/10 transition-colors"
+                title="Close"
               >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-8">
+            <div className="p-8 overflow-y-auto flex-1 bg-white">
               <form id="editForm">
                 <input type="hidden" id="editServiceId" value={currentEditId || ''} />
 
-                <div className="grid grid-cols-2 gap-6 mb-8">
-                  <div className="col-span-2">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Identity</label>
+                <div className="space-y-6 mb-8">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Service Identity</label>
                     <input
                       type="text"
                       name="serviceName"
                       value={editFormData.serviceName}
                       onChange={handleEditInputChange}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 focus:outline-none focus:border-amber-500 transition-all"
+                      className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
                       required
                     />
                   </div>
 
-                  <div className="col-span-2">
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Scope Definition</label>
+                  <div>
+                    <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Service Scope Definition</label>
                     <textarea
                       name="serviceDescription"
                       value={editFormData.serviceDescription}
                       onChange={handleEditInputChange}
-                      rows="2"
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-medium text-slate-600 focus:outline-none focus:border-amber-500 transition-all resize-none"
+                      rows="3"
+                      className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500 resize-none"
                     />
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Service Classification</label>
-                    <select
-                      name="serviceType"
-                      value={editFormData.serviceType}
-                      onChange={handleEditInputChange}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-amber-500 transition-all cursor-pointer"
-                    >
-                      <option value="regular">Regular Service</option>
-                      <option value="preventive">Preventive Maintenance</option>
-                      <option value="emergency">Emergency Service</option>
-                      <option value="special">Special Service</option>
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-3 gap-6">
                     <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Base Price (₹)</label>
+                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Service Classification</label>
+                      <div className="relative">
+                        <select
+                          name="serviceType"
+                          value={editFormData.serviceType}
+                          onChange={handleEditInputChange}
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500 appearance-none pr-10"
+                        >
+                          <option value="regular">Regular Service</option>
+                          <option value="preventive">Preventive Maintenance</option>
+                          <option value="emergency">Emergency Service</option>
+                          <option value="special">Special Service</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                      </div>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Base Price (₹)</label>
                       <input
                         type="number"
                         name="basePrice"
                         value={editFormData.basePrice}
                         onChange={handleEditInputChange}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:outline-none focus:border-amber-500 transition-all"
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Price Model</label>
-                      <select
-                        name="priceType"
-                        value={editFormData.priceType}
-                        onChange={handleEditInputChange}
-                        className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-amber-500 transition-all cursor-pointer"
-                      >
-                        <option value="fixed">Fixed</option>
-                        <option value="per_visit">Per Visit</option>
-                        <option value="monthly">Monthly</option>
-                        <option value="yearly">Yearly</option>
-                      </select>
+                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Price Model</label>
+                      <div className="relative">
+                        <select
+                          name="priceType"
+                          value={editFormData.priceType}
+                          onChange={handleEditInputChange}
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500 appearance-none pr-10"
+                        >
+                          <option value="fixed">Fixed</option>
+                          <option value="per_visit">Per Visit</option>
+                          <option value="monthly">Monthly</option>
+                          <option value="yearly">Yearly</option>
+                        </select>
+                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
+                      </div>
                     </div>
                   </div>
 
-                  <div>
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Standard Visits</label>
-                    <input
-                      type="number"
-                      name="visitsPerYear"
-                      value={editFormData.visitsPerYear}
-                      onChange={handleEditInputChange}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:outline-none focus:border-amber-500 transition-all"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-[11px] font-black text-slate-500 uppercase tracking-wider mb-2 ml-1">Extra Visit Premium (₹)</label>
-                    <input
-                      type="number"
-                      name="additionalVisitCharge"
-                      value={editFormData.additionalVisitCharge}
-                      onChange={handleEditInputChange}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 text-sm font-black text-slate-800 focus:outline-none focus:border-amber-500 transition-all"
-                    />
+                  <div className="grid grid-cols-2 gap-6">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Standard Visits</label>
+                      <input
+                        type="number"
+                        name="visitsPerYear"
+                        value={editFormData.visitsPerYear}
+                        onChange={handleEditInputChange}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Extra Visit Premium (₹)</label>
+                      <input
+                        type="number"
+                        name="additionalVisitCharge"
+                        value={editFormData.additionalVisitCharge}
+                        onChange={handleEditInputChange}
+                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+                      />
+                    </div>
                   </div>
                 </div>
 
                 {/* Edit Power Generation Guarantee Section */}
-                <div className={`mb-8 rounded-2xl border transition-all duration-500 ${editFormData.includePowerGuarantee ? 'border-amber-200 bg-amber-50/30' : 'border-slate-100 bg-slate-50/50'}`}>
-                  <div className="p-4 border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-all ${editFormData.includePowerGuarantee ? 'bg-amber-500 text-white shadow-amber-200 shadow-lg' : 'bg-slate-200 text-slate-500'}`}>
-                        <CheckSquare size={16} />
+                <div className="mb-6 rounded border border-slate-200 bg-slate-50/50">
+                  <div className="p-4 flex items-center justify-between border-b border-slate-200 bg-white">
+                    <label className="flex items-center gap-3 cursor-pointer">
+                      <div className="w-6 h-6 rounded bg-slate-100 border border-slate-300 flex items-center justify-center">
+                         <span className="text-slate-400 font-bold">&#10003;</span>
                       </div>
-                      <h6 className="text-[11px] font-black text-slate-800 uppercase tracking-wider">Power Generation Security</h6>
-                    </div>
+                      <span className="text-sm font-bold text-slate-800 uppercase tracking-wide">POWER GENERATION SECURITY</span>
+                    </label>
                     <label className="relative inline-flex items-center cursor-pointer">
                       <input
                         type="checkbox"
@@ -815,50 +784,60 @@ const AmcServices = () => {
                         }}
                         className="sr-only peer"
                       />
-                      <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                      <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0c6baf]"></div>
                     </label>
                   </div>
 
                   {showEditPowerGuarantee && (
-                    <div className="p-6 grid grid-cols-2 gap-4 animate-in fade-in slide-in-from-top-2">
+                    <div className="p-6 grid grid-cols-2 gap-6 bg-white animate-in fade-in slide-in-from-top-2">
                       <div>
-                        <label className="block text-[10px] font-black text-amber-700 uppercase mb-1.5 ml-1">Min kW</label>
+                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Min kW</label>
                         <input
                           type="number"
                           name="guaranteeMinKW"
                           value={editFormData.guaranteeMinKW}
                           onChange={handleEditInputChange}
                           step="0.1"
-                          className="w-full bg-white border border-amber-100 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:border-amber-400"
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
                         />
                       </div>
                       <div>
-                        <label className="block text-[10px] font-black text-amber-700 uppercase mb-1.5 ml-1">Max kW</label>
+                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Max kW</label>
                         <input
                           type="number"
                           name="guaranteeMaxKW"
                           value={editFormData.guaranteeMaxKW}
                           onChange={handleEditInputChange}
                           step="0.1"
-                          className="w-full bg-white border border-amber-100 rounded-xl px-4 py-2.5 text-sm font-bold focus:outline-none focus:border-amber-400"
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
+                        />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Guarantee Per Unit Price (₹)</label>
+                        <input
+                          type="number"
+                          name="guaranteePerUnitPrice"
+                          value={editFormData.guaranteePerUnitPrice}
+                          onChange={handleEditInputChange}
+                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
                         />
                       </div>
                     </div>
                   )}
                 </div>
 
-                <div className="flex items-center justify-end gap-3 pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 shrink-0">
                   <button
                     type="button"
                     onClick={() => setIsEditModalOpen(false)}
-                    className="px-6 py-3 text-[11px] font-black text-slate-400 hover:text-slate-600 transition-colors uppercase tracking-widest"
+                    className="px-6 py-2 text-sm font-bold text-slate-600 hover:text-slate-800 uppercase tracking-wider"
                   >
                     Cancel
                   </button>
                   <button
                     type="button"
                     onClick={updateService}
-                    className="px-8 py-3 bg-amber-500 text-white text-[11px] font-black rounded-xl hover:bg-amber-600 transition-all shadow-lg shadow-amber-100 uppercase tracking-widest"
+                    className="px-6 py-2 bg-[#f39c12] text-white text-sm font-bold rounded hover:bg-[#d68910] transition-colors uppercase tracking-wider"
                   >
                     Update Registry
                   </button>

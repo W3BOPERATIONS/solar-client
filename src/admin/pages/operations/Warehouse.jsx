@@ -22,7 +22,7 @@ import {
   getClustersHierarchy,
   getDistrictsHierarchy,
   getCitiesHierarchy
-} from '../../../services/locationApi';
+} from '../../../services/core/locationApi';
 import toast from 'react-hot-toast';
 
 export default function OurWarehouse() {

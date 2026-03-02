@@ -12,9 +12,9 @@ import {
   Loader2
 } from 'lucide-react';
 import { Chart } from 'react-google-charts';
-import { organizationApi } from '../../../services/organizationApi';
-import * as locationApi from '../../../services/locationApi';
-import { getDepartments } from '../../../services/masterApi';
+import { organizationApi } from '../../../services/organization/organizationApi';
+import * as locationApi from '../../../services/core/locationApi';
+import { getDepartments } from '../../../services/core/masterApi';
 
 export default function OrganizationChart() {
   const [loading, setLoading] = useState(false);

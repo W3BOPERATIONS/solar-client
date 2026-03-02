@@ -27,7 +27,7 @@ import {
     Award,
     X
 } from 'lucide-react';
-import { disputeApi } from '../../../services/disputeApi';
+import { disputeApi } from '../../../services/tickets/disputeApi';
 
 const FranchiseeManagerDispute = () => {
     const [filters, setFilters] = useState({
