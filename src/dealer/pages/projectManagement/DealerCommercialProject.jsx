@@ -114,7 +114,7 @@ import {
     FileX as FileXIcon
 } from 'lucide-react';
 
-import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
+import { getAllProjects, updateProject } from '../../services/projectApi';
 
 const DealerCommercialProject = () => {
     const navigate = useNavigate();

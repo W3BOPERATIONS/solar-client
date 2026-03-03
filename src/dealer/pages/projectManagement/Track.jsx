@@ -29,7 +29,7 @@ import {
     CheckSquare,
     Hourglass
 } from 'lucide-react';
-import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
+import { getAllProjects, updateProject } from '../../services/projectApi';
 
 const DealerProjectManagTrack = () => {
     const [searchQuery, setSearchQuery] = useState('');

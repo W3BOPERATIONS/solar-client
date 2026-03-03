@@ -26,7 +26,7 @@ import {
     Folder // Added Folder icon
 } from 'lucide-react';
 
-import { getAllProjects } from '../../../admin/services/projectApi';
+import { getAllProjects } from '../../services/projectApi';
 
 const DealerTrackProjectProgress = () => {
     const [stats, setStats] = useState({
