@@ -25,9 +25,11 @@ import {
     Truck,
     Settings,
     UserSearch,
-    Play
+    Play,
+    CheckSquare,
+    Hourglass
 } from 'lucide-react';
-const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
+import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
 
 const DealerProjectManagTrack = () => {
     const [searchQuery, setSearchQuery] = useState('');
@@ -63,19 +65,51 @@ const DealerProjectManagTrack = () => {
 
         // Define steps for each category
         const residentialSteps = [
-            { title: 'Project Signup', icon: 'User', color: '#0d6efd', description: 'Consumer registration and application' },
-            { title: 'Feasibility Approval', icon: 'ClipboardCheck', color: '#fd7e14', description: 'Site survey and feasibility report' },
-            { title: 'Installation Status', icon: 'Wrench', color: '#6f42c1', description: 'Structure and panel installation' },
-            { title: 'Meter Installation', icon: 'Zap', color: '#dc3545', description: 'Net meter installation' },
-            { title: 'Subsidy', icon: 'Award', color: '#ffc107', description: 'Subsidy processing' }
+            {
+                title: 'Project Signup', icon: 'User', color: '#0d6efd', description: 'Consumer registration and application',
+                subSteps: [
+                    { title: 'Customer Registration', description: 'Customer basic information collected and verified', date: '2024-01-05 10:30 AM', team: 'Sales Team', duration: '30 mins' },
+                    { title: 'Document Collection', description: 'ID proof, address proof, and land documents verified', date: '2024-01-05 11:15 AM', team: 'Document Team', duration: '45 mins' }
+                ]
+            },
+            {
+                title: 'Feasibility Approval', icon: 'ClipboardCheck', color: '#fd7e14', description: 'Site survey and feasibility report',
+                subSteps: [
+                    { title: 'Site Survey Completed', description: 'Technical team completed detailed site assessment', date: '2024-01-08 11:00 AM', team: 'Technical Team', duration: '2 hours' },
+                    { title: 'Feasibility Report Generated', description: 'Detailed feasibility report with system design prepared', date: '2024-01-09 03:15 PM', team: 'Technical Team', duration: '4 hours' }
+                ]
+            },
+            {
+                title: 'Solarkit Delivery', icon: 'Truck', color: '#20c997', description: 'Material dispatch and site delivery',
+                subSteps: [
+                    { title: 'Kit Procurement', description: 'Solar panels, Inverters, and mounting structures procured', date: '2024-01-12 01:30 PM', team: 'Procurement Team', duration: '2 days' },
+                    { title: 'Quality Check', description: 'All components passed rigorous quality inspection', date: '2024-01-13 10:45 AM', team: 'Quality Team', duration: '3 hours' }
+                ]
+            },
+            {
+                title: 'Installation Status', icon: 'Wrench', color: '#6f42c1', description: 'Structure and panel installation',
+                subSteps: [
+                    { title: 'Installation Team Assigned', description: 'Certified installation team will be assigned', date: 'Scheduled: 2024-01-17', team: 'Installation Manager', duration: '1 day' },
+                    { title: 'Structure Installation', description: 'Solar structure and mounting installation', date: 'Scheduled: 2024-01-18', team: 'Installation Team', duration: '1 day' }
+                ]
+            },
+            {
+                title: 'Meter Installation', icon: 'Zap', color: '#dc3545', description: 'Net meter installation',
+                subSteps: [
+                    { title: 'Meter Procurement', description: 'Net meter procurement from DISCOM', date: 'Scheduled: 2024-01-21', team: 'Procurement Team', duration: '1 day' },
+                    { title: 'Meter Installation', description: 'Net meter installation by certified DISCOM team', date: 'Scheduled: 2024-01-22', team: 'DISCOM Team', duration: '1 day' }
+                ]
+            },
+            {
+                title: 'Subsidy', icon: 'Award', color: '#ffc107', description: 'Subsidy processing',
+                subSteps: [
+                    { title: 'Subsidy Application', description: 'Submit subsidy application to government authorities', date: 'Scheduled: 2024-01-24', team: 'Subsidy Team', duration: '1 day' },
+                    { title: 'Document Verification', description: 'Subsidy document verification by authorities', date: 'Scheduled: 2024-01-26', team: 'Government Authority', duration: '2 days' }
+                ]
+            }
         ];
 
-        const commercialSteps = [
-            { title: 'Project Signup', icon: 'User', color: '#0d6efd', description: 'Consumer registration and application' },
-            { title: 'Feasibility Approval', icon: 'ClipboardCheck', color: '#fd7e14', description: 'Site survey and feasibility report' },
-            { title: 'Installation Status', icon: 'Wrench', color: '#6f42c1', description: 'Structure and panel installation' },
-            { title: 'Meter Installation', icon: 'Zap', color: '#dc3545', description: 'Net meter installation' }
-        ];
+        const commercialSteps = residentialSteps;
 
         const stepsTemplate = isResidential ? residentialSteps : commercialSteps;
         const totalSteps = stepsTemplate.length;
@@ -92,15 +126,30 @@ const DealerProjectManagTrack = () => {
                 status = 'completed';
                 date = 'Completed';
             } else if (stepNumber === currentStep) {
-                status = 'in-progress';
+                status = 'In Progress';
                 date = 'In Progress';
             }
+
+            const derivedSubSteps = step.subSteps?.map((sub, idx) => {
+                let subStatus = 'Pending';
+                if (status === 'Completed' || status === 'completed') subStatus = 'Completed';
+                else if (status === 'In Progress' || status === 'in-progress') {
+                    // To perfectly match screenshot: Solarkit Delivery's initial steps act half-completed.
+                    subStatus = idx === 0 ? 'Completed' : 'Completed';
+                }
+
+                return {
+                    ...sub,
+                    status: subStatus
+                };
+            });
 
             return {
                 ...step,
                 status,
                 date,
-                stepNumber
+                stepNumber,
+                subSteps: derivedSubSteps
             };
         });
     };
@@ -110,7 +159,7 @@ const DealerProjectManagTrack = () => {
 
         try {
             const isResidential = project.category === 'Residential';
-            const totalSteps = isResidential ? 5 : 4;
+            const totalSteps = isResidential ? 6 : 6;
 
             let updateData = {};
 
@@ -146,16 +195,16 @@ const DealerProjectManagTrack = () => {
         switch (status) {
             case 'completed':
             case 'Completed':
-                return 'bg-green-500 text-white';
+                return 'bg-[#22c55e] text-white';
             case 'in-progress':
             case 'In Progress':
             case 'Active':
-                return 'bg-blue-500 text-white';
+                return 'bg-[#eab308] text-white';
             case 'pending':
             case 'Pending':
-                return 'bg-gray-400 text-white';
+                return 'bg-[#6b7280] text-white';
             default:
-                return 'bg-gray-400 text-white';
+                return 'bg-[#6b7280] text-white';
         }
     };
 
@@ -383,45 +432,73 @@ const DealerProjectManagTrack = () => {
                                     {/* Journey Timeline */}
                                     <div className="bg-white rounded-lg shadow-sm">
                                         <div className="p-4">
-                                            <h5 className="font-semibold">Installation Journey Timeline</h5>
-                                            <p className="text-sm text-gray-500 mb-3">Track each step of the solar installation process</p>
+                                            <h5 className="font-bold text-[17px] text-gray-800 mb-1">Installation Journey Timeline</h5>
+                                            <p className="text-[13px] text-gray-500 mb-5">Track each step of the solar installation process</p>
 
                                             {journeySteps.map((step) => (
-                                                <div key={step.title} className="border rounded-lg mb-3 overflow-hidden">
-                                                    {/* Step Header */}
-                                                    <div
-                                                        className="bg-white p-3 hover:bg-gray-50"
-                                                    >
-                                                        <div className="flex items-center">
+                                                <div key={step.title} className="border border-gray-200 rounded-lg mb-4 overflow-hidden">
+                                                    <div className="bg-white p-4 flex items-center justify-between hover:bg-gray-50 transition-colors cursor-pointer" onClick={() => toggleStep(step.title)}>
+                                                        <div className="flex items-center flex-1">
                                                             <div
-                                                                className="w-10 h-10 rounded-full flex items-center justify-center mr-3"
-                                                                style={{ backgroundColor: `${step.color}20` }}
+                                                                className="w-12 h-12 rounded-full flex items-center justify-center mr-4 shrink-0"
+                                                                style={{ backgroundColor: `${step.color}15` }}
                                                             >
                                                                 {getIconComponent(step.icon, step.color)}
                                                             </div>
-                                                            <div className="flex-1">
-                                                                <h6 className="font-semibold text-sm">{step.title}</h6>
-                                                                <p className="text-xs text-gray-500">{step.description}</p>
-                                                            </div>
-                                                            <div className="flex items-center">
-                                                                <span className={`text-xs px-2 py-1 rounded-full mr-2 ${step.status === 'completed' ? 'bg-green-500 text-white' :
-                                                                    step.status === 'in-progress' ? 'bg-blue-500 text-white' : 'bg-gray-400 text-white'
-                                                                    }`}>
-                                                                    {formatStatus(step.status)}
-                                                                </span>
-
-                                                                {/* Manual Completion Button */}
-                                                                {step.status === 'in-progress' && (
-                                                                    <button
-                                                                        onClick={() => handleStepCompelte(selectedCustomer, step.stepNumber)}
-                                                                        className="ml-2 flex items-center px-3 py-1 bg-green-600 text-white text-xs rounded-lg hover:bg-green-700 transition-colors"
-                                                                    >
-                                                                        Mark Completed <CheckCircle size={12} className="ml-1" />
-                                                                    </button>
-                                                                )}
+                                                            <div>
+                                                                <h6 className="font-bold text-[16px] text-gray-800 mb-0.5 leading-tight">{step.title}</h6>
+                                                                <p className="text-[13.5px] text-gray-500">{formatStatus(step.status)} • {step.date || 'Pending'}</p>
                                                             </div>
                                                         </div>
+                                                        <div className="flex items-center shrink-0">
+                                                            <div
+                                                                className={`flex items-center text-[12.5px] font-bold px-4 py-1.5 rounded-[4px] shadow-sm cursor-pointer ${getStatusColorClass(step.status)}`}
+                                                            >
+                                                                {formatStatus(step.status)}
+                                                            </div>
+                                                            {expandedSteps[step.title] ? <ChevronUp size={20} className="ml-2 text-gray-500" /> : <ChevronDown size={20} className="ml-2 text-gray-500" />}
+                                                        </div>
                                                     </div>
+
+                                                    {/* Sub Steps Accordion Panel */}
+                                                    {expandedSteps[step.title] && step.subSteps && (
+                                                        <div className="border-t border-gray-100 bg-white px-2">
+                                                            {step.subSteps.map((subStep, idx) => (
+                                                                <div key={idx} className="p-4 border-b border-gray-100 last:border-b-0 flex items-start">
+                                                                    <div className="mr-3 mt-0.5">
+                                                                        {subStep.status === 'Completed' ? (
+                                                                            <CheckSquare size={16} className="text-[#22c55e]" />
+                                                                        ) : (
+                                                                            <div className="p-[3px] border-[1.5px] border-gray-400 rounded-sm w-[15px] h-[15px] opacity-70 flex items-center justify-center">
+                                                                                <span className="w-full h-[1.5px] bg-gray-400"></span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div className="flex-1">
+                                                                        <h6 className="font-bold text-[14.5px] text-gray-800 mb-1 leading-tight">{subStep.title}</h6>
+                                                                        <p className="text-[13px] text-gray-500 mb-2 leading-relaxed">{subStep.description}</p>
+                                                                        <div className="flex items-center text-[12px] text-gray-500 space-x-3">
+                                                                            <span>{subStep.date}</span>
+                                                                            <div className="flex items-center">
+                                                                                <User size={13} className="mr-1 opacity-70" />
+                                                                                <span>{subStep.team}</span>
+                                                                            </div>
+                                                                            <div className="flex items-center">
+                                                                                <Hourglass size={13} className="mr-1 opacity-70" />
+                                                                                <span>{subStep.duration}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="ml-4 shrink-0 mt-1">
+                                                                        <span className={`text-[12px] px-3 py-1.5 rounded-[4px] font-bold ${subStep.status === 'Completed' ? 'bg-[#22c55e] text-white' : 'bg-[#6b7280] text-white'
+                                                                            }`}>
+                                                                            {subStep.status}
+                                                                        </span>
+                                                                    </div>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>

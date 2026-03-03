@@ -114,7 +114,7 @@ import {
     FileX as FileXIcon
 } from 'lucide-react';
 
-const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
+import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
 
 const DealerCommercialProject = () => {
     const navigate = useNavigate();
@@ -142,51 +142,129 @@ const DealerCommercialProject = () => {
     });
     const totalSteps = 4;
 
-    // Timeline generation based on currentStep
+    // Timeline generation based on hardcoded layout request
     const getTimelineItems = (customer) => {
-        if (!customer) return [];
-
-        const steps = [
-            { title: 'Project Created', details: 'Project initiated successfully.' },
-            { title: 'Project SignUp', details: 'Consumer registered and application submitted.' },
-            { title: 'Feasibility Approval', details: 'Feasibility approved.' },
-            { title: 'Installation Status', details: 'Installation completed.' },
-            { title: 'Meter Installation', details: 'Meter installed and inspected.' }
-        ];
-
-        const items = [{
-            title: 'Project Created',
-            date: new Date(customer.createdAt || Date.now()).toLocaleDateString(),
-            status: 'Completed',
-            icon: 'FileText',
-            color: 'green',
-            details: 'Project initiated successfully.'
-        }];
-
-        const currentStepVal = customer.currentStep || 1;
-
-        for (let i = 1; i <= Math.min(currentStepVal, 4); i++) {
-            if (i < currentStepVal || customer.status === 'Completed') {
-                items.push({
-                    title: steps[i].title,
-                    date: new Date().toLocaleDateString(),
-                    status: 'Completed',
-                    icon: 'CheckCircle',
-                    color: 'green',
-                    details: steps[i].details
-                });
-            } else if (i === currentStepVal && customer.status !== 'Completed') {
-                items.push({
-                    title: steps[i].title,
-                    date: 'In Progress',
-                    status: 'Active',
-                    icon: 'Clock',
-                    color: 'blue',
-                    details: 'Currently working on this step.'
-                });
+        return [
+            {
+                title: 'Service Ticket Closed',
+                date: '23 Jan 2024',
+                user: 'Completed by RajDeep Singh',
+                icon: 'CheckSquare',
+                color: 'blue'
+            },
+            {
+                title: 'Service Ticket Created',
+                date: '24 Jan 2024',
+                user: 'Assigned to RajDeep Singh',
+                icon: 'User',
+                color: 'blue'
+            },
+            {
+                title: 'Project Completed',
+                date: '24 Jan 2024',
+                hasPdf: true,
+                icon: 'CheckCircle',
+                color: 'green'
+            },
+            {
+                title: 'Subsidy Received',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'IndianRupee',
+                color: 'blue'
+            },
+            {
+                title: 'Subsidy Claimed',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'IndianRupee',
+                color: 'blue'
+            },
+            {
+                title: 'PCR by Discom',
+                date: '25 Jan 2024',
+                status: 'Completed',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Solar Meter Status',
+                date: '25 Jan 2024',
+                status: 'Completed',
+                icon: 'Zap',
+                color: 'blue'
+            },
+            {
+                title: 'Meter Change File',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Assigned Installation To Prince',
+                date: 'Installer Prince',
+                user: '25 Jan 2024',
+                details: '2053, New Ram Bagh, Junagarh 143001',
+                mapLocation: true,
+                icon: 'User',
+                color: 'blue'
+            },
+            {
+                title: 'Picked Combo Kit From Warehouse',
+                date: 'Rajkot Warehouse',
+                user: '23 Jan 2024',
+                icon: 'MapPin',
+                color: 'blue'
+            },
+            {
+                title: 'Combokit Reached Company Warehouse',
+                date: 'Rajkot Warehouse',
+                user: '23 Jan 2024',
+                mapLocation: true,
+                icon: 'MapPin',
+                color: 'blue'
+            },
+            {
+                title: 'Meter Change Payment Paid',
+                date: '₹2,650 by online',
+                status: 'Completed',
+                details: '09 Oct 2023',
+                icon: 'CreditCard',
+                color: 'blue'
+            },
+            {
+                title: 'Combokit Payment Paid',
+                date: '₹1,30,0000 by online',
+                status: 'Completed',
+                details: '09 Oct 2023',
+                hasPdf: true,
+                icon: 'CreditCard',
+                color: 'blue'
+            },
+            {
+                title: 'Feasibility approbal by Discom(Auto)',
+                date: '23 Oct 2023',
+                icon: 'CheckSquare',
+                color: 'blue'
+            },
+            {
+                title: 'Reg. Summited for Subsidy',
+                date: 'by Ravi',
+                user: '07 Jan 2024',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Token Amount Received',
+                date: 'paid 20,000 online',
+                details: '05 Jan 2024',
+                icon: 'IndianRupee',
+                color: 'blue'
             }
-        }
-        return items;
+        ];
     };
 
     useEffect(() => {
@@ -524,47 +602,53 @@ const DealerCommercialProject = () => {
                                                 </button>
 
                                                 {/* Journey History */}
-                                                <div className="border rounded p-4 bg-gray-50">
-                                                    <div className="flex items-center mb-4">
-                                                        <RefreshCw className="h-4 w-4 text-blue-600 mr-2" />
-                                                        <h6 className="font-bold">Application Journey History</h6>
+                                                <div className="mt-4">
+                                                    <div className="flex items-center mb-6">
+                                                        <RefreshCw className="h-4 w-4 text-gray-800 mr-2 font-bold" />
+                                                        <h6 className="font-bold text-[13px] text-gray-900">Application Journey History</h6>
                                                     </div>
 
-                                                    <div className="timeline relative">
-                                                        <div className="absolute top-0 bottom-0 left-5 w-0.5 bg-gray-300"></div>
-                                                        <ul className="space-y-4">
-                                                            {getTimelineItems(selectedCustomer).map((item, index) => (
-                                                                <li key={index} className="timeline-item relative pl-12">
+                                                    <div className="timeline relative pl-2">
+                                                        <div className="absolute top-2 bottom-0 left-[19px] w-[1px] bg-gray-300"></div>
+                                                        <ul className="space-y-0">
+                                                            {getTimelineItems(selectedCustomer).map((item, index, arr) => (
+                                                                <li key={index} className="timeline-item relative pl-12 pb-5">
                                                                     <div
-                                                                        className={`timeline-icon absolute left-3 top-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs ${item.color === 'green' ? 'bg-green-600' : 'bg-blue-600'
+                                                                        className={`timeline-icon absolute left-[10px] top-0 w-[18px] h-[18px] rounded-full flex items-center justify-center text-white text-[10px] shadow-sm z-10 ${item.color === 'green' ? 'bg-green-500' : 'bg-[#0ea5e9]'
                                                                             }`}
                                                                     >
-                                                                        {getIcon(item.icon, 'h-3 w-3')}
+                                                                        {getIcon(item.icon, 'h-2.5 w-2.5')}
                                                                     </div>
-                                                                    <div className="timeline-content bg-gray-100 p-3 rounded relative">
-                                                                        <div className="flex justify-between items-start">
-                                                                            <div>
-                                                                                <div className="timeline-title font-semibold flex items-center flex-wrap">
-                                                                                    {item.title}
-                                                                                    {item.hasPdf && (
-                                                                                        <FileText className="h-3 w-3 text-red-500 ml-2" />
-                                                                                    )}
-                                                                                    {item.status && (
-                                                                                        <span className="ml-2 text-green-600 font-bold text-xs">
-                                                                                            {item.status}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <div
-                                                                                    className="timeline-details text-sm text-gray-600"
-                                                                                    dangerouslySetInnerHTML={{ __html: item.details || `${item.date}${item.user ? ` | Completed by ${item.user}` : ''}${item.location ? ` | ${item.location}` : ''}` }}
-                                                                                />
-                                                                            </div>
-                                                                            <button className="text-gray-400 hover:text-gray-600">
-                                                                                <MoreVertical className="h-4 w-4" />
-                                                                            </button>
+                                                                    <div className="timeline-content pt-[-2px]">
+                                                                        <div className="timeline-title text-[13px] text-gray-800 flex items-center font-medium">
+                                                                            {item.title}
+                                                                            {item.hasPdf && <FileText className="h-3 w-3 text-red-500 ml-1.5" />}
                                                                         </div>
+                                                                        <div className="text-[11px] text-gray-700 mt-0.5">
+                                                                            {item.date} {item.user ? ` | ${item.user}` : ''}
+                                                                            {item.status && (
+                                                                                <span className={`font-bold ml-1 ${item.status === 'Completed' ? 'text-green-600' : 'text-[#0ea5e9]'}`}>
+                                                                                    {item.status}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {item.details && (
+                                                                            <div
+                                                                                className="text-[11px] text-gray-700 mt-0.5"
+                                                                                dangerouslySetInnerHTML={{ __html: item.details }}
+                                                                            />
+                                                                        )}
+                                                                        {item.mapLocation && (
+                                                                            <div className="mt-0.5">
+                                                                                <a href="#" className="text-[#0ea5e9] text-[11px] font-medium hover:underline">Map Location</a>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
+                                                                    {index !== arr.length - 1 && (
+                                                                        <div className="absolute left-[16.5px] bottom-[10px] z-10 bg-white text-gray-700 text-[14px] leading-none h-[14px] w-[6px] flex items-center justify-center font-bold">
+                                                                            ⋮
+                                                                        </div>
+                                                                    )}
                                                                 </li>
                                                             ))}
                                                         </ul>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     ChevronLeft,
@@ -8,6 +8,7 @@ import {
     Phone,
     Mail,
     MapPin,
+    Navigation,
     CheckSquare,
     FileText,
     Check,
@@ -93,7 +94,7 @@ import {
     FolderX
 } from 'lucide-react';
 
-const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
+import { getAllProjects, updateProject } from '../../../admin/services/projectApi';
 
 const DealerResidentialProject = () => {
     const navigate = useNavigate();
@@ -117,58 +118,129 @@ const DealerResidentialProject = () => {
 
     const totalSteps = 5;
 
-    // Timeline generation based on currentStep
+    // Timeline generation based on hardcoded layout request
     const getTimelineItems = (customer) => {
-        if (!customer) return [];
-
-        const steps = [
-            { title: 'Project Created', details: 'Project initiated successfully.' },
-            { title: 'Project SignUp', details: 'Consumer registered and application submitted.' },
-            { title: 'Feasibility Approval', details: 'Feasibility approved.' },
-            { title: 'Installation Status', details: 'Installation completed.' },
-            { title: 'Meter Installation', details: 'Meter installed and inspected.' },
-            { title: 'Subsidy', details: 'Subsidy process completed.' }
-        ];
-
-        const items = [{
-            title: 'Project Created',
-            date: new Date(customer.createdAt || Date.now()).toLocaleDateString(),
-            status: 'Completed',
-            icon: 'FileText',
-            color: 'green',
-            details: 'Project initiated successfully.'
-        }];
-
-        const currentStepVal = customer.currentStep || 1;
-
-        // Add completed steps
-        for (let i = 1; i <= Math.min(currentStepVal, 5); i++) {
-            // Only mark as completed if we are passed this step or if the project is marked completed
-            // Or if we are ON this step, it is "In Progress" or "Active"?
-            // Usually timeline shows *history*. 
-            // If we are on Step 2, Step 1 is done.
-
-            if (i < currentStepVal || customer.status === 'Completed') {
-                items.push({
-                    title: steps[i].title,
-                    date: new Date().toLocaleDateString(), // Ideally we'd have dates for each step completion
-                    status: 'Completed',
-                    icon: 'CheckCircle',
-                    color: 'green',
-                    details: steps[i].details
-                });
-            } else if (i === currentStepVal && customer.status !== 'Completed') {
-                items.push({
-                    title: steps[i].title,
-                    date: 'In Progress',
-                    status: 'Active',
-                    icon: 'Clock',
-                    color: 'blue',
-                    details: 'Currently working on this step.'
-                });
+        return [
+            {
+                title: 'Service Ticket Closed',
+                date: '23 Jan 2024',
+                user: 'Completed by RajDeep Singh',
+                icon: 'CheckSquare',
+                color: 'blue'
+            },
+            {
+                title: 'Service Ticket Created',
+                date: '24 Jan 2024',
+                user: 'Assigned to RajDeep Singh',
+                icon: 'User',
+                color: 'blue'
+            },
+            {
+                title: 'Project Completed',
+                date: '24 Jan 2024',
+                hasPdf: true,
+                icon: 'CheckCircle',
+                color: 'green'
+            },
+            {
+                title: 'Subsidy Received',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'IndianRupee',
+                color: 'blue'
+            },
+            {
+                title: 'Subsidy Claimed',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'IndianRupee',
+                color: 'blue'
+            },
+            {
+                title: 'PCR by Discom',
+                date: '25 Jan 2024',
+                status: 'Completed',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Solar Meter Status',
+                date: '25 Jan 2024',
+                status: 'Completed',
+                icon: 'Zap',
+                color: 'blue'
+            },
+            {
+                title: 'Meter Change File',
+                date: '25 Jan 2024',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Assigned Installation To Prince',
+                date: 'Installer Prince',
+                user: '25 Jan 2024',
+                details: '2053, New Ram Bagh, Junagarh 143001',
+                mapLocation: true,
+                icon: 'User',
+                color: 'blue'
+            },
+            {
+                title: 'Picked Combo Kit From Warehouse',
+                date: 'Rajkot Warehouse',
+                user: '23 Jan 2024',
+                icon: 'MapPin',
+                color: 'blue'
+            },
+            {
+                title: 'Combokit Reached Company Warehouse',
+                date: 'Rajkot Warehouse',
+                user: '23 Jan 2024',
+                mapLocation: true,
+                icon: 'MapPin',
+                color: 'blue'
+            },
+            {
+                title: 'Meter Change Payment Paid',
+                date: '₹2,650 by online',
+                status: 'Completed',
+                details: '09 Oct 2023',
+                icon: 'CreditCard',
+                color: 'blue'
+            },
+            {
+                title: 'Combokit Payment Paid',
+                date: '₹1,30,0000 by online',
+                status: 'Completed',
+                details: '09 Oct 2023',
+                hasPdf: true,
+                icon: 'CreditCard',
+                color: 'blue'
+            },
+            {
+                title: 'Feasibility approbal by Discom(Auto)',
+                date: '23 Oct 2023',
+                icon: 'CheckSquare',
+                color: 'blue'
+            },
+            {
+                title: 'Reg. Summited for Subsidy',
+                date: 'by Ravi',
+                user: '07 Jan 2024',
+                hasPdf: true,
+                icon: 'FileText',
+                color: 'blue'
+            },
+            {
+                title: 'Token Amount Received',
+                date: 'paid 20,000 online',
+                details: '05 Jan 2024',
+                icon: 'IndianRupee',
+                color: 'blue'
             }
-        }
-        return items;
+        ];
     };
 
     useEffect(() => {
@@ -424,33 +496,34 @@ const DealerResidentialProject = () => {
                             <User className="h-4 w-4 mr-2" /> Select Customer
                         </h5>
 
-                        {filteredCustomers.map((customer) => (
-                            <div
-                                key={customer._id}
-                                onClick={() => handleCustomerClick(customer)}
-                                className={`border rounded p-3 mb-2 bg-gray-50 cursor-pointer transition-all ${selectedCustomer?._id === customer._id
-                                    ? 'border-blue-500 bg-blue-50'
-                                    : 'hover:border-blue-300'
-                                    }`}
-                            >
-                                <div className={`font-bold mb-2 ${selectedCustomer?._id === customer._id ? 'text-blue-800' : 'text-black'
-                                    }`}>
-                                    {customer.projectName}
+                        <div className="overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 250px)' }}>
+                            {filteredCustomers.map((customer) => (
+                                <div
+                                    key={customer._id}
+                                    onClick={() => handleCustomerClick(customer)}
+                                    className={`border rounded-lg p-3 mb-3 cursor-pointer transition-all shadow-sm ${selectedCustomer?._id === customer._id
+                                        ? 'border-[#0ea5e9] bg-[#e6f1fe]'
+                                        : 'bg-white border-gray-200 hover:border-blue-300'
+                                        }`}
+                                >
+                                    <div className="font-semibold mb-2 text-[#0ea5e9] text-[13px]">
+                                        {customer.projectName}
+                                    </div>
+                                    <div className="mb-1 text-[12px] flex items-center text-gray-800">
+                                        <Phone className="h-3 w-3 mr-2 text-gray-800 shrink-0" />
+                                        {customer.mobile || 'N/A'}
+                                    </div>
+                                    <div className="mb-1 text-[12px] flex items-center text-gray-800">
+                                        <Mail className="h-3 w-3 mr-2 text-gray-800 shrink-0" />
+                                        <span className="truncate">{customer.email || 'N/A'}</span>
+                                    </div>
+                                    <div className="mb-1 text-[12px] flex items-start text-gray-800">
+                                        <Navigation className="h-3 w-3 mr-2 mt-0.5 text-gray-800 shrink-0" />
+                                        <span className="leading-tight">{customer.address || customer.district?.name || 'N/A'}</span>
+                                    </div>
                                 </div>
-                                <div className="mb-1 text-sm flex items-center text-black">
-                                    <Phone className="h-3 w-3 mr-2 text-black" />
-                                    {customer.mobile || 'N/A'}
-                                </div>
-                                <div className="mb-1 text-sm flex items-center text-black">
-                                    <Mail className="h-3 w-3 mr-2 text-black" />
-                                    {customer.email || 'N/A'}
-                                </div>
-                                <div className="mb-1 text-sm flex items-center text-black">
-                                    <MapPin className="h-3 w-3 mr-2 text-black" />
-                                    {customer.address || customer.district?.name || 'N/A'}
-                                </div>
-                            </div>
-                        ))}
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -475,21 +548,21 @@ const DealerResidentialProject = () => {
                                             }`}
                                     >
                                         <div
-                                            className={`step-circle w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 font-bold transition-colors ${step < currentStep
-                                                ? 'bg-green-600 text-white'
+                                            className={`step-circle w-8 h-8 text-sm rounded-full flex items-center justify-center mx-auto mb-1 font-bold shadow-sm transition-colors ${step < currentStep
+                                                ? 'bg-green-500 text-white'
                                                 : step === currentStep
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'bg-gray-200 text-gray-600'
+                                                    ? 'bg-[#0ea5e9] text-white ring-4 ring-blue-50'
+                                                    : 'bg-gray-100 border border-gray-200 text-gray-400'
                                                 }`}
                                         >
-                                            {step}
+                                            {step < currentStep ? <Check className="h-4 w-4" /> : step}
                                         </div>
                                         <div
-                                            className={`step-label text-xs ${step === currentStep
-                                                ? 'text-blue-600 font-bold'
+                                            className={`step-label text-[11px] font-medium mt-2 ${step === currentStep
+                                                ? 'text-[#0ea5e9] font-bold'
                                                 : step < currentStep
                                                     ? 'text-green-600'
-                                                    : 'text-gray-500'
+                                                    : 'text-gray-400'
                                                 }`}
                                         >
                                             {step === 1 && 'Project SignUp'}
@@ -507,59 +580,65 @@ const DealerResidentialProject = () => {
                                 {/* Step 1: Project SignUp */}
                                 {currentStep === 1 && (
                                     <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Project SignUp</h5>
+                                        <h5 className="text-[#0ea5e9] font-bold text-lg mb-4">Project SignUp</h5>
 
                                         {!showProjectForm ? (
                                             <>
                                                 <button
                                                     onClick={() => setShowProjectForm(true)}
-                                                    className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 flex items-center"
+                                                    className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-4 py-2 rounded text-[13px] mb-8 flex items-center shadow-sm"
                                                 >
                                                     <UserPlus className="h-4 w-4 mr-2" /> Project SignUp
                                                 </button>
 
                                                 {/* Journey History */}
-                                                <div className="border rounded p-4 bg-gray-50">
-                                                    <div className="flex items-center mb-4">
-                                                        <RefreshCw className="h-4 w-4 text-blue-600 mr-2" />
-                                                        <h6 className="font-bold">Application Journey History</h6>
+                                                <div className="mt-4">
+                                                    <div className="flex items-center mb-6">
+                                                        <RefreshCw className="h-4 w-4 text-gray-800 mr-2 font-bold" />
+                                                        <h6 className="font-bold text-[13px] text-gray-900">Application Journey History</h6>
                                                     </div>
 
-                                                    <div className="timeline relative">
-                                                        <div className="absolute top-0 bottom-0 left-5 w-0.5 bg-gray-300"></div>
-                                                        <ul className="space-y-4">
-                                                            {getTimelineItems(selectedCustomer).map((item, index) => (
-                                                                <li key={index} className="timeline-item relative pl-12">
+                                                    <div className="timeline relative pl-2">
+                                                        <div className="absolute top-2 bottom-0 left-[19px] w-[1px] bg-gray-300"></div>
+                                                        <ul className="space-y-0">
+                                                            {getTimelineItems(selectedCustomer).map((item, index, arr) => (
+                                                                <li key={index} className="timeline-item relative pl-12 pb-5">
                                                                     <div
-                                                                        className={`timeline-icon absolute left-3 top-0 w-5 h-5 rounded-full flex items-center justify-center text-white text-xs ${item.color === 'green' ? 'bg-green-600' : 'bg-blue-600'
+                                                                        className={`timeline-icon absolute left-[10px] top-0 w-[18px] h-[18px] rounded-full flex items-center justify-center text-white text-[10px] shadow-sm z-10 ${item.color === 'green' ? 'bg-green-500' : 'bg-[#0ea5e9]'
                                                                             }`}
                                                                     >
-                                                                        {getIcon(item.icon, 'h-3 w-3')}
+                                                                        {getIcon(item.icon, 'h-2.5 w-2.5')}
                                                                     </div>
-                                                                    <div className="timeline-content bg-gray-100 p-3 rounded relative">
-                                                                        <div className="flex justify-between items-start">
-                                                                            <div>
-                                                                                <div className="timeline-title font-semibold flex items-center flex-wrap">
-                                                                                    {item.title}
-                                                                                    {item.hasPdf && (
-                                                                                        <FileText className="h-3 w-3 text-red-500 ml-2" />
-                                                                                    )}
-                                                                                    {item.status && (
-                                                                                        <span className="ml-2 text-green-600 font-bold text-xs">
-                                                                                            {item.status}
-                                                                                        </span>
-                                                                                    )}
-                                                                                </div>
-                                                                                <div
-                                                                                    className="timeline-details text-sm text-gray-600"
-                                                                                    dangerouslySetInnerHTML={{ __html: item.details || `${item.date}${item.user ? ` | Completed by ${item.user}` : ''}${item.location ? ` | ${item.location}` : ''}` }}
-                                                                                />
-                                                                            </div>
-                                                                            <button className="text-gray-400 hover:text-gray-600">
-                                                                                <MoreVertical className="h-4 w-4" />
-                                                                            </button>
+                                                                    <div className="timeline-content pt-[-2px]">
+                                                                        <div className="timeline-title text-[13px] text-gray-800 flex items-center font-medium">
+                                                                            {item.title}
+                                                                            {item.hasPdf && <FileText className="h-3 w-3 text-red-500 ml-1.5" />}
                                                                         </div>
+                                                                        <div className="text-[11px] text-gray-700 mt-0.5">
+                                                                            {item.date} {item.user ? ` | ${item.user}` : ''}
+                                                                            {item.status && (
+                                                                                <span className={`font-bold ml-1 ${item.status === 'Completed' ? 'text-green-600' : 'text-[#0ea5e9]'}`}>
+                                                                                    {item.status}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {item.details && (
+                                                                            <div
+                                                                                className="text-[11px] text-gray-700 mt-0.5"
+                                                                                dangerouslySetInnerHTML={{ __html: item.details }}
+                                                                            />
+                                                                        )}
+                                                                        {item.mapLocation && (
+                                                                            <div className="mt-0.5">
+                                                                                <a href="#" className="text-[#0ea5e9] text-[11px] font-medium hover:underline">Map Location</a>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
+                                                                    {index !== arr.length - 1 && (
+                                                                        <div className="absolute left-[16.5px] bottom-[10px] z-10 bg-white text-gray-700 text-[14px] leading-none h-[14px] w-[6px] flex items-center justify-center font-bold">
+                                                                            ⋮
+                                                                        </div>
+                                                                    )}
                                                                 </li>
                                                             ))}
                                                         </ul>
@@ -710,359 +789,452 @@ const DealerResidentialProject = () => {
                                                 )}
                                             </div>
                                         )}
-                                    </div>
+                                    </div >
                                 )}
 
                                 {/* Step 2: Feasibility Approval */}
-                                {currentStep === 2 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Feasibility Approval</h5>
+                                {
+                                    currentStep === 2 && (
+                                        <div className="wizard-step">
+                                            <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">Feasibility Approval</h5>
 
-                                        <div className="border rounded p-4 bg-gray-50">
-                                            <div className="border-b border-gray-200 mb-4">
-                                                <div className="flex">
+                                            <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
+                                                <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc] flex-wrap">
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'feasibility'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'feasibility'
+                                                            ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('feasibility')}
                                                     >
                                                         Feasibility
                                                     </button>
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'meterCharge'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'meterCharge'
+                                                            ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('meterCharge')}
                                                     >
                                                         Meter Charge Generation Paid (optional)
                                                     </button>
                                                 </div>
+
+                                                <div className="p-6 pb-10">
+                                                    {/* Feasibility Form */}
+                                                    {activeTab === 'feasibility' && (
+                                                        <div>
+                                                            <div className="font-bold text-[#1e293b] text-[16px] mb-1">Feasibility Form</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">Feasibility Letter (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Meter Charge Form */}
+                                                    {activeTab === 'meterCharge' && (
+                                                        <div>
+                                                            <div className="font-bold text-[#1e293b] text-[16px] mb-1">Meter Charge Generation Form</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">Meter Charge Payment Receipt (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-
-                                            {/* Feasibility Form */}
-                                            {activeTab === 'feasibility' && (
-                                                <div>
-                                                    <div className="font-bold mb-2">Feasibility Form</div>
-                                                    <div className="text-gray-500 text-xs mb-3">Feasibility Letter (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="feasibilityInput" field="feasibility" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Meter Charge Form */}
-                                            {activeTab === 'meterCharge' && (
-                                                <div>
-                                                    <h6 className="font-bold mb-3">Meter Charge Generation Form</h6>
-                                                    <div className="text-gray-500 text-xs mb-3">Meter Charge Payment Receipt (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="meterChargeInput" field="meterCharge" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    )
+                                }
 
                                 {/* Step 3: Installation Status */}
-                                {currentStep === 3 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Installation Status</h5>
+                                {
+                                    currentStep === 3 && (
+                                        <div className="wizard-step">
+                                            <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">Installation Status</h5>
 
-                                        <div className="border rounded p-4 bg-gray-50">
-                                            <div className="border-b border-gray-200 mb-4">
-                                                <div className="flex flex-wrap">
+                                            <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
+                                                <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc] flex-wrap">
                                                     {['Vendor Selection', 'Work Start (vendor Agreement)', 'Solar Installation Details', 'PCR (vendor)'].map((tab, index) => (
                                                         <button
                                                             key={index}
-                                                            className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === `install${index}`
-                                                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                                                : 'text-gray-500 hover:text-gray-700'
-                                                                }`}
+                                                            className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === `install${index}`
+                                                                ? 'bg-white text-gray-800 border-b-0 -mb-[1px] relative z-10'
+                                                                : 'text-gray-500 hover:text-gray-800 border-b border-transparent'
+                                                                } ${activeTab === `install${index}` ? `${index === 0 ? 'border-r border-[#7dd3fc]' : 'border-x border-[#7dd3fc]'}` : 'border-x border-transparent'}`}
                                                             onClick={() => setActiveTab(`install${index}`)}
                                                         >
                                                             {tab}
                                                         </button>
                                                     ))}
                                                 </div>
+
+                                                <div className="p-6 pb-10">
+                                                    {/* Vendor Selection */}
+                                                    {activeTab === 'install0' && (
+                                                        <div>
+                                                            <div className="font-bold text-gray-800 text-[16px] mb-1">Vendor Selection</div>
+                                                            <div className="text-gray-500 text-[12px] mb-4">Screenshot of Vendor Selected (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Work Start Form */}
+                                                    {activeTab === 'install1' && (
+                                                        <div>
+                                                            <h6 className="font-bold text-[16px] text-[#1e293b] mb-4">Certificate of Support (Vendor Agreement) Form</h6>
+
+                                                            <div className="border border-[#7dd3fc] rounded overflow-hidden">
+                                                                <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
+                                                                    <div className="w-1/2 p-3.5 border-r border-white/30">DOCUMENT TYPE</div>
+                                                                    <div className="w-1/2 p-3.5">UPLOAD DOCUMENT</div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    {[
+                                                                        { title: 'Vendor Agreement', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Email ID', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Meter Charge Receipt', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Bank Details(Cancelled Cheque/Bank Passbook with Clear Photo)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: "Panel Number Photo's", desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Inverter Serial Number Photo', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Customer Site Photo(Geo Tagged)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Application Acknowledgement (Registration Letter)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' }
+                                                                    ].map((doc, idx, arr) => (
+                                                                        <div key={idx} className={`flex items-center bg-white ${idx !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
+                                                                            <div className="w-1/2 p-4 border-r border-gray-200">
+                                                                                <div className="text-[14px] text-gray-800 font-medium mb-0.5">{doc.title}</div>
+                                                                                <div className="text-[11px] text-gray-400">{doc.desc}</div>
+                                                                            </div>
+                                                                            <div className="w-1/2 p-4">
+                                                                                <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white">
+                                                                                    <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                                    <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Solar Installation Details */}
+                                                    {activeTab === 'install2' && (
+                                                        <div>
+                                                            <h6 className="font-bold text-[16px] text-[#1e293b] mb-4">Solar Installation Details Form</h6>
+
+                                                            <div className="border border-[#7dd3fc] rounded overflow-hidden">
+                                                                <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
+                                                                    <div className="w-1/2 p-3.5 border-r border-white/30">DOCUMENT TYPE</div>
+                                                                    <div className="w-1/2 p-3.5">UPLOAD DOCUMENT</div>
+                                                                </div>
+                                                                <div className="flex flex-col">
+                                                                    {[
+                                                                        { title: 'Customer Bank Details Uploaded on National Portal Screenshot', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
+                                                                        { title: 'Installation Stage Completed by CP Screenshot', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' }
+                                                                    ].map((doc, idx, arr) => (
+                                                                        <div key={idx} className={`flex items-center bg-white ${idx !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
+                                                                            <div className="w-1/2 p-4 border-r border-gray-200">
+                                                                                <div className="text-[14px] text-gray-800 font-medium mb-0.5">{doc.title}</div>
+                                                                                <div className="text-[11px] text-gray-400">{doc.desc}</div>
+                                                                            </div>
+                                                                            <div className="w-1/2 p-4">
+                                                                                <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white">
+                                                                                    <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                                    <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                                                </div>
+                                                                            </div>
+                                                                        </div>
+                                                                    ))}
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* PCR Vendor */}
+                                                    {activeTab === 'install3' && (
+                                                        <div>
+                                                            <div className="font-medium text-gray-800 text-[16px] mb-1">PCR (vendor)</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">PCR Report from Vendor (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-200 rounded overflow-hidden shadow-sm mt-8 mb-6">
+                                                                <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
+                                                                    <div className="w-3/4 p-4">DOCUMENT TYPE</div>
+                                                                    <div className="w-1/4 p-4">ACTIONS</div>
+                                                                </div>
+                                                                <div className="flex items-center bg-white p-5 border-t border-gray-200">
+                                                                    <div className="w-3/4">
+                                                                        <div className="text-[15px] text-[#1e293b] font-bold mb-1">Installation Proof</div>
+                                                                        <div className="text-[13px] text-gray-500">(In app Project Completion Report will Generate)</div>
+                                                                    </div>
+                                                                    <div className="w-1/4 flex space-x-2">
+                                                                        <button className="bg-[#22c55e] hover:bg-green-600 text-white px-3.5 py-1.5 rounded text-[13px] font-bold flex items-center transition-colors cursor-pointer">
+                                                                            <Download className="w-4 h-4 mr-1.5" /> Download
+                                                                        </button>
+                                                                        <button className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-3.5 py-1.5 rounded text-[13px] font-bold flex items-center transition-colors cursor-pointer">
+                                                                            <Eye className="w-4 h-4 mr-1.5" /> View
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+
+                                                            <div className="text-center">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    CONFIRM COMPLETION
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-
-                                            {/* Vendor Selection */}
-                                            {activeTab === 'install0' && (
-                                                <div>
-                                                    <div className="font-bold mb-2">Vendor Selection</div>
-                                                    <div className="text-gray-500 text-xs mb-3">Screenshot of Vendor Selected (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="vendorScreenshotInput" field="vendorScreenshot" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Work Start Form */}
-                                            {activeTab === 'install1' && (
-                                                <div>
-                                                    <h6 className="font-bold mb-3">Certificate of Support (Vendor Agreement) Form</h6>
-                                                    <DocumentTable
-                                                        documents={[
-                                                            { title: 'Vendor Agreement', id: 'vendorAgreementInput', field: 'vendorAgreement' },
-                                                            { title: 'Email ID', id: 'emailIdInput', field: 'emailId' },
-                                                            { title: 'Meter Charge Receipt', id: 'meterChargeReceiptInput', field: 'meterChargeReceipt' },
-                                                            { title: 'Bank Details(Cancelled Cheque/Bank Passbook with Clear Photo)', id: 'bankDetailsPhotoInput', field: 'bankDetailsPhoto' },
-                                                            { title: 'Panel Number Photos', id: 'panelPhotoInput', field: 'panelPhoto' },
-                                                            { title: 'Inverter Serial Number Photo', id: 'inverterSerialInput', field: 'inverterSerial' },
-                                                            { title: 'Customer Site Photo(Geo Tagged)', id: 'customerSiteInput', field: 'customerSite' },
-                                                            { title: 'Application Acknowledgement (Registration Letter)', id: 'applicationAckInput', field: 'applicationAck' }
-                                                        ]}
-                                                    />
-                                                    <div className="text-center mt-4">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Solar Installation Details */}
-                                            {activeTab === 'install2' && (
-                                                <div>
-                                                    <h6 className="font-bold mb-3">Solar Installation Details Form</h6>
-                                                    <DocumentTable
-                                                        documents={[
-                                                            { title: 'Customer Bank Details Uploaded on National Portal Screenshot', id: 'bankDetailsInput', field: 'bankDetails' },
-                                                            { title: 'Installation Stage Completed by CP Screenshot', id: 'installationStageInput', field: 'installationStage' }
-                                                        ]}
-                                                    />
-                                                    <div className="text-center mt-4">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* PCR Vendor */}
-                                            {activeTab === 'install3' && (
-                                                <div>
-                                                    <div className="font-bold mb-2">PCR (vendor)</div>
-                                                    <div className="text-gray-500 text-xs mb-3">PCR Report from Vendor (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                    <div className="border rounded p-3 bg-white mb-4">
-                                                        <table className="min-w-full">
-                                                            <thead className="bg-gray-100">
-                                                                <tr>
-                                                                    <th className="text-left p-2 w-3/5">DOCUMENT TYPE</th>
-                                                                    <th className="text-left p-2 w-2/5">ACTIONS</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <tr>
-                                                                    <td className="p-2">
-                                                                        <div className="font-bold">Installation Proof</div>
-                                                                        <div className="text-gray-500 text-xs">(In app Project Completion Report will Generate)</div>
-                                                                    </td>
-                                                                    <td className="p-2">
-                                                                        <ActionButtons />
-                                                                    </td>
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
-                                                    </div>
-
-                                                    <div className="text-center">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            CONFIRM COMPLETION
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    )
+                                }
 
                                 {/* Step 4: Meter Installation */}
-                                {currentStep === 4 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Meter Installation</h5>
+                                {
+                                    currentStep === 4 && (
+                                        <div className="wizard-step">
+                                            <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">Meter Installation</h5>
 
-                                        <div className="border rounded p-4 bg-gray-50">
-                                            <div className="border-b border-gray-200 mb-4">
-                                                <div className="flex">
+                                            <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
+                                                <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc]">
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'meterChange'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'meterChange'
+                                                            ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('meterChange')}
                                                     >
                                                         Meter Change fill Submit And Meter Install
                                                     </button>
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'inspection'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'inspection'
+                                                            ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('inspection')}
                                                     >
                                                         Inspection (Project Commissioning)
                                                     </button>
                                                 </div>
+
+                                                <div className="p-6 pb-10">
+                                                    {/* Meter Change Form */}
+                                                    {activeTab === 'meterChange' && (
+                                                        <div>
+                                                            <div className="border border-[#7dd3fc] rounded overflow-hidden shadow-sm">
+                                                                <table className="min-w-full text-[13px]">
+                                                                    <thead className="bg-[#6bb0f5] text-white">
+                                                                        <tr>
+                                                                            <th className="px-5 py-3.5 text-left w-3/4 font-semibold uppercase border-r border-white/30">DOCUMENT TYPE</th>
+                                                                            <th className="px-5 py-3.5 text-left w-1/4 font-semibold uppercase">ACTIONS</th>
+                                                                        </tr>
+                                                                    </thead>
+                                                                    <tbody className="bg-white">
+                                                                        {[
+                                                                            'Application Acknowledgement',
+                                                                            'Meter Charge Receipt',
+                                                                            'Net Meter Agreement',
+                                                                            'Custom Signed Adhar Card',
+                                                                            '2 Witness ID Proof',
+                                                                            'Tax Invoice',
+                                                                            'Cancel Letter',
+                                                                            'DCR Letter',
+                                                                            'Customer Site Photo'
+                                                                        ].map((doc, index, arr) => (
+                                                                            <tr key={index} className={`hover:bg-gray-50 ${index !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
+                                                                                <td className="px-5 py-4 text-[#1e293b] font-medium border-r border-gray-200">{doc}</td>
+                                                                                <td className="px-5 py-4">
+                                                                                    <div className="flex space-x-2">
+                                                                                        <button className="bg-[#22c55e] hover:bg-green-600 text-white px-3.5 py-1.5 rounded text-[12px] font-bold flex items-center transition-colors cursor-pointer">
+                                                                                            <Download className="w-3.5 h-3.5 mr-1" /> Download
+                                                                                        </button>
+                                                                                        <button className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-3.5 py-1.5 rounded text-[12px] font-bold flex items-center transition-colors cursor-pointer">
+                                                                                            <Eye className="w-3.5 h-3.5 mr-1" /> View
+                                                                                        </button>
+                                                                                    </div>
+                                                                                </td>
+                                                                            </tr>
+                                                                        ))}
+                                                                    </tbody>
+                                                                </table>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Inspection Form */}
+                                                    {activeTab === 'inspection' && (
+                                                        <div>
+                                                            <div className="font-medium text-[#1e293b] text-[16px] mb-1">Inspection (Project Commissioning)</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">Inspection Report (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-
-                                            {/* Meter Change Form */}
-                                            {activeTab === 'meterChange' && (
-                                                <div>
-                                                    <table className="min-w-full border border-gray-300">
-                                                        <thead className="bg-gray-100">
-                                                            <tr>
-                                                                <th className="border border-gray-300 px-4 py-2 text-left w-3/4">DOCUMENT TYPE</th>
-                                                                <th className="border border-gray-300 px-4 py-2 text-left w-1/4">ACTIONS</th>
-                                                            </tr>
-                                                        </thead>
-                                                        <tbody>
-                                                            {[
-                                                                'Application Acknowledgement',
-                                                                'Meter Charge Receipt',
-                                                                'Net Meter Agreement',
-                                                                'Custom Signed Adhar Card',
-                                                                '2 Witness ID Proof',
-                                                                'Tax Invoice',
-                                                                'Cancel Letter',
-                                                                'DCR Letter',
-                                                                'Customer Site Photo'
-                                                            ].map((doc, index) => (
-                                                                <tr key={index}>
-                                                                    <td className="border border-gray-300 px-4 py-2 font-semibold">{doc}</td>
-                                                                    <td className="border border-gray-300 px-4 py-2">
-                                                                        <ActionButtons />
-                                                                    </td>
-                                                                </tr>
-                                                            ))}
-                                                        </tbody>
-                                                    </table>
-                                                </div>
-                                            )}
-
-                                            {/* Inspection Form */}
-                                            {activeTab === 'inspection' && (
-                                                <div>
-                                                    <div className="font-bold mb-2">Inspection (Project Commissioning)</div>
-                                                    <div className="text-gray-500 text-xs mb-3">Inspection Report (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="inspectionInput" field="inspection" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                )}
+                                    )
+                                }
 
                                 {/* Step 5: Subsidy */}
-                                {currentStep === 5 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Subsidy</h5>
+                                {
+                                    currentStep === 5 && (
+                                        <div className="wizard-step">
+                                            <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">Subsidy</h5>
 
-                                        <div className="border rounded p-4 bg-gray-50">
-                                            <div className="border-b border-gray-200 mb-4">
-                                                <div className="flex">
+                                            <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
+                                                <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc]">
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'subsidyRequest'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'subsidyRequest'
+                                                            ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('subsidyRequest')}
                                                     >
                                                         Subsidy Request
                                                     </button>
                                                     <button
-                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'subsidyDisbursal'
-                                                            ? 'border-b-2 border-blue-600 text-blue-600'
-                                                            : 'text-gray-500 hover:text-gray-700'
+                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'subsidyDisbursal'
+                                                            ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
+                                                            : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
                                                             }`}
                                                         onClick={() => setActiveTab('subsidyDisbursal')}
                                                     >
                                                         Subsidy Disbursal
                                                     </button>
                                                 </div>
+
+                                                <div className="p-6 pb-10">
+                                                    {/* Subsidy Request Form */}
+                                                    {activeTab === 'subsidyRequest' && (
+                                                        <div>
+                                                            <div className="font-bold text-[#1e293b] text-[16px] mb-1">Subsidy Request</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">Subsidy Requested Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Subsidy Disbursal Form */}
+                                                    {activeTab === 'subsidyDisbursal' && (
+                                                        <div>
+                                                            <div className="font-bold text-[#1e293b] text-[16px] mb-1">Subsidy Disbursal</div>
+                                                            <div className="text-gray-500 text-[13px] mb-4">Subsidy Disbursed Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
+
+                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
+                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
+                                                            </div>
+
+                                                            <div className="text-center mt-8">
+                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
+                                                                    SUBMIT
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
-
-                                            {/* Subsidy Request Form */}
-                                            {activeTab === 'subsidyRequest' && (
-                                                <div>
-                                                    <div className="font-bold mb-2">Subsidy Request</div>
-                                                    <div className="text-gray-500 text-xs mb-3">Subsidy Requested Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="subsidyRequestInput" field="subsidyRequest" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
-
-                                            {/* Subsidy Disbursal Form */}
-                                            {activeTab === 'subsidyDisbursal' && (
-                                                <div>
-                                                    <h6 className="font-bold mb-3">Subsidy Disbursal</h6>
-                                                    <div className="text-gray-500 text-xs mb-3">Subsidy Disbursed Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-                                                    <FileUpload id="subsidyDisbursalInput" field="subsidyDisbursal" />
-                                                    <div className="text-center mt-3">
-                                                        <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                            SUBMIT
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )}
                                         </div>
-                                    </div>
-                                )}
-                            </div>
+                                    )
+                                }
+                            </div >
 
                             {/* Navigation Buttons */}
-                            <div className="flex justify-between mt-6">
+                            < div className="flex justify-between mt-6" >
                                 <button
                                     onClick={handlePrev}
                                     disabled={currentStep === 1}
-                                    className={`px-4 py-2 rounded flex items-center ${currentStep === 1
-                                        ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                                        : 'bg-gray-600 hover:bg-gray-700 text-white'
+                                    className={`px-4 py-2 rounded flex items-center text-[14px] font-medium ${currentStep === 1
+                                        ? 'bg-gray-400 text-white cursor-not-allowed'
+                                        : 'bg-gray-500 hover:bg-gray-600 text-white'
                                         }`}
                                 >
-                                    <ChevronLeft className="h-4 w-4 mr-2" /> Previous
+                                    <ChevronLeft className="h-4 w-4 mr-1" /> Previous
                                 </button>
                                 <button
                                     onClick={handleNext}
-                                    className={`px-4 py-2 rounded flex items-center ${currentStep === totalSteps
-                                        ? 'bg-green-600 hover:bg-green-700 text-white'
-                                        : 'bg-blue-600 hover:bg-blue-700 text-white'
+                                    className={`px-5 py-2 rounded flex items-center text-[14px] font-medium ${currentStep === totalSteps
+                                        ? 'bg-[#0ea5e9] hover:bg-blue-600 text-white'
+                                        : 'bg-[#0ea5e9] hover:bg-blue-600 text-white'
                                         }`}
                                 >
                                     {currentStep === totalSteps ? (
-                                        <>Complete <Check className="h-4 w-4 ml-2" /></>
+                                        <>Complete<Check className="h-4 w-4 ml-1" /></>
                                     ) : (
-                                        <>Next <ChevronRight className="h-4 w-4 ml-2" /></>
+                                        <>Next <ChevronRight className="h-4 w-4 ml-1" /></>
                                     )}
                                 </button>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="mt-8 text-center text-sm text-gray-500 pb-4">
+                                Copyright © 2025 Solarkits. All Rights Reserved.
                             </div>
                         </div>
                     </div>
                 </div>
-            </div>
-        </div>
+            </div >
+        </div >
     );
 };
 

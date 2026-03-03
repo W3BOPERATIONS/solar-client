@@ -148,66 +148,93 @@ const DealerSurveyBOM = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header with Breadcrumb */}
-            <div className="mb-6">
-                <div className="bg-white shadow-sm p-4">
-                    <nav className="container-fluid">
-                        <ol className="flex items-center space-x-2">
-                            <li className="text-gray-500">
-                                <h3 className="text-xl font-semibold text-gray-800">Survey & BOM</h3>
-                            </li>
-                        </ol>
-                    </nav>
+            {/* Progress Steps */}
+            <div className="mb-6 bg-white shadow-sm border-b overflow-x-auto">
+                <div className="container-fluid px-6 py-4">
+                    <div className="flex justify-between items-center min-w-[600px] relative">
+                        {/* Connecting Line */}
+                        <div className="absolute top-1/2 left-[10%] right-[10%] h-[2px] bg-gray-200 -z-10 transform -translate-y-1/2"></div>
+
+                        {/* Steps */}
+                        <div className="flex flex-col items-center flex-1 z-10 bg-white px-2">
+                            <div className="w-8 h-8 rounded-full bg-yellow-400 text-white flex items-center justify-center font-bold text-sm mb-2 shadow-sm">1</div>
+                            <span className="text-xs text-yellow-500 font-semibold">Select Kit</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1 z-10 bg-white px-2">
+                            <div className="w-8 h-8 rounded-full bg-yellow-400 text-white flex items-center justify-center font-bold text-sm mb-2 shadow-sm">2</div>
+                            <span className="text-xs text-yellow-500 font-semibold">Survey BOM</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1 z-10 bg-white px-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-400 text-white flex items-center justify-center font-bold text-sm mb-2 shadow-sm">3</div>
+                            <span className="text-xs text-gray-500 font-medium">Project Quote</span>
+                        </div>
+                        <div className="flex flex-col items-center flex-1 z-10 bg-white px-2">
+                            <div className="w-8 h-8 rounded-full bg-gray-400 text-white flex items-center justify-center font-bold text-sm mb-2 shadow-sm">4</div>
+                            <span className="text-xs text-gray-500 font-medium">Project Signup</span>
+                        </div>
+                    </div>
                 </div>
             </div>
 
             <div className="container-fluid px-6">
-                {/* Filters */}
-                <div className="bg-white p-4 rounded-xl shadow-sm mb-6 border border-gray-100">
-                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                        {/* Search */}
-                        <div className="relative">
-                            <input
-                                type="text"
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
-                                placeholder="Search by name, phone..."
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                            <Search className="absolute left-3 top-3 text-gray-400" size={18} />
+                {/* Search & Filters */}
+                <div className="bg-white rounded-md shadow-sm mb-6 border border-gray-200">
+                    {/* Search row */}
+                    <div className="p-3 border-b border-gray-100 flex items-center">
+                        <Search className="text-gray-400 mr-2" size={18} />
+                        <input
+                            type="text"
+                            className="w-full py-1 focus:outline-none text-sm text-gray-700"
+                            placeholder="Search leads..."
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
+                    {/* Filters row */}
+                    <div className="flex p-3 text-sm">
+                        <div className="flex-1 flex px-4 items-center border-r border-gray-200">
+                            <span className="text-gray-500 mr-2 whitespace-nowrap">* Status:</span>
+                            <div className="relative w-full">
+                                <select
+                                    className="bg-transparent focus:outline-none text-gray-700 w-full appearance-none cursor-pointer pr-6"
+                                    value={statusFilter}
+                                    onChange={(e) => setStatusFilter(e.target.value)}
+                                >
+                                    <option value="All">All</option>
+                                    <option value="New">New</option>
+                                    <option value="SurveyPending">Survey Pending</option>
+                                    <option value="SurveyCompleted">Survey Completed</option>
+                                    <option value="QuoteGenerated">Quote Generated</option>
+                                </select>
+                                <ChevronDown className="text-gray-400 absolute right-0 top-1 pointer-events-none" size={14} />
+                            </div>
                         </div>
-
-                        {/* Status Filter */}
-                        <div className="relative">
-                            <select
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white transition-all"
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                            >
-                                <option value="All">All Statuses</option>
-                                <option value="New">New</option>
-                                <option value="SurveyPending">Survey Pending</option>
-                                <option value="SurveyCompleted">Survey Completed</option>
-                                <option value="QuoteGenerated">Quote Generated</option>
-                            </select>
-                            <Filter className="absolute left-3 top-3 text-gray-400" size={18} />
-                            <ChevronDown className="absolute right-3 top-3 text-gray-400" size={18} />
+                        <div className="flex-1 flex px-4 items-center border-r border-gray-200">
+                            <span className="text-gray-500 mr-2 whitespace-nowrap">District:</span>
+                            <div className="relative w-full">
+                                <select
+                                    className="bg-transparent focus:outline-none text-gray-700 w-full appearance-none cursor-pointer pr-6"
+                                    value={selectedDistrict}
+                                    onChange={(e) => setSelectedDistrict(e.target.value)}
+                                >
+                                    <option value="All">All</option>
+                                    {districts.map(d => (
+                                        <option key={d._id} value={d._id}>{d.name}</option>
+                                    ))}
+                                </select>
+                                <ChevronDown className="text-gray-400 absolute right-0 top-1 pointer-events-none" size={14} />
+                            </div>
                         </div>
-
-                        {/* District Filter */}
-                        <div className="relative">
-                            <select
-                                className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 appearance-none bg-white transition-all"
-                                value={selectedDistrict}
-                                onChange={(e) => setSelectedDistrict(e.target.value)}
-                            >
-                                <option value="All">All Districts</option>
-                                {districts.map(d => (
-                                    <option key={d._id} value={d._id}>{d.name}</option>
-                                ))}
-                            </select>
-                            <MapPin className="absolute left-3 top-3 text-gray-400" size={18} />
-                            <ChevronDown className="absolute right-3 top-3 text-gray-400" size={18} />
+                        <div className="flex-1 flex px-4 items-center">
+                            <span className="text-gray-500 mr-2 whitespace-nowrap">Project Type:</span>
+                            <div className="relative w-full">
+                                <select className="bg-transparent focus:outline-none text-gray-700 w-full appearance-none cursor-pointer pr-6">
+                                    <option value="All">All</option>
+                                    <option value="Residential">Residential</option>
+                                    <option value="Commercial">Commercial</option>
+                                </select>
+                                <ChevronDown className="text-gray-400 absolute right-0 top-1 pointer-events-none" size={14} />
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -223,61 +250,69 @@ const DealerSurveyBOM = () => {
                         <p className="text-xl font-medium">No leads found matching your filters</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-                        {filteredLeads.map((lead) => (
-                            <div key={lead._id} className="bg-white rounded-xl shadow-sm border border-gray-100 hover:shadow-md transition-shadow overflow-hidden group">
-                                <div className="p-5">
-                                    <div className="flex justify-between items-start mb-4">
-                                        <div className="flex items-center">
-                                            <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold border border-blue-100">
-                                                {lead.name.charAt(0).toUpperCase()}
-                                            </div>
-                                            <div className="ml-3">
-                                                <h3 className="font-semibold text-gray-800 truncate max-w-[150px]" title={lead.name}>{lead.name}</h3>
-                                                <div className="text-xs text-gray-500 flex items-center">
-                                                    <Clock size={10} className="mr-1" />
-                                                    {new Date(lead.createdAt).toLocaleDateString()}
+                    <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden mb-8">
+                        <div className="bg-[#0ea5e9] text-white px-4 py-3 font-semibold text-sm">
+                            Survey Leads
+                        </div>
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-left text-sm whitespace-nowrap">
+                                <thead className="bg-[#7dd3fc] text-white">
+                                    <tr>
+                                        <th className="px-4 py-3 font-semibold">Lead Information</th>
+                                        <th className="px-4 py-3 font-semibold">Location</th>
+                                        <th className="px-4 py-3 font-semibold">Project</th>
+                                        <th className="px-4 py-3 font-semibold text-center">Status</th>
+                                        <th className="px-4 py-3 font-semibold">Date</th>
+                                        <th className="px-4 py-3 font-semibold text-center">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {filteredLeads.map((lead) => (
+                                        <tr key={lead._id} className="hover:bg-gray-50 transition-colors">
+                                            <td className="px-4 py-3">
+                                                <div className="flex items-center">
+                                                    <div className="h-8 w-8 rounded-full bg-gray-200 flex-shrink-0 mr-3 overflow-hidden">
+                                                        <img src={`https://ui-avatars.com/api/?name=${lead.name.replace(' ', '+')}&background=random`} alt="Avatar" className="h-full w-full object-cover" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-medium text-gray-800">{lead.name}</div>
+                                                        <div className="text-xs text-gray-500 mt-0.5">{lead.email || `${lead.name.split(' ')[0].toLowerCase()}@example.com`}</div>
+                                                    </div>
                                                 </div>
-                                            </div>
-                                        </div>
-                                        <span className={`text-[10px] px-2 py-1 rounded-full font-medium ${getStatusColor(lead.status)}`}>
-                                            {lead.status.replace(/([A-Z])/g, ' $1').trim()}
-                                        </span>
-                                    </div>
-
-                                    <div className="space-y-3 mb-4">
-                                        <div className="flex items-center text-sm text-gray-600">
-                                            <Phone size={14} className="mr-2 text-gray-400" />
-                                            {lead.mobile}
-                                        </div>
-                                        <div className="flex items-center text-sm text-gray-600">
-                                            <MapPin size={14} className="mr-2 text-gray-400" />
-                                            <span className="truncate">{lead.district?.name}, {lead.city?.name}</span>
-                                        </div>
-                                        <div className="flex items-center text-sm text-gray-600">
-                                            <Zap size={14} className="mr-2 text-gray-400" />
-                                            {lead.kw} KW ({lead.solarType})
-                                        </div>
-                                    </div>
-
-                                    <div className="pt-4 border-t border-gray-50 flex justify-between items-center">
-                                        <div className="text-xs text-gray-400 font-medium">
-                                            {lead.subType}
-                                        </div>
-                                        <button
-                                            onClick={() => handleSurveyClick(lead)}
-                                            className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                                        >
-                                            View Survey
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="bg-gray-50 px-5 py-2 border-t border-gray-100 text-xs text-gray-500 flex justify-between">
-                                    <span>Bill: ₹{lead.billAmount}</span>
-                                    <span className="text-blue-600 cursor-pointer hover:underline">Details &rarr;</span>
-                                </div>
-                            </div>
-                        ))}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <div className="text-gray-800 font-medium">{lead.district?.name || 'Unknown'}</div>
+                                                <div className="text-xs text-gray-500 mt-0.5 truncate max-w-[200px]">{lead.city?.name || '-'}, {lead.district?.name || '-'}</div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                <span className={`inline-block px-3 py-0.5 rounded-full text-[10px] font-bold text-white mb-1 ${lead.solarType === 'Residential' ? 'bg-[#0ea5e9]' : 'bg-[#22c55e]'}`}>
+                                                    {lead.solarType}
+                                                </span>
+                                                <div className="text-xs text-[#0ea5e9] font-medium">{lead.kw} KW</div>
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <span className={`inline-block px-3 py-1 rounded-full text-[10px] font-bold text-white ${lead.status === 'Completed' || lead.status === 'SurveyCompleted' ? 'bg-[#22c55e]' :
+                                                        lead.status === 'Pending' || lead.status === 'SurveyPending' ? 'bg-[#facc15]' : 'bg-[#0ea5e9]'
+                                                    }`}>
+                                                    {lead.status === 'SurveyPending' ? 'Pending' : lead.status === 'SurveyCompleted' ? 'Completed' : lead.status === 'New' ? 'In Progress' : lead.status}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-gray-600 text-xs font-medium">
+                                                {new Date(lead.createdAt).toISOString().split('T')[0]}
+                                            </td>
+                                            <td className="px-4 py-3 text-center">
+                                                <button
+                                                    onClick={() => handleSurveyClick(lead)}
+                                                    className="bg-[#0ea5e9] hover:bg-blue-600 text-white text-[10px] font-bold px-3 py-1.5 rounded flex items-center justify-center mx-auto transition-colors"
+                                                >
+                                                    <FileText size={12} className="mr-1" /> Survey
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>

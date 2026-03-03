@@ -218,9 +218,9 @@ const DealerLead = () => {
                             </div>
                             <button
                                 onClick={() => setShowModal(true)}
-                                className="ml-2 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded-lg transition-colors"
+                                className="ml-2 bg-[#0ea5e9] hover:bg-blue-600 text-white px-3 py-2 rounded-md transition-colors text-xs font-semibold flex items-center"
                             >
-                                <Plus size={20} />
+                                <Plus size={14} className="mr-1" /> Add New<br />Lead
                             </button>
                         </div>
 
@@ -240,34 +240,30 @@ const DealerLead = () => {
                                     <div
                                         key={lead._id}
                                         onClick={() => setSelectedLead(lead)}
-                                        className={`p-3 rounded-lg cursor-pointer transition-all border ${selectedLead && selectedLead._id === lead._id
-                                            ? 'bg-blue-50 border-blue-500 shadow-sm'
-                                            : 'bg-white hover:bg-gray-50 border-gray-100 hover:shadow-sm'
+                                        className={`p-3 rounded-md cursor-pointer transition-all ${selectedLead && selectedLead._id === lead._id
+                                            ? 'bg-[#f0f9ff] border-2 border-[#0ea5e9]'
+                                            : 'bg-white hover:bg-gray-50 border border-gray-200 shadow-sm'
                                             }`}
                                     >
-                                        <div className="flex items-center">
-                                            <div className="h-10 w-10 rounded-full bg-gradient-to-br from-blue-100 to-blue-200 flex items-center justify-center text-blue-700 font-bold overflow-hidden shadow-inner">
-                                                {lead.name.charAt(0).toUpperCase()}
+                                        <div className="flex items-start">
+                                            <div className="h-10 w-10 rounded-full bg-gray-200 overflow-hidden flex-shrink-0 mt-1">
+                                                <img src={`https://ui-avatars.com/api/?name=${lead.name.replace(' ', '+')}&background=random`} alt="Avatar" className="h-full w-full object-cover" />
                                             </div>
                                             <div className="ml-3 flex-1 overflow-hidden">
-                                                <div className="flex justify-between items-start">
-                                                    <h4 className="text-sm font-semibold text-gray-800 truncate" title={lead.name}>{lead.name}</h4>
-                                                </div>
-                                                <div className="text-xs text-gray-500 truncate">{lead.mobile}</div>
-                                                <div className="text-xs text-gray-500 mt-1 flex justify-between">
-                                                    <span className="font-medium bg-gray-100 px-1.5 py-0.5 rounded text-gray-600 text-[10px]">{lead.kw} KW</span>
-                                                    <span className="text-[10px] text-gray-400">{new Date(lead.createdAt).toLocaleDateString()}</span>
+                                                <h4 className="text-sm font-medium text-gray-800 truncate" title={lead.name}>{lead.name}</h4>
+                                                <div className="text-xs text-gray-500 truncate mt-0.5">+91 {lead.mobile}</div>
+                                                <div className="text-xs text-gray-500 mt-0.5">
+                                                    ({lead.kw} KW)
                                                 </div>
                                             </div>
                                         </div>
-                                        <div className="mt-2 flex justify-between items-center border-t border-gray-50 pt-2">
-                                            <div className="flex items-center text-xs text-gray-500 truncate max-w-[100px]">
-                                                <MapPin size={10} className="mr-1" />
-                                                <span className="truncate">{lead.district?.name || 'Unknown'}</span>
+                                        <div className="mt-4 flex justify-between items-center">
+                                            <div className="text-xs text-gray-500 truncate max-w-[100px]">
+                                                {lead.district?.name || 'Unknown'}
                                             </div>
-                                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${lead.solarType === 'Residential'
-                                                    ? 'bg-green-50 text-green-700 border border-green-100'
-                                                    : 'bg-blue-50 text-blue-700 border border-blue-100'
+                                            <span className={`text-[10px] px-3 py-1 rounded-full font-semibold text-white ${lead.solarType === 'Residential'
+                                                ? 'bg-[#22c55e]'
+                                                : 'bg-[#0ea5e9]'
                                                 }`}>
                                                 {lead.solarType}
                                             </span>
@@ -279,117 +275,96 @@ const DealerLead = () => {
                     </div>
 
                     {/* RIGHT SIDE - Lead Details */}
-                    <div className="w-full md:w-3/4 bg-white p-6 flex-1 overflow-y-auto rounded-r-xl shadow-sm h-full">
+                    <div className="w-full md:w-3/4 bg-gray-50 p-6 flex-1 overflow-y-auto rounded-r-xl h-full">
                         {selectedLead ? (
-                            <div className="animate-fade-in max-w-4xl mx-auto">
-                                {/* Header */}
-                                <div className="flex items-center mb-8 pb-6 border-b border-gray-100">
-                                    <div className="h-20 w-20 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-3xl font-bold text-white shadow-lg mr-6">
-                                        {selectedLead.name.charAt(0).toUpperCase()}
-                                    </div>
-                                    <div>
-                                        <h2 className="text-3xl font-bold text-gray-800">{selectedLead.name}</h2>
-                                        <div className="flex items-center mt-2 space-x-4">
-                                            <p className="text-gray-500 flex items-center bg-gray-50 px-3 py-1 rounded-full text-sm">
-                                                <Phone size={14} className="mr-2 text-blue-500" /> {selectedLead.mobile}
-                                            </p>
-                                            <p className="text-gray-500 flex items-center bg-gray-50 px-3 py-1 rounded-full text-sm">
-                                                <span className={`w-2 h-2 rounded-full mr-2 ${selectedLead.isActive ? 'bg-green-500' : 'bg-red-500'}`}></span>
-                                                {selectedLead.isActive ? 'Active' : 'Inactive'}
+                            <div className="animate-fade-in max-w-5xl mx-auto space-y-4">
+                                {/* Customer Information */}
+                                <div className="bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4">Customer Information</h3>
+                                    <div className="flex items-center">
+                                        <div className="h-12 w-12 rounded-full overflow-hidden flex-shrink-0 bg-gray-100">
+                                            <img src={`https://ui-avatars.com/api/?name=${selectedLead.name.replace(' ', '+')}&background=random`} alt="Avatar" className="h-full w-full object-cover" />
+                                        </div>
+                                        <div className="ml-4">
+                                            <h4 className="text-base font-bold text-gray-800">{selectedLead.name}</h4>
+                                            <p className="text-sm text-gray-500 mt-1">
+                                                +91 {selectedLead.mobile}
                                             </p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Details Cards */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-                                    {/* Project Details */}
-                                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                                        <h4 className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-6 flex items-center">
-                                            <Zap size={16} className="mr-2" /> Project Configuration
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                                                <div className="text-sm text-gray-500">System Capacity</div>
-                                                <div className="font-bold text-gray-800 text-lg">{selectedLead.kw} <span className="text-xs text-gray-500 font-normal">KW</span></div>
-                                            </div>
-                                            <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                                                <div className="text-sm text-gray-500">Project Type</div>
-                                                <div className="font-semibold text-gray-800 bg-blue-50 px-3 py-1 rounded-full text-sm">{selectedLead.solarType}</div>
-                                            </div>
-                                            <div className="flex justify-between items-center border-b border-gray-50 pb-2">
-                                                <div className="text-sm text-gray-500">Connection Type</div>
-                                                <div className="font-semibold text-gray-800 capitalize">{selectedLead.subType || 'On Grid'}</div>
-                                            </div>
-                                            <div className="flex justify-between items-center">
-                                                <div className="text-sm text-gray-500">Approx. Monthly Bill</div>
-                                                <div className="font-semibold text-green-600">{formatCurrency(selectedLead.billAmount || 0)}</div>
-                                            </div>
+                                {/* Project Details */}
+                                <div className="bg-white p-6 rounded-sm border border-gray-200 shadow-sm">
+                                    <h3 className="text-lg font-bold text-gray-800 mb-4">Project Details</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800">Panel Information: <span className="font-normal text-gray-600">{selectedLead.kw} Kw</span></p>
                                         </div>
-                                    </div>
-
-                                    {/* Location & Contact Info */}
-                                    <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow">
-                                        <h4 className="text-xs font-bold text-blue-500 uppercase tracking-wider mb-6 flex items-center">
-                                            <MapPin size={16} className="mr-2" /> Location & Contact
-                                        </h4>
-                                        <div className="space-y-4">
-                                            <div className="grid grid-cols-2 gap-4">
-                                                <div>
-                                                    <div className="text-xs text-gray-400 mb-1">State</div>
-                                                    <div className="font-medium text-gray-800">Gujarat</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs text-gray-400 mb-1">District</div>
-                                                    <div className="font-medium text-gray-800">{selectedLead.district?.name || '-'}</div>
-                                                </div>
-                                                <div>
-                                                    <div className="text-xs text-gray-400 mb-1">City / Cluster</div>
-                                                    <div className="font-medium text-gray-800">{selectedLead.city?.name || '-'}</div>
-                                                </div>
-                                            </div>
-                                            <div className="pt-4 border-t border-gray-50">
-                                                <div className="grid grid-cols-1 gap-3">
-                                                    <div className="flex items-center text-sm">
-                                                        <Mail size={14} className="mr-3 text-gray-400" />
-                                                        <span className="text-gray-700">{selectedLead.email || 'No email provided'}</span>
-                                                    </div>
-                                                    <div className="flex items-center text-sm">
-                                                        <Phone size={14} className="mr-3 text-gray-400" />
-                                                        <span className="text-gray-700">{selectedLead.whatsapp ? `${selectedLead.whatsapp} (WhatsApp)` : 'No WhatsApp provided'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800">District: <span className="font-normal text-gray-600">{selectedLead.district?.name || '-'}</span></p>
+                                        </div>
+                                        <div>
+                                            <p className="text-sm font-bold text-gray-800">Project Type: <span className="font-normal text-gray-600">{selectedLead.solarType}</span></p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Status Tracker */}
-                                <div className="mt-8 bg-white p-8 rounded-2xl border border-gray-100 shadow-sm">
-                                    <h4 className="text-lg font-bold text-gray-800 mb-8 text-center">Project Progress Timeline</h4>
-                                    <div className="relative">
-                                        {/* Progress Bar Background */}
-                                        <div className="absolute top-1/2 left-0 w-full h-2 bg-gray-100 -z-10 transform -translate-y-1/2 rounded-full"></div>
-
-                                        {/* Steps */}
-                                        <div className="flex justify-between items-center">
-                                            {['New', 'SurveyCompleted', 'QuoteGenerated', 'ProjectStart', 'ProjectSigned'].map((step, index) => {
-                                                const completed = isStepActive(selectedLead.status, index);
-                                                const isCurrent = (selectedLead.status === step) || (selectedLead.status === 'SurveyPending' && index === 0);
-
-                                                return (
-                                                    <div key={step} className="flex flex-col items-center">
-                                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold mb-3 transition-all duration-300 border-4 ${completed ? 'bg-green-500 text-white border-green-200 shadow-green-200 shadow-lg' : 'bg-white text-gray-400 border-gray-200'
-                                                            }`}>
-                                                            {completed ? <ChevronRight size={16} /> : index + 1}
-                                                        </div>
-                                                        <span className={`text-xs font-bold uppercase tracking-wider ${completed ? 'text-green-600' : 'text-gray-400'}`}>
-                                                            {step.replace(/([A-Z])/g, ' $1').trim()}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            })}
+                                {/* Configuration Form */}
+                                <div className="bg-white p-6 rounded-sm border border-gray-200 shadow-sm flex flex-col min-h-[350px]">
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Technology</label>
+                                            <select className="w-full p-2.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-gray-600">
+                                                <option value="">Select Technology</option>
+                                            </select>
                                         </div>
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-2">Panel Wattage</label>
+                                            <select className="w-full p-2.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-gray-600">
+                                                <option value="">Select Panel Wattage</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">Number of Panels</label>
+                                        <select className="w-full p-2.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-gray-600">
+                                            <option value="">Select number of panels</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="mb-4">
+                                        <label className="block text-sm font-medium text-gray-700 mb-2">System Capacity</label>
+                                        <select className="w-full p-2.5 bg-white border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm text-gray-600">
+                                            <option value="">Select System Capacity</option>
+                                        </select>
+                                    </div>
+
+                                    <div className="mb-6">
+                                        <label className="block text-sm font-medium text-gray-700 mb-3">Select Kit Type</label>
+                                        <div className="flex items-center space-x-6">
+                                            <label className="flex items-center cursor-pointer">
+                                                <input type="radio" name="kitType" value="combo" className="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500" defaultChecked />
+                                                <span className="ml-2 text-sm text-gray-700">Combo Kits</span>
+                                            </label>
+                                            <label className="flex items-center cursor-pointer">
+                                                <input type="radio" name="kitType" value="customized" className="w-4 h-4 text-green-600 border-gray-300 focus:ring-green-500" />
+                                                <span className="ml-2 text-sm text-gray-700">Customized Kits</span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex justify-center mb-6">
+                                        <button className="text-sm font-semibold text-blue-600 hover:text-blue-700 flex items-center cursor-pointer">
+                                            <Plus size={14} className="mr-1" /> Add Customized Kits
+                                        </button>
+                                    </div>
+
+                                    <div className="mt-auto">
+                                        <button className="w-full bg-[#facc15] hover:bg-[#eab308] text-black font-semibold py-3 rounded-md transition-colors text-sm">
+                                            Next
+                                        </button>
                                     </div>
                                 </div>
                             </div>

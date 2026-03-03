@@ -26,7 +26,7 @@ import {
     Folder // Added Folder icon
 } from 'lucide-react';
 
-const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
+import { getAllProjects } from '../../../admin/services/projectApi';
 
 const DealerTrackProjectProgress = () => {
     const [stats, setStats] = useState({

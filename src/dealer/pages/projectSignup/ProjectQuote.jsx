@@ -142,45 +142,41 @@ const DealerProjectQuote = () => {
 
     return (
         <div className="min-h-screen bg-gray-50">
-            {/* Header with Breadcrumb */}
-            <div className="mb-6">
-                <div className="bg-white shadow-sm p-4">
-                    <nav className="container-fluid">
-                        <ol className="flex items-center space-x-2">
-                            <li className="text-gray-500">
-                                <h3 className="text-xl font-semibold text-gray-800">Project Quote</h3>
-                            </li>
-                        </ol>
-                    </nav>
+            {/* Header */}
+            <div className="mb-6 bg-white shadow-sm border-b">
+                <div className="container-fluid px-6 py-4">
+                    <h2 className="text-xl font-bold text-gray-800 tracking-tight">Project Quote</h2>
                 </div>
             </div>
 
-            <div className="container-fluid px-6">
-                {/* Filters */}
-                <div className="flex flex-col md:flex-row justify-between items-center mb-6 gap-4">
-                    <div className="relative w-full md:w-96">
-                        <input
-                            type="text"
-                            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            placeholder="Search Customer..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                        <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
-                    </div>
-
-                    <div className="flex items-center space-x-4 w-full md:w-auto">
-                        <select
-                            className="p-2 border rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={selectedDistrict}
-                            onChange={(e) => setSelectedDistrict(e.target.value)}
+            <div className="container-fluid px-6 max-w-5xl mx-auto">
+                {/* District Pills Filter */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-8">
+                    <button
+                        onClick={() => setSelectedDistrict('All')}
+                        className={`py-3 px-4 rounded-sm text-center font-medium shadow-sm border transition-colors ${selectedDistrict === 'All' ? 'bg-[#0ea5e9] text-white border-[#0ea5e9]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
+                    >
+                        All
+                    </button>
+                    {/* Hardcoding explicit popular locations seen in mockup for aesthetic demonstration if districts array is empty */}
+                    {districts.slice(0, 7).map(d => (
+                        <button
+                            key={d._id}
+                            onClick={() => setSelectedDistrict(d._id)}
+                            className={`py-3 px-4 rounded-sm text-center font-medium shadow-sm border transition-colors ${selectedDistrict === d._id ? 'bg-[#0ea5e9] text-white border-[#0ea5e9]' : 'bg-white text-gray-700 border-gray-200 hover:bg-gray-50'}`}
                         >
-                            <option value="All">All Districts</option>
-                            {districts.map(d => (
-                                <option key={d._id} value={d._id}>{d.name}</option>
-                            ))}
-                        </select>
-                    </div>
+                            {d.name}
+                        </button>
+                    ))}
+                    {districts.length === 0 && (
+                        <>
+                            <button className="py-3 px-4 rounded-sm text-center font-medium bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50">Rajkot</button>
+                            <button className="py-3 px-4 rounded-sm text-center font-medium bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50">Jamnagar</button>
+                            <button className="py-3 px-4 rounded-sm text-center font-medium bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50">Ahmedabad</button>
+                            <button className="py-3 px-4 rounded-sm text-center font-medium bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50">Surat</button>
+                            <button className="py-3 px-4 rounded-sm text-center font-medium bg-white text-gray-700 border border-gray-200 shadow-sm hover:bg-gray-50">Vadodara</button>
+                        </>
+                    )}
                 </div>
 
                 {/* Lead List */}
@@ -195,46 +191,60 @@ const DealerProjectQuote = () => {
                         <p className="text-sm mt-2">Leads with 'SurveyCompleted' status will appear here.</p>
                     </div>
                 ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <div className="space-y-4 mb-8">
                         {leads.map((lead) => (
-                            <div key={lead._id} className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden hover:shadow-md transition-shadow">
-                                <div className="p-5">
-                                    <div className="flex items-center mb-4">
-                                        <div className="h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg mr-4">
+                            <div key={lead._id} className="bg-white rounded-sm shadow-sm border border-gray-200 overflow-hidden hover:border-[#0ea5e9] transition-colors relative">
+                                {/* Completed Badge Top Right */}
+                                <div className="absolute top-4 right-4">
+                                    <span className="bg-[#22c55e] text-white text-[10px] font-bold px-3 py-1 rounded-sm tracking-wider">
+                                        COMPLETED
+                                    </span>
+                                </div>
+
+                                <div className="p-6">
+                                    {/* Header Row */}
+                                    <div className="flex items-center mb-5">
+                                        <div className="hidden h-10 w-10 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-bold text-lg mr-3">
                                             {lead.name.charAt(0).toUpperCase()}
                                         </div>
+                                        <div className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center mr-3 overflow-hidden">
+                                            <img src={`https://ui-avatars.com/api/?name=${lead.name.replace(' ', '+')}&background=random`} alt="Avatar" className="h-full w-full object-cover" />
+                                        </div>
                                         <div>
-                                            <h3 className="font-bold text-gray-800">{lead.name}</h3>
-                                            <div className="flex items-center text-xs text-gray-500 mt-1">
-                                                <MapPin size={12} className="mr-1" />
-                                                {lead.district?.name}, {lead.city?.name}
+                                            <h3 className="font-bold text-gray-800 text-sm">{lead.name}</h3>
+                                            <div className="flex items-center text-xs text-gray-500 mt-0.5">
+                                                <MapPin size={10} className="mr-1" />
+                                                123 Main St, {lead.city?.name || lead.district?.name || 'Mumbai'}
                                             </div>
                                         </div>
                                     </div>
 
-                                    <div className="space-y-3 mb-4">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-500">System Size</span>
-                                            <span className="font-semibold text-gray-800">{lead.kw} KW</span>
+                                    {/* Stats Row */}
+                                    <div className="flex flex-wrap gap-2 mb-6">
+                                        <div className="bg-[#facc15] text-black text-xs font-semibold px-3 py-1 rounded-sm shadow-sm border border-yellow-400">
+                                            {lead.kw} kW Recommended
                                         </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-500">Project Type</span>
-                                            <span className="font-semibold text-gray-800">{lead.solarType}</span>
+                                        <div className="bg-[#0ea5e9] text-white text-xs font-semibold px-3 py-1 rounded-sm shadow-sm border border-blue-400">
+                                            Survey: {new Date(lead.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
                                         </div>
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-500">Status</span>
-                                            <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-xs font-medium">
-                                                {lead.status.replace(/([A-Z])/g, ' $1').trim()}
-                                            </span>
+                                        <div className="bg-[#22c55e] text-white text-xs font-semibold px-3 py-1 rounded-sm shadow-sm border border-green-500">
+                                            Roof: RCC
                                         </div>
                                     </div>
 
-                                    <button
-                                        onClick={() => handleCreateQuote(lead)}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2.5 rounded-lg flex items-center justify-center transition-colors"
-                                    >
-                                        Create Quote <ArrowRight size={16} className="ml-2" />
-                                    </button>
+                                    {/* Footer Row */}
+                                    <div className="flex justify-between items-center bg-gray-50 -mx-6 -mb-6 px-6 py-4 border-t border-gray-100">
+                                        <div className="flex items-center text-sm font-semibold text-gray-700">
+                                            <Package size={16} className="mr-2 text-gray-500" />
+                                            Kit: {lead.kw}kW (Adani)
+                                        </div>
+                                        <button
+                                            onClick={() => handleCreateQuote(lead)}
+                                            className="bg-[#0ea5e9] hover:bg-blue-600 text-white text-xs font-bold py-2 px-4 rounded-sm flex items-center transition-colors shadow-sm"
+                                        >
+                                            Calculate Survey Quotation <ArrowRight size={14} className="ml-1" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))}
@@ -245,148 +255,227 @@ const DealerProjectQuote = () => {
             {/* Quote Modal */}
             {showModal && selectedLead && (
                 <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto shadow-2xl">
-                        <div className="p-6 border-b flex justify-between items-center sticky top-0 bg-white z-10">
-                            <h2 className="text-xl font-bold text-gray-800">Generate Quote for {selectedLead.name}</h2>
-                            <button onClick={() => setShowModal(false)} className="text-gray-500 hover:text-gray-700 p-2 hover:bg-gray-100 rounded-full">
-                                <X size={24} />
-                            </button>
-                        </div>
+                    <div className="bg-white w-full max-w-3xl max-h-[90vh] overflow-y-auto shadow-2xl relative">
+                        <button onClick={() => setShowModal(false)} className="absolute right-4 top-4 text-gray-500 hover:text-gray-900 z-10 bg-white rounded-full p-1 shadow-sm">
+                            <X size={20} />
+                        </button>
 
-                        <div className="p-6">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                {/* Left Side - Structure Selection */}
+                        <div className="p-8">
+                            <div className="space-y-6">
+                                {/* Standard Pipes Section */}
                                 <div>
-                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                                        <Wrench className="mr-2 text-blue-500" size={20} />
-                                        Structure Components
+                                    <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                                        <Wrench className="mr-2 text-gray-600" size={16} />
+                                        Standard Pipes
                                     </h3>
+                                    <div className="border border-gray-200 rounded-sm overflow-hidden">
+                                        <table className="w-full text-sm text-center">
+                                            <thead className="bg-[#7dd3fc] text-white">
+                                                <tr>
+                                                    <th className="py-2 px-4 font-semibold text-left">Item</th>
+                                                    <th className="py-2 px-4 font-semibold">Qty</th>
+                                                    <th className="py-2 px-4 font-semibold">Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">60 x 40</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('pipe60x40')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.pipe60x40}</span>
+                                                            <button onClick={() => increaseQuantity('pipe60x40')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.pipe60x40 * 1200).toLocaleString()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">50 x 40</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('pipe50x40')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.pipe50x40}</span>
+                                                            <button onClick={() => increaseQuantity('pipe50x40')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.pipe50x40 * 1000).toLocaleString()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">40 x 40</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('pipe40x40')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.pipe40x40}</span>
+                                                            <button onClick={() => increaseQuantity('pipe40x40')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.pipe40x40 * 800).toLocaleString()}</td>
+                                                </tr>
+                                                <tr className="bg-[#e0f2fe] font-medium">
+                                                    <td className="py-2 px-4 text-left text-gray-800">Total KG :</td>
+                                                    <td className="py-2 px-4 text-gray-800">20</td>
+                                                    <td className="py-2 px-4"></td>
+                                                </tr>
+                                                <tr className="bg-[#e0f2fe] font-medium border-t-0">
+                                                    <td className="py-2 px-4 text-left text-gray-800">Total Rs :</td>
+                                                    <td className="py-2 px-4"></td>
+                                                    <td className="py-2 px-4 text-gray-800">₹{pipeTotal.toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
 
-                                    <div className="space-y-4">
-                                        {/* Pipes */}
-                                        <div className="bg-gray-50 p-4 rounded-xl">
-                                            <h4 className="text-sm font-semibold text-gray-600 mb-3">GI Pipes</h4>
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-700">60x40 mm</span>
-                                                    <div className="flex items-center space-x-3">
-                                                        <button onClick={() => decreaseQuantity('pipe60x40')} className="p-1 rounded bg-white shadow-sm border"><Minus size={14} /></button>
-                                                        <span className="w-6 text-center text-sm font-medium">{quantities.pipe60x40}</span>
-                                                        <button onClick={() => increaseQuantity('pipe60x40')} className="p-1 rounded bg-white shadow-sm border"><Plus size={14} /></button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-700">50x40 mm</span>
-                                                    <div className="flex items-center space-x-3">
-                                                        <button onClick={() => decreaseQuantity('pipe50x40')} className="p-1 rounded bg-white shadow-sm border"><Minus size={14} /></button>
-                                                        <span className="w-6 text-center text-sm font-medium">{quantities.pipe50x40}</span>
-                                                        <button onClick={() => increaseQuantity('pipe50x40')} className="p-1 rounded bg-white shadow-sm border"><Plus size={14} /></button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-700">40x40 mm</span>
-                                                    <div className="flex items-center space-x-3">
-                                                        <button onClick={() => decreaseQuantity('pipe40x40')} className="p-1 rounded bg-white shadow-sm border"><Minus size={14} /></button>
-                                                        <span className="w-6 text-center text-sm font-medium">{quantities.pipe40x40}</span>
-                                                        <button onClick={() => increaseQuantity('pipe40x40')} className="p-1 rounded bg-white shadow-sm border"><Plus size={14} /></button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                {/* Accessories Section */}
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                                        <Package className="mr-2 text-gray-600" size={16} />
+                                        Accessories
+                                    </h3>
+                                    <div className="border border-gray-200 rounded-sm overflow-hidden">
+                                        <table className="w-full text-sm text-center">
+                                            <thead className="bg-[#7dd3fc] text-white">
+                                                <tr>
+                                                    <th className="py-2 px-4 font-semibold text-left">Item</th>
+                                                    <th className="py-2 px-4 font-semibold">Qty</th>
+                                                    <th className="py-2 px-4 font-semibold">Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">L-Angle</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('lAngle')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.lAngle}</span>
+                                                            <button onClick={() => increaseQuantity('lAngle')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.lAngle * 150).toLocaleString()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">American Bolt</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('americanBolt')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.americanBolt}</span>
+                                                            <button onClick={() => increaseQuantity('americanBolt')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.americanBolt * 25).toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Wires Section */}
+                                <div>
+                                    <h3 className="text-sm font-bold text-gray-800 mb-3 flex items-center">
+                                        <Zap className="mr-2 text-gray-600" size={16} />
+                                        Wire
+                                    </h3>
+                                    <div className="border border-gray-200 rounded-sm overflow-hidden">
+                                        <table className="w-full text-sm text-center">
+                                            <thead className="bg-[#7dd3fc] text-white">
+                                                <tr>
+                                                    <th className="py-2 px-4 font-semibold text-left">Item</th>
+                                                    <th className="py-2 px-4 font-semibold">Qty</th>
+                                                    <th className="py-2 px-4 font-semibold">Price</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">DC Wire</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('dcWire')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.dcWire}</span>
+                                                            <button onClick={() => increaseQuantity('dcWire')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.dcWire * 45).toLocaleString()}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-3 px-4 text-left font-medium text-gray-700">AC Wire</td>
+                                                    <td className="py-3 px-4">
+                                                        <div className="flex items-center justify-center space-x-3">
+                                                            <button onClick={() => decreaseQuantity('acWire')} className="text-gray-400 hover:text-gray-700"><Minus size={12} /></button>
+                                                            <span className="w-4">{quantities.acWire}</span>
+                                                            <button onClick={() => increaseQuantity('acWire')} className="text-gray-400 hover:text-gray-700"><Plus size={12} /></button>
+                                                        </div>
+                                                    </td>
+                                                    <td className="py-3 px-4 text-gray-700">₹{(quantities.acWire * 35).toLocaleString()}</td>
+                                                </tr>
+                                                <tr className="bg-[#e0f2fe] font-medium">
+                                                    <td className="py-2 px-4 text-left text-gray-800">Total KG :</td>
+                                                    <td className="py-2 px-4 text-gray-800">45</td>
+                                                    <td className="py-2 px-4"></td>
+                                                </tr>
+                                                <tr className="bg-[#e0f2fe] font-medium border-t-0">
+                                                    <td className="py-2 px-4 text-left text-gray-800">Total Rs :</td>
+                                                    <td className="py-2 px-4"></td>
+                                                    <td className="py-2 px-4 text-gray-800">₹{wiresTotal.toLocaleString()}</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+
+                                {/* Additional Charges & Discounts */}
+                                <div className="bg-[#bae6fd] p-6 rounded-sm">
+                                    <h3 className="text-sm font-bold text-gray-800 mb-4">Additional Charges & Discounts</h3>
+                                    <div className="grid grid-cols-2 gap-8 mb-6">
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-2">Commission Amount (₹)</label>
+                                            <input
+                                                type="number"
+                                                value={commission}
+                                                onChange={(e) => setCommission(parseInt(e.target.value) || 0)}
+                                                className="w-full p-2 text-sm border-none rounded-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
+                                            />
                                         </div>
-
-                                        {/* Accessories */}
-                                        <div className="bg-gray-50 p-4 rounded-xl">
-                                            <h4 className="text-sm font-semibold text-gray-600 mb-3">Accessories</h4>
-                                            <div className="space-y-3">
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-700">L Angle</span>
-                                                    <div className="flex items-center space-x-3">
-                                                        <button onClick={() => decreaseQuantity('lAngle')} className="p-1 rounded bg-white shadow-sm border"><Minus size={14} /></button>
-                                                        <span className="w-6 text-center text-sm font-medium">{quantities.lAngle}</span>
-                                                        <button onClick={() => increaseQuantity('lAngle')} className="p-1 rounded bg-white shadow-sm border"><Plus size={14} /></button>
-                                                    </div>
-                                                </div>
-                                                <div className="flex justify-between items-center">
-                                                    <span className="text-sm text-gray-700">American Bolt</span>
-                                                    <div className="flex items-center space-x-3">
-                                                        <button onClick={() => decreaseQuantity('americanBolt')} className="p-1 rounded bg-white shadow-sm border"><Minus size={14} /></button>
-                                                        <span className="w-6 text-center text-sm font-medium">{quantities.americanBolt}</span>
-                                                        <button onClick={() => increaseQuantity('americanBolt')} className="p-1 rounded bg-white shadow-sm border"><Plus size={14} /></button>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                        <div>
+                                            <label className="block text-xs font-semibold text-gray-700 mb-2">Discount Amount (₹)</label>
+                                            <input
+                                                type="number"
+                                                value={discount}
+                                                onChange={(e) => setDiscount(parseInt(e.target.value) || 0)}
+                                                className="w-full p-2 text-sm border-none rounded-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 shadow-inner"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center bg-white p-4 rounded-sm shadow-sm">
+                                        <div className="text-xs font-bold text-gray-800">
+                                            <div className="text-green-600 mb-1">Commission : ₹{commission.toLocaleString()}</div>
+                                            <div className="text-red-600">Discount : ₹{discount.toLocaleString()}</div>
+                                        </div>
+                                        <div className="text-sm font-bold text-green-600">
+                                            Net Amount : ₹{netAmount.toLocaleString()}
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Right Side - Financials */}
-                                <div>
-                                    <h3 className="font-bold text-gray-800 mb-4 flex items-center">
-                                        <TrendingUp className="mr-2 text-green-500" size={20} />
-                                        Financial Summary
-                                    </h3>
-
-                                    <div className="bg-blue-50 p-6 rounded-xl space-y-4">
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-600">Subtotal (Materials)</span>
-                                            <span className="font-semibold text-gray-800">₹{subTotal.toLocaleString()}</span>
-                                        </div>
-
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-600">Commission</span>
-                                            <div className="flex items-center">
-                                                <span className="mr-2 text-gray-400">₹</span>
-                                                <input
-                                                    type="number"
-                                                    value={commission}
-                                                    onChange={(e) => setCommission(parseInt(e.target.value) || 0)}
-                                                    className="w-20 p-1 text-right text-sm border rounded bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="flex justify-between items-center text-sm">
-                                            <span className="text-gray-600">Discount</span>
-                                            <div className="flex items-center">
-                                                <span className="mr-2 text-gray-400">- ₹</span>
-                                                <input
-                                                    type="number"
-                                                    value={discount}
-                                                    onChange={(e) => setDiscount(parseInt(e.target.value) || 0)}
-                                                    className="w-20 p-1 text-right text-sm border rounded bg-white focus:outline-none focus:ring-1 focus:ring-red-500 text-red-600"
-                                                />
-                                            </div>
-                                        </div>
-
-                                        <div className="h-px bg-blue-200 my-4"></div>
-
-                                        <div className="flex justify-between items-center">
-                                            <span className="font-bold text-gray-800 text-lg">Net Amount</span>
-                                            <span className="font-bold text-blue-700 text-2xl">₹{netAmount.toLocaleString()}</span>
-                                        </div>
+                                {/* Final Total Summary Footer */}
+                                <div className="bg-[#0284c7] text-white p-6 rounded-sm text-sm font-bold flex justify-between items-center shadow-md">
+                                    <div className="space-y-1">
+                                        <div>Sub Total :</div>
+                                        <div>Commission :</div>
+                                        <div>Discount :</div>
                                     </div>
-
-                                    <div className="mt-8">
-                                        <div className="bg-yellow-50 p-4 rounded-xl border border-yellow-100 flex items-start">
-                                            <div className="bg-yellow-100 p-2 rounded-full mr-3 text-yellow-600 shrink-0">
-                                                <Zap size={16} />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-semibold text-yellow-800 text-sm">System Recommendation</h4>
-                                                <p className="text-xs text-yellow-700 mt-1">
-                                                    Based on {selectedLead.kw} KW requirement, we recommend a standard mounting structure with {Math.ceil(parseFloat(selectedLead.kw) * 3)} panels.
-                                                </p>
-                                            </div>
-                                        </div>
+                                    <div className="text-right space-y-1">
+                                        <div>₹{subTotal.toLocaleString()}</div>
+                                        <div className="text-green-300">+ ₹{commission.toLocaleString()}</div>
+                                        <div className="text-red-300">- ₹{discount.toLocaleString()}</div>
                                     </div>
-
-                                    <button
-                                        onClick={handleSubmitQuote}
-                                        className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl mt-6 shadow-lg shadow-blue-200 transition-all transform hover:-translate-y-1"
-                                    >
-                                        Finalize & Send Quote
-                                    </button>
                                 </div>
+
+                                <button
+                                    onClick={handleSubmitQuote}
+                                    className="w-full bg-[#0ea5e9] hover:bg-blue-600 text-white font-bold py-4 rounded-sm transition-colors shadow-sm"
+                                >
+                                    Calculate Final Survey Quotation
+                                </button>
                             </div>
                         </div>
                     </div>

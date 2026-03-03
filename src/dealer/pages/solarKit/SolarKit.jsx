@@ -206,21 +206,21 @@ const DealerSolarKit = () => {
     };
 
     // ... (rest of the helper functions from original file: getStatusClass, etc. converted to use new data structure if needed)
-    const getStatusClass = (status) => status === 'In-Stock' ? 'bg-green-500 text-white' : 'bg-red-500 text-white';
+    const getStatusClass = (status) => status === 'In-Stock' ? 'bg-[#22c55e] text-white' : 'bg-[#ef4444] text-white';
     const getTypeClass = (type) => {
         switch (type) {
-            case 'Hybrid': return 'bg-purple-600 text-white';
-            case 'On-Grid': return 'bg-blue-600 text-white';
-            case 'Off-Grid': return 'bg-orange-500 text-white';
+            case 'Hybrid': return 'bg-[#a855f7] text-white';
+            case 'On-Grid': return 'bg-[#3b82f6] text-white';
+            case 'Off-Grid': return 'bg-[#f59e0b] text-white';
             default: return 'bg-gray-500 text-white';
         }
     };
     const getSubCategoryClass = (subCat) => {
         switch (subCat) {
-            case 'Commercial': return 'bg-gradient-to-r from-orange-500 to-orange-700 text-white';
-            case 'Residential': return 'bg-gradient-to-r from-green-500 to-green-700 text-white';
-            case 'Industrial': return 'bg-gradient-to-r from-purple-600 to-purple-800 text-white';
-            case 'Mega': return 'bg-gradient-to-r from-red-500 to-red-700 text-white';
+            case 'Commercial': return 'bg-[#f97316] text-white';
+            case 'Residential': return 'bg-[#166534] text-white';
+            case 'Industrial': return 'bg-[#7e22ce] text-white';
+            case 'Mega': return 'bg-[#dc2626] text-white';
             default: return 'bg-gray-600 text-white';
         }
     };
@@ -259,43 +259,77 @@ const DealerSolarKit = () => {
                     </div>
                 </div>
 
-                {/* Filter Section (Simplified for brevity, same as original logic) */}
+                {/* Filter Section */}
                 {showFilters && (
-                    <div className="bg-white rounded-2xl shadow-lg p-6 mb-4">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Category</label>
+                    <div className="bg-[#f8fafc] rounded-[16px] border border-gray-100 p-6 mb-6">
+                        <div className="flex justify-between items-center mb-6">
+                            <h3 className="text-[17px] font-bold text-[#1e293b]">Advanced Filters</h3>
+                            <div className="bg-[#0bd2c3] text-[#0f172a] text-[12px] font-bold px-3 py-1.5 rounded-[4px]">
+                                {solarKits.length} kits match your filters
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+                            <div className="flex items-center space-x-3">
+                                <label className="text-[13px] text-gray-500 whitespace-nowrap hidden lg:block">Category</label>
                                 <select
-                                    className="w-full border rounded-lg p-2"
+                                    className="w-full border border-gray-200 rounded-[8px] p-2.5 text-[14px] focus:outline-none bg-white shadow-sm appearance-none"
                                     value={filters.category}
                                     onChange={(e) => handleFilterChange('category', e.target.value)}
                                 >
                                     {categoryOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">System Type</label>
+                            <div className="flex items-center space-x-3">
+                                <label className="text-[13px] text-gray-500 whitespace-nowrap hidden lg:block">System Type</label>
                                 <select
-                                    className="w-full border rounded-lg p-2"
+                                    className="w-full border border-gray-200 rounded-[8px] p-2.5 text-[14px] focus:outline-none bg-white shadow-sm appearance-none"
                                     value={filters.type}
                                     onChange={(e) => handleFilterChange('type', e.target.value)}
                                 >
                                     {typeOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
-                            <div>
-                                <label className="block text-xs font-bold mb-1">Capacity</label>
+                            <div className="flex items-center space-x-3">
+                                <label className="text-[13px] text-gray-500 whitespace-nowrap hidden lg:block">Capacity</label>
                                 <select
-                                    className="w-full border rounded-lg p-2"
+                                    className="w-full border border-gray-200 rounded-[8px] p-2.5 text-[14px] focus:outline-none bg-white shadow-sm appearance-none"
                                     value={filters.kwRange}
                                     onChange={(e) => handleFilterChange('kwRange', e.target.value)}
                                 >
                                     {kwOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
                                 </select>
                             </div>
-                            <div className="flex items-end">
-                                <button onClick={clearFilters} className="w-full border border-red-500 text-red-500 rounded-lg p-2 hover:bg-red-50">
-                                    <XCircle size={18} className="inline mr-2" /> Clear All
+                            <div className="flex items-center justify-end">
+                                <button onClick={clearFilters} className="text-red-500 text-[13px] font-medium hover:text-red-600 transition-colors">
+                                    Clear All
+                                </button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label className="block text-[13px] text-gray-500 mb-2">Stock Status</label>
+                            <div className="flex bg-[#f1f5f9] rounded-[8px] p-1.5">
+                                <button
+                                    className={`flex-1 py-3 px-4 rounded-[6px] text-[15px] transition-colors flex flex-col justify-center items-center ${filters.status === 'All' ? 'bg-[#007bff] text-white shadow-sm font-medium' : 'text-gray-600 hover:bg-gray-200'}`}
+                                    onClick={() => handleFilterChange('status', 'All')}
+                                >
+                                    <span className="mb-0.5">All</span>
+                                    <span className="text-[12px] opacity-80">{solarKits.length}</span>
+                                </button>
+                                <button
+                                    className={`flex-1 py-3 px-4 rounded-[6px] text-[15px] transition-colors flex flex-col justify-center items-center ${filters.status === 'In-Stock' ? 'bg-[#007bff] text-white shadow-sm font-medium' : 'text-gray-600 hover:bg-gray-200'}`}
+                                    onClick={() => handleFilterChange('status', 'In-Stock')}
+                                >
+                                    <span className="flex items-center mb-0.5"><CheckCircle size={16} className="mr-1" /> In Stock</span>
+                                    <span className="text-[12px] opacity-80">{solarKits.filter(k => k.status === 'In-Stock').length}</span>
+                                </button>
+                                <button
+                                    className={`flex-1 py-3 px-4 rounded-[6px] text-[15px] transition-colors flex flex-col justify-center items-center ${filters.status === 'Out-of-Stock' ? 'bg-[#007bff] text-white shadow-sm font-medium' : 'text-gray-600 hover:bg-gray-200'}`}
+                                    onClick={() => handleFilterChange('status', 'Out-of-Stock')}
+                                >
+                                    <span className="flex items-center mb-0.5"><XCircle size={16} className="mr-1" /> Out of Stock</span>
+                                    <span className="text-[12px] opacity-80">{solarKits.filter(k => k.status === 'Out-of-Stock').length}</span>
                                 </button>
                             </div>
                         </div>
@@ -312,7 +346,7 @@ const DealerSolarKit = () => {
                             const finalPrice = calculateFinalPrice(kit);
 
                             return (
-                                <div key={kit._id} className="bg-white rounded-lg shadow-md hover:shadow-lg transition-all relative group">
+                                <div key={kit._id} className="bg-white rounded-lg shadow-sm border border-gray-100 hover:shadow-md transition-all relative group flex flex-col justify-between">
                                     {/* Edit/Delete Actions */}
                                     <div className="absolute top-2 right-2 flex space-x-1 opacity-100 z-10">
                                         <button
@@ -320,72 +354,102 @@ const DealerSolarKit = () => {
                                             className="bg-white p-2 rounded-full shadow-sm text-blue-600 hover:bg-blue-50"
                                             title="Edit Kit"
                                         >
-                                            <Edit size={16} />
+                                            <Edit size={14} />
                                         </button>
                                         <button
                                             onClick={() => handleDeleteKit(kit._id)}
                                             className="bg-white p-2 rounded-full shadow-sm text-red-600 hover:bg-red-50"
                                             title="Delete Kit"
                                         >
-                                            <Trash2 size={16} />
+                                            <Trash2 size={14} />
                                         </button>
                                     </div>
 
-                                    <div className="p-4" onClick={() => { setSelectedKitForDetails(kit); setShowDetailsModal(true); }}>
+                                    <div className="p-5 h-full flex flex-col" onClick={() => { setSelectedKitForDetails(kit); setShowDetailsModal(true); }}>
                                         {/* Image/Brand Section */}
-                                        <div className="flex mb-3 mt-4">
-                                            <div className="flex-1 mr-2">
-                                                <div className="bg-blue-50 rounded-lg h-16 flex items-center justify-center">
-                                                    <SolarPanel size={32} className="text-blue-600" />
+                                        <div className="flex mb-6 mt-2">
+                                            <div className="flex-1 relative">
+                                                <div className="absolute top-0 left-0 bg-[#eff6ff] text-gray-700 rounded-[6px] p-2 flex items-center justify-center">
+                                                    <Info size={16} />
                                                 </div>
-                                                <small className="block text-center mt-1">{kit.panelBrand}</small>
+                                                <div className="text-center pt-8 text-[12px] font-semibold text-gray-800">{kit.panelBrand}</div>
                                             </div>
-                                            <div className="flex-1 ml-2">
-                                                <div className="bg-green-50 rounded-lg h-16 flex items-center justify-center">
-                                                    <Zap size={32} className="text-green-600" />
+                                            <div className="flex-1 relative">
+                                                <div className="absolute top-0 right-10 bg-[#f0fdf4] text-[#22c55e] rounded-[6px] p-2 flex items-center justify-center">
+                                                    <Zap size={16} />
                                                 </div>
-                                                <small className="block text-center mt-1">{kit.inverterBrand}</small>
+                                                <div className="text-right pt-8 pr-8 text-[12px] font-semibold text-gray-800">{kit.inverterBrand}</div>
                                             </div>
                                         </div>
 
                                         {/* Status Badges */}
-                                        <div className="flex justify-between mb-3">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getStatusClass(kit.status)}`}>
+                                        <div className="flex justify-between items-center mb-5">
+                                            <span className={`px-2.5 py-1 rounded-[4px] text-[10px] font-bold ${getStatusClass(kit.status)}`}>
                                                 {kit.status}
                                             </span>
-                                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${getTypeClass(kit.type)}`}>
+                                            <span className={`px-2.5 py-1 rounded-[4px] text-[10px] font-bold ${getTypeClass(kit.type)}`}>
                                                 {kit.type}
                                             </span>
                                         </div>
 
                                         {/* Kit Info */}
-                                        <h6 className="font-semibold text-gray-800 mb-2 truncate" title={kit.name}>{kit.name}</h6>
-                                        <div className="flex items-center mb-3">
-                                            <Tag size={14} className="text-yellow-500 mr-2" />
-                                            <span className="text-xs text-gray-600">{kit.brand}</span>
-                                            <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${getSubCategoryClass(kit.subCategory)}`}>
+                                        <h6 className="font-bold text-[16px] text-gray-900 mb-2 truncate" title={kit.name}>
+                                            <span className={`${selectedKitForDetails?._id === kit._id ? 'bg-[#3b82f6] text-white px-1 mr-1' : ''}`}>{kit.name}</span>
+                                        </h6>
+                                        <div className="flex items-center mb-5 relative">
+                                            <Zap size={14} className="text-[#eab308] mr-1.5" fill="currentColor" />
+                                            <span className="text-[12px] text-gray-700 font-bold mr-2">{kit.brand}</span>
+                                            <span className={`text-[10px] px-2 py-0.5 rounded-[4px] font-bold ${getSubCategoryClass(kit.subCategory)}`}>
                                                 {kit.subCategory}
                                             </span>
                                         </div>
 
                                         {/* Specs Grid */}
-                                        <div className="grid grid-cols-2 gap-2 mb-3">
-                                            <div className="bg-gray-50 rounded-lg p-2">
-                                                <span className="text-xs font-bold block">{kit.kw}</span>
-                                                <small className="text-[10px] text-gray-500">Capacity</small>
+                                        <div className="grid grid-cols-2 mt-auto mb-6">
+                                            <div className="py-3 px-1 border-r border-b border-gray-100 flex flex-col justify-center">
+                                                <div className="flex items-center text-[13px] font-bold text-gray-800 mb-1">
+                                                    <Zap size={14} className="text-[#eab308] mr-1" />
+                                                    ↑{kit.kw}
+                                                </div>
+                                                <span className="text-[11px] font-medium text-gray-500">Capacity</span>
                                             </div>
-                                            <div className="bg-gray-50 rounded-lg p-2">
-                                                <span className="text-xs font-bold block">{kit.efficiency}</span>
-                                                <small className="text-[10px] text-gray-500">Efficiency</small>
+                                            <div className="py-3 pl-4 border-b border-gray-100 flex flex-col justify-center">
+                                                <div className="text-[13px] font-bold text-gray-800 mb-1">
+                                                    {kit.efficiency}
+                                                </div>
+                                                <span className="text-[11px] font-medium text-gray-500">Efficiency</span>
+                                            </div>
+                                            <div className="py-3 px-1 border-r border-gray-100 flex flex-col justify-center">
+                                                <div className="flex items-center text-[13px] font-bold text-gray-800 mb-1">
+                                                    <Power size={14} className="text-[#22c55e] mr-1" />
+                                                    {kit.panelWatt}
+                                                </div>
+                                                <span className="text-[11px] font-medium text-gray-500">Panel Watt</span>
+                                            </div>
+                                            <div className="py-3 pl-4 flex flex-col justify-center">
+                                                <div className="flex items-center text-[13px] font-bold text-gray-800 mb-1">
+                                                    <SolarPanel size={14} className="text-gray-800 mr-1" />
+                                                    {kit.technology}
+                                                </div>
+                                                <span className="text-[11px] font-medium text-gray-500">Technology</span>
                                             </div>
                                         </div>
 
                                         {/* Price Footer */}
-                                        <div className="border-t pt-3 flex justify-between items-center">
-                                            <span className="text-lg font-bold text-green-600">
-                                                ₹{formatPrice(finalPrice)}/kW
-                                            </span>
-                                            <span className="text-xs text-gray-400">Click for details</span>
+                                        <div className="flex justify-between items-center mt-2">
+                                            <div className={`text-[16px] font-bold ${kit.status === 'Out-of-Stock' ? 'text-[#22c55e]' : 'text-[#22c55e]'}`}>
+                                                {kit.status === 'Out-of-Stock' ? 'Out of Stock' : `₹${formatPrice(finalPrice)}/kW`}
+                                            </div>
+                                            <div className="flex space-x-2">
+                                                {kit.status === 'Out-of-Stock' ? (
+                                                    <button className="bg-gray-400 text-white text-[11px] px-3.5 py-1.5 rounded-[4px] font-bold cursor-not-allowed">Not Available</button>
+                                                ) : (
+                                                    <>
+                                                        <button className="bg-[#3b82f6] text-white text-[11px] px-3.5 py-1.5 rounded-[4px] font-bold hover:bg-blue-600 transition-colors shadow-sm">Price Details</button>
+                                                        <button className="bg-[#f59e0b] text-white text-[11px] px-3.5 py-1.5 rounded-[4px] font-bold hover:bg-orange-600 transition-colors shadow-sm">Details</button>
+                                                    </>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 </div>

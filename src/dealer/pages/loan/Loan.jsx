@@ -41,7 +41,8 @@ import {
     ChevronDown,
     ChevronUp,
     Menu,
-    Settings
+    Settings,
+    CheckSquare
 } from 'lucide-react';
 import { projectAPI, loanAPI } from '../../../api/api';
 
@@ -248,43 +249,42 @@ const DealerLoan = () => {
                 <div className="flex flex-wrap">
                     {/* Left Side - Project List */}
                     <div className="w-full md:w-1/3 lg:w-1/4 pr-4">
-                        <div className="bg-white rounded-lg shadow-sm p-3 mt-4">
-                            <h4 className="font-bold text-lg mb-3">Select Customer</h4>
-                            <div className="mb-3 relative">
+                        <div className="bg-white rounded-sm shadow-sm p-4 mt-4 h-full border border-gray-100">
+                            <h4 className="font-bold text-[18px] text-[#1e293b] mb-4">Apply For Loan</h4>
+                            <div className="mb-4 relative">
                                 <input
                                     type="text"
-                                    className="w-full pl-10 pr-3 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    placeholder="Search..."
+                                    className="w-full px-3 py-2 border border-gray-200 rounded text-sm focus:outline-none placeholder-gray-400 font-medium"
+                                    placeholder="Search Customer..."
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
-                                <Search className="absolute left-3 top-2.5 text-gray-400" size={18} />
                             </div>
 
-                            <div className="space-y-2 max-h-[500px] overflow-y-auto">
+                            <div className="space-y-0 max-h-[600px] overflow-y-auto">
                                 {loading ? (
                                     <div className="text-center py-4">Loading projects...</div>
                                 ) : filteredProjects.length > 0 ? filteredProjects.map((project) => (
                                     <button
                                         key={project._id}
-                                        className={`w-full flex items-center p-3 rounded-lg border transition-all ${selectedProject?._id === project._id
-                                            ? 'bg-blue-600 text-white border-blue-600'
-                                            : 'bg-white hover:bg-gray-50 text-gray-800 border-gray-200'
+                                        className={`w-full flex items-center p-3 mb-2 rounded border transition-all ${selectedProject?._id === project._id
+                                            ? 'bg-[#007bff] text-white border-[#007bff]'
+                                            : 'bg-white text-gray-800 border-gray-200 hover:bg-gray-50'
                                             }`}
                                         onClick={() => handleSelectProject(project)}
                                     >
-                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${selectedProject?._id === project._id ? 'bg-blue-500' : 'bg-gray-100'}`}>
-                                            <User size={20} className={selectedProject?._id === project._id ? 'text-white' : 'text-gray-400'} />
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center mr-3 ${selectedProject?._id === project._id ? 'bg-white shadow-sm' : 'bg-[#e2e8f0]'}`}>
+                                            <User size={20} className={selectedProject?._id === project._id ? 'text-[#007bff]' : 'text-gray-500'} />
                                         </div>
                                         <div className="flex-1 text-left">
-                                            <div className="font-bold text-sm truncate">{project.projectName}</div>
-                                            <div className={`text-xs ${selectedProject?._id === project._id ? 'text-blue-100' : 'text-gray-500'}`}>
-                                                {project.projectId}
+                                            <div className="font-medium text-[13px] truncate">{project.projectName}</div>
+                                            <div className={`text-[11px] font-medium mt-0.5 ${selectedProject?._id === project._id ? 'text-blue-100' : 'text-gray-500'}`}>
+                                                Project: {project.projectId}
                                             </div>
                                         </div>
-                                        <span className={`text-[10px] px-2 py-0.5 rounded-full ${selectedProject?._id === project._id ? 'bg-blue-700' : 'bg-gray-200'}`}>
-                                            {project.totalKW} KW
-                                        </span>
+                                        <div className={`text-[10px] px-2 py-1 rounded font-bold ml-2 ${selectedProject?._id === project._id ? 'bg-[#5c636a] text-white' : 'bg-[#6c757d] text-white'}`}>
+                                            6 Panel
+                                        </div>
                                     </button>
                                 )) : <div className="text-center py-4 text-gray-400 text-sm">No projects found</div>}
                             </div>
@@ -295,21 +295,21 @@ const DealerLoan = () => {
                     <div className="w-full md:w-2/3 lg:w-3/4">
                         <div className="bg-white rounded-lg shadow-sm border p-5 mt-4">
                             {/* Stepper */}
-                            <div className="flex items-center justify-between mb-8 overflow-x-auto pb-4">
+                            <div className="flex justify-between items-center mb-8 px-4 overflow-x-hidden relative">
+                                {/* Background connecting line */}
+                                <div className="absolute top-5 left-8 right-8 h-[2px] bg-gray-100 -z-10"></div>
+
                                 {steps.map((step, index) => (
-                                    <React.Fragment key={index}>
-                                        <div className="flex flex-col items-center min-w-[100px]">
-                                            <div className={`w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold transition-all ${index === activeStep ? 'bg-orange-500 text-white shadow-lg scale-110' :
-                                                index < activeStep ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-500'
-                                                }`}>
-                                                {index < activeStep ? <Check size={20} /> : index + 1}
-                                            </div>
-                                            <span className={`text-xs mt-2 font-medium ${index === activeStep ? 'text-orange-600' : 'text-gray-500'}`}>
-                                                {step}
-                                            </span>
+                                    <div key={index} className="flex flex-col items-center bg-white z-10 px-2">
+                                        <div className={`w-10 h-10 rounded-full flex items-center justify-center text-[15px] font-bold border-2 transition-all ${index === activeStep ? 'border-[#007bff] bg-white text-[#007bff] shadow-sm' :
+                                            index < activeStep ? 'border-gray-200 bg-gray-100 text-gray-500' : 'border-gray-100 bg-white text-gray-400'
+                                            }`}>
+                                            {index + 1}
                                         </div>
-                                        {index < steps.length - 1 && <div className="flex-1 h-[2px] bg-gray-200 mx-2 mt-[-20px]"></div>}
-                                    </React.Fragment>
+                                        <span className={`text-[11px] mt-2 font-bold w-16 text-center leading-tight ${index === activeStep ? 'text-gray-600' : 'text-gray-400'}`}>
+                                            {step.split(' ').map((word, i) => <React.Fragment key={i}>{word}<br /></React.Fragment>)}
+                                        </span>
+                                    </div>
                                 ))}
                             </div>
 
@@ -323,178 +323,337 @@ const DealerLoan = () => {
                                 </div>
                             ) : (
                                 <div className="space-y-6">
-                                    {/* Project Summary Header */}
-                                    <div className="bg-blue-50 border border-blue-100 rounded-lg p-4 flex flex-wrap justify-between items-center">
-                                        <div className="flex items-center">
-                                            <div className="bg-blue-600 p-2 rounded-lg mr-4">
-                                                <Sun className="text-white" size={24} />
-                                            </div>
-                                            <div>
-                                                <h5 className="font-bold text-blue-900">{selectedProject.projectName}</h5>
-                                                <p className="text-sm text-blue-700">{selectedProject.projectId} • {selectedProject.totalKW} KW Solar Solution</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <span className="text-xs text-blue-600 uppercase font-bold tracking-wider">Project Value</span>
-                                            <h4 className="text-xl font-bold text-blue-900">₹{selectedProject.totalAmount.toLocaleString()}</h4>
-                                        </div>
-                                    </div>
-
-                                    {/* Step Contents */}
                                     {activeStep === 0 && (
-                                        <div className="animate-fadeIn">
-                                            <h4 className="text-lg font-bold mb-4 border-b pb-2">Step 1: Borrower Eligibility</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Main Applicant Name</label>
-                                                        <input type="text" name="applicantName" value={formData.applicantName} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="Full Name" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Aadhar Card Number</label>
-                                                        <input type="text" name="applicantAadhar" value={formData.applicantAadhar} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="12 Digit Aadhar" />
-                                                    </div>
-                                                    <div>
-                                                        <label className="block text-sm font-semibold text-gray-700 mb-1">PAN Card Number</label>
-                                                        <input type="text" name="applicantPan" value={formData.applicantPan} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="ABCDE1234F" />
-                                                    </div>
+                                        <div className="animate-fadeIn px-2">
+                                            {/* Popular Combo Box */}
+                                            <div className="border-[3px] border-[#ffc107] rounded-lg p-4 mb-4 flex justify-between items-center bg-white shadow-sm relative overflow-hidden">
+                                                <div>
+                                                    <h5 className="text-[#fd7e14] font-bold text-[11px] mb-1">Popular Combo</h5>
+                                                    <h6 className="font-bold text-[13px] text-gray-800">6 Panel (2.7 KW)</h6>
+                                                    <p className="font-black text-[14px] text-gray-900 leading-tight">₹1,00,000/-</p>
                                                 </div>
-                                                <div className="space-y-4">
-                                                    <div>
-                                                        <label className="block text-sm font-semibold text-gray-700 mb-1">Employment Type</label>
-                                                        <select name="employmentType" value={formData.employmentType} onChange={handleInputChange} className="w-full p-2 border rounded-lg">
-                                                            <option value="">Select Option</option>
-                                                            <option value="Salaried">Salaried</option>
-                                                            <option value="Self-Employed">Self-Employed</option>
-                                                            <option value="Business">Business</option>
-                                                        </select>
-                                                    </div>
-                                                    <div className="grid grid-cols-2 gap-2">
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">Downpayment</label>
-                                                            <input type="number" name="downpayment" value={formData.downpayment} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="₹" />
-                                                        </div>
-                                                        <div>
-                                                            <label className="block text-sm font-semibold text-gray-700 mb-1">Loan Amount</label>
-                                                            <input type="number" name="loanAmount" value={formData.loanAmount} onChange={handleInputChange} className="w-full p-2 border rounded-lg" placeholder="₹" />
+                                                <div className="flex space-x-2 items-center relative z-10 w-28 justify-end">
+                                                    <div className="w-10 h-10 bg-white border border-gray-100 shadow-sm flex items-center justify-center rounded"><Sun size={20} className="text-orange-500" /></div>
+                                                    <div className="w-10 h-10 bg-[#0f172a] shadow-sm flex items-center justify-center rounded text-blue-300">
+                                                        <div className="grid grid-cols-2 gap-[1px] w-5 h-6">
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
                                                         </div>
                                                     </div>
                                                 </div>
                                             </div>
 
-                                            <div className="mt-6">
-                                                <h5 className="font-bold mb-3 text-sm">Mandatory Documents</h5>
-                                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
-                                                    {documentTypes.map(doc => (
-                                                        <div key={doc.id} className="border rounded-lg p-3 text-center bg-gray-50">
-                                                            <p className="text-xs font-bold mb-2 truncate">{doc.name}</p>
-                                                            <label className="cursor-pointer block bg-white border border-blue-500 text-blue-600 rounded py-1 px-2 text-[10px] hover:bg-blue-50">
-                                                                <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, doc.id)} />
-                                                                {formData.documents.find(d => d.type === doc.id) ? 'Change File' : 'Choose File'}
-                                                            </label>
-                                                            {formData.documents.find(d => d.type === doc.id) && <Check size={12} className="text-green-500 mx-auto mt-1" />}
-                                                        </div>
-                                                    ))}
+                                            <div className="mb-4">
+                                                <label className="block text-[12px] font-medium text-gray-700 mb-1">Project Price</label>
+                                                <input type="text" disabled value="₹1,45,000/-" className="w-full px-3 py-2 border border-gray-200 bg-[#f8fafc] rounded text-[13px] text-gray-800 font-medium" />
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <h4 className="text-[#0ea5e9] font-bold text-[16px] mb-0 tracking-tight">Get Loans in Minutes!</h4>
+                                                <p className="text-gray-400 text-[11px] font-medium pb-2 border-b border-gray-100 mb-3">You can loan up to 5 Lakh</p>
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <input type="text" name="downpayment" value={formData.downpayment} onChange={handleInputChange} placeholder="Downpayment" className="w-full px-3 py-2.5 border border-gray-200 rounded text-[13px] placeholder-gray-400 focus:outline-none" />
+                                                    <input type="text" name="loanAmount" value={formData.loanAmount} onChange={handleInputChange} placeholder="Loan Amount" className="w-full px-3 py-2.5 border border-gray-200 rounded text-[13px] placeholder-gray-400 focus:outline-none" />
+                                                </div>
+                                            </div>
+
+                                            {/* Applicant Details */}
+                                            <div className="border border-gray-200 rounded bg-white mb-6">
+                                                <div className="px-4 py-3 border-b border-gray-200 font-bold text-[13px] text-[#334155] tracking-wide">
+                                                    Applicant Details
+                                                </div>
+                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-white">
+                                                    <input type="text" name="applicantName" value={formData.applicantName} onChange={handleInputChange} placeholder="Main Applicant" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <input type="text" name="applicantAadhar" value={formData.applicantAadhar} onChange={handleInputChange} placeholder="Aadhar Number" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <input type="text" name="applicantPan" value={formData.applicantPan} onChange={handleInputChange} placeholder="PAN Number" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <select name="employmentType" value={formData.employmentType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] text-gray-600 focus:outline-none">
+                                                        <option value="">Select Employment Type</option>
+                                                        <option value="Salaried">Salaried</option>
+                                                        <option value="Self-Employed">Self-Employed</option>
+                                                        <option value="Business">Business</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Documents Upload Table */}
+                                            <div className="border border-gray-200 rounded bg-white mb-6 overflow-hidden">
+                                                <div className="px-4 py-3 border-b border-gray-200 font-bold text-[13px] text-[#334155] tracking-wide bg-white">
+                                                    Documents Upload
+                                                </div>
+                                                <div className="overflow-x-auto">
+                                                    <table className="w-full text-left border-collapse">
+                                                        <thead className="bg-[#7fbbf1] text-white">
+                                                            <tr>
+                                                                <th className="px-4 py-3 text-[12px] font-bold border-r border-[#96cbf6]">Document Type</th>
+                                                                <th className="px-4 py-3 text-[12px] font-bold border-r border-[#96cbf6]">File</th>
+                                                                <th className="px-4 py-3 text-[12px] font-bold w-24 text-center">Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {documentTypes.map(doc => (
+                                                                <tr key={doc.id} className="bg-[#f8fafc]">
+                                                                    <td className="px-4 py-3 text-[11px] font-bold text-gray-600 border-r border-gray-100 max-w-[150px]">
+                                                                        {doc.name}
+                                                                    </td>
+                                                                    <td className="px-4 py-3 border-r border-gray-100">
+                                                                        <div className="flex items-center bg-white border border-gray-200 rounded p-1">
+                                                                            <button className="bg-gray-100 text-gray-700 text-[10px] font-medium px-2 py-1 rounded border border-gray-300 mr-2 whitespace-nowrap">Choose File</button>
+                                                                            <span className="text-[11px] text-gray-400 truncate">No file chosen</span>
+                                                                            <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, doc.id)} />
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-center">
+                                                                        <button className="bg-[#007bff] hover:bg-blue-600 text-white text-[10px] font-bold px-4 py-1.5 rounded shadow-sm">
+                                                                            Upload
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+
+                                            {/* Co-Applicant Details */}
+                                            <div className="border border-gray-200 rounded bg-white mb-6">
+                                                <div className="px-4 py-3 border-b border-gray-200 font-bold text-[13px] text-[#334155] tracking-wide">
+                                                    Co-Applicant Details
+                                                </div>
+                                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-4 bg-white">
+                                                    <input type="text" name="coApplicantName" value={formData.coApplicantName} onChange={handleInputChange} placeholder="Main Applicant" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <input type="text" name="coApplicantAadhar" value={formData.coApplicantAadhar} onChange={handleInputChange} placeholder="Aadhar Number" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <input type="text" name="coApplicantPan" value={formData.coApplicantPan} onChange={handleInputChange} placeholder="PAN Number" className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] placeholder-gray-400 focus:outline-none" />
+                                                    <select name="coApplicantEmployment" value={formData.coApplicantEmployment} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-200 rounded text-[12px] text-gray-600 focus:outline-none">
+                                                        <option value="">Select Employment Type</option>
+                                                        <option value="Salaried">Salaried</option>
+                                                        <option value="Self-Employed">Self-Employed</option>
+                                                        <option value="Business">Business</option>
+                                                    </select>
                                                 </div>
                                             </div>
                                         </div>
                                     )}
 
                                     {activeStep === 1 && (
-                                        <div className="text-center py-10">
-                                            <div className="w-20 h-20 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
-                                                <Shield className="text-green-600" size={40} />
-                                            </div>
-                                            <h4 className="text-2xl font-bold text-gray-800">Eligibility Check Passed!</h4>
-                                            <p className="text-gray-500 mb-8 max-w-sm mx-auto">Based on the provided details, the applicant is eligible for a solar loan up to ₹{Number(formData.loanAmount).toLocaleString()}.</p>
+                                        <div className="bg-white border border-gray-100 rounded shadow-sm text-center py-10 px-6">
+                                            <h4 className="text-[20px] font-bold text-[#0052cc] mb-1">Loan Eligibility Check</h4>
+                                            <p className="text-gray-500 mb-8 text-[13px] font-medium">Click below to check your eligibility status.</p>
 
-                                            <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-left max-w-md mx-auto">
-                                                <h5 className="font-bold text-yellow-800 mb-2 flex items-center text-sm">
-                                                    <AlertCircle size={16} className="mr-2" /> Note:
-                                                </h5>
-                                                <p className="text-xs text-yellow-700">Approval depends on physical document verification and credit score indexing.</p>
+                                            <div className="flex justify-center space-x-6">
+                                                <button className="bg-[#28a745] hover:bg-green-600 text-white font-bold py-2.5 px-8 rounded shadow-sm text-[13px] flex items-center transition-colors">
+                                                    <CheckSquare size={16} className="mr-2" /> Eligible
+                                                </button>
+                                                <button className="bg-[#dc3545] hover:bg-red-600 text-white font-bold py-2.5 px-8 rounded shadow-sm text-[13px] flex items-center transition-colors">
+                                                    <X size={16} className="mr-2" /> Not Eligible
+                                                </button>
                                             </div>
                                         </div>
                                     )}
 
                                     {activeStep === 2 && (
                                         <div className="animate-fadeIn">
-                                            <h4 className="text-lg font-bold mb-4 border-b pb-2">Step 3: Verification Documents</h4>
-                                            <div className="overflow-x-auto border rounded-lg">
-                                                <table className="w-full text-sm">
-                                                    <thead className="bg-gray-100 border-b">
+                                            {/* Popular Combo Box */}
+                                            <div className="border-[3px] border-[#ffc107] rounded-lg p-4 mb-4 flex justify-between items-center bg-white shadow-sm relative overflow-hidden">
+                                                <div>
+                                                    <h5 className="text-[#fd7e14] font-bold text-[11px] mb-1">Popular Combo</h5>
+                                                    <h6 className="font-bold text-[13px] text-gray-800">6 Panel (2.7 KW)</h6>
+                                                    <p className="font-black text-[14px] text-gray-900 leading-tight">₹1,00,000/-</p>
+                                                </div>
+                                                <div className="flex space-x-2 items-center relative z-10 w-28 justify-end">
+                                                    <div className="w-10 h-10 bg-white border border-gray-100 shadow-sm flex items-center justify-center rounded"><Sun size={20} className="text-orange-500" /></div>
+                                                    <div className="w-10 h-10 bg-[#0f172a] shadow-sm flex items-center justify-center rounded text-blue-300">
+                                                        <div className="grid grid-cols-2 gap-[1px] w-5 h-6">
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="font-bold text-[14px] text-[#1e293b] mb-4">Required Documents</div>
+                                            <div className="border border-gray-200 rounded overflow-hidden">
+                                                <table className="w-full text-left border-collapse bg-white">
+                                                    <thead className="bg-[#7fbbf1] text-white">
                                                         <tr>
-                                                            <th className="p-3 text-left">Category</th>
-                                                            <th className="p-3 text-left">Document Required</th>
-                                                            <th className="p-3 text-center">Action</th>
+                                                            <th className="px-4 py-3 text-[12px] font-bold border-r border-[#96cbf6] w-1/3">Category</th>
+                                                            <th className="px-4 py-3 text-[12px] font-bold border-r border-[#96cbf6]">Document</th>
+                                                            <th className="px-4 py-3 text-[12px] font-bold w-24 text-center">Action</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="divide-y">
-                                                        {additionalDocuments.map(doc => (
-                                                            <tr key={doc.id}>
-                                                                <td className="p-3 text-gray-500 font-medium">{doc.category}</td>
-                                                                <td className="p-3 font-semibold">{doc.name}</td>
-                                                                <td className="p-3 text-center">
-                                                                    <label className="cursor-pointer inline-flex items-center px-4 py-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-xs font-bold transition-colors">
-                                                                        <Upload size={14} className="mr-2" />
-                                                                        <input type="file" className="hidden" onChange={(e) => handleFileUpload(e, doc.id)} />
-                                                                        {formData.documents.find(d => d.type === doc.id) ? 'Uploaded' : 'Upload'}
-                                                                    </label>
-                                                                </td>
-                                                            </tr>
-                                                        ))}
+                                                    <tbody className="divide-y divide-gray-100 text-[12px] text-gray-700 font-medium">
+                                                        <tr>
+                                                            <td className="px-4 py-3 border-r border-b border-gray-100 align-top" rowSpan={4}>Project Documents</td>
+                                                            <td className="px-4 py-5 border-r border-gray-100">Light Bill</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'lightBill')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-gray-100">Property OR Tax Bill</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'propertyTax')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-gray-100">Dastaveg Copy (<span className="text-gray-400">Optional</span>)</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'dastaveg')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-gray-100">Quotation PDF</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'quotation')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-3 border-r border-t border-gray-100 align-top" rowSpan={3}>Loan Documents</td>
+                                                            <td className="px-4 py-5 border-r border-gray-100 border-t">Bank Statement (Min 1 Year)</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer border-t border-gray-100 text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'bankStatement')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-gray-100">ITR Return (Min 2 Year)</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'itr')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-gray-100">Or Salary Slip</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'salarySlip')} /></label></td>
+                                                        </tr>
+                                                        <tr>
+                                                            <td className="px-4 py-5 border-r border-t border-gray-100"></td>
+                                                            <td className="px-4 py-5 border-r border-t border-gray-100">Another Document (<span className="text-gray-400">Optional</span>)</td>
+                                                            <td className="px-4 py-5 text-center text-[#007bff] hover:text-blue-700 cursor-pointer border-t border-gray-100 text-[11px] font-bold"><label className="cursor-pointer">Upload<input type="file" className="hidden" onChange={(e) => handleFileUpload(e, 'anotherDoc')} /></label></td>
+                                                        </tr>
                                                     </tbody>
                                                 </table>
                                             </div>
                                         </div>
                                     )}
 
-                                    {activeStep === 3 && applicationResult && (
-                                        <div className="text-center py-8">
-                                            <div className="w-24 h-24 bg-blue-600 text-white rounded-full flex items-center justify-center mx-auto mb-6 shadow-xl animate-bounce">
-                                                <Check size={48} />
+                                    {activeStep === 3 && (
+                                        <div className="animate-fadeIn">
+                                            {/* Popular Combo Box */}
+                                            <div className="border-[3px] border-[#ffc107] rounded-lg p-4 mb-4 flex justify-between items-center bg-white shadow-sm relative overflow-hidden">
+                                                <div>
+                                                    <h5 className="text-[#fd7e14] font-bold text-[11px] mb-1">Popular Combo</h5>
+                                                    <h6 className="font-bold text-[13px] text-gray-800">6 Panel (2.7 KW)</h6>
+                                                    <p className="font-black text-[14px] text-gray-900 leading-tight">₹1,00,000/-</p>
+                                                </div>
+                                                <div className="flex space-x-2 items-center relative z-10 w-28 justify-end">
+                                                    <div className="w-10 h-10 bg-white border border-gray-100 shadow-sm flex items-center justify-center rounded"><Sun size={20} className="text-orange-500" /></div>
+                                                    <div className="w-10 h-10 bg-[#0f172a] shadow-sm flex items-center justify-center rounded text-blue-300">
+                                                        <div className="grid grid-cols-2 gap-[1px] w-5 h-6">
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
                                             </div>
-                                            <h3 className="text-2xl font-bold text-blue-900 mb-2">Application Submitted!</h3>
-                                            <p className="text-gray-500 mb-8 font-medium">Your initial loan request has been successfully registered.</p>
 
-                                            <div className="bg-white border-2 border-blue-600 rounded-2xl p-6 shadow-lg max-w-sm mx-auto mb-8">
-                                                <span className="text-xs text-blue-500 uppercase font-black tracking-widest">Application ID</span>
-                                                <h2 className="text-3xl font-black text-blue-900 mt-1">{applicationResult.applicationNumber}</h2>
+                                            <div className="flex justify-between items-end mb-6 border-b border-gray-200 pb-2">
+                                                <h4 className="text-[14px] font-bold text-gray-800">Payment Summary</h4>
+                                                <span className="text-[11px] text-gray-500 font-medium tracking-wide">Project Number: Consumer Number</span>
                                             </div>
 
-                                            <div className="text-gray-600 text-sm space-y-1">
-                                                <p>Proceed to select your preferred loan provider from our partners.</p>
+                                            <div className="flex items-center mb-6">
+                                                <div className="w-12 h-12 rounded-full overflow-hidden mr-4">
+                                                    <img src="https://i.pravatar.cc/150?img=11" alt="Profile" className="w-full h-full object-cover" />
+                                                </div>
+                                                <div>
+                                                    <h5 className="font-bold text-[14px] text-[#0f172a]">Pardeep Singh</h5>
+                                                    <p className="text-[12px] text-gray-500 mb-0">+91 96148xxxxx</p>
+                                                    <p className="text-[12px] text-gray-500 mt-0">Email: pardeep@gmail.com</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <h5 className="font-bold text-[13px] text-[#334155] mb-2">Items / Products</h5>
+                                                <div className="flex justify-between items-center bg-white p-0">
+                                                    <div>
+                                                        <h6 className="font-bold text-[13px] text-gray-800 mb-1">Solar Rooftop Kit</h6>
+                                                        <p className="text-[12px] text-gray-500">6 Panel (2.7 KW)</p>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="flex justify-between items-center mb-6 py-4 border-t border-b border-gray-100">
+                                                <h5 className="font-bold text-[14px] text-gray-700">Downpayment</h5>
+                                                <h5 className="font-black text-[14px] text-gray-800">₹{Number(formData.downpayment || 50000).toLocaleString()}/-</h5>
+                                            </div>
+
+                                            <div className="mb-6">
+                                                <h5 className="font-bold text-[14px] text-gray-700 mb-3">Payment Method</h5>
+                                                <div className="flex flex-col space-y-2">
+                                                    <label className="flex items-center text-[13px] font-medium text-gray-700 cursor-pointer">
+                                                        <input type="radio" name="paymentMethod" className="mr-2 accent-[#00a3ff]" defaultChecked /> Online
+                                                    </label>
+                                                    <label className="flex items-center text-[13px] font-medium text-gray-700 cursor-pointer">
+                                                        <input type="radio" name="paymentMethod" className="mr-2 accent-[#00a3ff]" /> Offline
+                                                    </label>
+                                                </div>
+                                                <button className="mt-4 bg-[#ffc107] text-gray-900 font-bold py-1.5 px-3 rounded text-[11px] flex items-center shadow-sm">
+                                                    ₹{Number(formData.downpayment || 50000).toLocaleString()}/ Pay
+                                                </button>
                                             </div>
                                         </div>
                                     )}
 
                                     {activeStep === 4 && (
                                         <div className="animate-fadeIn">
-                                            <h4 className="text-lg font-bold mb-4 border-b pb-2">Step 5: Select Loan Provider</h4>
-                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                {loanOffers.map(offer => (
-                                                    <div key={offer.id} className={`border-2 rounded-xl p-6 transition-all cursor-pointer hover:shadow-md ${formData.loanOption === offer.id ? 'border-blue-600 bg-blue-50' : 'border-gray-100 bg-white'}`} onClick={() => handleLoanOptionSelect(offer.id)}>
-                                                        <div className="flex justify-between items-start mb-4">
-                                                            <img src={offer.logo} alt={offer.bank} className="h-8 object-contain" onError={(e) => {
-                                                                const text = offer.bank || 'Bank';
-                                                                const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="40"><rect width="100" height="40" fill="#e2e8f0"/><text x="50%" y="50%" fill="#64748b" font-size="10" font-family="sans-serif" font-weight="bold" text-anchor="middle" dominant-baseline="middle">${text}</text></svg>`;
-                                                                e.target.src = `data:image/svg+xml;base64,${btoa(svg)}`;
-                                                            }} />
-                                                            {offer.recommended && <span className="bg-orange-500 text-white text-[10px] px-2 py-1 rounded-full font-bold uppercase">Recommended</span>}
-                                                        </div>
-                                                        <h5 className="font-bold text-gray-800 text-lg">{offer.bank}</h5>
-                                                        <p className="text-sm text-gray-500 mb-4">{offer.plan}</p>
-                                                        <div className="flex justify-between text-sm py-2 border-t">
-                                                            <span className="text-gray-500">Interest Rate</span>
-                                                            <span className="font-bold text-blue-600">{offer.interest}% p.a.</span>
-                                                        </div>
-                                                        <div className="flex justify-between text-sm py-2 border-t">
-                                                            <span className="text-gray-500">Estimated EMI</span>
-                                                            <span className="font-bold">₹{offer.emi.toLocaleString()}</span>
+                                            {/* Popular Combo Box */}
+                                            <div className="border-[3px] border-[#ffc107] rounded-lg p-4 mb-4 flex justify-between items-center bg-white shadow-sm relative overflow-hidden">
+                                                <div>
+                                                    <h5 className="text-[#fd7e14] font-bold text-[11px] mb-1">Popular Combo</h5>
+                                                    <h6 className="font-bold text-[13px] text-gray-800">6 Panel (2.7 KW)</h6>
+                                                    <p className="font-black text-[14px] text-gray-900 leading-tight">₹1,00,000/-</p>
+                                                </div>
+                                                <div className="flex space-x-2 items-center relative z-10 w-28 justify-end">
+                                                    <div className="w-10 h-10 bg-white border border-gray-100 shadow-sm flex items-center justify-center rounded"><Sun size={20} className="text-orange-500" /></div>
+                                                    <div className="w-10 h-10 bg-[#0f172a] shadow-sm flex items-center justify-center rounded text-blue-300">
+                                                        <div className="grid grid-cols-2 gap-[1px] w-5 h-6">
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
+                                                            <div className="bg-blue-300/30"></div><div className="bg-blue-300/30"></div>
                                                         </div>
                                                     </div>
+                                                </div>
+                                            </div>
+
+                                            <div className="space-y-4">
+                                                {loanOffers.map(offer => (
+                                                    <label key={offer.id} className="block cursor-pointer">
+                                                        <div className={`border rounded shadow-sm p-4 transition-all bg-white relative flex items-start ${formData.loanOption === offer.id ? 'border-blue-500 ring-1 ring-blue-500' : 'border-gray-200'}`}>
+                                                            <input
+                                                                type="radio"
+                                                                name="loanProvider"
+                                                                className="mt-1 mr-4 accent-[#00a3ff]"
+                                                                checked={formData.loanOption === offer.id}
+                                                                onChange={() => setFormData(prev => ({ ...prev, loanOption: offer.id }))}
+                                                            />
+                                                            <div className="flex-1">
+                                                                {offer.recommended && <div className="bg-[#ffc107] inline-block text-gray-900 text-[10px] px-2 py-0.5 rounded font-bold mb-2">Recommended</div>}
+                                                                <h5 className="font-bold text-gray-900 text-[14px] leading-tight mb-1">{offer.plan}</h5>
+                                                                <p className="text-[12px] text-gray-500 mb-2">{offer.bank}</p>
+                                                                <p className="text-[12px] text-gray-900 font-bold leading-tight mb-1">Amount: ₹{offer.amount.toLocaleString()}/-</p>
+                                                                <p className="text-[12px] text-gray-900 font-bold leading-tight">Interest: {offer.interest.toFixed(2)}%</p>
+                                                            </div>
+                                                            <div className="text-right flex flex-col items-end">
+                                                                {offer.logo ? (
+                                                                    <img src={offer.logo} alt={offer.bank} className="h-6 object-contain mb-3" />
+                                                                ) : (
+                                                                    <div className="text-[10px] text-gray-400 mb-3"><Image size={24} className="mb-1 mx-auto" /> Bank Logo</div>
+                                                                )}
+                                                                <div>
+                                                                    <p className="text-[11px] text-[#00a3ff] mb-0 leading-tight">Monthly EMI</p>
+                                                                    <p className="text-[14px] text-[#00a3ff] font-bold leading-tight">₹{offer.emi.toLocaleString()}/-</p>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                    </label>
                                                 ))}
                                             </div>
+
+                                            <button
+                                                className="w-full mt-6 bg-[#28a745] hover:bg-green-600 text-white font-bold py-3 rounded text-[13px] shadow-sm transition-colors"
+                                                onClick={() => setActiveStep(5)}
+                                            >
+                                                Apply for Loan
+                                            </button>
                                         </div>
                                     )}
 
@@ -526,31 +685,38 @@ const DealerLoan = () => {
 
                                     {/* Navigation Buttons */}
                                     {activeStep < 4 && (
-                                        <div className="flex justify-between pt-4 border-t mt-8">
-                                            <button
-                                                disabled={activeStep === 0 || activeStep === 3}
-                                                onClick={() => setActiveStep(prev => prev - 1)}
-                                                className="px-6 py-2 border border-gray-300 rounded-lg text-gray-600 font-bold hover:bg-gray-50 disabled:opacity-30 flex items-center"
-                                            >
-                                                <ChevronDown className="rotate-90 mr-2" size={18} /> Back
-                                            </button>
-
-                                            {activeStep === 2 ? (
-                                                <button
-                                                    onClick={handleSubmit}
-                                                    disabled={submitting}
-                                                    className="px-8 py-2 bg-orange-600 text-white rounded-lg font-bold hover:bg-orange-700 shadow-md flex items-center"
-                                                >
-                                                    {submitting ? 'Submitting...' : 'Submit Application'} <ArrowRight className="ml-2" size={18} />
-                                                </button>
-                                            ) : (
-                                                <button
-                                                    onClick={() => setActiveStep(prev => prev + 1)}
-                                                    className="px-8 py-2 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md flex items-center"
-                                                >
-                                                    {activeStep === 3 ? 'Explore Providers' : 'Continue'} <ArrowRight className="ml-2" size={18} />
-                                                </button>
-                                            )}
+                                        <div className="pt-2">
+                                            {/* Navigation Buttons for other steps are handled at the top, modifying inner wizard controls specifically */}
+                                            {activeStep > 0 && activeStep < 4 ? (
+                                                <div className="flex justify-end pt-4 mt-8">
+                                                    <button
+                                                        onClick={() => setActiveStep(prev => prev - 1)}
+                                                        className="px-6 py-2 border border-[#00a3ff] text-[#00a3ff] bg-white rounded text-[13px] font-bold hover:bg-blue-50 transition-colors mr-3"
+                                                    >
+                                                        Previous
+                                                    </button>
+                                                    <button
+                                                        onClick={() => setActiveStep(prev => prev + 1)}
+                                                        className="px-8 py-2 bg-[#00a3ff] text-white rounded text-[13px] font-bold hover:bg-blue-500 transition-colors shadow-sm"
+                                                    >
+                                                        {activeStep === 3 ? 'Submit' : 'Next'}
+                                                    </button>
+                                                </div>
+                                            ) : activeStep === 0 ? (
+                                                <>
+                                                    <button className="w-full bg-[#ffc107] hover:bg-[#e0a800] text-gray-900 font-bold py-2.5 rounded shadow-sm text-[13px] mb-4 transition-colors">
+                                                        Eligibility Check
+                                                    </button>
+                                                    <div className="flex justify-end pt-4 border-t mt-4 border-gray-100">
+                                                        <button
+                                                            onClick={() => setActiveStep(prev => prev + 1)}
+                                                            className="px-8 py-2 bg-[#00a3ff] hover:bg-blue-500 text-white rounded text-[13px] font-bold shadow-sm transition-colors"
+                                                        >
+                                                            Next
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            ) : null}
                                         </div>
                                     )}
 
