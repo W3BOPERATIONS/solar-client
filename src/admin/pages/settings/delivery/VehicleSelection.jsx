@@ -239,236 +239,151 @@ const VehicleManagement = () => {
       )}
 
       {/* Header */}
-      <div className="mb-6">
-        <div className="bg-white rounded-xl shadow-sm p-4">
-          <div className="flex items-center">
-            <Truck className="w-8 h-8 text-blue-600 mr-3" />
-            <div>
-              <h1 className="text-2xl font-bold text-gray-800">Vehicle Management</h1>
-              <p className="text-gray-600">Manage delivery vehicles and their specifications</p>
-            </div>
-          </div>
-        </div>
+      <div className="mb-6 flex items-center">
+        <Truck className="w-7 h-7 text-gray-700 mr-2" />
+        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Vehicle Management</h1>
+      </div>
+
+      {/* Enter Vehicle Type Row */}
+      <div className="mb-4 flex items-center space-x-3">
+        <input
+          type="text"
+          placeholder="Enter Vehicle Type Name"
+          className="border border-gray-300 px-3 py-2 rounded text-sm w-64 focus:outline-none focus:border-blue-500"
+        />
+        <button className="bg-[#0284c7] hover:bg-[#0369a1] text-white px-4 py-2 rounded text-sm font-semibold transition" onClick={(e) => e.preventDefault()}>
+          ADD
+        </button>
       </div>
 
       {/* Add/Edit Vehicle Form */}
-      <div className="card bg-white rounded-xl shadow-md mb-8">
-        <div className="bg-blue-600 text-white p-4 rounded-t-xl flex justify-between items-center">
-          <h2 className="text-xl font-bold flex items-center">
-            <PlusCircle className="w-6 h-6 mr-2" />
-            {editId ? 'Edit Vehicle' : 'Add New Vehicle'}
+      <div className="bg-white border text-[14px] border-gray-200 shadow-sm rounded-md mb-8 overflow-hidden">
+        <div className="bg-[#0284c7] text-white p-3 flex justify-between items-center">
+          <h2 className="text-base font-semibold flex items-center">
+            <PlusCircle className="w-5 h-5 mr-2" />
+            {editId ? 'Edit Vehicle' : 'Add/Edit Vehicle'}
           </h2>
           {editId && (
-            <button
-              onClick={resetForm}
-              className="text-white hover:text-gray-200 text-sm underline"
-            >
-              Cancel Edit
+            <button onClick={resetForm} className="text-white hover:text-gray-200 text-sm">
+              Cancel
             </button>
           )}
         </div>
         <div className="p-6">
           <form onSubmit={handleSubmit}>
-            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+            <div className="flex flex-col lg:flex-row gap-6">
               {/* Vehicle Image Upload */}
-              <div className="lg:col-span-1">
-                <div className="border-2 border-dashed border-gray-300 rounded-xl p-4 text-center">
-                  <div className="w-full h-40 bg-gray-100 rounded-lg mb-4 flex items-center justify-center overflow-hidden">
+              <div className="lg:w-1/4">
+                <div className="border border-gray-200 rounded p-4 text-center">
+                  <div className="w-full h-32 bg-white flex items-center justify-center overflow-hidden mb-4">
                     {formData.image ? (
-                      <img
-                        src={formData.image}
-                        alt="Vehicle Preview"
-                        className="w-full h-full object-cover"
-                      />
+                      <img src={formData.image} alt="Preview" className="w-full h-full object-contain" />
                     ) : (
-                      <Truck className="w-16 h-16 text-gray-300" />
+                      <div className="w-12 h-12 flex items-center justify-center">
+                        <Truck className="w-full h-full text-gray-200" />
+                      </div>
                     )}
                   </div>
-                  <label className="cursor-pointer block">
-                    <div className="bg-blue-50 hover:bg-blue-100 text-blue-600 px-4 py-2 rounded-lg flex items-center justify-center transition-colors">
-                      <Upload className="w-5 h-5 mr-2" />
-                      Upload Image
-                    </div>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="image/*"
-                      onChange={handleImageUpload}
-                    />
-                  </label>
-                  <p className="text-xs text-gray-500 mt-2">Max size 2MB</p>
+                  <div className="flex items-center border border-gray-300 rounded overflow-hidden text-xs bg-white">
+                    <label className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-3 py-2 cursor-pointer border-r border-gray-300 whitespace-nowrap">
+                      Choose File
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        className="hidden"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                    <span className="px-3 text-gray-500 truncate">
+                      {fileInputRef.current?.files[0]?.name || 'No file chosen'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-3">Upload vehicle image (max 2MB)</p>
                 </div>
               </div>
 
               {/* Vehicle Details */}
-              <div className="lg:col-span-3">
-                <div className="space-y-4">
-                  {/* Row 1 */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Vehicle Name</label>
-                      <input
-                        type="text"
-                        name="name"
-                        value={formData.name}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g. TATA Ace"
-                        required
-                      />
+              <div className="lg:w-3/4 space-y-4">
+                {/* Row 1 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="relative">
+                    {formData.name === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Vehicle Name</span>}
+                    <input type="text" name="name" value={formData.name} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" required />
+                  </div>
+                  <div>
+                    <select name="type" value={formData.type} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700" required>
+                      <option value="">Vehicle Type</option>
+                      {vehicleTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <select name="deliveryType" value={formData.deliveryType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700" required>
+                      <option value="">Delivery Type</option>
+                      {deliveryTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 2 */}
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-4">
+                  <div className="relative">
+                    {formData.length === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Length (ft)</span>}
+                    <input type="number" name="length" value={formData.length} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div className="relative">
+                    {formData.width === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Width (ft)</span>}
+                    <input type="number" name="width" value={formData.width} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div className="relative">
+                    {formData.height === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Height (ft)</span>}
+                    <input type="number" name="height" value={formData.height} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
+                  </div>
+                  <div className="relative">
+                    {formData.capacity === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Load Capacity (Tons)</span>}
+                    <input type="text" name="capacity" value={formData.capacity} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" required />
+                  </div>
+                </div>
+
+                {/* Row 3 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+                  <div className="flex items-center">
+                    <div className="relative flex-1">
+                      {formData.kw === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Solar Panel Capacity</span>}
+                      <input type="number" name="kw" value={formData.kw} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Vehicle Type</label>
-                      <select
-                        name="type"
-                        value={formData.type}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        required
-                      >
-                        <option value="">Select Type</option>
-                        {vehicleTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Delivery Type</label>
-                      <select
-                        name="deliveryType"
-                        value={formData.deliveryType}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        required
-                      >
-                        <option value="">Select Delivery Type</option>
-                        {deliveryTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
+                    <span className="text-gray-600 font-medium ml-3 text-[13px]">KW</span>
                   </div>
 
-                  {/* Row 2 - Dimensions */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="flex space-x-2">
-                      <div className="flex-1">
-                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Length (ft)</label>
-                        <input
-                          type="number"
-                          name="length"
-                          value={formData.length}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="L"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Width (ft)</label>
-                        <input
-                          type="number"
-                          name="width"
-                          value={formData.width}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="W"
-                        />
-                      </div>
-                      <div className="flex-1">
-                        <label className="text-xs font-semibold text-gray-500 mb-1 block">Height (ft)</label>
-                        <input
-                          type="number"
-                          name="height"
-                          value={formData.height}
-                          onChange={handleInputChange}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                          placeholder="H"
-                        />
-                      </div>
+                  <div className="flex items-center">
+                    <div className="relative flex-1">
+                      {formData.range === '' && <span className="absolute left-3 top-2 text-gray-400 text-[13px] pointer-events-none">Maximum Range</span>}
+                      <input type="number" name="range" value={formData.range} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500" />
                     </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Capacity</label>
-                      <input
-                        type="text"
-                        name="capacity"
-                        value={formData.capacity}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="e.g. 1.5 Tons"
-                        required
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Cost Per KM (₹)</label>
-                      <input
-                        type="number"
-                        name="costPerKm"
-                        value={formData.costPerKm}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="0.00"
-                      />
-                    </div>
+                    <span className="text-gray-600 font-medium ml-3 text-[13px]">KM</span>
                   </div>
 
-                  {/* Row 3 - Tech Specs */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Solar KW</label>
-                      <input
-                        type="number"
-                        name="kw"
-                        value={formData.kw}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="KW"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Range (KM)</label>
-                      <input
-                        type="number"
-                        name="range"
-                        value={formData.range}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                        placeholder="Max Range"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Order Type</label>
-                      <select
-                        name="orderType"
-                        value={formData.orderType}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select Order Type</option>
-                        {orderTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
+                  <div>
+                    <select name="orderType" value={formData.orderType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700">
+                      <option value="">Order Type</option>
+                      {orderTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
                   </div>
+                </div>
 
-                  {/* Row 4 - Location & Save */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
-                    <div>
-                      <label className="text-xs font-semibold text-gray-500 mb-1 block">Location Type</label>
-                      <select
-                        name="locationType"
-                        value={formData.locationType}
-                        onChange={handleInputChange}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">Select Location Type</option>
-                        {locationTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                      </select>
-                    </div>
-                    <div className="md:col-span-2">
-                      <button
-                        type="submit"
-                        className="w-full bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-lg font-semibold flex items-center justify-center transition-colors"
-                      >
-                        <Save className="w-5 h-5 mr-2" />
-                        {editId ? 'Update Vehicle' : 'Save Vehicle'}
-                      </button>
-                    </div>
+                {/* Row 4 */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
+                  <div>
+                    <select name="locationType" value={formData.locationType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700">
+                      <option value="">Location Type</option>
+                      {locationTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <button type="submit" disabled={loading} className="bg-[#0284c7] hover:bg-[#0369a1] text-white px-5 py-2 rounded font-medium flex items-center transition-colors">
+                      <Save className="w-4 h-4 mr-2" />
+                      {editId ? 'Update Vehicle' : 'Save Vehicle'}
+                    </button>
                   </div>
                 </div>
               </div>
@@ -478,22 +393,9 @@ const VehicleManagement = () => {
       </div>
 
       {/* Vehicle List */}
-      <div className="mb-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
-          <input
-            type="text"
-            placeholder="Search vehicles..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-10 pr-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-      </div>
-
       {loading ? (
         <div className="flex justify-center py-12">
-          <Loader className="w-8 h-8 text-blue-600 animate-spin" />
+          <Loader className="w-8 h-8 text-[#0284c7] animate-spin" />
         </div>
       ) : filteredVehicles.length === 0 ? (
         <div className="text-center py-12 text-gray-500 bg-white rounded-xl shadow-sm">
@@ -502,76 +404,72 @@ const VehicleManagement = () => {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredVehicles.map((vehicle) => (
-            <div key={vehicle._id} className="card bg-white rounded-xl shadow-md overflow-hidden hover:shadow-lg transition-shadow border border-gray-100">
-              <div className="h-48 bg-gray-100 flex items-center justify-center overflow-hidden">
+            <div key={vehicle._id} className="bg-white rounded-md shadow-sm border border-gray-100 overflow-hidden relative">
+              {/* Image Section */}
+              <div className="h-56 bg-white flex items-center justify-center p-4">
                 {vehicle.image ? (
-                  <img src={vehicle.image} alt={vehicle.name} className="w-full h-full object-cover" />
+                  <img src={vehicle.image} alt={vehicle.name} className="h-full object-contain" />
                 ) : (
                   <Truck className="w-16 h-16 text-gray-300" />
                 )}
               </div>
-              <div className="p-5">
-                <div className="flex justify-between items-start mb-4">
-                  <div>
-                    <h3 className="text-xl font-bold text-gray-800">{vehicle.name}</h3>
-                    <div className="flex space-x-2 mt-1">
-                      <span className="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-0.5 rounded">
-                        {vehicle.type}
-                      </span>
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded ${vehicle.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
-                        }`}>
-                        {vehicle.status}
-                      </span>
-                    </div>
+
+              {/* Content Section */}
+              <div className="p-6 pt-2 text-[14.5px] text-[#0f172a]">
+
+                {/* Title & Badge */}
+                <div className="flex justify-between items-center mb-6">
+                  <h3 className="text-lg font-bold text-gray-800">{vehicle.name}</h3>
+                  <span className="bg-[#0284c7] text-white text-[12px] font-semibold px-3 py-1.5 rounded-md shadow-sm">
+                    {vehicle.type || 'Vehicle'}
+                  </span>
+                </div>
+
+                {/* Properties List */}
+                <div className="space-y-3.5">
+                  <div className="flex justify-between">
+                    <span className="font-bold">Delivery</span>
+                    <span className="text-gray-700">{vehicle.deliveryType || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Dimensions</span>
+                    <span className="text-gray-700">{vehicle.dimensions?.length || 0}×{vehicle.dimensions?.width || 0}×{vehicle.dimensions?.height || 0} ft</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Capacity</span>
+                    <span className="text-gray-700">{vehicle.capacity || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Solar KW</span>
+                    <span className="text-gray-700">{vehicle.kw || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Range</span>
+                    <span className="text-gray-700">{vehicle.range || 0} KM</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Order Type</span>
+                    <span className="text-gray-700">{vehicle.orderType || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="font-bold">Location</span>
+                    <span className="text-gray-700">{vehicle.locationType || '-'}</span>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-y-3 gap-x-2 mb-4 text-sm">
-                  <div>
-                    <p className="text-xs text-gray-500">Delivery Type</p>
-                    <p className="font-semibold">{vehicle.deliveryType}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Capacity</p>
-                    <p className="font-semibold">{vehicle.capacity}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Cost/KM</p>
-                    <p className="font-semibold">₹{vehicle.costPerKm || 0}</p>
-                  </div>
-                  <div>
-                    <p className="text-xs text-gray-500">Dims</p>
-                    <p className="font-semibold">
-                      {vehicle.dimensions?.length || '-'}x{vehicle.dimensions?.width || '-'}x{vehicle.dimensions?.height || '-'}
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex justify-between pt-4 border-t border-gray-100">
-                  <div className="flex space-x-2">
-                    <button
-                      onClick={() => editVehicle(vehicle)}
-                      className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                      title="Edit"
-                    >
-                      <Edit className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => handleDelete(vehicle._id)}
-                      className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                      title="Delete"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </div>
+                {/* Actions */}
+                <div className="flex justify-between items-center mt-8 text-[13px] font-medium">
                   <button
-                    onClick={() => handleStatusToggle(vehicle)}
-                    className={`flex items-center space-x-1 px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${vehicle.status === 'active'
-                        ? 'text-red-600 hover:bg-red-50'
-                        : 'text-green-600 hover:bg-green-50'
-                      }`}
+                    onClick={() => editVehicle(vehicle)}
+                    className="text-[#0284c7] hover:text-blue-800 flex items-center transition-colors"
                   >
-                    {vehicle.status === 'active' ? 'Deactivate' : 'Activate'}
+                    <Edit className="w-4 h-4 mr-1.5" /> Edit
+                  </button>
+                  <button
+                    onClick={() => handleDelete(vehicle._id)}
+                    className="text-red-500 hover:text-red-700 flex items-center transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 mr-1.5" /> Delete
                   </button>
                 </div>
               </div>
@@ -579,6 +477,11 @@ const VehicleManagement = () => {
           ))}
         </div>
       )}
+
+      {/* Footer text */}
+      <div className="mt-8 text-center text-[13px] text-gray-500 font-medium">
+        Copyright © 2025 Solarkits. All Rights Reserved.
+      </div>
     </div>
   );
 };

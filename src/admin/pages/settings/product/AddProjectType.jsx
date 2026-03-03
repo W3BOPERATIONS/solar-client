@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Save, Edit2, Trash2, CheckCircle, AlertCircle, Loader2, Plus } from 'lucide-react';
+import { Search, Save, Edit2, Trash2, CheckCircle, AlertCircle, Loader2, Plus, X } from 'lucide-react';
 import { productApi } from '../../../../api/productApi';
 
 const AddProjectType = () => {
@@ -8,15 +8,15 @@ const AddProjectType = () => {
     const [subCategories, setSubCategories] = useState([]);
     const [projectTypes, setProjectTypes] = useState([]);
     const [subProjectTypes, setSubProjectTypes] = useState([]);
-    
+
     // Loading & UI States
     const [loading, setLoading] = useState(false);
     const [toasts, setToasts] = useState([]);
-    
+
     // Form Inputs
     const [newCategoryName, setNewCategoryName] = useState('');
     const [selectedProjectTypeForCat, setSelectedProjectTypeForCat] = useState('');
-    
+
     const [newSubCategoryName, setNewSubCategoryName] = useState('');
     const [selectedCategoryForSubCat, setSelectedCategoryForSubCat] = useState('');
     const [selectedProjectTypeForSubCat, setSelectedProjectTypeForSubCat] = useState('');
@@ -46,7 +46,7 @@ const AddProjectType = () => {
 
             const cats = catRes?.data?.data || [];
             const pts = pTypeRes?.data?.data || [];
-            
+
             setCategories(cats);
             setSubCategories(subCatRes?.data?.data || []);
             setProjectTypes(pts);
@@ -71,11 +71,10 @@ const AddProjectType = () => {
 
     const handleAddCategory = async () => {
         if (!newCategoryName.trim()) return showToast("Category name is required", "error");
-        if (!selectedProjectTypeForCat) return showToast("Project Type is required", "error");
         try {
-            await productApi.createCategory({ 
+            await productApi.createCategory({
                 name: newCategoryName.trim(),
-                projectTypeId: selectedProjectTypeForCat
+                projectTypeId: selectedProjectTypeForCat || null
             });
             showToast("Category added");
             setNewCategoryName('');
@@ -88,13 +87,12 @@ const AddProjectType = () => {
     const handleAddSubCategory = async () => {
         if (!newSubCategoryName.trim()) return showToast("Sub Category name is required", "error");
         if (!selectedCategoryForSubCat) return showToast("Category selection is required", "error");
-        if (!selectedProjectTypeForSubCat) return showToast("Project Type selection is required", "error");
-        
+
         try {
-            await productApi.createSubCategory({ 
+            await productApi.createSubCategory({
                 name: newSubCategoryName.trim(),
                 categoryId: selectedCategoryForSubCat,
-                projectTypeId: selectedProjectTypeForSubCat
+                projectTypeId: selectedProjectTypeForSubCat || null
             });
             showToast("Sub Category added");
             setNewSubCategoryName('');
@@ -106,12 +104,11 @@ const AddProjectType = () => {
 
     const handleAddSubProjectType = async () => {
         if (!newSubProjectTypeName.trim()) return showToast("Sub Project Type name is required", "error");
-        if (!selectedProjectTypeForSubPT) return showToast("Project Type selection is required", "error");
 
         try {
-            await productApi.createSubProjectType({ 
+            await productApi.createSubProjectType({
                 name: newSubProjectTypeName.trim(),
-                projectTypeId: selectedProjectTypeForSubPT
+                projectTypeId: selectedProjectTypeForSubPT || null
             });
             showToast("Sub Project Type added");
             setNewSubProjectTypeName('');
@@ -135,7 +132,7 @@ const AddProjectType = () => {
     };
 
     return (
-        <div className="container mx-auto p-4 max-w-7xl font-sans">
+        <div className="container mx-auto p-4 max-w-6xl font-sans mt-4">
             {/* Toasts */}
             <div className="fixed top-4 right-4 z-50 space-y-2">
                 {toasts.map(t => (
@@ -147,185 +144,185 @@ const AddProjectType = () => {
             </div>
 
             {/* Main Content Card */}
-            <div className="bg-white rounded shadow-sm overflow-hidden mb-8 border border-gray-200">
-                <div className="bg-blue-600 p-3">
-                    <h2 className="text-white text-center font-bold text-lg uppercase tracking-wider">Add Category Type</h2>
+            <div className="bg-white rounded-md shadow-sm overflow-hidden mb-6 border border-gray-200">
+                {/* Header */}
+                <div className="bg-[#0073B7] py-3 text-center">
+                    <h2 className="text-white font-semibold text-lg">Add Category Type</h2>
                 </div>
 
-                <div className="p-8">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                        {/* Category Card */}
-                        <div className="bg-gray-50 p-6 rounded-lg border border-gray-100 shadow-sm transition hover:shadow-md">
-                            <h3 className="text-blue-600 font-bold mb-4 flex items-center gap-2">Category</h3>
-                            <div className="space-y-4">
-                                <input 
-                                    type="text" 
-                                    className="w-full border rounded p-2 focus:ring-1 focus:ring-blue-400 outline-none"
+                <div className="p-6">
+                    {/* Input Sections */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 mb-8">
+                        {/* Category */}
+                        <div>
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className="text-[#0073B7] font-bold text-[15px]">Category</h3>
+                            </div>
+                            <div className="flex h-10">
+                                <input
+                                    type="text"
+                                    className="border border-gray-300 rounded-l px-3 w-full outline-none focus:border-[#0073B7] text-sm"
                                     placeholder="Enter Category Name"
                                     value={newCategoryName}
                                     onChange={(e) => setNewCategoryName(e.target.value)}
                                 />
-                                <div className="flex gap-2">
-                                    <select 
-                                        className="flex-1 border rounded p-2 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
-                                        value={selectedProjectTypeForCat}
-                                        onChange={(e) => setSelectedProjectTypeForCat(e.target.value)}
-                                    >
-                                        <option value="">Select Project Type</option>
-                                        {projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)}
-                                    </select>
-                                    <button 
-                                        onClick={handleAddCategory}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-1 font-semibold transition"
-                                    >
-                                        <Plus size={18} /> Add
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-
-                        {/* Sub Category Card */}
-                        <div className="bg-gray-50 p-6 rounded-lg border border-gray-100 shadow-sm transition hover:shadow-md">
-                            <h3 className="text-blue-600 font-bold mb-4 flex items-center gap-2">Sub Category</h3>
-                            <div className="space-y-4">
-                                <input 
-                                    type="text" 
-                                    className="w-full border rounded p-2 focus:ring-1 focus:ring-blue-400 outline-none"
-                                    placeholder="Enter Sub Category Name"
-                                    value={newSubCategoryName}
-                                    onChange={(e) => setNewSubCategoryName(e.target.value)}
-                                />
-                                <div className="grid grid-cols-2 gap-2">
-                                    <select 
-                                        className="border rounded p-2 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
-                                        value={selectedCategoryForSubCat}
-                                        onChange={(e) => setSelectedCategoryForSubCat(e.target.value)}
-                                    >
-                                        <option value="">Select Category</option>
-                                        {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                                    </select>
-                                    <select 
-                                        className="border rounded p-2 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
-                                        value={selectedProjectTypeForSubCat}
-                                        onChange={(e) => setSelectedProjectTypeForSubCat(e.target.value)}
-                                    >
-                                        <option value="">Select Project Type</option>
-                                        {projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)}
-                                    </select>
-                                </div>
-                                <button 
-                                    onClick={handleAddSubCategory}
-                                    className="w-full bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center justify-center gap-1 font-semibold transition"
+                                <button
+                                    onClick={handleAddCategory}
+                                    className="bg-[#28A745] hover:bg-[#218838] text-white px-5 rounded-r flex items-center justify-center font-medium text-sm transition-colors"
                                 >
-                                    <Plus size={18} /> Add Sub Category
+                                    + Add
                                 </button>
                             </div>
                         </div>
 
-                        {/* Sub Project Type Card */}
-                        <div className="bg-gray-50 p-6 rounded-lg border border-gray-100 shadow-sm transition hover:shadow-md md:col-span-1">
-                            <h3 className="text-blue-600 font-bold mb-4 flex items-center gap-2">Sub Project Type</h3>
-                            <div className="space-y-4">
-                                <input 
-                                    type="text" 
-                                    className="w-full border rounded p-2 focus:ring-1 focus:ring-blue-400 outline-none"
+                        {/* Sub Category */}
+                        <div>
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className="text-[#0073B7] font-bold text-[15px]">Sub Category</h3>
+                                <div className="flex gap-1">
+                                    <select
+                                        className="text-xs border border-gray-200 rounded px-1 py-0.5 outline-none text-gray-500 bg-transparent"
+                                        value={selectedCategoryForSubCat}
+                                        onChange={(e) => setSelectedCategoryForSubCat(e.target.value)}
+                                    >
+                                        <option value="">Category</option>
+                                        {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex h-10">
+                                <input
+                                    type="text"
+                                    className="border border-gray-300 rounded-l px-3 w-full outline-none focus:border-[#0073B7] text-sm"
+                                    placeholder="Enter Sub Category Name"
+                                    value={newSubCategoryName}
+                                    onChange={(e) => setNewSubCategoryName(e.target.value)}
+                                />
+                                <button
+                                    onClick={handleAddSubCategory}
+                                    className="bg-[#28A745] hover:bg-[#218838] text-white px-5 rounded-r flex items-center justify-center font-medium text-sm transition-colors"
+                                >
+                                    + Add
+                                </button>
+                            </div>
+                        </div>
+
+                        {/* Sub Project Type */}
+                        <div>
+                            <div className="flex justify-between items-center mb-1">
+                                <h3 className="text-[#0073B7] font-bold text-[15px]">Sub Project Type</h3>
+                            </div>
+                            <div className="flex h-10">
+                                <input
+                                    type="text"
+                                    className="border border-gray-300 rounded-l px-3 w-full outline-none focus:border-[#0073B7] text-sm"
                                     placeholder="Enter Sub Project Type"
                                     value={newSubProjectTypeName}
                                     onChange={(e) => setNewSubProjectTypeName(e.target.value)}
                                 />
-                                <div className="flex gap-2">
-                                    <select 
-                                        className="flex-1 border rounded p-2 text-sm focus:ring-1 focus:ring-blue-400 outline-none"
-                                        value={selectedProjectTypeForSubPT}
-                                        onChange={(e) => setSelectedProjectTypeForSubPT(e.target.value)}
-                                    >
-                                        <option value="">Select Project Type</option>
-                                        {projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)}
-                                    </select>
-                                    <button 
-                                        onClick={handleAddSubProjectType}
-                                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded flex items-center gap-1 font-semibold transition"
-                                    >
-                                        <Plus size={18} /> Add
-                                    </button>
-                                </div>
+                                <button
+                                    onClick={handleAddSubProjectType}
+                                    className="bg-[#28A745] hover:bg-[#218838] text-white px-5 rounded-r flex items-center justify-center font-medium text-sm transition-colors"
+                                >
+                                    + Add
+                                </button>
                             </div>
                         </div>
                     </div>
+
+                    {/* Summary Cards Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+                        {/* Category Summary */}
+                        <div className="border border-[#0073B7] rounded-md overflow-hidden bg-white">
+                            <div className="bg-[#0073B7] text-white py-2 text-center font-semibold text-sm">
+                                Category Summary
+                            </div>
+                            <div className="p-3 overflow-y-auto min-h-[150px] max-h-[300px]">
+                                {categories.length === 0 ? (
+                                    <div className="text-gray-400 text-center py-6 text-sm">No categories</div>
+                                ) : (
+                                    categories.map((item, idx) => (
+                                        <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
+                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            <div className="flex items-center gap-4">
+                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                </button>
+                                                <button onClick={() => handleDelete('cat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                        <X size={10} strokeWidth={3} className="text-red-500" />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Sub Category Summary */}
+                        <div className="border border-[#28A745] rounded-md overflow-hidden bg-white">
+                            <div className="bg-[#28A745] text-white py-2 text-center font-semibold text-sm">
+                                Sub Category Summary
+                            </div>
+                            <div className="p-3 overflow-y-auto min-h-[150px] max-h-[300px]">
+                                {subCategories.length === 0 ? (
+                                    <div className="text-gray-400 text-center py-6 text-sm">No sub categories</div>
+                                ) : (
+                                    subCategories.map((item, idx) => (
+                                        <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
+                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            <div className="flex items-center gap-4">
+                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                </button>
+                                                <button onClick={() => handleDelete('subCat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                        <X size={10} strokeWidth={3} className="text-red-500" />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Sub Project Type Summary */}
+                        <div className="border border-[#FFC107] rounded-md overflow-hidden bg-white">
+                            <div className="bg-[#FFC107] text-[#333] py-2 text-center font-semibold text-sm">
+                                Sub Project Type Summary
+                            </div>
+                            <div className="p-3 overflow-y-auto min-h-[150px] max-h-[300px]">
+                                {subProjectTypes.length === 0 ? (
+                                    <div className="text-gray-400 text-center py-6 text-sm">No sub project types</div>
+                                ) : (
+                                    subProjectTypes.map((item, idx) => (
+                                        <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
+                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            <div className="flex items-center gap-4">
+                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                </button>
+                                                <button onClick={() => handleDelete('subPT', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                        <X size={10} strokeWidth={3} className="text-red-500" />
+                                                    </div>
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        </div>
+
+                    </div>
                 </div>
             </div>
 
-            {/* Summary Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                {/* Category Summary */}
-                <div className="bg-white rounded shadow-sm overflow-hidden border border-gray-200">
-                    <div className="bg-blue-600 p-2 text-center text-white font-bold">Category Summary</div>
-                    <div className="p-4 max-h-[300px] overflow-y-auto min-h-[150px]">
-                        {categories.length === 0 ? (
-                            <div className="text-gray-400 text-center py-10">No categories added yet.</div>
-                        ) : (
-                            <ul className="divide-y divide-gray-100">
-                                {categories.map(item => (
-                                    <li key={item._id} className="py-2 flex justify-between items-center group">
-                                        <div className="flex flex-col">
-                                            <span className="text-gray-700 font-medium">{item.name}</span>
-                                            <span className="text-[10px] text-gray-400 uppercase">{item.projectTypeId?.name}</span>
-                                        </div>
-                                        <button onClick={() => handleDelete('cat', item._id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-
-                {/* Sub Category Summary */}
-                <div className="bg-white rounded shadow-sm overflow-hidden border border-gray-200">
-                    <div className="bg-green-600 p-2 text-center text-white font-bold">Sub Category Summary</div>
-                    <div className="p-4 max-h-[300px] overflow-y-auto min-h-[150px]">
-                        {subCategories.length === 0 ? (
-                            <div className="text-gray-400 text-center py-10">No sub-categories added yet.</div>
-                        ) : (
-                            <ul className="divide-y divide-gray-100">
-                                {subCategories.map(item => (
-                                    <li key={item._id} className="py-2 flex justify-between items-center group">
-                                        <div className="flex flex-col">
-                                            <span className="text-gray-700 font-medium">{item.name}</span>
-                                            <span className="text-[10px] text-gray-400 uppercase">{item.categoryId?.name}</span>
-                                        </div>
-                                        <button onClick={() => handleDelete('subCat', item._id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-
-                {/* Sub Project Type Summary */}
-                <div className="bg-white rounded shadow-sm overflow-hidden border border-gray-200">
-                    <div className="bg-yellow-500 p-2 text-center text-white font-bold">Sub Project Type Summary</div>
-                    <div className="p-4 max-h-[300px] overflow-y-auto min-h-[150px]">
-                        {subProjectTypes.length === 0 ? (
-                            <div className="text-gray-400 text-center py-10">No sub project types added yet.</div>
-                        ) : (
-                            <ul className="divide-y divide-gray-100">
-                                {subProjectTypes.map(item => (
-                                    <li key={item._id} className="py-2 flex justify-between items-center group">
-                                         <div className="flex flex-col">
-                                            <span className="text-gray-700 font-medium">{item.name}</span>
-                                            <span className="text-[10px] text-gray-400 uppercase">{item.projectTypeId?.name}</span>
-                                        </div>
-                                        <button onClick={() => handleDelete('subPT', item._id)} className="text-red-400 opacity-0 group-hover:opacity-100 transition"><Trash2 size={16}/></button>
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    </div>
-                </div>
-            </div>
-
-            {/* Copyright Footer (matches mockup) */}
-            <div className="mt-12 text-center text-gray-600 text-sm pb-8">
+            {/* Copyright Footer */}
+            <div className="bg-white rounded-md shadow-sm border border-gray-200 py-3 mb-6 text-center text-gray-700 text-sm font-medium">
                 Copyright © 2025 Solarkits. All Rights Reserved.
             </div>
         </div>

@@ -166,7 +166,8 @@ const BrandSupplierOverview = () => {
       try {
         const responses = await Promise.all(promises);
         const mergedCities = responses.flatMap(r => r.data.success ? r.data.data : []);
-        setAllCities(mergedCities);
+        const uniqueCities = Array.from(new Map(mergedCities.map(item => [item._id, item])).values());
+        setAllCities(uniqueCities);
       } catch (err) { console.error(err); }
     };
     fetchFilterCities();
@@ -184,7 +185,8 @@ const BrandSupplierOverview = () => {
       try {
         const responses = await Promise.all(promises);
         const mergedDistricts = responses.flatMap(r => r.data.success ? r.data.data : []);
-        setAllDistricts(mergedDistricts);
+        const uniqueDistricts = Array.from(new Map(mergedDistricts.map(item => [item._id, item])).values());
+        setAllDistricts(uniqueDistricts);
       } catch (err) { console.error(err); }
     };
     fetchFilterDistricts();
@@ -408,7 +410,7 @@ const BrandSupplierOverview = () => {
       {/* City Selection (Clusters) */}
       {selectedStates.size > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Cities (Clusters)</h2>
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Districts</h2>
           <div className="flex gap-2 mb-4">
             <button onClick={() => setSelectedCities(new Set(allCities.map(c => c._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
             <button onClick={() => setSelectedCities(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
@@ -420,7 +422,7 @@ const BrandSupplierOverview = () => {
                 className={`border rounded-lg p-4 text-center cursor-pointer transition-all duration-200 ${selectedCities.has(city._id) ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-200'}`}
                 onClick={() => handleCitySelect(city._id)}
               >
-                {city.name}
+                {city.name || `Zones: ${city.zones?.map(z => z.name).join(', ') || 'N/A'}`}
               </div>
             ))}
           </div>
@@ -430,7 +432,7 @@ const BrandSupplierOverview = () => {
       {/* District Selection */}
       {selectedCities.size > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Districts</h2>
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Clusters</h2>
           <div className="flex gap-2 mb-4">
             <button onClick={() => setSelectedDistricts(new Set(allDistricts.map(d => d._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
             <button onClick={() => setSelectedDistricts(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
@@ -449,10 +451,32 @@ const BrandSupplierOverview = () => {
         </div>
       )}
 
+      {/* Manufacture Selection */}
+      {selectedDistricts.size > 0 && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Manufacture</h2>
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => setSelectedManufactures(new Set(manufacturers.map(m => m.companyName)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
+            <button onClick={() => setSelectedManufactures(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {manufacturers.map((manu) => (
+              <div
+                key={manu._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-all duration-200 ${selectedManufactures.has(manu.companyName) ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-200'}`}
+                onClick={() => handleManufactureSelect(manu.companyName)}
+              >
+                {manu.companyName}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Filter Section */}
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Advanced Filters</h2>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Filter Section</h2>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           {/* Supplier Type */}
           <FilterDropdown
             label="Supplier Type"
@@ -711,7 +735,7 @@ const BrandSupplierOverview = () => {
                   <label className="block text-sm font-medium">City*</label>
                   <select className="w-full border p-2 rounded" value={modalForm.cluster} onChange={handleModalCityChange} required disabled={!modalForm.state}>
                     <option value="">Select City</option>
-                    {modalCities.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                    {modalCities.map(c => <option key={c._id} value={c._id}>{c.name || `Zones: ${c.zones?.map(z => z.name).join(', ') || 'N/A'}`}</option>)}
                   </select>
                 </div>
                 <div>

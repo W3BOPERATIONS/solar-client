@@ -107,7 +107,7 @@ const AgencyPlan = () => {
       const payload = { ...defaultFormData, name: newName, state: selectedState };
       const created = await createInstallerAgencyPlan(payload);
       toast.success(`${newName} added successfully`);
-      
+
       setPlans((prev) => [...prev, created]);
       setActivePlanId(created._id);
       setFormData(created);
@@ -120,13 +120,16 @@ const AgencyPlan = () => {
   };
 
   const handleCheckboxChange = (section, field) => {
-    setFormData((prev) => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: !prev[section][field]
-      }
-    }));
+    setFormData((prev) => {
+      const sectionData = prev[section] || {};
+      return {
+        ...prev,
+        [section]: {
+          ...sectionData,
+          [field]: !sectionData[field]
+        }
+      };
+    });
   };
 
   const handleInputChange = (e) => {
@@ -190,55 +193,54 @@ const AgencyPlan = () => {
   return (
     <div className="min-h-screen bg-[#f5f7fb] p-6 font-sans">
       <div className="max-w-7xl mx-auto">
-        
+
         {/* Setup Location Selection */}
         {!selectedState ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8">
             <h2 className="text-xl font-semibold text-center mb-6 text-gray-800">Select Setup Location</h2>
             {loading ? (
-               <div className="p-8 text-center text-gray-500">Loading locations...</div>
+              <div className="p-8 text-center text-gray-500">Loading locations...</div>
             ) : (
-               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                 {states.map((state) => (
-                   <div
-                     key={state._id}
-                     onClick={() => setSelectedState(state._id)}
-                     className="bg-white border border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:shadow-md transition-shadow hover:border-blue-400"
-                   >
-                     <h3 className="text-lg font-bold text-gray-800">{state.name}</h3>
-                     <p className="text-gray-500 mt-1">{state.abbreviation}</p>
-                   </div>
-                 ))}
-               </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                {states.map((state) => (
+                  <div
+                    key={state._id}
+                    onClick={() => setSelectedState(state._id)}
+                    className="bg-white border border-gray-200 rounded-lg p-6 text-center cursor-pointer hover:shadow-md transition-shadow hover:border-blue-400"
+                  >
+                    <h3 className="text-lg font-bold text-gray-800">{state.name}</h3>
+                    <p className="text-gray-500 mt-1">{state.abbreviation}</p>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         ) : (
           <>
             <div className="flex justify-between items-center mb-6">
-               <button 
-                  onClick={() => setSelectedState(null)} 
-                  className="text-blue-600 hover:text-blue-800 flex items-center font-medium"
-               >
-                 <ChevronRight className="w-4 h-4 mr-1 rotate-180" />
-                 Back to Locations
-               </button>
+              <button
+                onClick={() => setSelectedState(null)}
+                className="text-blue-600 hover:text-blue-800 flex items-center font-medium"
+              >
+                <ChevronRight className="w-4 h-4 mr-1 rotate-180" />
+                Back to Locations
+              </button>
             </div>
 
             {/* State Header Display */}
             <div className="flex flex-wrap gap-4 mb-8 justify-center">
-               {states.map((state) => (
-                 <div
-                   key={state._id}
-                   onClick={() => setSelectedState(state._id)}
-                   className={`bg-white border rounded-lg px-8 py-4 text-center cursor-pointer transition-all ${
-                     selectedState === state._id 
-                        ? 'border-blue-500 shadow-sm ring-1 ring-blue-500' 
-                        : 'border-gray-200 hover:border-blue-300'
-                   }`}
-                 >
-                   <h3 className="text-lg font-bold text-gray-800">{state.name}</h3>
-                 </div>
-               ))}
+              {states.map((state) => (
+                <div
+                  key={state._id}
+                  onClick={() => setSelectedState(state._id)}
+                  className={`bg-white border rounded-lg px-8 py-4 text-center cursor-pointer transition-all ${selectedState === state._id
+                    ? 'border-blue-500 shadow-sm ring-1 ring-blue-500'
+                    : 'border-gray-200 hover:border-blue-300'
+                    }`}
+                >
+                  <h3 className="text-lg font-bold text-gray-800">{state.name}</h3>
+                </div>
+              ))}
             </div>
 
             {/* Add More Plan Button */}
@@ -259,11 +261,10 @@ const AgencyPlan = () => {
                   <button
                     key={plan._id}
                     onClick={() => handleTabClick(plan)}
-                    className={`px-6 py-2 text-sm font-semibold rounded-md transition-all ${
-                      activePlanId === plan._id
-                        ? 'bg-blue-600 text-white shadow-md'
-                        : 'bg-white text-gray-500 hover:text-gray-800 border-b-2 border-transparent'
-                    }`}
+                    className={`px-6 py-2 text-sm font-semibold rounded-md transition-all ${activePlanId === plan._id
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'bg-white text-gray-500 hover:text-gray-800 border-b-2 border-transparent'
+                      }`}
                   >
                     {plan.name}
                   </button>
@@ -272,286 +273,302 @@ const AgencyPlan = () => {
             )}
 
             {loading && plans.length === 0 ? (
-               <div className="p-8 text-center text-gray-500">Loading plan...</div>
+              <div className="p-8 text-center text-gray-500">Loading plan...</div>
             ) : plans.length > 0 && formData ? (
-               <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8">
-                 <div className="mb-6 pb-2 inline-block">
-                   <input
-                     type="text"
-                     name="name"
-                     value={formData.name || ''}
-                     onChange={handleInputChange}
-                     className="text-2xl font-bold text-blue-600 bg-transparent outline-none placeholder-blue-300 border-b border-dashed border-blue-400 min-w-[200px]"
-                     placeholder="Enter Plan Name"
-                   />
-                 </div>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8">
+                <div className="mb-6 pb-2 inline-block">
+                  <input
+                    type="text"
+                    name="name"
+                    value={formData.name || ''}
+                    onChange={handleInputChange}
+                    className="text-2xl font-bold text-blue-600 bg-transparent outline-none placeholder-blue-300 border-b border-dashed border-blue-400 min-w-[200px]"
+                    placeholder="Enter Plan Name"
+                  />
+                </div>
 
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-                   {/* Column 1 */}
-                   <div className="space-y-6">
-                     <div>
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Eligibility Requirements</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="KYC"
-                           checked={formData.eligibility.kyc}
-                           onChange={() => handleCheckboxChange('eligibility', 'kyc')}
-                         />
-                         <CheckboxField
-                           label="Agreement"
-                           checked={formData.eligibility.agreement}
-                           onChange={() => handleCheckboxChange('eligibility', 'agreement')}
-                         />
-                       </div>
-                     </div>
+                {/* Safe object definitions to prevent undefined errors from older plans */}
+                {(() => {
+                  const safeEligibility = formData.eligibility || {};
+                  const safeSubUser = formData.subUser || {};
+                  const safeCategoryType = formData.categoryType || {};
+                  const safeSubCategoryType = formData.subCategoryType || {};
+                  const safeAssignedProjectTypes = formData.assignedProjectTypes || {};
+                  const safeProjectType = formData.projectType || {};
+                  const safeSubProjectType = formData.subProjectType || {};
 
-                     <div className="pt-2">
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Sub User</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="Sales"
-                           checked={formData.subUser.sales}
-                           onChange={() => handleCheckboxChange('subUser', 'sales')}
-                         />
-                         <CheckboxField
-                           label="Dealer"
-                           checked={formData.subUser.dealer}
-                           onChange={() => handleCheckboxChange('subUser', 'dealer')}
-                         />
-                         <CheckboxField
-                           label="Lead Partner"
-                           checked={formData.subUser.leadPartner}
-                           onChange={() => handleCheckboxChange('subUser', 'leadPartner')}
-                         />
-                         <CheckboxField
-                           label="Service"
-                           checked={formData.subUser.service}
-                           onChange={() => handleCheckboxChange('subUser', 'service')}
-                         />
-                       </div>
-                     </div>
+                  return (
+                    <>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
+                        {/* Column 1 */}
+                        <div className="space-y-6">
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Eligibility Requirements</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="KYC"
+                                checked={safeEligibility.kyc || false}
+                                onChange={() => handleCheckboxChange('eligibility', 'kyc')}
+                              />
+                              <CheckboxField
+                                label="Agreement"
+                                checked={safeEligibility.agreement || false}
+                                onChange={() => handleCheckboxChange('eligibility', 'agreement')}
+                              />
+                            </div>
+                          </div>
 
-                     <div className="pt-2">
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Category Type</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="Solar Panel"
-                           checked={formData.categoryType.solarPanel}
-                           onChange={() => handleCheckboxChange('categoryType', 'solarPanel')}
-                         />
-                         <CheckboxField
-                           label="Solar Rooftop"
-                           checked={formData.categoryType.solarRooftop}
-                           onChange={() => handleCheckboxChange('categoryType', 'solarRooftop')}
-                         />
-                         <CheckboxField
-                           label="Solar Pump"
-                           checked={formData.categoryType.solarPump}
-                           onChange={() => handleCheckboxChange('categoryType', 'solarPump')}
-                         />
-                         <CheckboxField
-                           label="Solar Water Heater"
-                           checked={formData.categoryType.solarWaterHeater}
-                           onChange={() => handleCheckboxChange('categoryType', 'solarWaterHeater')}
-                         />
-                       </div>
-                     </div>
-                   </div>
+                          <div className="pt-2">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Sub User</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="Sales"
+                                checked={safeSubUser.sales || false}
+                                onChange={() => handleCheckboxChange('subUser', 'sales')}
+                              />
+                              <CheckboxField
+                                label="Dealer"
+                                checked={safeSubUser.dealer || false}
+                                onChange={() => handleCheckboxChange('subUser', 'dealer')}
+                              />
+                              <CheckboxField
+                                label="Lead Partner"
+                                checked={safeSubUser.leadPartner || false}
+                                onChange={() => handleCheckboxChange('subUser', 'leadPartner')}
+                              />
+                              <CheckboxField
+                                label="Service"
+                                checked={safeSubUser.service || false}
+                                onChange={() => handleCheckboxChange('subUser', 'service')}
+                              />
+                            </div>
+                          </div>
 
-                   {/* Column 2 */}
-                   <div className="space-y-6">
-                     <div>
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Coverage</h4>
-                       <input
-                         type="text"
-                         name="coverage"
-                         value={formData.coverage}
-                         onChange={handleInputChange}
-                         className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 max-w-[200px]"
-                         placeholder="e.g. 1 District"
-                       />
-                     </div>
+                          <div className="pt-2">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Category Type</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="Solar Panel"
+                                checked={safeCategoryType.solarPanel || false}
+                                onChange={() => handleCheckboxChange('categoryType', 'solarPanel')}
+                              />
+                              <CheckboxField
+                                label="Solar Rooftop"
+                                checked={safeCategoryType.solarRooftop || false}
+                                onChange={() => handleCheckboxChange('categoryType', 'solarRooftop')}
+                              />
+                              <CheckboxField
+                                label="Solar Pump"
+                                checked={safeCategoryType.solarPump || false}
+                                onChange={() => handleCheckboxChange('categoryType', 'solarPump')}
+                              />
+                              <CheckboxField
+                                label="Solar Water Heater"
+                                checked={safeCategoryType.solarWaterHeater || false}
+                                onChange={() => handleCheckboxChange('categoryType', 'solarWaterHeater')}
+                              />
+                            </div>
+                          </div>
+                        </div>
 
-                     <div className="pt-5">
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">User Limits</h4>
-                       <input
-                         type="number"
-                         name="userLimits"
-                         value={formData.userLimits}
-                         onChange={handleInputChange}
-                         className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 max-w-[200px]"
-                         placeholder="e.g. 10"
-                       />
-                     </div>
+                        {/* Column 2 */}
+                        <div className="space-y-6">
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Coverage</h4>
+                            <input
+                              type="text"
+                              name="coverage"
+                              value={formData.coverage || ''}
+                              onChange={handleInputChange}
+                              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 max-w-[200px]"
+                              placeholder="e.g. 1 District"
+                            />
+                          </div>
 
-                     <div className="pt-2">
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Sub Category Type</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="Residential"
-                           checked={formData.subCategoryType.residential}
-                           onChange={() => handleCheckboxChange('subCategoryType', 'residential')}
-                         />
-                         <CheckboxField
-                           label="Commercial"
-                           checked={formData.subCategoryType.commercial}
-                           onChange={() => handleCheckboxChange('subCategoryType', 'commercial')}
-                         />
-                       </div>
-                     </div>
-                   </div>
+                          <div className="pt-5">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">User Limits</h4>
+                            <input
+                              type="number"
+                              name="userLimits"
+                              value={formData.userLimits || ''}
+                              onChange={handleInputChange}
+                              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500 max-w-[200px]"
+                              placeholder="e.g. 10"
+                            />
+                          </div>
 
-                   {/* Column 3 */}
-                   <div className="space-y-6">
-                     <div>
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Assigned Project Types</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="District project types"
-                           checked={formData.assignedProjectTypes.district}
-                           onChange={() => handleCheckboxChange('assignedProjectTypes', 'district')}
-                         />
-                         <CheckboxField
-                           label="Cluster project types"
-                           checked={formData.assignedProjectTypes.cluster}
-                           onChange={() => handleCheckboxChange('assignedProjectTypes', 'cluster')}
-                         />
-                         <CheckboxField
-                           label="State all project types"
-                           checked={formData.assignedProjectTypes.state}
-                           onChange={() => handleCheckboxChange('assignedProjectTypes', 'state')}
-                         />
-                       </div>
-                     </div>
+                          <div className="pt-2">
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Sub Category Type</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="Residential"
+                                checked={safeSubCategoryType.residential || false}
+                                onChange={() => handleCheckboxChange('subCategoryType', 'residential')}
+                              />
+                              <CheckboxField
+                                label="Commercial"
+                                checked={safeSubCategoryType.commercial || false}
+                                onChange={() => handleCheckboxChange('subCategoryType', 'commercial')}
+                              />
+                            </div>
+                          </div>
+                        </div>
 
-                     <div>
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Project Type</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="Up To 100 KW"
-                           checked={formData.projectType.upTo100Kw}
-                           onChange={() => handleCheckboxChange('projectType', 'upTo100Kw')}
-                         />
-                         <CheckboxField
-                           label="Up To 200 KW"
-                           checked={formData.projectType.upTo200Kw}
-                           onChange={() => handleCheckboxChange('projectType', 'upTo200Kw')}
-                         />
-                         <CheckboxField
-                           label="Above 100 KW"
-                           checked={formData.projectType.above100Kw}
-                           onChange={() => handleCheckboxChange('projectType', 'above100Kw')}
-                         />
-                       </div>
-                     </div>
+                        {/* Column 3 */}
+                        <div className="space-y-6">
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Assigned Project Types</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="District project types"
+                                checked={safeAssignedProjectTypes.district || false}
+                                onChange={() => handleCheckboxChange('assignedProjectTypes', 'district')}
+                              />
+                              <CheckboxField
+                                label="Cluster project types"
+                                checked={safeAssignedProjectTypes.cluster || false}
+                                onChange={() => handleCheckboxChange('assignedProjectTypes', 'cluster')}
+                              />
+                              <CheckboxField
+                                label="State all project types"
+                                checked={safeAssignedProjectTypes.state || false}
+                                onChange={() => handleCheckboxChange('assignedProjectTypes', 'state')}
+                              />
+                            </div>
+                          </div>
 
-                     <div>
-                       <h4 className="text-sm font-medium text-gray-600 mb-2">Sub Project Type</h4>
-                       <div className="space-y-1">
-                         <CheckboxField
-                           label="On-Grid"
-                           checked={formData.subProjectType.onGrid}
-                           onChange={() => handleCheckboxChange('subProjectType', 'onGrid')}
-                         />
-                         <CheckboxField
-                           label="Off-Grid"
-                           checked={formData.subProjectType.offGrid}
-                           onChange={() => handleCheckboxChange('subProjectType', 'offGrid')}
-                         />
-                         <CheckboxField
-                           label="Hybrid"
-                           checked={formData.subProjectType.hybrid}
-                           onChange={() => handleCheckboxChange('subProjectType', 'hybrid')}
-                         />
-                       </div>
-                     </div>
-                   </div>
-                 </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Project Type</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="Up To 100 KW"
+                                checked={safeProjectType.upTo100Kw || false}
+                                onChange={() => handleCheckboxChange('projectType', 'upTo100Kw')}
+                              />
+                              <CheckboxField
+                                label="Up To 200 KW"
+                                checked={safeProjectType.upTo200Kw || false}
+                                onChange={() => handleCheckboxChange('projectType', 'upTo200Kw')}
+                              />
+                              <CheckboxField
+                                label="Above 100 KW"
+                                checked={safeProjectType.above100Kw || false}
+                                onChange={() => handleCheckboxChange('projectType', 'above100Kw')}
+                              />
+                            </div>
+                          </div>
 
-                 {/* Solar Installation Points */}
-                 <div className="mb-6">
-                   <h3 className="text-sm font-medium text-gray-600 mb-3">
-                     Solar Installation Points
-                   </h3>
-                   <div className="space-y-3">
-                     {formData.solarInstallationPoints.map((item, index) => (
-                       <div key={index} className="border border-gray-200 p-4 rounded-md">
-                         <h4 className="text-sm font-bold text-gray-800 mb-3">{item.typeLabel}</h4>
-                         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                           <div>
-                             <label className="block text-xs text-gray-600 mb-1">Points</label>
-                             <input
-                               type="number"
-                               value={item.points}
-                               onChange={(e) => handlePointsChange(index, 'points', e.target.value)}
-                               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                               placeholder="e.g. 1000"
-                             />
-                           </div>
-                           <div>
-                             <label className="block text-xs text-gray-600 mb-1">Period (in Month)</label>
-                             <input
-                               type="number"
-                               value={item.periodInMonth}
-                               onChange={(e) => handlePointsChange(index, 'periodInMonth', e.target.value)}
-                               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                               placeholder="e.g. 6"
-                             />
-                           </div>
-                           <div>
-                             <label className="block text-xs text-gray-600 mb-1">Claim (in Month)</label>
-                             <input
-                               type="number"
-                               value={item.claimInMonth}
-                               onChange={(e) => handlePointsChange(index, 'claimInMonth', e.target.value)}
-                               className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                               placeholder="e.g. 2"
-                             />
-                           </div>
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
+                          <div>
+                            <h4 className="text-sm font-medium text-gray-600 mb-2">Sub Project Type</h4>
+                            <div className="space-y-1">
+                              <CheckboxField
+                                label="On-Grid"
+                                checked={safeSubProjectType.onGrid || false}
+                                onChange={() => handleCheckboxChange('subProjectType', 'onGrid')}
+                              />
+                              <CheckboxField
+                                label="Off-Grid"
+                                checked={safeSubProjectType.offGrid || false}
+                                onChange={() => handleCheckboxChange('subProjectType', 'offGrid')}
+                              />
+                              <CheckboxField
+                                label="Hybrid"
+                                checked={safeSubProjectType.hybrid || false}
+                                onChange={() => handleCheckboxChange('subProjectType', 'hybrid')}
+                              />
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </>
+                  );
+                })()}
 
-                 {/* Solar Installation Charges */}
-                 <div className="mb-8">
-                   <h3 className="text-sm font-medium text-gray-600 mb-3">
-                     Solar Installation Charges
-                   </h3>
-                   <div className="space-y-3">
-                     {formData.solarInstallationCharges.map((item, index) => (
-                       <div key={index} className="border border-gray-200 p-4 rounded-md">
-                         <h4 className="text-sm font-bold text-gray-800 mb-3">{item.typeLabel}</h4>
-                         <div>
-                           <label className="block text-xs text-gray-600 mb-1">₹ charges</label>
-                           <input
-                             type="number"
-                             value={item.charges}
-                             onChange={(e) => handleChargesChange(index, e.target.value)}
-                             className="w-full md:w-1/3 border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
-                             placeholder="e.g. 1000"
-                           />
-                         </div>
-                       </div>
-                     ))}
-                   </div>
-                 </div>
 
-                 {/* Actions */}
-                 <div className="mt-8 flex justify-end">
-                   <button
-                     onClick={handleSave}
-                     className="px-6 py-2 bg-[#1B57A6] hover:bg-blue-800 text-white rounded-md text-sm font-medium transition-colors"
-                   >
-                     Save Changes
-                   </button>
-                 </div>
-               </div>
+                {/* Solar Installation Points */}
+                <div className="mb-6">
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">
+                    Solar Installation Points
+                  </h3>
+                  <div className="space-y-3">
+                    {formData.solarInstallationPoints.map((item, index) => (
+                      <div key={index} className="border border-gray-200 p-4 rounded-md">
+                        <h4 className="text-sm font-bold text-gray-800 mb-3">{item.typeLabel}</h4>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Points</label>
+                            <input
+                              type="number"
+                              value={item.points}
+                              onChange={(e) => handlePointsChange(index, 'points', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                              placeholder="e.g. 1000"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Period (in Month)</label>
+                            <input
+                              type="number"
+                              value={item.periodInMonth}
+                              onChange={(e) => handlePointsChange(index, 'periodInMonth', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                              placeholder="e.g. 6"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-600 mb-1">Claim (in Month)</label>
+                            <input
+                              type="number"
+                              value={item.claimInMonth}
+                              onChange={(e) => handlePointsChange(index, 'claimInMonth', e.target.value)}
+                              className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                              placeholder="e.g. 2"
+                            />
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Solar Installation Charges */}
+                <div className="mb-8">
+                  <h3 className="text-sm font-medium text-gray-600 mb-3">
+                    Solar Installation Charges
+                  </h3>
+                  <div className="space-y-3">
+                    {formData.solarInstallationCharges.map((item, index) => (
+                      <div key={index} className="border border-gray-200 p-4 rounded-md">
+                        <h4 className="text-sm font-bold text-gray-800 mb-3">{item.typeLabel}</h4>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">₹ charges</label>
+                          <input
+                            type="number"
+                            value={item.charges}
+                            onChange={(e) => handleChargesChange(index, e.target.value)}
+                            className="w-full md:w-1/3 border border-gray-300 rounded-md px-3 py-1.5 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+                            placeholder="e.g. 1000"
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="mt-8 flex justify-end">
+                  <button
+                    onClick={handleSave}
+                    className="px-6 py-2 bg-[#1B57A6] hover:bg-blue-800 text-white rounded-md text-sm font-medium transition-colors"
+                  >
+                    Save Changes
+                  </button>
+                </div>
+              </div>
             ) : (
-               <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
-                 No plans available for this location. Click "Add More Plan" to create one.
-               </div>
+              <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-8 text-center text-gray-500">
+                No plans available for this location. Click "Add More Plan" to create one.
+              </div>
             )}
           </>
         )}

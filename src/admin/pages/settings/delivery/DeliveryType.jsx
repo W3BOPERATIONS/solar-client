@@ -62,9 +62,12 @@ const DeliveryType = () => {
   const [clusterOptions, setClusterOptions] = useState([]);
   const [selectedCluster, setSelectedCluster] = useState('');
   const [selectedClusterName, setSelectedClusterName] = useState('');
+  const [selectedAllClusters, setSelectedAllClusters] = useState(false);
   const [districtOptions, setDistrictOptions] = useState([]);
   const [selectedDistrict, setSelectedDistrict] = useState('');
   const [selectedDistrictName, setSelectedDistrictName] = useState('');
+  const [selectedAllDistricts, setSelectedAllDistricts] = useState(false);
+  const [selectedAllStates, setSelectedAllStates] = useState(false);
 
   // Form State
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
@@ -111,50 +114,115 @@ const DeliveryType = () => {
 
   // Location Handlers
   const handleStateSelect = async (stateId, stateName) => {
-    setSelectedState(stateId);
-    setSelectedStateName(stateName);
-    setSelectedCluster('');
-    setSelectedClusterName('');
-    setClusterOptions([]);
-    setSelectedDistrict('');
-    setSelectedDistrictName('');
-    setDistrictOptions([]);
-    setDeliveryTypes([]);
-    setActiveTabId('new');
+    if (stateId === 'all') {
+      setSelectedState('all');
+      setSelectedStateName('All States');
+      setSelectedAllStates(true);
+      setSelectedCluster('');
+      setSelectedClusterName('');
+      setSelectedAllClusters(false);
+      setClusterOptions([]);
+      setSelectedDistrict('');
+      setSelectedDistrictName('');
+      setSelectedAllDistricts(false);
+      setDistrictOptions([]);
+      setDeliveryTypes([]);
+      setActiveTabId('new');
 
-    try {
-      const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
-      if (res.data && res.data.data) {
-        setClusterOptions(res.data.data);
+      try {
+        // Fetch ALL clusters across all states
+        // If your API supports `{ isActive: 'true' }` without providing `state` to get all clusters
+        const res = await locationAPI.getAllClusters({ isActive: 'true' });
+        if (res.data && res.data.data) {
+          setClusterOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching all clusters", e);
       }
-    } catch (e) {
-      console.error("Error fetching clusters", e);
+    } else {
+      setSelectedState(stateId);
+      setSelectedStateName(stateName);
+      setSelectedAllStates(false);
+      setSelectedCluster('');
+      setSelectedClusterName('');
+      setSelectedAllClusters(false);
+      setClusterOptions([]);
+      setSelectedDistrict('');
+      setSelectedDistrictName('');
+      setSelectedAllDistricts(false);
+      setDistrictOptions([]);
+      setDeliveryTypes([]);
+      setActiveTabId('new');
+
+      try {
+        const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
+        if (res.data && res.data.data) {
+          setClusterOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching clusters", e);
+      }
     }
   };
 
   const handleClusterSelect = async (clusterId, clusterName) => {
-    setSelectedCluster(clusterId);
-    setSelectedClusterName(clusterName);
-    setSelectedDistrict('');
-    setSelectedDistrictName('');
-    setDistrictOptions([]);
-    setDeliveryTypes([]);
-    setActiveTabId('new');
+    if (clusterId === 'all') {
+      setSelectedCluster('all');
+      setSelectedClusterName('All Clusters');
+      setSelectedAllClusters(true);
+      setSelectedDistrict('');
+      setSelectedDistrictName('');
+      setSelectedAllDistricts(false);
+      setDistrictOptions([]);
+      setDeliveryTypes([]);
+      setActiveTabId('new');
 
-    try {
-      const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
-      if (res.data && res.data.data) {
-        setDistrictOptions(res.data.data);
+      try {
+        // If selectedState is 'all', fetch ALL districts.
+        // Otherwise, fetch districts for the given selectedState.
+        const queryParams = selectedState === 'all' ? { isActive: 'true' } : { state: selectedState, isActive: 'true' };
+        const res = await locationAPI.getAllDistricts(queryParams);
+        if (res.data && res.data.data) {
+          setDistrictOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching districts", e);
       }
-    } catch (e) {
-      console.error("Error fetching districts", e);
+    } else {
+      setSelectedCluster(clusterId);
+      setSelectedClusterName(clusterName);
+      setSelectedAllClusters(false);
+      setSelectedDistrict('');
+      setSelectedDistrictName('');
+      setSelectedAllDistricts(false);
+      setDistrictOptions([]);
+      setDeliveryTypes([]);
+      setActiveTabId('new');
+
+      try {
+        const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
+        if (res.data && res.data.data) {
+          setDistrictOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching districts", e);
+      }
     }
   };
 
   const handleDistrictSelect = (districtId, districtName) => {
-    setSelectedDistrict(districtId);
-    setSelectedDistrictName(districtName);
-    loadDeliveryTypes(districtId);
+    if (districtId === 'all') {
+      setSelectedDistrict('all');
+      setSelectedDistrictName('All Districts');
+      setSelectedAllDistricts(true);
+      setDeliveryTypes([]);
+      setActiveTabId('new');
+    } else {
+      setSelectedDistrict(districtId);
+      setSelectedDistrictName(districtName);
+      setSelectedAllDistricts(false);
+      loadDeliveryTypes(districtId);
+    }
   };
 
   // Form Handlers
@@ -227,21 +295,57 @@ const DeliveryType = () => {
 
     try {
       setLoading(true);
-      const payload = {
-        ...formData,
-        state: selectedState,
-        cluster: selectedCluster,
-        district: selectedDistrict
-      };
 
-      if (activeTabId === 'new') {
-        const res = await createDeliveryType(payload);
-        showNotification('Delivery type created successfully', 'success');
-        loadDeliveryTypes(selectedDistrict);
+      if (selectedAllStates) {
+        // If state is "all", it still requires cluster and district to be chosen
+        if (!selectedCluster) {
+          showNotification('Please select a cluster first', 'error');
+          setLoading(false);
+          return;
+        }
+        if (!selectedDistrict) {
+          showNotification('Please select a district first', 'error');
+          setLoading(false);
+          return;
+        }
+      }
+
+      if (selectedAllStates && selectedAllClusters && selectedAllDistricts) {
+        // recursive save all... fallback if needed
+      }
+
+      if (selectedAllDistricts) {
+        // Save for all districts in the chosen list sequentially
+        for (const district of districtOptions) {
+          const payload = {
+            ...formData,
+            state: district.state?._id || district.state || selectedState, // grab exact state from populated district if available
+            cluster: district.cluster?._id || district.cluster || selectedCluster,
+            district: district._id
+          };
+          if (payload.state === 'all' || payload.cluster === 'all') continue; // Sanity check
+          await createDeliveryType(payload);
+        }
+        showNotification('Delivery types created for all selected districts', 'success');
+        setSelectedDistrict('');
+        setSelectedAllDistricts(false);
       } else {
-        await updateDeliveryType(activeTabId, payload);
-        showNotification('Delivery type updated successfully', 'success');
-        loadDeliveryTypes(selectedDistrict);
+        const payload = {
+          ...formData,
+          state: selectedState,
+          cluster: selectedCluster,
+          district: selectedDistrict
+        };
+
+        if (activeTabId === 'new') {
+          await createDeliveryType(payload);
+          showNotification('Delivery type created successfully', 'success');
+          loadDeliveryTypes(selectedDistrict);
+        } else {
+          await updateDeliveryType(activeTabId, payload);
+          showNotification('Delivery type updated successfully', 'success');
+          loadDeliveryTypes(selectedDistrict);
+        }
       }
     } catch (error) {
       showNotification(error.response?.data?.message || 'Operation failed', 'error');
@@ -283,6 +387,18 @@ const DeliveryType = () => {
           <div>
             <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {states.length > 0 && (
+                <div
+                  className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === 'all'
+                    ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                    : 'bg-white border-gray-200 hover:border-blue-300'
+                    }`}
+                  onClick={() => handleStateSelect('all', 'All States')}
+                >
+                  <div className="font-semibold text-sm">Select All</div>
+                  <div className="text-xs text-gray-400 mt-1 uppercase">ALL IN</div>
+                </div>
+              )}
               {states.map(state => (
                 <div
                   key={state._id}
@@ -303,6 +419,18 @@ const DeliveryType = () => {
             <div className="animate-in fade-in slide-in-from-top-4 duration-300">
               <h3 className="text-lg font-bold text-slate-800 mb-3">Select Cluster</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {clusterOptions.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCluster === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleClusterSelect('all', 'All Clusters')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1">{selectedStateName}</div>
+                  </div>
+                )}
                 {clusterOptions.map(cluster => (
                   <div
                     key={cluster._id}
@@ -324,6 +452,18 @@ const DeliveryType = () => {
             <div className="animate-in fade-in slide-in-from-top-4 duration-300">
               <h3 className="text-lg font-bold text-slate-800 mb-3">Select District</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {districtOptions.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedDistrict === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleDistrictSelect('all', 'All Districts')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1">Apply to all districts</div>
+                  </div>
+                )}
                 {districtOptions.map(district => (
                   <div
                     key={district._id}
@@ -348,40 +488,48 @@ const DeliveryType = () => {
         <div className="mt-8 animate-in fade-in duration-500">
           {/* Dynamic Tabs */}
           <div className="flex items-center space-x-4 mb-6 pb-2 overflow-x-auto justify-center">
-            {deliveryTypes.map((type, index) => {
-              const isActive = activeTabId === type._id;
-              // Cycle through some colors if inactive to match screenshot (blue, green)
-              let inactiveColor = 'text-[#0ea5e9]';
-              if (index % 2 !== 0) inactiveColor = 'text-[#22c55e]';
+            {selectedAllDistricts ? (
+              <div className="text-slate-600 font-medium italic">
+                Creating delivery configuration for all selected districts at once.
+              </div>
+            ) : (
+              <>
+                {deliveryTypes.map((type, index) => {
+                  const isActive = activeTabId === type._id;
+                  // Cycle through some colors if inactive to match screenshot (blue, green)
+                  let inactiveColor = 'text-[#0ea5e9]';
+                  if (index % 2 !== 0) inactiveColor = 'text-[#22c55e]';
 
-              return (
+                  return (
+                    <button
+                      key={type._id}
+                      onClick={() => handleTabSwitch(type)}
+                      className={`px-4 py-2 rounded-md font-bold text-sm transition-colors whitespace-nowrap flex items-center ${isActive
+                        ? 'bg-[#64748b] text-white shadow-sm'
+                        : `bg-transparent ${inactiveColor} hover:bg-gray-50`
+                        }`}
+                    >
+                      <Truck size={16} className="mr-2" />
+                      {type.name}
+                    </button>
+                  )
+                })}
                 <button
-                  key={type._id}
-                  onClick={() => handleTabSwitch(type)}
-                  className={`px-4 py-2 rounded-md font-bold text-sm transition-colors whitespace-nowrap flex items-center ${isActive
-                      ? 'bg-[#64748b] text-white shadow-sm'
-                      : `bg-transparent ${inactiveColor} hover:bg-gray-50`
+                  onClick={() => handleTabSwitch('new')}
+                  className={`px-4 py-2 rounded-md font-bold text-sm transition-colors whitespace-nowrap flex items-center bg-[#1e293b] text-white hover:bg-slate-800 shadow-sm ${activeTabId === 'new' ? 'ring-2 ring-offset-2 ring-[#1e293b]' : ''
                     }`}
                 >
-                  <Truck size={16} className="mr-2" />
-                  {type.name}
+                  <Plus size={16} className="mr-1" /> Add Delivery Type
                 </button>
-              )
-            })}
-            <button
-              onClick={() => handleTabSwitch('new')}
-              className={`px-4 py-2 rounded-md font-bold text-sm transition-colors whitespace-nowrap flex items-center bg-[#1e293b] text-white hover:bg-slate-800 shadow-sm ${activeTabId === 'new' ? 'ring-2 ring-offset-2 ring-[#1e293b]' : ''
-                }`}
-            >
-              <Plus size={16} className="mr-1" /> Add Delivery Type
-            </button>
+              </>
+            )}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
 
             {/* Left Sidebar - Navigation */}
-            <div className="lg:col-span-1">
-              <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden">
+            <div className="xl:col-span-3">
+              <div className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden sticky top-6">
                 <div className="bg-[#0284c7] text-white p-4 font-bold rounded-t-lg flex items-center">
                   <Truck size={18} className="mr-2" /> Delivery Sections
                 </div>
@@ -391,10 +539,13 @@ const DeliveryType = () => {
                     return (
                       <button
                         key={opt.id}
-                        onClick={() => setActiveSection(opt.id)}
+                        onClick={() => {
+                          setActiveSection(opt.id);
+                          document.getElementById(opt.id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                        }}
                         className={`w-full flex items-center px-3 py-2 text-sm font-medium transition-colors ${isActive
-                            ? 'bg-[#007bff] text-white rounded-md'
-                            : 'text-slate-600 hover:bg-gray-50'
+                          ? 'bg-[#007bff] text-white rounded-md'
+                          : 'text-slate-600 hover:bg-gray-50'
                           }`}
                       >
                         <Check size={16} strokeWidth={3} className={`mr-3 ${isActive ? 'text-white' : 'text-green-500'}`} />
@@ -406,47 +557,15 @@ const DeliveryType = () => {
               </div>
             </div>
 
-            {/* Right Content - Form */}
-            <div className="lg:col-span-3">
+            {/* Middle Content - Form */}
+            <div className="xl:col-span-6">
               <div className="mb-6 flex justify-between items-center border-b pb-2">
                 <div>
                   <h2 className="text-2xl font-bold text-[#0284c7] flex items-center">
                     <Truck size={24} className="mr-2" />
-                    {activeTabId === 'new' ? 'New Delivery Configuration' : formData.name}
+                    {activeTabId === 'new' ? 'Standard Delivery' : formData.name}
                   </h2>
-                  <p className="text-gray-500 text-sm mt-1">Configure settings for {formData.name || 'this delivery type'}</p>
-                </div>
-
-                {/* Live Output/Preview Card matching the right side of the screenshot */}
-                <div className="bg-white border shadow-sm rounded-lg w-72 text-sm hidden md:block overflow-hidden pb-4">
-                  <div className={`p-5 flex justify-between items-start ${activeTabId === 'new' ? 'bg-[#1e293b]' : 'bg-[#64748b]'} text-white`}>
-                    <div className="font-bold uppercase tracking-wider text-xl leading-tight w-28">
-                      {formData.name || 'PREMIUM DELIVERY'}
-                    </div>
-                    <span className="text-[10px] bg-white text-gray-800 px-2.5 py-1 rounded shadow-sm font-bold">Premium Access</span>
-                  </div>
-                  <div className="p-5">
-                    <div className="text-xs text-gray-500 mb-6">{formData.description || 'Premium service with white-glove delivery'}</div>
-                    <div className="flex justify-between items-end mb-6">
-                      <div>
-                        <div className="text-3xl font-bold text-gray-900 leading-none mb-1">₹{formData.applicableCategories[0]?.cost || '2,000'}</div>
-                        <div className="text-[10px] text-gray-500">base charge</div>
-                      </div>
-                      <div className="text-right">
-                        <div className="font-medium text-gray-800 text-sm mb-1">{formData.deliveryTiming.estimatedDelivery || 'Same Day'}</div>
-                        <div className="text-[10px] text-gray-500">Delivery Time</div>
-                      </div>
-                    </div>
-                    <div className="text-xs space-y-2 text-gray-700">
-                      <p>Coverage: <span className="font-medium">{formData.coverageType.join(', ') || 'Full State'}</span></p>
-                      <p>Access: <span className="font-medium">Premium Access</span></p>
-                      <p className="font-bold mt-4 mb-2 text-gray-900 text-[13px]">Features:</p>
-                      <div className="flex items-center">
-                        <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
-                        <span>{formData.deliveryTiming.estimatedDelivery || 'Same Day'} Delivery</span>
-                      </div>
-                    </div>
-                  </div>
+                  <p className="text-gray-500 text-sm mt-1">Configure settings for {formData.name || 'Standard Delivery'}</p>
                 </div>
               </div>
 
@@ -454,7 +573,7 @@ const DeliveryType = () => {
               <div className="space-y-6">
 
                 {/* Setup */}
-                <div className={`bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden ${activeSection === 'setup' || activeSection === 'all' ? 'block' : 'hidden'}`}>
+                <div id="setup" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#0284c7] text-white p-3 font-bold text-sm flex justify-between">
                     <span>Delivery Type Setup</span>
                     <span className="bg-white text-blue-700 text-xs px-2 py-0.5 rounded font-bold">Required</span>
@@ -475,7 +594,7 @@ const DeliveryType = () => {
                 </div>
 
                 {/* Coverage */}
-                <div className={`bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden ${activeSection === 'coverage' || activeSection === 'all' ? 'block' : 'hidden'}`}>
+                <div id="coverage" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#22c55e] text-white p-3 font-bold text-sm">
                     Coverage Area
                   </div>
@@ -498,7 +617,7 @@ const DeliveryType = () => {
                 </div>
 
                 {/* Categories & Costs */}
-                <div className={`bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden ${activeSection === 'categories' || activeSection === 'all' ? 'block' : 'hidden'}`}>
+                <div id="categories" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#0ea5e9] text-white p-3 font-bold text-sm">
                     Applicable Categories
                   </div>
@@ -522,7 +641,7 @@ const DeliveryType = () => {
                                 type="checkbox"
                                 checked={cat.isActive}
                                 onChange={() => handleCategoryToggle(i)}
-                                className="rounded text-[#0ea5e9] focus:ring-[#0ea5e9] w-4 h-4 accent-[#0ea5e9]"
+                                className="rounded text-[#22c55e] focus:ring-[#22c55e] w-4 h-4 accent-[#22c55e]"
                               />
                             </td>
                             <td className="px-4 py-3 border-r border-gray-100 text-gray-700">{cat.category}</td>
@@ -547,7 +666,7 @@ const DeliveryType = () => {
                 </div>
 
                 {/* Delivery Timing */}
-                <div className={`bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden ${activeSection === 'timing' || activeSection === 'all' ? 'block' : 'hidden'}`}>
+                <div id="timing" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#eab308] text-white p-3 font-bold text-sm">
                     Delivery Timing
                   </div>
@@ -589,25 +708,73 @@ const DeliveryType = () => {
               </div>
 
               {/* Save Layout Action */}
-              <div className="mt-8 pt-4 border-t border-gray-200 flex justify-end">
+              <div className="mt-8 pt-4 border-t border-gray-200 flex justify-start">
                 <button
                   onClick={handleSave}
                   disabled={loading}
-                  className="bg-[#1e293b] text-white px-8 py-2.5 rounded-lg text-sm font-bold shadow-md hover:bg-slate-800 hover:shadow-lg transition-all flex items-center"
+                  className="bg-[#0284c7] text-white px-3 py-1.5 rounded text-xs font-semibold shadow-sm hover:bg-[#0369a1] transition-all flex items-center"
                 >
-                  {loading ? <Loader size={16} className="animate-spin mr-2" /> : <Save size={16} className="mr-2" />}
+                  {loading ? <Loader size={12} className="animate-spin mr-1" /> : null}
                   Save Delivery Settings
                 </button>
               </div>
 
             </div>
+
+            {/* Right Sidebar - Live Preview Card */}
+            <div className="xl:col-span-3 hidden xl:block">
+              <div className="bg-white border border-gray-200 shadow-sm rounded-lg w-full text-sm overflow-hidden pb-4 sticky top-6">
+                <div className="p-4 flex justify-between items-start bg-[#0284c7] text-white">
+                  <div className="font-bold uppercase tracking-wider text-sm leading-tight max-w-[140px]">
+                    {formData.name || 'STANDARD DELIVERY'}
+                  </div>
+                  <span className="text-[10px] bg-white text-[#0284c7] px-2 py-1 rounded-sm shadow-sm font-bold whitespace-nowrap">Standard Access</span>
+                </div>
+                <div className="p-5">
+                  <div className="text-xs text-gray-500 mb-6 italic">{formData.description || 'Reliable delivery for standard orders'}</div>
+                  <div className="flex justify-between items-end mb-6">
+                    <div>
+                      <div className="text-2xl font-bold text-gray-900 leading-none mb-1">₹{formData.applicableCategories[0]?.cost || '500'}</div>
+                      <div className="text-[10px] text-gray-500">base charge</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-bold text-gray-800 text-sm mb-1">{formData.deliveryTiming.estimatedDelivery || '3-5 Days'}</div>
+                      <div className="text-[10px] text-gray-500">Delivery Time</div>
+                    </div>
+                  </div>
+                  <div className="text-xs space-y-2 text-gray-700">
+                    <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageType.length > 0 ? formData.coverageType.join(', ') : '50km Radius'}</span></p>
+                    <p className="flex items-center text-[#0284c7] font-medium"><Truck size={14} className="mr-1" />Access: <span className="text-gray-900 font-medium ml-1">Standard Access</span></p>
+                    <p className="font-bold mt-4 mb-2 text-gray-900 text-[13px]">Features:</p>
+                    <div className="flex items-center mb-2">
+                      <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
+                      <span>{formData.deliveryTiming.estimatedDelivery || '3-5 Day'} Delivery</span>
+                    </div>
+                    <div className="flex items-center mb-2">
+                      <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
+                      <span>50km Coverage</span>
+                    </div>
+                    <div className="flex items-center">
+                      <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
+                      <span>Standard Support</span>
+                    </div>
+                  </div>
+                  <div className="mt-6 px-2">
+                    <button className="w-full bg-[#6366f1] hover:bg-[#4f46e5] text-white py-2.5 rounded-full text-xs font-bold shadow-sm transition-colors flex justify-center items-center">
+                      <Check size={14} className="mr-1 hover:animate-pulse" /> @Apply {formData.name ? formData.name.toUpperCase() : 'STANDARD DELIVERY'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         </div>
       ) : (
         <div className="flex flex-col items-center justify-center h-64 bg-white rounded-lg border border-dashed border-gray-300 text-gray-400">
           <Truck size={48} className="text-gray-200 mb-4" />
-          <p className="text-lg">Please select a District.</p>
-          <p className="text-sm font-medium mt-1 text-gray-300">Delivery configurations are managed on a per-district basis.</p>
+          <p className="text-lg">Please select a Location Scope.</p>
+          <p className="text-sm font-medium mt-1 text-gray-300">Delivery configurations need a district or "all districts" scope to apply.</p>
         </div>
       )}
 

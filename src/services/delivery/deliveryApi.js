@@ -24,8 +24,8 @@ export const deleteDeliveryType = async (id) => {
 };
 
 // Benchmark Prices
-export const getBenchmarkPrices = async () => {
-    const response = await axios.get(`${API_URL}/benchmark-prices`);
+export const getBenchmarkPrices = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/benchmark-prices`, { params });
     return response.data;
 };
 
