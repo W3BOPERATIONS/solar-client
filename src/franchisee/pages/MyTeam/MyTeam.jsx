@@ -1,5 +1,6 @@
 // FranchiseMyTeam.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     MapPin,
     Phone,
@@ -16,6 +17,7 @@ import {
 import { locationAPI } from '../../../api/api';
 
 const FranchiseMyTeam = () => {
+    const navigate = useNavigate();
     const [selectedDistrict, setSelectedDistrict] = useState('all');
     const [districts, setDistricts] = useState([]);
 
@@ -239,7 +241,7 @@ const FranchiseMyTeam = () => {
                 <button
                     id="addTeamBtn"
                     className="bg-blue-600 text-white rounded-lg shadow-lg flex items-center px-4 py-2 hover:bg-blue-700 transition-all duration-300 hover:shadow-xl"
-                    onClick={() => window.location.href = '/franchise-add-team'}
+                    onClick={() => navigate('/franchisee/my-team/add')}
                 >
                     <Plus size={18} className="mr-2" />
                     Add Team

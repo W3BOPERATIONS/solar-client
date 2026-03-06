@@ -1,5 +1,6 @@
 // FranchiseDistrictManager.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     MapPin,
     MoreVertical,
@@ -25,6 +26,7 @@ import {
 import { locationAPI } from '../../../api/api';
 
 const FranchiseDistrictManager = () => {
+    const navigate = useNavigate();
     const [selectedDistrict, setSelectedDistrict] = useState('all');
     const [showProfileView, setShowProfileView] = useState(false);
     const [selectedManager, setSelectedManager] = useState(null);
@@ -37,14 +39,14 @@ const FranchiseDistrictManager = () => {
     const [activeDropdown, setActiveDropdown] = useState(null);
     const [districts, setDistricts] = useState([]);
 
-    // Sample Manager Data (Restored mock data for now, ideally this should also be dynamic)
+    // Sample Manager Data
     const [managers] = useState([
         {
             name: "Smith",
             role: "District Manager",
             email: "john@example.com",
             phone: "+1234567890",
-            district: "rajkot", // This needs to match dynamic district name or ID
+            district: "rajkot",
             projectType: "Residential (25 kW)",
             completed: 12,
             pending: 3,
@@ -107,7 +109,7 @@ const FranchiseDistrictManager = () => {
     ]);
 
     // Fetch districts on mount
-    React.useEffect(() => {
+    useEffect(() => {
         const fetchDistricts = async () => {
             try {
                 const response = await locationAPI.getAllDistricts({ isActive: true });
@@ -120,6 +122,34 @@ const FranchiseDistrictManager = () => {
         };
         fetchDistricts();
     }, []);
+
+    const viewProfile = (managerName) => {
+        const manager = managers.find(m => m.name === managerName);
+        if (manager) {
+            setSelectedManager(manager);
+            setShowProfileView(true);
+        }
+    };
+
+    const closeProfile = () => {
+        setShowProfileView(false);
+        setSelectedManager(null);
+    };
+
+    const handlePasswordReset = () => {
+        if (resetPasswordData.newPassword.length < 6) {
+            alert("New password must be at least 6 characters long.");
+            return;
+        }
+        if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
+            alert("New password and confirm password do not match.");
+            return;
+        }
+
+        alert(`Password for ${resetPasswordData.managerName} successfully reset!`);
+        setShowResetPasswordModal(false);
+        setResetPasswordData({ managerName: '', newPassword: '', confirmPassword: '' });
+    };
 
     const renderManagerCards = () => {
         const filtered = selectedDistrict === 'all'
@@ -245,368 +275,216 @@ const FranchiseDistrictManager = () => {
         ));
     };
 
-    const viewProfile = (managerName) => {
-        const manager = managers.find(m => m.name === managerName);
-        if (manager) {
-            setSelectedManager(manager);
-            setShowProfileView(true);
-        }
-    };
-
-    const closeProfile = () => {
-        setShowProfileView(false);
-        setSelectedManager(null);
-    };
-
-    const handlePasswordReset = () => {
-        if (resetPasswordData.newPassword.length < 6) {
-            alert("New password must be at least 6 characters long.");
-            return;
-        }
-        if (resetPasswordData.newPassword !== resetPasswordData.confirmPassword) {
-            alert("New password and confirm password do not match.");
-            return;
-        }
-
-        alert(`Password for ${resetPasswordData.managerName} successfully reset!`);
-        setShowResetPasswordModal(false);
-        setResetPasswordData({ managerName: '', newPassword: '', confirmPassword: '' });
-    };
-
     return (
         <div className="container mx-auto px-4 py-3 max-w-7xl">
             {/* Main Content */}
-            <div className={showProfileView ? 'hidden' : ''}>
-                <div className="bg-white rounded-lg shadow-sm mb-3 border-0">
-                    <div className="p-6">
-                        <h3 className="text-2xl mb-1 text-blue-600 font-semibold">District Managers</h3>
-                        <p className="text-gray-500 mb-0">Performance overview of your team</p>
-                    </div>
-                </div>
-
-                <br />
-
-                {/* District Cards */}
-                <div className="flex overflow-x-auto pb-3 mb-1 space-x-3">
-                    <div
-                        className={`min-w-[160px] cursor-pointer rounded-lg border bg-white shadow-sm transition-all duration-300 ${selectedDistrict === 'all' ? '!bg-[#35a5da] border-blue-500 text-white' : ''
-                            }`}
-                        onClick={() => setSelectedDistrict('all')}
-                    >
-                        <div className="p-4 text-center">
-                            <MapPin className={`mx-auto mb-1 ${selectedDistrict === 'all' ? 'text-white' : 'text-blue-600'}`} size={20} />
-                            <div className="text-sm font-semibold">All</div>
+            {!showProfileView && (
+                <div>
+                    <div className="bg-white rounded-lg shadow-sm mb-3 border-0">
+                        <div className="p-6">
+                            <h3 className="text-2xl mb-1 text-blue-600 font-semibold">District Managers</h3>
+                            <p className="text-gray-500 mb-0">Performance overview of your team</p>
                         </div>
                     </div>
-                    {districts.map((district) => (
+
+                    {/* District Cards */}
+                    <div className="flex overflow-x-auto pb-3 mb-1 space-x-3">
                         <div
-                            key={district._id}
-                            className={`min-w-[160px] cursor-pointer rounded-lg border bg-white shadow-sm transition-all duration-300 ${selectedDistrict === district.name.toLowerCase() ? '!bg-[#35a5da] border-blue-500 text-white' : ''
+                            className={`min-w-[160px] cursor-pointer rounded-lg border bg-white shadow-sm transition-all duration-300 ${selectedDistrict === 'all' ? 'bg-blue-500 border-blue-500 text-white' : 'hover:border-blue-300'
                                 }`}
-                            onClick={() => setSelectedDistrict(district.name.toLowerCase())}
+                            onClick={() => setSelectedDistrict('all')}
                         >
                             <div className="p-4 text-center">
-                                <MapPin className={`mx-auto mb-1 ${selectedDistrict === district.name.toLowerCase() ? 'text-white' : 'text-blue-600'}`} size={20} />
-                                <div className="text-sm font-semibold">{district.name}</div>
+                                <MapPin className={`mx-auto mb-1 ${selectedDistrict === 'all' ? 'text-white' : 'text-blue-600'}`} size={20} />
+                                <div className="text-sm font-semibold">All Districts</div>
                             </div>
                         </div>
-                    ))}
-                </div>
-
-                {/* Manager Cards */}
-                <div className="mt-3 space-y-3">
-                    {renderManagerCards()}
-                    {selectedDistrict !== 'all' && managers.filter(m => m.district === selectedDistrict).length === 0 && (
-                        <div className="bg-gray-50 text-center p-4 rounded">
-                            No managers found for this district.
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            {/* Profile View */}
-            {selectedManager && (
-                <div className={showProfileView ? '' : 'hidden'}>
-                    <div className="flex justify-between items-center mb-4">
-                        <h4 className="text-xl font-semibold mb-0">District Manager Details</h4>
-                        <button
-                            type="button"
-                            className="text-gray-500 hover:text-gray-700"
-                            onClick={closeProfile}
-                        >
-                            <X size={20} />
-                        </button>
+                        {districts.map((district) => (
+                            <div
+                                key={district._id}
+                                className={`min-w-[160px] cursor-pointer rounded-lg border bg-white shadow-sm transition-all duration-300 ${selectedDistrict === district.name.toLowerCase() ? 'bg-blue-500 border-blue-500 text-white' : 'hover:border-blue-300'
+                                    }`}
+                                onClick={() => setSelectedDistrict(district.name.toLowerCase())}
+                            >
+                                <div className="p-4 text-center">
+                                    <MapPin className={`mx-auto mb-1 ${selectedDistrict === district.name.toLowerCase() ? 'text-white' : 'text-blue-600'}`} size={20} />
+                                    <div className="text-sm font-semibold">{district.name}</div>
+                                </div>
+                            </div>
+                        ))}
                     </div>
 
-                    {/* Profile Card */}
-                    <div className="bg-white rounded-lg shadow-sm mb-4 border-0 p-6">
-                        <div className="flex items-center mb-4">
-                            <div className="w-10 h-10 bg-blue-600 text-white rounded-lg flex items-center justify-center text-2xl mr-4 uppercase">
-                                {selectedManager.name.charAt(0)}
+                    {/* Manager Cards */}
+                    <div className="mt-3 space-y-3">
+                        {renderManagerCards()}
+                        {selectedDistrict !== 'all' && managers.filter(m => m.district === selectedDistrict).length === 0 && (
+                            <div className="bg-white text-center p-8 rounded-xl shadow-sm border border-dashed border-gray-300">
+                                <p className="text-gray-500">No managers found for this district.</p>
                             </div>
-                            <div>
-                                <h4 className="text-xl font-semibold mb-0">{selectedManager.name}</h4>
-                                <span className="bg-gray-600 text-white px-2 py-1 rounded text-xs">{selectedManager.role}</span>
-                            </div>
-                        </div>
-
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-                            <div className="flex items-center">
-                                <Phone size={16} className="text-blue-600 mr-2" />
-                                <div>
-                                    <div className="text-gray-500 uppercase text-xs font-medium">Contact</div>
-                                    <strong className="text-gray-900">{selectedManager.phone}</strong>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center">
-                                <Mail size={16} className="text-red-500 mr-2" />
-                                <div>
-                                    <div className="text-gray-500 uppercase text-xs font-medium">Email</div>
-                                    <strong className="text-gray-900">{selectedManager.email}</strong>
-                                </div>
-                            </div>
-
-                            <div className="flex items-center">
-                                <Calendar size={16} className="text-green-600 mr-2" />
-                                <div>
-                                    <div className="text-gray-500 uppercase text-xs font-medium">Join Date</div>
-                                    <strong className="text-gray-900">{selectedManager.joinDate}</strong>
-                                </div>
-                            </div>
-                        </div>
+                        )}
                     </div>
-
-                    <h5 className="text-lg font-semibold mb-3">Performance Overview</h5>
-
-                    {/* Performance Boxes */}
-                    <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-4">
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <Activity className="mx-auto mb-2 text-blue-600" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Leads</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.leads.total}</p>
-                        </div>
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <FileText className="mx-auto mb-2 text-cyan-600" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Survey</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.survey.total}</p>
-                        </div>
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <FileText className="mx-auto mb-2 text-yellow-600" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Quote</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.quote.total}</p>
-                        </div>
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <PenSquare className="mx-auto mb-2 text-gray-600" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Project Signup</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.projectSignup.total}</p>
-                        </div>
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <Wrench className="mx-auto mb-2 text-gray-900" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Install</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.install.total}</p>
-                        </div>
-                        <div className="border rounded-lg p-4 text-center shadow-sm">
-                            <Settings className="mx-auto mb-2 text-yellow-600" size={24} />
-                            <h6 className="text-sm font-semibold mb-0">Services</h6>
-                            <p className="font-bold mb-0">{selectedManager.performance.services.total}</p>
-                        </div>
-                    </div>
-
-                    <h5 className="text-lg font-semibold mb-3">Performance Metrics</h5>
-
-                    {/* Performance Metric Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
-                        {/* Leads */}
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-0">
-                            <div className="flex justify-between items-start">
-                                <div className="text-red-600 font-bold text-xl">75%</div>
-                                <div className="w-12 h-12 rounded-full bg-red-100 border-4 border-red-200 flex items-center justify-center">
-                                    <Circle size={12} className="text-red-600 fill-current" />
-                                </div>
-                            </div>
-                            <div className="mt-2">
-                                <h6 className="text-sm font-semibold mb-1">Leads</h6>
-                                <small className="text-gray-500 block">
-                                    <strong className="text-red-600">Active 10</strong>
-                                </small>
-                                <small className="text-gray-500">75% Completed</small>
-                            </div>
-                        </div>
-
-                        {/* Survey */}
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-0">
-                            <div className="flex justify-between items-start">
-                                <div className="text-cyan-600 font-bold text-xl">75%</div>
-                                <div className="w-12 h-12 rounded-full bg-cyan-100 border-4 border-cyan-200 flex items-center justify-center">
-                                    <Circle size={12} className="text-cyan-600 fill-current" />
-                                </div>
-                            </div>
-                            <div className="mt-2">
-                                <h6 className="text-sm font-semibold mb-1">Survey</h6>
-                                <small className="text-gray-500 block">
-                                    <strong className="text-cyan-600">Active 4</strong>
-                                </small>
-                                <small className="text-gray-500">75% Completed</small>
-                            </div>
-                        </div>
-
-                        {/* Quote */}
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-0">
-                            <div className="flex justify-between items-start">
-                                <div className="text-green-600 font-bold text-xl">60%</div>
-                                <div className="w-12 h-12 rounded-full bg-green-100 border-4 border-green-200 flex items-center justify-center">
-                                    <Circle size={12} className="text-green-600 fill-current" />
-                                </div>
-                            </div>
-                            <div className="mt-2">
-                                <h6 className="text-sm font-semibold mb-1">Quote</h6>
-                                <small className="text-gray-500 block">
-                                    <strong className="text-green-600">Active 8</strong>
-                                </small>
-                                <small className="text-gray-500">60% Completed</small>
-                            </div>
-                        </div>
-
-                        {/* Project Signup */}
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-0">
-                            <div className="flex justify-between items-start">
-                                <div className="text-yellow-500 font-bold text-xl">50%</div>
-                                <div className="w-12 h-12 rounded-full bg-yellow-100 border-4 border-yellow-200 flex items-center justify-center">
-                                    <Circle size={12} className="text-yellow-500 fill-current" />
-                                </div>
-                            </div>
-                            <div className="mt-2">
-                                <h6 className="text-sm font-semibold mb-1">Project Signup</h6>
-                                <small className="text-gray-500 block">
-                                    <strong className="text-yellow-500">Active 3</strong>
-                                </small>
-                                <small className="text-gray-500">50% Completed</small>
-                            </div>
-                        </div>
-
-                        {/* Installation */}
-                        <div className="bg-white p-4 rounded-lg shadow-sm border-0">
-                            <div className="flex justify-between items-start">
-                                <div className="text-purple-600 font-bold text-xl">80%</div>
-                                <div className="w-12 h-12 rounded-full bg-purple-100 border-4 border-purple-200 flex items-center justify-center">
-                                    <Circle size={12} className="text-purple-600 fill-current" />
-                                </div>
-                            </div>
-                            <div className="mt-2">
-                                <h6 className="text-sm font-semibold mb-1">Installation</h6>
-                                <small className="text-gray-500 block">
-                                    <strong className="text-purple-600">Active 3</strong>
-                                </small>
-                                <small className="text-gray-500">80% Completed</small>
-                            </div>
-                        </div>
-                    </div>
-
-                    <h5 className="text-lg font-semibold mb-3">Projects ({selectedManager.projects.length})</h5>
-
-                    {/* Projects List */}
-                    {selectedManager.projects.map((project, idx) => (
-                        <div key={idx} className="bg-white rounded-lg shadow-sm mb-2 border-0">
-                            <div className="p-4">
-                                <div className="flex justify-between items-center">
-                                    <div>
-                                        <h6 className="text-base font-semibold mb-1">{project.name}</h6>
-                                        <small className="text-gray-500">
-                                            <Bolt size={12} className="inline text-yellow-500 mr-1" />
-                                            {project.size}
-                                            <Calendar size={12} className="inline ml-3 mr-1" />
-                                            {project.date}
-                                            <IndianRupee size={12} className="inline ml-3 mr-1" />
-                                            {project.amount.toLocaleString()}
-                                        </small>
-                                    </div>
-                                    <span className={`px-3 py-1 rounded-full text-xs font-semibold uppercase ${project.status === 'Completed'
-                                        ? 'bg-green-100 text-green-800'
-                                        : 'bg-blue-100 text-blue-800'
-                                        }`}>
-                                        {project.status}
-                                    </span>
-                                </div>
-                            </div>
-                        </div>
-                    ))}
                 </div>
             )}
 
-            {/* Create User Button */}
+            {/* Profile View */}
+            {showProfileView && selectedManager && (
+                <div>
+                    <div className="flex justify-between items-center mb-6">
+                        <div className="flex items-center">
+                            <button onClick={closeProfile} className="mr-4 p-2 hover:bg-gray-100 rounded-full">
+                                <X size={24} />
+                            </button>
+                            <h4 className="text-2xl font-bold text-gray-800 mb-0">District Manager Details</h4>
+                        </div>
+                    </div>
+
+                    {/* Profile Card */}
+                    <div className="bg-white rounded-xl shadow-sm mb-6 border border-gray-100 overflow-hidden">
+                        <div className="p-8">
+                            <div className="flex items-center mb-6">
+                                <img src={selectedManager.image} className="w-20 h-20 rounded-full mr-6 border-4 border-blue-50" alt="profile" />
+                                <div>
+                                    <h2 className="text-3xl font-bold text-gray-800 mb-1">{selectedManager.name}</h2>
+                                    <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs font-semibold uppercase tracking-wider">
+                                        {selectedManager.role}
+                                    </span>
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                <div className="flex items-center p-4 bg-gray-50 rounded-lg">
+                                    <Phone size={20} className="text-blue-600 mr-4" />
+                                    <div>
+                                        <div className="text-gray-500 text-xs font-medium uppercase tracking-wider">Contact</div>
+                                        <div className="font-semibold">{selectedManager.phone}</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center p-4 bg-gray-50 rounded-lg">
+                                    <Mail size={20} className="text-red-500 mr-4" />
+                                    <div>
+                                        <div className="text-gray-500 text-xs font-medium uppercase tracking-wider">Email</div>
+                                        <div className="font-semibold">{selectedManager.email}</div>
+                                    </div>
+                                </div>
+
+                                <div className="flex items-center p-4 bg-gray-50 rounded-lg">
+                                    <Calendar size={20} className="text-green-600 mr-4" />
+                                    <div>
+                                        <div className="text-gray-500 text-xs font-medium uppercase tracking-wider">Join Date</div>
+                                        <div className="font-semibold">{selectedManager.joinDate}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h5 className="text-xl font-bold text-gray-800 mb-4">Performance Insights</h5>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+                        {Object.entries(selectedManager.performance).map(([key, data]) => (
+                            <div key={key} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 text-center">
+                                <div className="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-50 text-blue-600 mb-3">
+                                    {key === 'leads' && <Activity size={24} />}
+                                    {key === 'survey' && <FileText size={24} />}
+                                    {key === 'quote' && <IndianRupee size={24} />}
+                                    {key === 'projectSignup' && <PenSquare size={24} />}
+                                    {key === 'install' && <Wrench size={24} />}
+                                    {key === 'services' && <Settings size={24} />}
+                                </div>
+                                <h6 className="text-sm font-semibold capitalize text-gray-600 mb-1">{key}</h6>
+                                <div className="text-2xl font-bold text-gray-800">{data.total}</div>
+                                <div className="text-xs text-green-600 font-medium mt-1">{data.completed}% Efficiency</div>
+                            </div>
+                        ))}
+                    </div>
+
+                    <h5 className="text-xl font-bold text-gray-800 mb-4">Active Projects</h5>
+                    <div className="grid grid-cols-1 gap-4">
+                        {selectedManager.projects.map((project, idx) => (
+                            <div key={idx} className="bg-white p-6 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center transition-hover hover:shadow-md">
+                                <div className="flex items-center">
+                                    <div className="w-12 h-12 rounded-lg bg-yellow-50 flex items-center justify-center mr-4">
+                                        <Bolt className="text-yellow-600" size={24} />
+                                    </div>
+                                    <div>
+                                        <h6 className="text-lg font-bold text-gray-800 mb-1">{project.name}</h6>
+                                        <div className="flex items-center text-sm text-gray-500">
+                                            <span className="mr-4">{project.size}</span>
+                                            <span className="flex items-center">
+                                                <IndianRupee size={14} className="mr-1" />
+                                                {project.amount.toLocaleString()}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <span className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest ${project.status === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                    }`}>
+                                    {project.status}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Floating Action Button */}
             <button
                 type="button"
-                className="fixed bottom-8 right-8 bg-blue-600 text-white rounded-full px-6 py-3 font-semibold shadow-lg flex items-center hover:translate-y-[-2px] transition-all duration-300 z-50"
-                onClick={() => window.location.href = '/franchise-create-district-manager'}
+                className="fixed bottom-10 right-10 bg-blue-600 text-white w-16 h-16 rounded-full shadow-2xl flex items-center justify-center hover:bg-blue-700 hover:scale-110 transition-all duration-300 z-50 group"
+                onClick={() => navigate('/franchisee/district-manager/create')}
+                title="Create New District Manager"
             >
-                <UserPlus size={20} className="mr-2" />
-                Create User
+                <UserPlus size={28} />
+                <span className="absolute right-full mr-4 bg-gray-800 text-white px-3 py-1.5 rounded text-sm whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none shadow-xl">
+                    Create New Manager
+                </span>
             </button>
 
             {/* Reset Password Modal */}
             {showResetPasswordModal && (
-                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-6 max-w-md w-full">
-                        <div className="flex justify-between items-center mb-4">
-                            <h5 className="text-xl font-bold">Reset Password</h5>
-                            <button
-                                onClick={() => setShowResetPasswordModal(false)}
-                                className="text-gray-500 hover:text-gray-700"
-                            >
-                                <X size={20} />
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] px-4">
+                    <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden transform transition-all animate-in fade-in zoom-in duration-300">
+                        <div className="bg-blue-600 p-6 text-white flex justify-between items-center">
+                            <h5 className="text-xl font-bold">Secure Reset</h5>
+                            <button onClick={() => setShowResetPasswordModal(false)} className="hover:rotate-90 transition-transform duration-300">
+                                <X size={24} />
                             </button>
                         </div>
-
-                        <p className="text-sm text-gray-500 mb-4">
-                            You are resetting the password for <strong className="text-gray-900">{resetPasswordData.managerName}</strong>. Please enter and confirm the new password.
-                        </p>
-
-                        <div className="space-y-4">
-                            <div>
-                                <label className="text-sm font-semibold block mb-1">New Password</label>
-                                <div className="relative">
-                                    <Lock size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                    <input
-                                        type="password"
-                                        className="w-full pl-10 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Enter at least 6 characters"
-                                        value={resetPasswordData.newPassword}
-                                        onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
-                                    />
+                        <div className="p-8">
+                            <p className="text-gray-600 mb-6">Resetting password for <span className="font-bold text-gray-800">{resetPasswordData.managerName}</span>. Please use a strong password.</p>
+                            <div className="space-y-6">
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">New Password</label>
+                                    <div className="relative">
+                                        <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="password"
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                                            placeholder="Enter strong password"
+                                            value={resetPasswordData.newPassword}
+                                            onChange={(e) => setResetPasswordData({ ...resetPasswordData, newPassword: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
-
-                            <div>
-                                <label className="text-sm font-semibold block mb-1">Confirm Password</label>
-                                <div className="relative">
-                                    <Lock size={16} className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
-                                    <input
-                                        type="password"
-                                        className="w-full pl-10 pr-3 py-2 border rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Re-enter the new password"
-                                        value={resetPasswordData.confirmPassword}
-                                        onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
-                                    />
+                                <div>
+                                    <label className="block text-sm font-bold text-gray-700 mb-2">Confirm Password</label>
+                                    <div className="relative">
+                                        <Lock size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+                                        <input
+                                            type="password"
+                                            className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                                            placeholder="Repeat password"
+                                            value={resetPasswordData.confirmPassword}
+                                            onChange={(e) => setResetPasswordData({ ...resetPasswordData, confirmPassword: e.target.value })}
+                                        />
+                                    </div>
                                 </div>
                             </div>
                         </div>
-
-                        <div className="flex justify-end space-x-3 mt-6">
-                            <button
-                                type="button"
-                                className="px-4 py-2 text-gray-600 hover:text-gray-800"
-                                onClick={() => setShowResetPasswordModal(false)}
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                type="button"
-                                className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
-                                onClick={handlePasswordReset}
-                            >
-                                Reset Password
-                            </button>
+                        <div className="p-6 bg-gray-50 flex justify-end space-x-3">
+                            <button onClick={() => setShowResetPasswordModal(false)} className="px-6 py-2 text-gray-600 font-bold hover:text-gray-800 transition-colors">Cancel</button>
+                            <button onClick={handlePasswordReset} className="px-6 py-2 bg-blue-600 text-white rounded-xl font-bold hover:bg-blue-700 shadow-lg shadow-blue-200 transition-all">Update Password</button>
                         </div>
                     </div>
                 </div>

@@ -1,5 +1,6 @@
 // FranchiseProjectManagementLeadPartner.jsx
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     MapPin,
     MoreVertical,
@@ -25,6 +26,7 @@ import {
 import { locationAPI } from '../../../api/api';
 
 const FranchiseProjectManagementLeadPartner = () => {
+    const navigate = useNavigate();
     const [districts, setDistricts] = useState([]);
     const [selectedDistrict, setSelectedDistrict] = useState('all');
     const [showProfileView, setShowProfileView] = useState(false);
@@ -534,7 +536,7 @@ const FranchiseProjectManagementLeadPartner = () => {
             <button
                 type="button"
                 className="fixed bottom-8 right-8 bg-blue-600 text-white rounded-full px-6 py-3 font-semibold shadow-lg flex items-center hover:translate-y-[-2px] transition-all duration-300 z-50"
-                onClick={() => window.location.href = '/franchise-project-management-create-lead-partner'}
+                onClick={() => navigate('/franchisee/lead-partner/create-form')}
             >
                 <UserPlus size={20} className="mr-2" />
                 Create User

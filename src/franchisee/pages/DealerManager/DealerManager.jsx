@@ -1,5 +1,6 @@
 // FranchiseDealerManager.jsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
     MapPin,
     MoreVertical,
@@ -26,6 +27,7 @@ import Chart from 'react-apexcharts';
 import { locationAPI } from '../../../api/api';
 
 const FranchiseDealerManager = () => {
+    const navigate = useNavigate();
     const [selectedDistrict, setSelectedDistrict] = useState('all');
     const [showProfileView, setShowProfileView] = useState(false);
     const [selectedManager, setSelectedManager] = useState(null);
@@ -35,6 +37,16 @@ const FranchiseDealerManager = () => {
         newPassword: '',
         confirmPassword: ''
     });
+
+    // State for dropdown visibility
+    const [openDropdownIndex, setOpenDropdownIndex] = useState(null);
+
+    // Close dropdown on click outside
+    useEffect(() => {
+        const handleClickOutside = () => setOpenDropdownIndex(null);
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, []);
 
     // Sample Manager Data
     const [managers] = useState([
@@ -182,59 +194,72 @@ const FranchiseDealerManager = () => {
                 <div className="p-6">
                     <div className="relative">
                         <div className="absolute top-0 right-0">
-                            <div className="dropdown relative">
+                            <div className="relative">
                                 <MoreVertical
-                                    className="cursor-pointer"
+                                    className="cursor-pointer text-gray-500 hover:text-gray-800"
                                     size={20}
-                                    data-bs-toggle="dropdown"
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenDropdownIndex(openDropdownIndex === index ? null : index);
+                                    }}
                                 />
-                                <div className="dropdown-menu absolute right-0 mt-2 w-48 bg-white rounded-md shadow-lg border hidden">
-                                    <a
-                                        href="#"
-                                        className="flex items-center px-4 py-2 hover:bg-gray-100"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            viewProfile(manager.name);
-                                        }}
-                                    >
-                                        <Eye size={16} className="mr-2" /> View Profile
-                                    </a>
-                                    <div className="border-t my-1"></div>
-                                    <a
-                                        href="#"
-                                        className="flex items-center px-4 py-2 hover:bg-gray-100"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            setResetPasswordData({ ...resetPasswordData, managerName: manager.name });
-                                            setShowResetPasswordModal(true);
-                                        }}
-                                    >
-                                        <RefreshCw size={16} className="mr-2" /> Reset Password
-                                    </a>
-                                    <a
-                                        href="#"
-                                        className="flex items-center px-4 py-2 hover:bg-gray-100"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            alert(`Freeze Account of ${manager.name}`);
-                                        }}
-                                    >
-                                        <Ban size={16} className="mr-2" /> Freeze Account
-                                    </a>
-                                    <div className="border-t my-1"></div>
-                                    <a
-                                        href="#"
-                                        className="flex items-center px-4 py-2 text-red-600 hover:bg-gray-100"
-                                        onClick={(e) => {
-                                            e.preventDefault();
-                                            if (window.confirm(`Are you sure you want to delete ${manager.name}?`)) {
-                                                alert(`${manager.name} has been deleted`);
-                                            }
-                                        }}
-                                    >
-                                        <Trash2 size={16} className="mr-2" /> Delete
-                                    </a>
-                                </div>
+                                {openDropdownIndex === index && (
+                                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-md shadow-xl border border-gray-100 z-50 py-1">
+                                        <a
+                                            href="#"
+                                            className="flex items-center px-4 py-2 hover:bg-gray-100"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                viewProfile(manager.name);
+                                                setOpenDropdownIndex(null);
+                                            }}
+                                        >
+                                            <Eye size={16} className="mr-2" /> View Profile
+                                        </a>
+                                        <div className="border-t my-1"></div>
+                                        <a
+                                            href="#"
+                                            className="flex items-center px-4 py-2 hover:bg-gray-100"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                setResetPasswordData({ ...resetPasswordData, managerName: manager.name });
+                                                setShowResetPasswordModal(true);
+                                                setOpenDropdownIndex(null);
+                                            }}
+                                        >
+                                            <RefreshCw size={16} className="mr-2" /> Reset Password
+                                        </a>
+                                        <a
+                                            href="#"
+                                            className="flex items-center px-4 py-2 hover:bg-gray-100"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                alert(`Freeze Account of ${manager.name}`);
+                                                setOpenDropdownIndex(null);
+                                            }}
+                                        >
+                                            <Ban size={16} className="mr-2" /> Freeze Account
+                                        </a>
+                                        <div className="border-t my-1"></div>
+                                        <a
+                                            href="#"
+                                            className="flex items-center px-4 py-2 text-red-600 hover:bg-gray-100"
+                                            onClick={(e) => {
+                                                e.preventDefault();
+                                                e.stopPropagation();
+                                                if (window.confirm(`Are you sure you want to delete ${manager.name}?`)) {
+                                                    alert(`${manager.name} has been deleted`);
+                                                }
+                                                setOpenDropdownIndex(null);
+                                            }}
+                                        >
+                                            <Trash2 size={16} className="mr-2" /> Delete
+                                        </a>
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
@@ -606,7 +631,7 @@ const FranchiseDealerManager = () => {
             <button
                 type="button"
                 className="fixed bottom-8 right-8 bg-blue-600 text-white rounded-full px-6 py-3 font-semibold shadow-lg flex items-center hover:translate-y-[-2px] transition-all duration-300 z-50"
-                onClick={() => window.location.href = '/franchise-create-dealer-manager'}
+                onClick={() => navigate('/franchisee/dealer-manager/create')}
             >
                 <UserPlus size={20} className="mr-2" />
                 Create User

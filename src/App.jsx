@@ -57,11 +57,7 @@ import SolarPanelBundleSetting from './admin/pages/settings/sales/SolarPanelBund
 // Marketing Settings
 import CampaignManagement from './admin/pages/settings/marketing/CampaignManagement';
 
-// Delivery Settings
-import DeliveryType from './admin/pages/settings/delivery/DeliveryType';
-import BenchmarkPrice from './admin/pages/settings/delivery/BenchmarkPrice';
-import VehicleSelection from './admin/pages/settings/delivery/VehicleSelection';
-import VendorDeliveryPlan from './admin/pages/settings/delivery/VendorDeliveryPlan';
+
 
 // Installer Settings
 import SolarInstaller from './admin/pages/settings/installer/SolarInstaller';
@@ -103,18 +99,14 @@ import CombokitOverview from './admin/pages/settings/combokit-overview/CombokitO
 // Order Procurement Settings (direct file)
 import OrderProcurement from './admin/pages/settings/order-procurement/OrderProcurement';
 
-// Franchisee Settings
-import FranchiseePlans from './admin/pages/settings/franchisee/Plans';
-import FranchiseePointsRewards from './admin/pages/settings/franchisee/PointsRewards';
-import FranchiseeOnboardingGoals from './admin/pages/settings/franchisee/OnboardingGoals';
-import FranchiseeProfessionType from './admin/pages/settings/franchisee/ProfessionType';
-import FranchiseeOrderSetting from './admin/pages/settings/franchisee/OrderSetting';
 
-// Dealer Settings
-import DealerPlans from './admin/pages/settings/dealer/Plans';
-import DealerPointsRewards from './admin/pages/settings/dealer/PointsRewards';
-import DealerOnboardingGoals from './admin/pages/settings/dealer/OnboardingGoals';
-import DealerProfessionType from './admin/pages/settings/dealer/ProfessionType';
+
+// Partner Settings (Unified)
+import AddPartner from './admin/pages/settings/partner/AddPartner';
+import PartnerPlans from './admin/pages/settings/partner/Plans';
+import PartnerPointsRewards from './admin/pages/settings/partner/PointsRewards';
+import PartnerOnboardingGoals from './admin/pages/settings/partner/OnboardingGoals';
+import PartnerProfessionType from './admin/pages/settings/partner/ProfessionType';
 
 // HRMS Settings
 import HrmsSettings from './admin/pages/settings/hrms/Settings';
@@ -393,11 +385,7 @@ function App() {
             {/* Marketing Settings */}
             <Route path="settings/marketing/campaign-management" element={<CampaignManagement />} />
 
-            {/* Delivery Settings */}
-            <Route path="settings/delivery/delivery-type" element={<DeliveryType />} />
-            <Route path="settings/delivery/benchmark-price" element={<BenchmarkPrice />} />
-            <Route path="settings/delivery/vehicle-selection" element={<VehicleSelection />} />
-            <Route path="settings/delivery/vendor-delivery-plan" element={<VendorDeliveryPlan />} />
+
 
             {/* Installer Settings */}
             <Route path="settings/installer/solar-installer" element={<SolarInstaller />} />
@@ -439,18 +427,12 @@ function App() {
             {/* Order Procurement Settings */}
             <Route path="settings/order-procurement" element={<OrderProcurement />} />
 
-            {/* Franchisee Settings */}
-            <Route path="settings/franchisee/plans" element={<FranchiseePlans />} />
-            <Route path="settings/franchisee/points-rewards" element={<FranchiseePointsRewards />} />
-            <Route path="settings/franchisee/onboarding-goals" element={<FranchiseeOnboardingGoals />} />
-            <Route path="settings/franchisee/profession-type" element={<FranchiseeProfessionType />} />
-            <Route path="settings/franchisee/order-setting" element={<FranchiseeOrderSetting />} />
-
-            {/* Dealer Settings */}
-            <Route path="settings/dealer/plans" element={<DealerPlans />} />
-            <Route path="settings/dealer/points-rewards" element={<DealerPointsRewards />} />
-            <Route path="settings/dealer/onboarding-goals" element={<DealerOnboardingGoals />} />
-            <Route path="settings/dealer/profession-type" element={<DealerProfessionType />} />
+            {/* Partner Settings (Unified) */}
+            <Route path="settings/partner/add-partner" element={<AddPartner />} />
+            <Route path="settings/partner/plans" element={<PartnerPlans />} />
+            <Route path="settings/partner/points-rewards" element={<PartnerPointsRewards />} />
+            <Route path="settings/partner/onboarding-goals" element={<PartnerOnboardingGoals />} />
+            <Route path="settings/partner/profession-type" element={<PartnerProfessionType />} />
 
             {/* HRMS Settings */}
             <Route path="settings/hrms/settings" element={<HrmsSettings />} />

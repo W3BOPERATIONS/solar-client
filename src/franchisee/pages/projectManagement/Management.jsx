@@ -11,8 +11,10 @@ import {
     Battery,
     ArrowRight
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 const ProjectManagement = () => {
+    const navigate = useNavigate();
     // State for filters
     const [filters, setFilters] = useState({
         category: '',
@@ -84,20 +86,11 @@ const ProjectManagement = () => {
     // Handle continue button click
     const handleContinue = () => {
         if (selectedCustomerType) {
-            // In a real app, you would navigate to the appropriate page
-            // For now, we'll just show an alert with the navigation
-            const url = selectedCustomerType === 'Residential'
-                ? 'Franchiseresidentialprojectmanagement.php'
-                : 'FranchiseCommercialProjectManagement.php';
-
-            alert(`Navigating to: ${url}\nWith filters: ${JSON.stringify(filters, null, 2)}`);
-
-            // In a real React app with routing, you would do:
-            // if (selectedCustomerType === 'Residential') {
-            //   navigate('/franchise/residential-project-management');
-            // } else {
-            //   navigate('/franchise/commercial-project-management');
-            // }
+            if (selectedCustomerType === 'Residential') {
+                navigate('/franchisee/residential-project');
+            } else if (selectedCustomerType === 'Commercial') {
+                navigate('/franchisee/commercial-project');
+            }
         }
     };
 
@@ -214,8 +207,8 @@ const ProjectManagement = () => {
                         >
                             <div
                                 className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Residential'
-                                        ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                        : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
+                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
+                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
                                     }`}
                             >
                                 <Home
@@ -236,8 +229,8 @@ const ProjectManagement = () => {
                         >
                             <div
                                 className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Commercial'
-                                        ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                        : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
+                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
+                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
                                     }`}
                             >
                                 <Building2
@@ -256,8 +249,8 @@ const ProjectManagement = () => {
                         onClick={handleContinue}
                         disabled={!isContinueEnabled}
                         className={`mt-8 px-8 py-3 rounded-md text-white font-semibold text-lg flex items-center justify-center mx-auto transition-colors ${isContinueEnabled
-                                ? 'bg-blue-600 hover:bg-blue-700'
-                                : 'bg-gray-300 cursor-not-allowed'
+                            ? 'bg-blue-600 hover:bg-blue-700'
+                            : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >
                         Continue
