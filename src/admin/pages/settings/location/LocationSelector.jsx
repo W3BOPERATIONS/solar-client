@@ -22,9 +22,12 @@ const LocationSelector = ({
     layout = 'grid',
     showLevels: showLevelsProp,
     upto, // optional: 'country', 'state', 'district', 'cluster', 'zone', 'city'
-    multiple = {} // e.g. { district: true, cluster: true, zone: true }
+    multiple = {}, // e.g. { district: true, cluster: true, zone: true }
+    isZoneMode = false // true when activeTab === 'zones'
 }) => {
-    const levels = ['country', 'state', 'district', 'cluster', 'zone', 'city'];
+    const levels = isZoneMode
+        ? ['country', 'state', 'cluster', 'district', 'zone', 'city']
+        : ['country', 'state', 'district', 'cluster', 'zone', 'city'];
     const showLevels = showLevelsProp || (upto ? levels.slice(0, levels.indexOf(upto) + 1) : levels);
     const [data, setData] = useState({
         countries: [],
@@ -77,11 +80,14 @@ const LocationSelector = ({
         }
     };
 
-    const fetchDistricts = async (stateId) => {
-        if (!stateId) return;
+    const fetchDistricts = async (parentId, isCluster = false) => {
+        if (!parentId) return;
         try {
             setLoading(prev => ({ ...prev, districts: true }));
-            const res = await locationAPI.getAllDistricts({ stateId, isActive: true });
+            const params = { isActive: true };
+            if (isCluster) params.clusterId = parentId;
+            else params.stateId = parentId;
+            const res = await locationAPI.getAllDistricts(params);
             setData(prev => ({ ...prev, districts: res.data.data || [] }));
         } catch (err) {
             console.error('Failed to load districts', err);
@@ -90,11 +96,14 @@ const LocationSelector = ({
         }
     };
 
-    const fetchClusters = async (districtId) => {
-        if (!districtId) return;
+    const fetchClusters = async (parentId, isState = false) => {
+        if (!parentId) return;
         try {
             setLoading(prev => ({ ...prev, clusters: true }));
-            const res = await locationAPI.getAllClusters({ districtId, isActive: true });
+            const params = { isActive: true };
+            if (isState) params.stateId = parentId;
+            else params.districtId = parentId;
+            const res = await locationAPI.getAllClusters(params);
             setData(prev => ({ ...prev, clusters: res.data.data || [] }));
         } catch (err) {
             console.error('Failed to load clusters', err);
@@ -136,15 +145,28 @@ const LocationSelector = ({
     }, [values.country]);
 
     useEffect(() => {
-        if (values.state && showLevels.includes('district')) fetchDistricts(values.state);
-        else setData(prev => ({ ...prev, districts: [] }));
-    }, [values.state]);
+        if (values.state) {
+            if (isZoneMode && showLevels.includes('cluster')) fetchClusters(values.state, true);
+            else if (!isZoneMode && showLevels.includes('district')) fetchDistricts(values.state, false);
+            else {
+                setData(prev => ({ ...prev, districts: [], clusters: [] }));
+            }
+        } else {
+            setData(prev => ({ ...prev, districts: [], clusters: [] }));
+        }
+    }, [values.state, isZoneMode]);
 
     useEffect(() => {
         const districtId = Array.isArray(values.district) ? values.district[0] : values.district;
-        if (districtId && showLevels.includes('cluster')) fetchClusters(districtId);
-        else setData(prev => ({ ...prev, clusters: [] }));
-    }, [values.district]);
+        if (districtId && !isZoneMode && showLevels.includes('cluster')) fetchClusters(districtId, false);
+        else if (!isZoneMode) setData(prev => ({ ...prev, clusters: [] }));
+    }, [values.district, isZoneMode]);
+
+    useEffect(() => {
+        const clusterId = Array.isArray(values.cluster) ? values.cluster[0] : values.cluster;
+        if (clusterId && isZoneMode && showLevels.includes('district')) fetchDistricts(clusterId, true);
+        else if (isZoneMode) setData(prev => ({ ...prev, districts: [] }));
+    }, [values.cluster, isZoneMode]);
 
     useEffect(() => {
         const clusterId = Array.isArray(values.cluster) ? values.cluster[0] : values.cluster;
@@ -165,8 +187,10 @@ const LocationSelector = ({
         if (!multiple[level]) {
             if (level === 'country') Object.assign(updates, { state: '', district: multiple.district ? [] : '', cluster: multiple.cluster ? [] : '', zone: multiple.zone ? [] : '', city: '' });
             if (level === 'state') Object.assign(updates, { district: multiple.district ? [] : '', cluster: multiple.cluster ? [] : '', zone: multiple.zone ? [] : '', city: '' });
-            if (level === 'district') Object.assign(updates, { cluster: multiple.cluster ? [] : '', zone: multiple.zone ? [] : '', city: '' });
-            if (level === 'cluster') Object.assign(updates, { zone: multiple.zone ? [] : '', city: '' });
+            if (level === 'district' && !isZoneMode) Object.assign(updates, { cluster: multiple.cluster ? [] : '', zone: multiple.zone ? [] : '', city: '' });
+            if (level === 'cluster' && isZoneMode) Object.assign(updates, { district: multiple.district ? [] : '', zone: multiple.zone ? [] : '', city: '' });
+            if (level === 'cluster' && !isZoneMode) Object.assign(updates, { zone: multiple.zone ? [] : '', city: '' });
+            if (level === 'district' && isZoneMode) Object.assign(updates, { zone: multiple.zone ? [] : '', city: '' });
             if (level === 'zone') Object.assign(updates, { city: '' });
         }
 
@@ -239,9 +263,9 @@ const LocationSelector = ({
         <div className={layout === 'grid' ? 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4' : 'flex flex-col gap-4'}>
             {renderSelect('country', data.countries, 'Country')}
             {renderSelect('state', data.states, 'State', values.country)}
-            {renderSelect('district', data.districts, 'District', values.state)}
-            {renderSelect('cluster', data.clusters, 'Cluster', values.district)}
-            {renderSelect('zone', data.zones, 'Zone', values.cluster)}
+            {isZoneMode ? renderSelect('cluster', data.clusters, 'Cluster', values.state) : renderSelect('district', data.districts, 'District', values.state)}
+            {isZoneMode ? renderSelect('district', data.districts, 'District', values.cluster) : renderSelect('cluster', data.clusters, 'Cluster', values.district)}
+            {renderSelect('zone', data.zones, 'Zone', isZoneMode ? values.district : values.cluster)}
             {renderSelect('city', data.cities, 'City', values.zone)}
         </div>
     );

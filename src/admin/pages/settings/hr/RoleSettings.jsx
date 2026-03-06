@@ -94,40 +94,140 @@ const SIDEBAR_MODULES = [
 const ALL_SUB_MODULES = [...new Set(SIDEBAR_MODULES.reduce((acc, cat) => acc.concat(cat.modules.map(m => m.name)), []))];
 const ALL_CATEGORIES = SIDEBAR_MODULES.map(c => c.category);
 
-const OPTIONAL_TASKS_STRUCTURE = [
-  { category: "User Performance", subItems: ["User Performance"] },
-  { category: "Franchise Manager Dashboard", subItems: ["Franchise Manager Dashboard"] },
-  { category: "Franchise Dashboard", subItems: ["Franchise Dashboard"] },
-  { category: "Dealer Manager Dashboard", subItems: ["Dealer Manager Dashboard"] },
-  { category: "Dealer Dashboard", subItems: ["Dealer Dashboard"] },
-  { category: "Order by Loan", subItems: ["Order by Loan"] },
-  { category: "Installer", subItems: ["Solar Installer", "Installer Tool Requirement", "Rating Setting", "Installer Agency Plans", "Installer Vendors"] },
-  { category: "Delivery", subItems: ["Delivery Type", "Delivery Benchmark Price", "Vehicle Selection", "Vendor Delivery Plan"] },
-  { category: "Inventory", subItems: ["Inventory Overview", "Inventory Level Management", "AutoLock Order Limit"] },
-  { category: "Vendors", subItems: ["Supplier Type", "Supplier Vendors"] },
-  { category: "Organization Chart", subItems: ["Organization Chart"] },
-  { category: "Location Settings", subItems: ["Setup Locations"] },
-  { category: "HR Settings", subItems: ["Role Settings", "Create Department", "Department-wise Modules", "Temporary Incharge Setting"] },
-  { category: "Vendor Settings", subItems: ["Installer Vendors", "Supplier Type", "Supplier Vendors"] },
-  { category: "Sales Settings", subItems: ["Set Price", "Set Price for AMC", "Offers", "Solar Panel Bundle Setting"] },
-  { category: "Marketing Settings", subItems: ["Campaign Management"] },
-  { category: "Delivery Settings", subItems: ["Delivery Type", "Delivery Benchmark Price", "Vehicle Selection", "Vendor Delivery Plan"] },
-  { category: "Installer Settings", subItems: ["Solar Installer", "Installer Tool Requirement", "Rating Setting", "Installer Agency Plans"] },
-  { category: "Inventory Management", subItems: ["Inventory Overview", "Inventory Level Management", "AutoLock Order Limit"] },
-  { category: "Product Configuration", subItems: ["ComboKit Brand Overview", "Add Project Type", "Add Project Category", "Add Product", "SKU", "Price Matrix", "Add Unit Management"] },
-  { category: "Brand Manufacturer", subItems: ["Add Brand Manufacturer", "Brand Supplier Overview"] },
-  { category: "ComboKit", subItems: ["Create SolarKit", "Create AMC", "AMC Services"] },
-  { category: "ComboKit Overview", subItems: ["ComboKit Overview"] },
-  { category: "Order Procurement", subItems: ["Order Procurement"] },
-  { category: "Franchise Settings", subItems: ["Franchise Plans", "Franchise Points & Rewards", "Franchise Onboarding Goals", "Franchise Permission Type", "Order Settings"] },
-  { category: "Dealer Settings", subItems: ["Dealer Plans", "Dealer Points & Reward Setting", "Dealer Onboarding Goals", "Dealer Permission Type"] },
-  { category: "HMS Settings", subItems: ["HMS Settings", "Candidate Test Setting", "Candidate Training Setting"] },
-  { category: "Project Management Settings", subItems: ["Project Journey Stage Setting", "Project Management Overdue Setting", "Project Management Configuration", "Project Documentation Setting", "Placeholder Name Setting"] },
-  { category: "Financial & P&L", subItems: ["Financial & P&L"] },
-  { category: "Cashflow", subItems: ["Cashflow"] },
-  { category: "Inventory", subItems: ["Inventory"] },
-  { category: "Loans", subItems: ["Loans"] },
-  { category: "Capital", subItems: ["Capital"] }
+const MANDATORY_TASK_STRUCTURE = [
+  {
+    category: "Dashboard",
+    subItems: [
+      "User Performance",
+      "Franchise Manager Dashboard",
+      "Franchise Dashboard",
+      "Dealer Manager Dashboard",
+      "Dealer Dashboard",
+      "Orders",
+      "Orders by Loan",
+      "Installer",
+      "Delivery",
+      "Inventory",
+      "Vendors"
+    ]
+  },
+  {
+    category: "Departments",
+    subItems: ["Organization Chart"]
+  },
+  {
+    category: "Approvals",
+    subItems: ["Approvals"]
+  },
+  {
+    category: "Project Management",
+    subItems: ["Project Management"]
+  },
+  {
+    category: "Operations",
+    subItems: ["Our Warehouse", "Add Inventory", "Inventory Management"]
+  },
+  {
+    category: "Settings",
+    groups: [
+      { label: "Location Settings", items: ["Setup Locations"] },
+      { label: "HR Settings", items: ["Role Settings", "Create Department", "Department-wise Modules", "Temporary Incharge Setting"] },
+      { label: "Vendor Settings", items: ["Installer Vendors", "Supplier Type", "Supplier Vendors"] },
+      { label: "Sales Settings", items: ["Set Price", "Set Price For AMC", "Offers", "Solar Panel Bundle Setting"] },
+      { label: "Marketing Settings", items: ["Campaign Management"] },
+      { label: "Delivery Settings", items: ["Delivery Type", "Delivery Benchmark Price", "Vehicle Selection", "Vendor Delivery Plan"] },
+      { label: "Installer Settings", items: ["Solar Installer", "Installer Tool Requirements", "Rating Setting", "Installer Agency Plans"] },
+      { label: "Inventory Management", items: ["Inventory Overview", "Inventory Level Management", "Restock Order Limit", "Combokit Brand Overview"] },
+      { label: "Product Configuration", items: ["Add Project Type", "Add Project Category", "Add Product", "SKU", "Price Master", "Add Unit Management"] },
+      { label: "Brand Manufacturer", items: ["Add Brand Manufacturer", "Brand Supplier Overview"] },
+      { label: "ComboKit", items: ["Create Solarkit", "Create AMC", "AMC Services", "Solarkit Bundle Plans", "Add ComboKit", "Customize Combokit"] },
+      { label: "Combokit Overview", items: ["Combokit Overview"] },
+      { label: "Order Procurement", items: ["Order Procurement"] },
+      { label: "Partner Settings", items: ["Partner Plans", "Partner Points & Reward Setting", "Partner Onboarding Goals", "Partner Profession Type", "Add Partner"] },
+      { label: "HRMS Settings", items: ["HRMS Settings", "Candidate Test Setting", "Candidate Training Setting"] },
+      { label: "Project Management Settings", items: ["Project Journey Stage Setting", "Project Management Overdue Setting", "Project Management Configuration", "Project Documentation Setting", "Placeholder Name Setting"] },
+      { label: "Quote", items: ["Quote Setting", "Survey BOM Setting", "Terrace Setting", "Structure Setting", "Building Setting", "Discom Master", "Approval Overdue Setting", "Overdue Task Setting", "Overdue Status Setting", "Franchisee Manager Setting", "Franchise Buy Lead Setting", "Loan Setting", "Checklist Setting"] }
+    ]
+  },
+  {
+    category: "Report",
+    subItems: [
+      "Financial & P&L",
+      "Cashflow",
+      "Inventory",
+      "Loans",
+      "CapTable",
+      "Revenue By CP Types",
+      "Cluster",
+      "District",
+      "City"
+    ]
+  }
+];
+
+const OPTIONAL_TASK_STRUCTURE = MANDATORY_TASK_STRUCTURE;
+
+const DEFAULT_ROLE_MAPPINGS = [
+  {
+    department: 'HR',
+    position: 'HR Manager',
+    mandatoryTasks: ['Role Settings', 'Create Department', 'Department-wise Modules', 'Temporary Incharge Setting'],
+    optionalTasks: ['Organization Chart', 'Financial & P&L', 'Cashflow', 'Inventory', 'Loans']
+  },
+  {
+    department: 'HR',
+    position: 'Recruiter',
+    mandatoryTasks: ['Create Department', 'Organization Chart'],
+    optionalTasks: ['Role Settings', 'HRMS Settings']
+  },
+  {
+    department: 'Operations',
+    position: 'Operations Manager',
+    mandatoryTasks: ['Our Warehouse', 'Add Inventory', 'Inventory Management', 'Order Procurement'],
+    optionalTasks: ['Inventory Overview', 'Inventory Level Management', 'Setup Locations']
+  },
+  {
+    department: 'Operations',
+    position: 'Warehouse Incharge',
+    mandatoryTasks: ['Our Warehouse', 'Add Inventory', 'Inventory Management'],
+    optionalTasks: ['Inventory Overview', 'Inventory Level Management']
+  },
+  {
+    department: 'Operations',
+    position: 'Inventory Incharge',
+    mandatoryTasks: ['Add Inventory', 'Inventory Management', 'Inventory Overview'],
+    optionalTasks: ['Restock Order Limit', 'Combokit Brand Overview']
+  },
+  {
+    department: 'Sales',
+    position: 'Sales Executive',
+    mandatoryTasks: ['Set Price', 'Offers', 'Solar Panel Bundle Setting'],
+    optionalTasks: ['Campaign Management']
+  },
+  {
+    department: 'Finance',
+    position: 'Finance Manager',
+    mandatoryTasks: ['Financial & P&L', 'Cashflow', 'Revenue By CP Types', 'Loan Setting'],
+    optionalTasks: ['Approvals', 'CapTable', 'Inventory']
+  },
+  {
+    department: 'Finance',
+    position: 'Accountant',
+    mandatoryTasks: ['Financial & P&L', 'Cashflow', 'Revenue By CP Types'],
+    optionalTasks: ['Inventory', 'Loans']
+  },
+  {
+    department: 'Marketing',
+    position: 'Marketing Manager',
+    mandatoryTasks: ['Campaign Management', 'Offers', 'Partner Points & Reward Setting'],
+    optionalTasks: ['User Performance', 'Revenue By CP Types']
+  },
+  {
+    department: 'Marketing',
+    position: 'Digital Marketer',
+    mandatoryTasks: ['Campaign Management'],
+    optionalTasks: ['Offers', 'User Performance']
+  }
 ];
 
 export default function RoleSettings() {
@@ -152,6 +252,7 @@ export default function RoleSettings() {
   // Data Options
   const [allModulesList, setAllModulesList] = useState([]);
   const [deptModulesList, setDeptModulesList] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
 
   // Location Hierarchy State
   const [locationData, setLocationData] = useState({
@@ -161,9 +262,9 @@ export default function RoleSettings() {
   });
 
   const [selectedLocation, setSelectedLocation] = useState({
-    state: '',
-    cluster: '',
-    district: '',
+    state: 'all',
+    cluster: 'all',
+    district: 'all',
     country: ''
   });
 
@@ -175,6 +276,8 @@ export default function RoleSettings() {
   const [editingRoleId, setEditingRoleId] = useState(null); // Used for editing if we implement it, unused for now.
 
   const allLevels = ["Country", "State", "Cluster", "District", "Zone"];
+
+  const toId = (val) => (val && typeof val === 'object' ? val._id : val);
 
   useEffect(() => {
     fetchInitialData();
@@ -258,7 +361,6 @@ export default function RoleSettings() {
   }, [selectedLocation.cluster, selectedLocation.state]);
 
 
-  // Fetch Dept Modules when Department changes
   useEffect(() => {
     const fetchDeptMods = async () => {
       if (formData.department) {
@@ -277,8 +379,76 @@ export default function RoleSettings() {
         setDeptModulesList([]);
       }
     };
+
     fetchDeptMods();
+    // Real-time reset when department changes
+    setSelectedMandatoryTasks([]);
+    setSelectedOptionalTasks([]);
+    setFormData(prev => ({ ...prev, name: '' }));
   }, [formData.department]);
+
+  // Click outside suggestions list to close it
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (showSuggestions && !e.target.closest('.position-input-container')) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showSuggestions]);
+
+  const handleOpenTaskModal = (type) => {
+    if (!formData.department) {
+      toast.error("Please select a Department first to view tasks.");
+      return;
+    }
+
+    // Only suggest if current selection is empty
+    const currentList = type === 'mandatory' ? selectedMandatoryTasks : selectedOptionalTasks;
+    if (currentList.length === 0 && formData.name) {
+      const deptName = departments.find(d => toId(d._id) === toId(formData.department))?.name || '';
+
+      // Look for match
+      const matchedRole = roles.find(r =>
+        r.name.toLowerCase().trim() === formData.name.toLowerCase().trim() &&
+        toId(r.department) === toId(formData.department)
+      );
+
+      const defaultMatch = DEFAULT_ROLE_MAPPINGS.find(m =>
+        m.position.toLowerCase() === formData.name.toLowerCase().trim() &&
+        m.department.toLowerCase() === deptName.toLowerCase()
+      );
+
+      const data = matchedRole || defaultMatch;
+      if (data) {
+        const tasks = type === 'mandatory' ? (data.mandatoryTasks || []) : (data.optionalTasks || []);
+        if (type === 'mandatory') setSelectedMandatoryTasks(tasks);
+        else setSelectedOptionalTasks(tasks);
+
+        // Expand categories
+        const structure = type === 'mandatory' ? MANDATORY_TASK_STRUCTURE : OPTIONAL_TASK_STRUCTURE;
+        const categoriesToExpand = [];
+        structure.forEach(cat => {
+          const items = cat.groups ? cat.groups.reduce((acc, g) => acc.concat(g.items), []) : (cat.subItems || []);
+          if (items.some(item => tasks.includes(item))) {
+            categoriesToExpand.push(cat.category);
+            if (cat.groups) {
+              cat.groups.forEach(g => {
+                if (g.items.some(item => tasks.includes(item))) {
+                  categoriesToExpand.push(`${cat.category}:${g.label}`);
+                }
+              });
+            }
+          }
+        });
+        setExpandedCategories(prev => [...new Set([...prev, ...categoriesToExpand])]);
+      }
+    }
+
+    setActiveTaskModalType(type);
+    setShowTaskModal(true);
+  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -325,10 +495,10 @@ export default function RoleSettings() {
       parentRole: formData.parentRole || null,
       isChildPosition: formData.isChildPosition,
       tempIncharge: formData.tempIncharge || '',
-      country: selectedLocation.country || null,
-      state: selectedLocation.state || null,
-      cluster: selectedLocation.cluster || null,
-      district: selectedLocation.district || null,
+      country: selectedLocation.country === 'all' ? null : (selectedLocation.country || null),
+      state: selectedLocation.state === 'all' ? null : (selectedLocation.state || null),
+      cluster: selectedLocation.cluster === 'all' ? null : (selectedLocation.cluster || null),
+      district: selectedLocation.district === 'all' ? null : (selectedLocation.district || null),
       city: null,
       zone: null,
       mandatoryTasks: selectedMandatoryTasks,
@@ -337,17 +507,50 @@ export default function RoleSettings() {
     };
 
     try {
-      // If editingRoleId is set, we could call updateRole. For now, it's just create mode as per image
-      const res = await createRole(payload);
-      if (res.success) {
-        toast.success("Role created successfully");
-        resetForm();
-        fetchInitialData();
+      if (editingRoleId) {
+        const res = await updateRole(editingRoleId, payload);
+        if (res.success) {
+          toast.success("Role updated successfully");
+          resetForm();
+          fetchInitialData();
+        }
+      } else {
+        const res = await createRole(payload);
+        if (res.success) {
+          toast.success("Role created successfully");
+          resetForm();
+          fetchInitialData();
+        }
       }
     } catch (error) {
-      console.error("Create role error:", error);
-      toast.error(error.response?.data?.message || "Failed to create role");
+      console.error("Save role error:", error);
+      toast.error(error.response?.data?.message || "Failed to save role");
     }
+  };
+
+  const handleEdit = (role) => {
+    setEditingRoleId(role._id);
+    setFormData({
+      name: role.name || '',
+      department: role.department || '',
+      level: role.level || '',
+      parentRole: role.parentRole || '',
+      isChildPosition: role.isChildPosition || false,
+      tempIncharge: role.tempIncharge || ''
+    });
+    setSelectedMandatoryTasks(role.mandatoryTasks || []);
+    setSelectedOptionalTasks(role.optionalTasks || []);
+    setSelectedRights(role.rights || []);
+
+    // Automatically open location cards to show context if needed
+    setShowLocationCards(true);
+
+    // Scroll to top to ensure the edit form is visible
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleCancelEdit = () => {
+    resetForm();
   };
 
   const handleDelete = async (id) => {
@@ -376,6 +579,7 @@ export default function RoleSettings() {
     setSelectedMandatoryTasks([]);
     setSelectedOptionalTasks([]);
     setSelectedRights([]);
+    setEditingRoleId(null);
   };
 
   // Filter roles based on selected district
@@ -404,7 +608,6 @@ export default function RoleSettings() {
     return selectedLocation.district ? filtered : [];
   })();
 
-  // Card Render Helper
   const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
     <div
       onClick={onClick}
@@ -573,14 +776,49 @@ export default function RoleSettings() {
                   {/* Create New Role Row */}
                   <tr className="bg-gray-50 border-b border-gray-200 align-top">
                     {/* Position */}
-                    <td className="p-3 border-r border-gray-200">
-                      <input
-                        type="text"
-                        className="w-full p-2 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-sm mb-2"
-                        placeholder="Enter Position name"
-                        value={formData.name}
-                        onChange={(e) => handleInputChange('name', e.target.value)}
-                      />
+                    <td className="p-3 border-r border-gray-200 relative position-input-container">
+                      <div className="relative">
+                        <input
+                          type="text"
+                          className="w-full p-2 pr-8 border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 outline-none text-sm mb-2"
+                          placeholder="Search or Enter Position"
+                          value={formData.name}
+                          onChange={(e) => handleInputChange('name', e.target.value)}
+                          onFocus={() => setShowSuggestions(true)}
+                        />
+                        <div className="absolute right-2 top-2.5 text-gray-400">
+                          <ChevronDown size={14} />
+                        </div>
+
+                        {showSuggestions && formData.department && (
+                          <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-48 overflow-y-auto">
+                            {(() => {
+                              const deptName = departments.find(d => d._id === formData.department)?.name || '';
+                              const suggestions = [
+                                ...new Set([
+                                  ...roles.filter(r => toId(r.department) === toId(formData.department)).map(r => r.name),
+                                  ...DEFAULT_ROLE_MAPPINGS.filter(m => m.department === deptName).map(m => m.position)
+                                ])
+                              ].filter(name => name.toLowerCase().includes((formData.name || '').toLowerCase()));
+
+                              if (suggestions.length === 0) return <div className="p-2 text-xs text-gray-500">No suggestions</div>;
+
+                              return suggestions.map(name => (
+                                <div
+                                  key={name}
+                                  className="p-2 text-xs hover:bg-blue-50 cursor-pointer border-b last:border-0 border-gray-100"
+                                  onClick={() => {
+                                    handleInputChange('name', name);
+                                    setShowSuggestions(false);
+                                  }}
+                                >
+                                  {name}
+                                </div>
+                              ));
+                            })()}
+                          </div>
+                        )}
+                      </div>
                       <label className="flex items-center text-xs text-gray-700 cursor-pointer">
                         <input
                           type="radio"
@@ -645,14 +883,7 @@ export default function RoleSettings() {
                     {/* Mandatory Tasks (Clickable area to open modal) */}
                     <td
                       className="p-3 border-r border-gray-200 text-center align-middle cursor-pointer hover:bg-gray-100 transition-colors group"
-                      onClick={() => {
-                        if (!formData.department) {
-                          toast.error("Please select a Department first to view tasks.");
-                          return;
-                        }
-                        setActiveTaskModalType('mandatory');
-                        setShowTaskModal(true);
-                      }}
+                      onClick={() => handleOpenTaskModal('mandatory')}
                     >
                       <div className="flex flex-col items-center justify-center">
                         <span className="text-xs text-gray-500 mb-1 group-hover:text-blue-600 font-medium">
@@ -666,14 +897,7 @@ export default function RoleSettings() {
                     {/* Optional Tasks (Clickable area to open modal) */}
                     <td
                       className="p-3 border-r border-gray-200 text-center align-middle cursor-pointer hover:bg-gray-100 transition-colors group"
-                      onClick={() => {
-                        if (!formData.department) {
-                          toast.error("Please select a Department first to view tasks.");
-                          return;
-                        }
-                        setActiveTaskModalType('optional');
-                        setShowTaskModal(true);
-                      }}
+                      onClick={() => handleOpenTaskModal('optional')}
                     >
                       <div className="flex flex-col items-center justify-center">
                         <span className="text-xs text-gray-500 mb-1 group-hover:text-blue-600 font-medium">
@@ -719,14 +943,24 @@ export default function RoleSettings() {
 
                     {/* (Removed Set Task Button Column) */}
 
-                    {/* Create Button */}
+                    {/* Create/Update Button */}
                     <td className="p-3 text-center align-middle">
-                      <button
-                        onClick={handleSubmit}
-                        className="bg-[#17a2b8] hover:bg-[#138496] shadow-sm text-white px-3 py-1.5 rounded-md text-xs font-semibold"
-                      >
-                        Create
-                      </button>
+                      <div className="flex flex-col gap-2">
+                        <button
+                          onClick={handleSubmit}
+                          className="bg-[#17a2b8] hover:bg-[#138496] shadow-sm text-white px-3 py-1.5 rounded-md text-xs font-semibold"
+                        >
+                          {editingRoleId ? 'Update' : 'Create'}
+                        </button>
+                        {editingRoleId && (
+                          <button
+                            onClick={handleCancelEdit}
+                            className="bg-gray-400 hover:bg-gray-500 shadow-sm text-white px-3 py-1.5 rounded-md text-xs font-semibold"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
 
@@ -764,7 +998,7 @@ export default function RoleSettings() {
                       const parent = roles.find(r => r._id === role.parentRole);
 
                       // Displaying state/cluster/district if level requires based on image layout
-                      const levelDisp = role.level === 'State' || role.level === 'State Level' ? `State Level\n${role.state}` : role.level;
+                      const levelDisp = role.level === 'State' || role.level === 'State Level' ? `State Level\n${role.state} ` : role.level;
 
                       return (
                         <tr key={role._id} className="bg-white hover:bg-gray-50 border-b border-gray-200">
@@ -772,9 +1006,9 @@ export default function RoleSettings() {
                           <td className="p-3 border-r border-gray-200 align-top text-gray-600">{dept ? dept.name : '-'}</td>
                           <td className="p-3 border-r border-gray-200 align-top text-gray-600 whitespace-pre-wrap text-xs leading-relaxed">
                             {role.level || '-'}
-                            {role.level === 'State' && locationData.states.find(s => s._id === role.state) && `\n${locationData.states.find(s => s._id === role.state).name}`}
-                            {role.level === 'Cluster' && locationData.clusters.find(c => c._id === role.cluster) && `\n${locationData.clusters.find(c => c._id === role.cluster).name}`}
-                            {role.level === 'District' && locationData.districts.find(d => d._id === role.district) && `\n${locationData.districts.find(d => d._id === role.district).name}`}
+                            {role.level === 'State' && locationData.states.find(s => s._id === role.state) && `\n${locationData.states.find(s => s._id === role.state).name} `}
+                            {role.level === 'Cluster' && locationData.clusters.find(c => c._id === role.cluster) && `\n${locationData.clusters.find(c => c._id === role.cluster).name} `}
+                            {role.level === 'District' && locationData.districts.find(d => d._id === role.district) && `\n${locationData.districts.find(d => d._id === role.district).name} `}
                           </td>
                           <td className="p-3 border-r border-gray-200 align-top text-gray-600">{parent ? parent.name : '-'}</td>
 
@@ -821,7 +1055,10 @@ export default function RoleSettings() {
                           {/* Action Buttons */}
                           <td className="p-3 align-top text-center" colSpan="2">
                             <div className="flex flex-col items-center gap-2">
-                              <button className="bg-[#17a2b8] hover:bg-[#138496] shadow-sm text-white px-4 py-1.5 rounded-md text-xs font-semibold w-16">
+                              <button
+                                onClick={() => handleEdit(role)}
+                                className="bg-[#17a2b8] hover:bg-[#138496] shadow-sm text-white px-4 py-1.5 rounded-md text-xs font-semibold w-16"
+                              >
                                 Edit
                               </button>
                               <button
@@ -852,52 +1089,24 @@ export default function RoleSettings() {
               <button onClick={() => setShowTaskModal(false)} className="hover:text-gray-300"><X size={20} /></button>
             </div>
 
-            <div className="p-6 grid grid-cols-1 gap-6">
-              {/* Mandatory Tasks */}
-              {activeTaskModalType === 'mandatory' && (
-                <div className="border rounded-lg flex flex-col h-80">
-                  <div className="bg-gray-100 p-2 border-b font-semibold text-sm text-center">
-                    Mandatory Tasks (Dept Modules)
-                  </div>
-                  <div className="p-3 overflow-y-auto flex-1 custom-scrollbar">
-                    {(() => {
-                      const explicitMandatoryList = [
-                        'Dashboard',
-                        'Departments',
-                        'Approvals',
-                        'Project Management',
-                        'Operations',
-                        'Settings',
-                        'Report'
-                      ];
-
-                      return explicitMandatoryList.map(task => (
-                        <label key={task} className="flex items-start mb-2 cursor-pointer hover:bg-gray-50 p-1.5 rounded border border-transparent hover:border-gray-200">
-                          <input
-                            type="checkbox"
-                            className="mt-0.5 mr-2 accent-blue-600"
-                            checked={selectedMandatoryTasks.includes(task)}
-                            onChange={() => handleTaskToggle(task, 'mandatory')}
-                          />
-                          <span className="text-sm text-gray-700 leading-tight">{task}</span>
-                        </label>
-                      ));
-                    })()}
-                  </div>
+            <div className="p-6">
+              <div className="border rounded-lg flex flex-col h-[550px]">
+                <div className="bg-gray-100 p-2 border-b font-semibold text-sm text-center">
+                  {activeTaskModalType === 'mandatory' ? 'Assign Mandatory Tasks' : 'Assign Optional Tasks'}
                 </div>
-              )}
+                <div className="p-3 overflow-y-auto flex-1 custom-scrollbar">
+                  {(() => {
+                    const currentSelected = activeTaskModalType === 'mandatory' ? selectedMandatoryTasks : selectedOptionalTasks;
+                    const setter = activeTaskModalType === 'mandatory' ? setSelectedMandatoryTasks : setSelectedOptionalTasks;
 
-              {/* Optional Tasks (Accordion) */}
-              {activeTaskModalType === 'optional' && (
-                <div className="border rounded-lg flex flex-col h-[500px]">
-                  <div className="bg-gray-100 p-2 border-b font-semibold text-sm text-center">
-                    Optional Tasks (Other Modules)
-                  </div>
-                  <div className="p-3 overflow-y-auto flex-1 custom-scrollbar">
-                    {OPTIONAL_TASKS_STRUCTURE.map((catObj) => {
+                    // Use distinct structure for Mandatory vs Optional
+                    const taskStructure = activeTaskModalType === 'mandatory' ? MANDATORY_TASK_STRUCTURE : OPTIONAL_TASK_STRUCTURE;
+
+                    return taskStructure.map((catObj) => {
                       const isExpanded = expandedCategories.includes(catObj.category);
-                      const allSelected = catObj.subItems.every(item => selectedOptionalTasks.includes(item));
-                      const someSelected = catObj.subItems.some(item => selectedOptionalTasks.includes(item));
+                      const allItems = catObj.groups ? catObj.groups.reduce((acc, g) => acc.concat(g.items), []) : (catObj.subItems || []);
+                      const allSelected = allItems.every(item => currentSelected.includes(item));
+                      const someSelected = allItems.some(item => currentSelected.includes(item));
 
                       return (
                         <div key={catObj.category} className="mb-2 border rounded overflow-hidden">
@@ -916,53 +1125,123 @@ export default function RoleSettings() {
                               <input
                                 type="checkbox"
                                 className="accent-blue-600"
-                                checked={allSelected}
+                                checked={allItems.length > 0 && allSelected}
                                 ref={el => el && (el.indeterminate = someSelected && !allSelected)}
                                 onClick={(e) => e.stopPropagation()}
                                 onChange={(e) => {
                                   e.stopPropagation();
                                   const newVal = e.target.checked;
-                                  let updated = [...selectedOptionalTasks];
-                                  catObj.subItems.forEach(item => {
+                                  let updated = [...currentSelected];
+                                  allItems.forEach(item => {
                                     if (newVal) {
                                       if (!updated.includes(item)) updated.push(item);
                                     } else {
                                       updated = updated.filter(u => u !== item);
                                     }
                                   });
-                                  setSelectedOptionalTasks(updated);
+                                  setter(updated);
                                 }}
                               />
                               <span className="text-sm font-medium text-gray-700">{catObj.category}</span>
                             </div>
                             <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded-full">
-                              {catObj.subItems.filter(i => selectedOptionalTasks.includes(i)).length} / {catObj.subItems.length}
+                              {allItems.filter(i => currentSelected.includes(i)).length} / {allItems.length}
                             </span>
                           </div>
 
                           {isExpanded && (
-                            <div className="p-3 bg-white grid grid-cols-2 gap-x-4 gap-y-2 border-t">
-                              {catObj.subItems.map(item => (
-                                <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                                  <input
-                                    type="checkbox"
-                                    className="accent-blue-600"
-                                    checked={selectedOptionalTasks.includes(item)}
-                                    onChange={() => handleTaskToggle(item, 'optional')}
-                                  />
-                                  <span className="text-xs text-gray-600">{item}</span>
-                                </label>
-                              ))}
+                            <div className="bg-white border-t">
+                              {catObj.groups ? (
+                                <div className="p-2 space-y-2">
+                                  {catObj.groups.map(group => {
+                                    const groupKey = `${catObj.category}:${group.label}`;
+                                    const isGroupExpanded = expandedCategories.includes(groupKey);
+                                    const groupSelected = group.items.every(item => currentSelected.includes(item));
+                                    const groupSome = group.items.some(item => currentSelected.includes(item));
+
+                                    return (
+                                      <div key={group.label} className="border border-gray-100 rounded">
+                                        <div
+                                          className="p-2 bg-gray-50/50 flex items-center justify-between cursor-pointer hover:bg-gray-100"
+                                          onClick={() => {
+                                            setExpandedCategories(prev =>
+                                              prev.includes(groupKey)
+                                                ? prev.filter(k => k !== groupKey)
+                                                : [...prev, groupKey]
+                                            );
+                                          }}
+                                        >
+                                          <div className="flex items-center gap-2">
+                                            {isGroupExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                            <input
+                                              type="checkbox"
+                                              className="accent-blue-400"
+                                              checked={group.items.length > 0 && groupSelected}
+                                              ref={el => el && (el.indeterminate = groupSome && !groupSelected)}
+                                              onClick={(e) => e.stopPropagation()}
+                                              onChange={(e) => {
+                                                e.stopPropagation();
+                                                const newVal = e.target.checked;
+                                                let updated = [...currentSelected];
+                                                group.items.forEach(item => {
+                                                  if (newVal) {
+                                                    if (!updated.includes(item)) updated.push(item);
+                                                  } else {
+                                                    updated = updated.filter(u => u !== item);
+                                                  }
+                                                });
+                                                setter(updated);
+                                              }}
+                                            />
+                                            <span className="text-xs font-semibold text-gray-600">{group.label}</span>
+                                          </div>
+                                          <span className="text-[9px] text-gray-400">
+                                            {group.items.filter(i => currentSelected.includes(i)).length}/{group.items.length}
+                                          </span>
+                                        </div>
+
+                                        {isGroupExpanded && (
+                                          <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 bg-white">
+                                            {group.items.map(item => (
+                                              <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                                                <input
+                                                  type="checkbox"
+                                                  className="accent-blue-600"
+                                                  checked={currentSelected.includes(item)}
+                                                  onChange={() => handleTaskToggle(item, activeTaskModalType)}
+                                                />
+                                                <span className="text-[11px] text-gray-600">{item}</span>
+                                              </label>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              ) : (
+                                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                                  {catObj.subItems.map(item => (
+                                    <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-blue-600"
+                                        checked={currentSelected.includes(item)}
+                                        onChange={() => handleTaskToggle(item, activeTaskModalType)}
+                                      />
+                                      <span className="text-xs text-gray-600">{item}</span>
+                                    </label>
+                                  ))}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
                       );
-                    })}
-                  </div>
+                    });
+                  })()}
                 </div>
-              )}
-
-
+              </div>
             </div>
 
             <div className="p-4 bg-gray-50 border-t flex justify-end gap-3">

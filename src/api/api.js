@@ -102,8 +102,11 @@ export const locationAPI = {
   getAllCities: (params) => api.get('/locations/cities', { params }),
   getCityById: (id) => api.get(`/locations/cities/${id}`),
   createCity: (data) => api.post('/locations/cities', data),
+  bulkCreateCities: (data) => api.post('/locations/cities/bulk', data),
   updateCity: (id, data) => api.put(`/locations/cities/${id}`, data),
   deleteCity: (id) => api.delete(`/locations/cities/${id}`),
+
+  checkDuplicate: (params) => api.get('/locations/check-duplicate', { params }),
 
   // State APIs
   getAllStates: (params) => api.get('/locations/states', { params }),

@@ -11,7 +11,9 @@ import {
   X,
   AlertCircle,
   Loader2,
+  Upload
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 import { locationAPI } from '../../../../api/api';
 import LocationSelector from './LocationSelector';
@@ -79,9 +81,13 @@ export default function SetupLocations() {
     isActive: true,
   });
 
+  const [pendingCities, setPendingCities] = useState([]); // Preview for Bulk Upload
   const [selectedMasterId, setSelectedMasterId] = useState(''); // New state for selected master country to activate
   const [activating, setActivating] = useState(false); // New state for activation loading
+  const [uploadingExcel, setUploadingExcel] = useState(false); // State for Excel Bulk Upload
   const [pincodeStr, setPincodeStr] = useState(''); // Local state for pincode input string
+  const [nameError, setNameError] = useState(''); // New state for duplicate validation error
+  const [checkingName, setCheckingName] = useState(false); // State for loader when checking name
 
   // Load base data on mount
   useEffect(() => {
@@ -249,6 +255,50 @@ export default function SetupLocations() {
     }
   }, [formData.zone, showForm]);
 
+  useEffect(() => {
+    const handler = setTimeout(async () => {
+      // Don't validate if form is hidden or name is empty
+      if (!formData.name || !showForm) {
+        setNameError('');
+        return;
+      }
+
+      setCheckingName(true);
+      try {
+        let parentId = '';
+        if (activeTab === 'states') parentId = toId(formData.country);
+        else if (activeTab === 'districts') parentId = toId(formData.state);
+        else if (activeTab === 'clusters') parentId = toId(formData.state);
+        else if (activeTab === 'zones') parentId = toId(formData.state);
+        else if (activeTab === 'cities') parentId = toId(formData.district);
+
+        // For countries, parentId is not needed
+        if (activeTab !== 'countries' && !parentId) {
+          setCheckingName(false);
+          return;
+        }
+        const response = await locationAPI.checkDuplicate({
+          type: activeTab,
+          name: formData.name,
+          parentId,
+          currentId: editingId
+        });
+
+        if (response.data.exists) {
+          setNameError(`🔴 ${activeTab.slice(0, -1)} already exists`);
+        } else {
+          setNameError('');
+        }
+      } catch (err) {
+        console.error('Validation error:', err);
+      } finally {
+        setCheckingName(false);
+      }
+    }, 500);
+
+    return () => clearTimeout(handler);
+  }, [formData.name, activeTab, editingId, showForm, formData.country, formData.state, formData.district]);
+
   // When closing available form, reload list for the active tab
   useEffect(() => {
     if (showForm) return;
@@ -284,12 +334,11 @@ export default function SetupLocations() {
         // districts (plural) is required for Cluster model
         payload.districts = Array.isArray(formData.district) ? formData.district : (formData.districts || []);
       } else if (activeTab === 'zones') {
-        // clusters (plural) is required for Zone model
-        payload.clusters = Array.isArray(formData.cluster) ? formData.cluster : (formData.clusters || []);
-      } else if (activeTab === 'cities') {
-        // zones (plural) is required for City model
-        payload.zones = Array.isArray(formData.zone) ? formData.zone : (formData.zones || []);
+        // cluster (single) and districts (plural) are required for custom Zone mode
+        payload.districts = Array.isArray(formData.district) ? formData.district : (formData.districts || []);
         payload.cluster = toId(formData.cluster);
+      } else if (activeTab === 'cities') {
+        // Cities now attach directly to districts
         payload.district = toId(formData.district);
         payload.areaType = formData.areaType;
         payload.pincodes = formData.pincodes;
@@ -326,10 +375,18 @@ export default function SetupLocations() {
         setSuccess(`Zone ${editingId ? 'updated' : 'created'} successfully`);
         loadZones({ stateId: formData.state });
       } else if (activeTab === 'cities') {
-        if (editingId) await locationAPI.updateCity(editingId, payload);
-        else await locationAPI.createCity(payload);
-        setSuccess(`City ${editingId ? 'updated' : 'created'} successfully`);
-        loadCities({ stateId: formData.state });
+        if (pendingCities.length > 0) {
+          // Bulk Create
+          const response = await locationAPI.bulkCreateCities({ cities: pendingCities });
+          setSuccess(response.data.message || `${pendingCities.length} Cities imported successfully!`);
+          loadCities({ stateId: formData.state });
+        } else {
+          // Single Create/Update
+          if (editingId) await locationAPI.updateCity(editingId, payload);
+          else await locationAPI.createCity(payload);
+          setSuccess(`City ${editingId ? 'updated' : 'created'} successfully`);
+          loadCities({ stateId: formData.state });
+        }
       }
 
       resetForm();
@@ -373,6 +430,79 @@ export default function SetupLocations() {
     }
   };
 
+  const handleFileUpload = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    // Validate that district is selected (Country, State, District hierarchy must be chosen)
+    if (!formData.district || !formData.state || !formData.country) {
+      setError('Please select Country, State, and District before uploading cities.');
+      return;
+    }
+
+    try {
+      setUploadingExcel(true);
+      setError('');
+      setSuccess('');
+
+      const reader = new FileReader();
+      reader.onload = async (evt) => {
+        try {
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet);
+
+          if (!jsonData || jsonData.length === 0) {
+            throw new Error('Excel file is empty or invalid.');
+          }
+
+          const newCities = jsonData.map((row) => {
+            const cityName = row['City Name'] || row['city name'] || row['Name'] || row['name'];
+            const pincodesRaw = row['Pincodes'] || row['pincodes'] || row['Pincode'] || row['pincode'];
+            // Prioritize the radio button selection from formData.areaType
+            const areaType = formData.areaType || row['Area Type'] || row['area type'] || 'Urban';
+
+            if (!cityName) {
+              throw new Error('A column named "City Name" is required for all rows.');
+            }
+
+            // Split comma separated pincodes
+            let pincodesArray = [];
+            if (pincodesRaw) {
+              pincodesArray = String(pincodesRaw).split(',').map(p => p.trim()).filter(p => p);
+            }
+
+            return {
+              name: String(cityName).trim(),
+              areaType: String(areaType).trim(),
+              pincodes: pincodesArray,
+              country: toId(formData.country),
+              state: toId(formData.state),
+              district: toId(formData.district)
+            };
+          });
+
+          // Store for preview instead of immediate upload
+          setPendingCities(newCities);
+          setSuccess(`Excel parsed successfully! Review ${newCities.length} cities below.`);
+
+        } catch (err) {
+          setError(err.message || 'Error processing Excel file. Make sure it has "City Name" and "Pincodes" columns.');
+        } finally {
+          setUploadingExcel(false);
+          // Reset file input
+          e.target.value = null;
+        }
+      };
+      reader.readAsArrayBuffer(file);
+    } catch (err) {
+      setError('Error reading file.');
+      setUploadingExcel(false);
+    }
+  };
+
   const resetForm = () => {
     setFormData({
       districts: [],
@@ -385,6 +515,8 @@ export default function SetupLocations() {
       pincodes: [],
       isActive: true,
     });
+    setPendingCities([]);
+    setNameError('');
     setEditingId(null);
     setShowForm(false);
     setSelectedMasterId(''); // Reset selected master ID
@@ -548,14 +680,13 @@ export default function SetupLocations() {
                     activeTab === 'states' ? 'country' :
                       activeTab === 'districts' ? 'state' :
                         activeTab === 'clusters' ? 'district' :
-                          activeTab === 'zones' ? 'cluster' :
-                            activeTab === 'cities' ? 'zone' : null
+                          activeTab === 'zones' ? 'district' :
+                            activeTab === 'cities' ? 'district' : null
                   }
                   multiple={{
-                    district: activeTab === 'clusters',
-                    cluster: activeTab === 'zones',
-                    zone: activeTab === 'cities'
+                    district: ['clusters', 'zones'].includes(activeTab)
                   }}
+                  isZoneMode={activeTab === 'zones'}
                   layout="stack"
                 />
               )}
@@ -571,12 +702,13 @@ export default function SetupLocations() {
                     type="text"
                     value={formData.name}
                     onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                    className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${nameError ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
                     required
                   />
+                  {checkingName && <p className="text-xs text-blue-500 mt-1 italic">Checking availability...</p>}
+                  {nameError && <p className="text-sm text-red-500 mt-1 font-semibold">{nameError}</p>}
                 </div>
               )}
-
 
               {activeTab === 'cities' && (
                 <>
@@ -589,7 +721,17 @@ export default function SetupLocations() {
                             type="radio"
                             name="areaType"
                             checked={formData.areaType === type}
-                            onChange={() => setFormData({ ...formData, areaType: type })}
+                            onChange={() => {
+                              const newType = type;
+                              setFormData(prev => {
+                                const updated = { ...prev, areaType: newType };
+                                // If we have pending cities, update their area type to match the new selection
+                                if (pendingCities.length > 0) {
+                                  setPendingCities(pendingCities.map(c => ({ ...c, areaType: newType })));
+                                }
+                                return updated;
+                              });
+                            }}
                             className="w-4 h-4 text-blue-600"
                           />
                           <span>{type}</span>
@@ -598,23 +740,102 @@ export default function SetupLocations() {
                     </div>
                   </div>
 
-                  <div>
-                    <label className="font-semibold text-gray-700 block mb-2">Pincodes (Comma separated)</label>
-                    <input
-                      type="text"
-                      value={pincodeStr}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setPincodeStr(val);
-                        setFormData({
-                          ...formData,
-                          pincodes: val.split(',').map(p => p.trim()).filter(p => p)
-                        });
-                      }}
-                      placeholder="e.g. 380001, 380002"
-                      className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
+                  {pendingCities.length > 0 ? (
+                    <div className="bg-white border border-orange-200 rounded-xl overflow-hidden mt-4">
+                      <div className="p-3 bg-orange-50 border-b border-orange-100 flex justify-between items-center">
+                        <span className="font-bold text-orange-800 text-sm">Preview: {pendingCities.length} {formData.areaType} Cities found</span>
+                        <button
+                          type="button"
+                          onClick={() => setPendingCities([])}
+                          className="text-orange-600 hover:text-orange-800 text-xs font-bold underline"
+                        >
+                          Clear Preview
+                        </button>
+                      </div>
+                      <div className="max-h-60 overflow-y-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead className="bg-gray-50 text-gray-600 font-bold">
+                            <tr>
+                              <th className="p-2">#</th>
+                              <th className="p-2">City Name</th>
+                              <th className="p-2 text-center">Type</th>
+                              <th className="p-2">Pincodes</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {pendingCities.slice(0, 50).map((city, idx) => (
+                              <tr key={idx} className="hover:bg-gray-50">
+                                <td className="p-2 text-gray-400">{idx + 1}</td>
+                                <td className="p-2 font-semibold text-gray-800">{city.name}</td>
+                                <td className="p-2 text-center">
+                                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${city.areaType === 'Rural' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>
+                                    {city.areaType}
+                                  </span>
+                                </td>
+                                <td className="p-2 text-gray-500">{city.pincodes.join(', ')}</td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex gap-4 items-center p-4 bg-orange-50 border border-orange-200 rounded-lg mt-4">
+                        <div className="flex-1">
+                          <label className="font-semibold text-gray-800 block text-lg mb-1 flex items-center gap-2">
+                            <Upload size={20} className="text-orange-500" /> Bulk Upload Cities
+                          </label>
+                          <p className="text-sm text-gray-600 mb-2">Upload Excel to import cities as <b>{formData.areaType}</b>. Needs "City Name" and "Pincodes" columns.</p>
+                        </div>
+                        <div>
+                          <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-orange-400 text-orange-600 rounded-xl font-bold hover:bg-orange-50 cursor-pointer shadow-sm transition-all disabled:opacity-50">
+                            {uploadingExcel ? <Loader2 size={20} className="animate-spin" /> : 'Choose Excel File'}
+                            <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" disabled={uploadingExcel || editingId} />
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="relative flex py-3 items-center">
+                        <div className="flex-grow border-t border-gray-300"></div>
+                        <span className="flex-shrink-0 mx-4 text-gray-400 font-bold uppercase text-xs tracking-wider">OR ENTER MANUALLY</span>
+                        <div className="flex-grow border-t border-gray-300"></div>
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-gray-700 block mb-2">
+                          Name <span className="text-red-500">*</span>
+                        </label>
+                        <input
+                          type="text"
+                          value={formData.name}
+                          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                          className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 ${nameError ? 'border-red-500 bg-red-50' : 'border-gray-300'}`}
+                          required={!formData.name && !uploadingExcel}
+                        />
+                        {checkingName && <p className="text-xs text-blue-500 mt-1 italic">Checking availability...</p>}
+                        {nameError && <p className="text-sm text-red-500 mt-1 font-semibold">{nameError}</p>}
+                      </div>
+
+                      <div>
+                        <label className="font-semibold text-gray-700 block mb-2">Pincodes (Comma separated)</label>
+                        <input
+                          type="text"
+                          value={pincodeStr}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setPincodeStr(val);
+                            setFormData({
+                              ...formData,
+                              pincodes: val.split(',').map(p => p.trim()).filter(p => p)
+                            });
+                          }}
+                          placeholder="e.g. 380001, 380002"
+                          className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500"
+                        />
+                      </div>
+                    </>
+                  )}
                 </>
               )}
 
@@ -636,7 +857,7 @@ export default function SetupLocations() {
               <div className="flex gap-3">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !!nameError || checkingName}
                   className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-3 px-4 rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-50"
                 >
                   <CheckCircle size={20} />
@@ -732,9 +953,14 @@ export default function SetupLocations() {
                           State: {item.state.name}
                         </span>
                       )}
-                      {['districts', 'clusters', 'zones', 'cities'].includes(activeTab) && item.district?.name && (
+                      {['districts', 'clusters', 'cities'].includes(activeTab) && item.district?.name && (
                         <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">
                           District: {item.district.name}
+                        </span>
+                      )}
+                      {['zones'].includes(activeTab) && item.cluster?.name && (
+                        <span className="text-[10px] bg-gray-100 text-gray-600 px-2 py-1 rounded-full font-semibold">
+                          Cluster: {item.cluster.name}
                         </span>
                       )}
                       {activeTab === 'clusters' && item.districts?.length > 0 && (
@@ -749,30 +975,19 @@ export default function SetupLocations() {
                           </div>
                         </div>
                       )}
-                      {activeTab === 'zones' && item.clusters?.length > 0 && (
+                      {activeTab === 'zones' && item.districts?.length > 0 && (
                         <div className="w-full mt-2">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold">Clusters:</p>
+                          <p className="text-[10px] text-gray-400 uppercase font-bold">Districts:</p>
                           <div className="flex flex-wrap gap-1">
-                            {item.clusters.map(c => (
-                              <span key={c._id} className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-semibold">
-                                {c.name}
+                            {item.districts.map(d => (
+                              <span key={d._id} className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-semibold">
+                                {d.name}
                               </span>
                             ))}
                           </div>
                         </div>
                       )}
-                      {activeTab === 'cities' && item.zones?.length > 0 && (
-                        <div className="w-full mt-2">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold">Zones:</p>
-                          <div className="flex flex-wrap gap-1">
-                            {item.zones.map(z => (
-                              <span key={z._id} className="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-full font-semibold">
-                                {z.name}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      )}
+
                       {activeTab === 'cities' && (
                         <>
                           <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-1 rounded-full font-bold">
