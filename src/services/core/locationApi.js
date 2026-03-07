@@ -11,9 +11,10 @@ export const getCountries = async () => {
 };
 
 // Get all states (optionally by country)
-export const getStates = async (countryId) => {
+export const getStates = async (params = {}) => {
     try {
-        const url = countryId ? `/locations/states?countryId=${countryId}` : '/locations/states';
+        const query = typeof params === 'string' ? `countryId=${params}` : new URLSearchParams(params).toString();
+        const url = query ? `/locations/states?${query}` : '/locations/states';
         const res = await api.get(url);
         return res.data.data;
     } catch (err) {
@@ -22,9 +23,10 @@ export const getStates = async (countryId) => {
 };
 
 // Get cities by state
-export const getCities = async (stateId) => {
+export const getCities = async (params = {}) => {
     try {
-        const res = await api.get(`/locations/cities?stateId=${stateId}`);
+        const query = typeof params === 'string' ? `stateId=${params}` : new URLSearchParams(params).toString();
+        const res = await api.get(`/locations/cities?${query}`);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -43,9 +45,10 @@ export const getDistricts = async (params = {}) => {
 };
 
 // Get clusters by district
-export const getClusters = async (districtId) => {
+export const getClusters = async (params = {}) => {
     try {
-        const res = await api.get(`/locations/clusters?districtId=${districtId}`);
+        const query = typeof params === 'string' ? `districtId=${params}` : new URLSearchParams(params).toString();
+        const res = await api.get(`/locations/clusters?${query}`);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;

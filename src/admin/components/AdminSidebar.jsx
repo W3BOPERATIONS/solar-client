@@ -364,6 +364,8 @@ export default function AdminSidebar() {
           isExpanded: expandedSections.settingsHrms,
           children: [
             { name: '- HRMS Settings', href: '/admin/settings/hrms/settings', icon: UserCog },
+            { name: '- Vacancy Module', href: '/admin/settings/hrms/vacancy-module', icon: BriefcaseBusiness },
+            { name: '- Candidates List', href: '/admin/settings/hrms/candidates', icon: Users },
             { name: '- Candidate Test Setting', href: '/admin/settings/hrms/candidate-test-setting', icon: ClipboardList },
             { name: '- Candidate Training Setting', href: '/admin/settings/hrms/candidate-training-setting', icon: ClipboardList },
           ],

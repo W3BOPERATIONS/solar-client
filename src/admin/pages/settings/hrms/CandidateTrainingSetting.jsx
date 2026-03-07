@@ -3,26 +3,30 @@ import {
   MapPin, Users, Video, Save, ChevronLeft, ChevronRight,
   PlayCircle, FileVideo, Layers, Globe, Building,
   CheckCircle, Trash2, Edit, Plus, BarChart3,
-  GraduationCap, Upload, Link, Loader
+  GraduationCap, Upload, Link, Loader, Clock, X
 } from 'lucide-react';
-import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getCountries, getStates, getCities, getDistricts, getClusters } from '../../../../services/core/locationApi';
 import { getDepartments, getDesignationsByDepartment } from '../../../../services/core/masterApi';
-import { getCandidateTrainings, createCandidateTraining, updateCandidateTraining } from '../../../../services/hrms/hrmsApi';
+import { getCandidateTrainings, createCandidateTraining, updateCandidateTraining, deleteCandidateTraining } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 
 const CandidateTrainingSetting = () => {
   // Data States
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [cities, setCities] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
 
   // Selection States
-  const [currentStep, setCurrentStep] = useState('state');
+  const [currentStep, setCurrentStep] = useState('country');
+  const [currentCountry, setCurrentCountry] = useState(null);
   const [currentState, setCurrentState] = useState(null);
+  const [currentCluster, setCurrentCluster] = useState(null);
+  const [currentDistrict, setCurrentDistrict] = useState(null);
   const [selectedCities, setSelectedCities] = useState([]);
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [currentDepartment, setCurrentDepartment] = useState(null);
   const [currentPosition, setCurrentPosition] = useState(null);
 
@@ -32,18 +36,19 @@ const CandidateTrainingSetting = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [allTrainings, setAllTrainings] = useState([]); // Global summary state
 
   // Initial Load
   useEffect(() => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [statesData, departmentsData] = await Promise.all([
-          getStates(),
+        const [countriesData, departmentsData] = await Promise.all([
+          getCountries(),
           getDepartments()
         ]);
-        setStates(statesData);
-        setDepartments(departmentsData);
+        setCountries(countriesData || []);
+        setDepartments(departmentsData?.data || departmentsData || []);
       } catch (error) {
         console.error("Error loading initial data:", error);
         toast.error("Failed to load initial data");
@@ -54,16 +59,75 @@ const CandidateTrainingSetting = () => {
     fetchData();
   }, []);
 
-  // Fetch Cities
+  // Fetch States when Country Selects
+  useEffect(() => {
+    if (currentCountry?._id) {
+      const fetchStates = async () => {
+        try {
+          const data = await getStates(currentCountry._id);
+          setStates(data);
+          setCurrentState(null);
+          setCurrentCluster(null);
+          setCurrentDistrict(null);
+          setSelectedCities([]);
+          if (currentStep === 'country') setCurrentStep('state');
+        } catch (error) {
+          console.error("Error fetching states:", error);
+          toast.error("Failed to load states");
+        }
+      };
+      fetchStates();
+    }
+  }, [currentCountry]);
+
+  // Fetch Clusters when State Selects
   useEffect(() => {
     if (currentState?._id) {
+      const fetchClusters = async () => {
+        try {
+          const data = await getClusters({ stateId: currentState._id });
+          setClusters(data);
+          setCurrentCluster(null);
+          setCurrentDistrict(null);
+          setSelectedCities([]);
+          if (currentStep === 'state') setCurrentStep('cluster');
+        } catch (error) {
+          console.error("Error fetching clusters:", error);
+          toast.error("Failed to load clusters");
+        }
+      };
+      fetchClusters();
+    }
+  }, [currentState]);
+
+  // Fetch Districts when Cluster Selects
+  useEffect(() => {
+    if (currentCluster?._id) {
+      const fetchDistricts = async () => {
+        try {
+          const data = await getDistricts({ clusterId: currentCluster._id });
+          setDistricts(data);
+          setCurrentDistrict(null);
+          setSelectedCities([]);
+          if (currentStep === 'cluster') setCurrentStep('district');
+        } catch (error) {
+          console.error("Error fetching districts:", error);
+          toast.error("Failed to load districts");
+        }
+      };
+      fetchDistricts();
+    }
+  }, [currentCluster]);
+
+  // Fetch Cities when District Selects
+  useEffect(() => {
+    if (currentDistrict?._id) {
       const fetchCities = async () => {
         try {
-          const data = await getCities(currentState._id);
+          const data = await getCities({ districtId: currentDistrict._id });
           setCities(data);
           setSelectedCities([]);
-          setSelectedDistricts([]);
-          if (currentStep === 'state') setCurrentStep('city');
+          if (currentStep === 'district') setCurrentStep('city');
         } catch (error) {
           console.error("Error fetching cities:", error);
           toast.error("Failed to load cities");
@@ -71,28 +135,7 @@ const CandidateTrainingSetting = () => {
       };
       fetchCities();
     }
-  }, [currentState]);
-
-  // Fetch Districts
-  useEffect(() => {
-    if (selectedCities.length > 0) {
-      const fetchDistrictsForCities = async () => {
-        try {
-          const promises = selectedCities.map(city => getDistricts(city._id));
-          const results = await Promise.all(promises);
-          const allDistricts = results.flat();
-          const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
-          setDistricts(uniqueDistricts);
-        } catch (error) {
-          console.error("Error fetching districts:", error);
-          toast.error("Failed to load districts");
-        }
-      };
-      fetchDistrictsForCities();
-    } else {
-      setDistricts([]);
-    }
-  }, [selectedCities]);
+  }, [currentDistrict]);
 
   // Fetch Positions
   useEffect(() => {
@@ -100,7 +143,7 @@ const CandidateTrainingSetting = () => {
       const fetchPositions = async () => {
         try {
           const data = await getDesignationsByDepartment(currentDepartment._id);
-          setPositions(data);
+          setPositions(data?.data || data || []);
           setCurrentPosition(null);
           if (currentStep === 'department') setCurrentStep('position');
         } catch (error) {
@@ -112,21 +155,23 @@ const CandidateTrainingSetting = () => {
     }
   }, [currentDepartment]);
 
-  // Fetch Existing Training Config
   useEffect(() => {
     if (currentDepartment?._id && currentPosition?.name) {
       const fetchTraining = async () => {
         try {
           const params = {
             department: currentDepartment._id,
-            position: currentPosition.name // Backend expects String for now, or match ID if we enforce
+            position: currentPosition.name
           };
+          if (currentCountry?._id) params.country = currentCountry._id;
+          if (currentState?._id) params.state = currentState._id;
+          if (currentCluster?._id) params.cluster = currentCluster._id;
+          if (currentDistrict?._id) params.district = currentDistrict._id;
+
           const response = await getCandidateTrainings(params);
           if (response.data && response.data.length > 0) {
             const existing = response.data[0];
             setTrainingId(existing._id);
-            setTrainingId(existing._id);
-            // Ensure every section has a frontend ID for editing and rendering keys
             const formattedSections = (existing.sections || []).map(s => ({
               ...s,
               id: s._id || `section_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
@@ -134,14 +179,12 @@ const CandidateTrainingSetting = () => {
             setSections(formattedSections);
           } else {
             setTrainingId(null);
-            setSections([
-              {
-                id: `section_${Date.now()}`,
-                category: 'solarrooftop',
-                name: 'New Section',
-                videos: []
-              }
-            ]);
+            setSections([{
+              id: `section_${Date.now()}`,
+              category: 'solarrooftop',
+              name: 'New Section',
+              videos: []
+            }]);
           }
           setCurrentStep('training');
         } catch (error) {
@@ -151,13 +194,48 @@ const CandidateTrainingSetting = () => {
       };
       fetchTraining();
     }
-  }, [currentPosition]);
+  }, [currentPosition, currentDepartment]);
+
+  // Fetch all trainings for Global Summary
+  useEffect(() => {
+    const fetchAllMatching = async () => {
+      try {
+        const params = {};
+        if (currentCountry?._id) params.country = currentCountry._id;
+        if (currentState?._id) params.state = currentState._id;
+        if (currentCluster?._id) params.cluster = currentCluster._id;
+        if (currentDistrict?._id) params.district = currentDistrict._id;
+        if (currentDepartment?._id) params.department = currentDepartment._id;
+
+        const response = await getCandidateTrainings(params);
+        setAllTrainings(response.data || []);
+      } catch (error) {
+        console.error("Error fetching all trainings:", error);
+      }
+    };
+    fetchAllMatching();
+  }, [currentCountry, currentState, currentCluster, currentDistrict, currentDepartment, showSuccessModal]);
 
 
   // HANDLERS
 
+  const handleCountrySelect = (country) => {
+    setCurrentCountry(country);
+    setCurrentStep('state');
+  };
+
   const handleStateSelect = (state) => {
     setCurrentState(state);
+    setCurrentStep('cluster');
+  };
+
+  const handleClusterSelect = (cluster) => {
+    setCurrentCluster(cluster);
+    setCurrentStep('district');
+  };
+
+  const handleDistrictSelect = (district) => {
+    setCurrentDistrict(district);
     setCurrentStep('city');
   };
 
@@ -170,16 +248,6 @@ const CandidateTrainingSetting = () => {
   };
 
   const handleSelectAllCities = () => setSelectedCities([...cities]);
-
-  const toggleDistrictSelect = (district) => {
-    if (selectedDistricts.find(d => d._id === district._id)) {
-      setSelectedDistricts(selectedDistricts.filter(d => d._id !== district._id));
-    } else {
-      setSelectedDistricts([...selectedDistricts, district]);
-    }
-  };
-
-  const handleSelectAllDistricts = () => setSelectedDistricts([...districts]);
 
   const handleDepartmentSelect = (dept) => {
     setCurrentDepartment(dept);
@@ -243,29 +311,22 @@ const CandidateTrainingSetting = () => {
   };
 
   const saveTrainingSettings = async () => {
-    if (!currentDepartment || !currentPosition) return toast.error("Department and Position required");
+    if (!currentDepartment) return toast.error("Department is required");
 
     // Sanitize sections to remove frontend temporary IDs
     const sanitizedSections = sections.map(section => {
       const { id, ...rest } = section;
-      // If it's a temporary ID, don't send it as _id. 
-      // If it's a real ID (from backend), it might be under _id in the original object if we kept it, 
-      // but here we are using 'id' in state. 
-      // If we loaded from backend, we should probably have preserved _id. 
-      // Let's assume for now we strip 'id' and let backend handle _id for new ones.
-      // For existing ones, we want to update them? 
-      // The backend 'updateCandidateTraining' likely does a full replace of sections array or uses set.
-      // If strictly replacing, we don't strictly need _id unless we want to preserve subdocument IDs.
-      // But sending a string 'id' is definitely wrong.
       return rest;
     });
 
     const payload = {
+      country: currentCountry?._id,
       state: currentState?._id,
+      cluster: currentCluster?._id,
+      district: currentDistrict?._id,
       cities: selectedCities.map(c => c._id),
-      districts: selectedDistricts.map(d => d._id),
       department: currentDepartment._id,
-      position: currentPosition.name,
+      position: currentPosition?.name || "",
       sections: sanitizedSections
     };
 
@@ -287,16 +348,61 @@ const CandidateTrainingSetting = () => {
     }
   };
 
+  const handleEditTraining = (training) => {
+    setCurrentCountry(training.country || null);
+    setCurrentState(training.state || null);
+    setCurrentCluster(training.cluster || null);
+    setCurrentDistrict(training.district || null);
+    setSelectedCities(training.cities || []);
+    setCurrentDepartment(training.department || null);
+
+    // Find match for position in current positions list
+    if (training.position && positions.length > 0) {
+      const match = positions.find(p => p.name === training.position);
+      setCurrentPosition(match || { name: training.position });
+    } else {
+      setCurrentPosition(null);
+    }
+
+    const formattedSections = (training.sections || []).map(s => ({
+      ...s,
+      id: s._id || `section_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    }));
+    setSections(formattedSections);
+    setTrainingId(training._id);
+
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    toast("Training data loaded for editing");
+  };
+
+  const handleDeleteTraining = async (id) => {
+    if (window.confirm("Are you sure you want to delete this training configuration?")) {
+      try {
+        await deleteCandidateTraining(id);
+        toast.success("Training deleted successfully");
+        // Refetch updated list
+        const params = {};
+        if (currentCountry?._id) params.country = currentCountry._id;
+        if (currentState?._id) params.state = currentState._id;
+        if (currentCluster?._id) params.cluster = currentCluster._id;
+        if (currentDistrict?._id) params.district = currentDistrict._id;
+        if (currentDepartment?._id) params.department = currentDepartment._id;
+        const response = await getCandidateTrainings(params);
+        setAllTrainings(response.data || []);
+      } catch (error) {
+        console.error("Delete error:", error);
+        toast.error("Failed to delete training");
+      }
+    }
+  };
+
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       {/* Header */}
       <div className="mb-6">
-        <div className="bg-gradient-to-r from-blue-900 to-blue-800 rounded-lg p-4 shadow-lg">
-          <div className="flex items-center">
-            <GraduationCap className="h-8 w-8 text-white mr-3" />
-            <h1 className="text-2xl font-bold text-white">Candidate Training Settings</h1>
-          </div>
+        <div className="bg-[#2D3E50] p-4 flex items-center shadow-md">
+          <h1 className="text-xl font-bold text-white ml-2">Candidate Training Settings</h1>
         </div>
       </div>
 
@@ -307,118 +413,141 @@ const CandidateTrainingSetting = () => {
           </div>
         )}
 
-        {/* State Selection */}
-        {currentStep === 'state' && !isLoading && (
-          <div className="mb-8">
-            <h2 className="text-xl font-semibold text-blue-900 border-b-2 border-gray-200 pb-3 mb-6">Select State</h2>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {states.map((state) => (
+        {/* Stacked Selection Section */}
+        <div className="space-y-6">
+          {/* Country Selection */}
+          <div className="mb-6">
+            <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select Country</h2>
+            <div className="flex flex-wrap gap-4">
+              {countries.map((country) => (
                 <div
-                  key={state._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentState?._id === state._id ? 'bg-gradient-to-r from-blue-500 to-teal-500 text-white' : ''}`}
-                  onClick={() => handleStateSelect(state)}
+                  key={country._id}
+                  className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentCountry?._id === country._id ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                  onClick={() => handleCountrySelect(country)}
                 >
-                  <h3 className="font-medium">{state.name}</h3>
+                  <h3 className="font-medium">{country.name}</h3>
                 </div>
               ))}
             </div>
           </div>
-        )}
 
-        {/* City Selection */}
-        {currentStep === 'city' && currentState && (
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setCurrentStep('state')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Cities in <span className="text-blue-600">{currentState.name}</span></h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-100" onClick={handleSelectAllCities}>
-                <div className="flex items-center justify-center"><CheckCircle className="h-5 w-5 text-green-500 mr-2" /><h3 className="font-medium">All Cities</h3></div>
+          {/* State Selection */}
+          {currentCountry && (
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select State in <span className="text-blue-600">{currentCountry.name}</span></h2>
+              <div className="flex flex-wrap gap-4">
+                {states.map((state) => (
+                  <div
+                    key={state._id}
+                    className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentState?._id === state._id ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                    onClick={() => handleStateSelect(state)}
+                  >
+                    <h3 className="font-medium">{state.name}</h3>
+                  </div>
+                ))}
               </div>
-              {cities.map((city) => (
-                <div
-                  key={city._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all ${selectedCities.find(c => c._id === city._id) ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' : 'hover:shadow-lg'}`}
-                  onClick={() => toggleCitySelect(city)}
-                >
-                  <h3 className="font-medium">{city.name}</h3>
-                </div>
-              ))}
             </div>
-            {selectedCities.length > 0 && (
-              <div className="mt-6 text-right">
-                <button onClick={() => setCurrentStep('district')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Next: Select Districts</button>
-              </div>
-            )}
-          </div>
-        )}
+          )}
 
-        {/* District Selection */}
-        {currentStep === 'district' && selectedCities.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setCurrentStep('city')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Districts</h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-100" onClick={handleSelectAllDistricts}>
-                <div className="flex items-center justify-center"><CheckCircle className="h-5 w-5 text-green-500 mr-2" /><h3 className="font-medium">All Districts</h3></div>
-              </div>
-              {districts.map((dist) => (
+          {/* Cluster Selection */}
+          {(currentCountry && currentState) && (
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select Clusters in <span className="text-blue-600">{currentState.name}</span></h2>
+              <div className="flex flex-wrap gap-4">
                 <div
-                  key={dist._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all ${selectedDistricts.find(d => d._id === dist._id) ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' : 'hover:shadow-lg'}`}
-                  onClick={() => toggleDistrictSelect(dist)}
+                  className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${currentCluster === 'all' || !currentCluster ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                  onClick={() => handleClusterSelect(null)}
                 >
-                  <h3 className="font-medium">{dist.name}</h3>
+                  <CheckCircle className="h-4 w-4 mb-1" />
+                  <h3 className="font-medium text-sm">All Clusters</h3>
                 </div>
-              ))}
-            </div>
-            {selectedDistricts.length > 0 && (
-              <div className="mt-6 text-right">
-                <button onClick={() => setCurrentStep('department')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Next: Select Department</button>
+                {clusters.map((cluster) => (
+                  <div
+                    key={cluster._id}
+                    className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentCluster?._id === cluster._id ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                    onClick={() => handleClusterSelect(cluster)}
+                  >
+                    <h3 className="font-medium">{cluster.name}</h3>
+                  </div>
+                ))}
               </div>
-            )}
+            </div>
+          )}
+
+          {/* District Selection */}
+          {(currentState && (currentCluster || districts.length > 0)) && (
+            <div className="mb-6">
+              <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select Districts in <span className="text-blue-600">{currentCluster?.name || 'All Clusters'}</span></h2>
+              <div className="flex flex-wrap gap-4">
+                <div
+                  className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all flex flex-col items-center justify-center ${!currentDistrict ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                  onClick={() => handleDistrictSelect(null)}
+                >
+                  <CheckCircle className="h-4 w-4 mb-1" />
+                  <h3 className="font-medium text-sm">All Districts</h3>
+                </div>
+                {districts.map((district) => (
+                  <div
+                    key={district._id}
+                    className={`min-w-[120px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentDistrict?._id === district._id ? 'bg-[#2ECC71] text-white border-[#2ECC71]' : 'hover:shadow-md'}`}
+                    onClick={() => handleDistrictSelect(district)}
+                  >
+                    <h3 className="font-medium">{district.name}</h3>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Selected Locations Bar */}
+        {(currentState) && (
+          <div className="bg-[#E9ECEF] rounded-lg p-3 mb-8 flex justify-between items-center">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-[#2D3E50] text-sm mr-2">Selected Locations:</span>
+              <div className="flex gap-2">
+                {currentCountry && <span className="bg-[#2ECC71] text-white text-xs px-3 py-1 rounded-full">{currentCountry.name}</span>}
+                {currentState && <span className="bg-[#2ECC71] text-white text-xs px-3 py-1 rounded-full">{currentState.name}</span>}
+                <span className="bg-[#2ECC71] text-white text-xs px-3 py-1 rounded-full">{currentCluster?.name || 'All Clusters'}</span>
+                <span className="bg-[#2ECC71] text-white text-xs px-3 py-1 rounded-full flex items-center">
+                  <Layers className="h-3 w-3 mr-1" /> {currentDistrict?.name || `${districts.length} Districts`}
+                </span>
+              </div>
+            </div>
+            <div className="bg-[#0D1B2A] text-white text-[10px] px-3 py-1 rounded-full flex items-center font-bold">
+              <Clock className="w-3 h-3 mr-1" /> Break Time
+            </div>
           </div>
         )}
 
         {/* Department Selection */}
-        {currentStep === 'department' && (
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setCurrentStep('district')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Department</h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {departments.map(dept => (
-                <div
-                  key={dept._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all hover:scale-105 ${currentDepartment?._id === dept._id ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white' : ''}`}
-                  onClick={() => handleDepartmentSelect(dept)}
-                >
-                  <h3 className="font-medium">{dept.name}</h3>
-                </div>
-              ))}
-            </div>
+        <div className="mb-8">
+          <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select a Department</h2>
+          <div className="flex flex-wrap gap-4">
+            {departments.map(dept => (
+              <div
+                key={dept._id}
+                className={`min-w-[150px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentDepartment?._id === dept._id ? 'bg-[#3498DB] text-white border-[#3498DB]' : 'hover:shadow-md text-gray-700'}`}
+                onClick={() => handleDepartmentSelect(dept)}
+              >
+                <h3 className="font-bold text-sm">{dept.name}</h3>
+              </div>
+            ))}
           </div>
-        )}
+        </div>
 
         {/* Position Selection */}
-        {currentStep === 'position' && (
+        {positions.length > 0 && (
           <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setCurrentStep('department')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Position</h2>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <h2 className="text-lg font-bold text-[#2D3E50] mb-4">Select a Position</h2>
+            <div className="flex flex-wrap gap-4">
               {positions.map(pos => (
                 <div
                   key={pos._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all hover:scale-105 ${currentPosition?._id === pos._id ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white' : ''}`}
+                  className={`min-w-[200px] bg-white rounded-lg shadow-sm border border-gray-100 p-6 text-center cursor-pointer transition-all ${currentPosition?._id === pos._id ? 'bg-[#3498DB] text-white border-[#3498DB]' : 'hover:shadow-md text-gray-700'}`}
                   onClick={() => handlePositionSelect(pos)}
                 >
-                  <h3 className="font-medium">{pos.name}</h3>
+                  <h3 className="font-bold text-sm">{pos.name}</h3>
                 </div>
               ))}
             </div>
@@ -426,163 +555,273 @@ const CandidateTrainingSetting = () => {
         )}
 
         {/* Training Form */}
-        {currentStep === 'training' && (
-          <div className="bg-white rounded-xl shadow-lg p-6 mb-8">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-2xl font-bold text-blue-600">{currentDepartment?.name} - {currentPosition?.name} Training</h2>
-              <button onClick={() => setCurrentStep('position')} className="p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
+        {currentDepartment && (
+          <div className="bg-white rounded-xl shadow-lg border border-gray-100 p-0 overflow-hidden mb-8 transition-all">
+            <div className="p-6">
+              <h2 className="text-[22px] font-bold text-[#0077B6] mb-2 uppercase tracking-tight text-center sm:text-left">
+                {currentDepartment?.name} - {currentPosition ? currentPosition.name : "Selection Required"} Training Settings
+              </h2>
+              <h3 className="text-lg font-bold text-[#0077B6] mb-4">Upload Video Section</h3>
             </div>
 
-            <div className="mb-8">
-              <div className="bg-blue-600 text-white rounded-t-lg p-4 flex justify-between items-center">
-                <span className="font-semibold">Video Upload Sections</span>
-                <button onClick={addNewSection} className="bg-white text-blue-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-100 flex items-center">
-                  <Plus className="h-4 w-4 mr-1" /> Add Section
+            <div className="px-6 pb-6">
+              <div className="bg-[#0077B6] text-white p-3 flex justify-between items-center rounded-t-lg">
+                <span className="font-bold text-sm">Video Upload Sections</span>
+                <button onClick={addNewSection} className="bg-white text-[#0077B6] px-3 py-1 rounded-md text-[10px] font-bold hover:bg-gray-100 flex items-center">
+                  Add Section
                 </button>
               </div>
-              <div className="border border-gray-200 rounded-b-lg p-4">
+
+              <div className="border border-gray-200 rounded-b-lg p-6 bg-white shadow-inner">
                 {sections.map(section => (
-                  <div key={section.id} className="border-l-4 border-blue-500 rounded-lg border border-gray-200 p-4 mb-4">
-                    <div className="grid grid-cols-1 md:grid-cols-12 gap-4 mb-4">
-                      <div className="md:col-span-4">
-                        <label className="block text-sm font-medium mb-2">Category</label>
-                        <select value={section.category} onChange={e => updateSection(section.id, 'category', e.target.value)} className="w-full border rounded-lg px-3 py-2">
+                  <div key={section.id} className="border-l-[4px] border-[#3498DB] border-t border-r border-b border-gray-100 rounded-lg p-8 mb-8 relative bg-white transition-all hover:shadow-md">
+
+                    {/* Row 1: Category & Section Name & Small Trash */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-6 relative">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Category</label>
+                        <select
+                          value={section.category}
+                          onChange={e => updateSection(section.id, 'category', e.target.value)}
+                          className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                        >
                           <option value="solarrooftop">Solar Rooftop</option>
                           <option value="solarpump">Solar Pump</option>
                           <option value="solarstreetlight">Solar Street Light</option>
                         </select>
                       </div>
-                      <div className="md:col-span-6">
-                        <label className="block text-sm font-medium mb-2">Section Name</label>
-                        <input type="text" value={section.name} onChange={e => updateSection(section.id, 'name', e.target.value)} className="w-full border rounded-lg px-3 py-2" placeholder="Section Name" />
-                      </div>
-                      <div className="md:col-span-2 flex items-end justify-end">
-                        <button onClick={() => removeSection(section.id)} className="text-red-500 p-2 border border-red-500 rounded-lg hover:bg-red-50"><Trash2 className="h-4 w-4" /></button>
+                      <div className="relative">
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Section Name</label>
+                        <div className="flex items-center gap-4">
+                          <input
+                            type="text"
+                            value={section.name}
+                            onChange={e => updateSection(section.id, 'name', e.target.value)}
+                            className="flex-1 border border-gray-200 rounded-lg px-4 py-2.5 text-sm bg-gray-50 focus:bg-white focus:ring-1 focus:ring-blue-500 outline-none transition-all"
+                            placeholder="Enter Section Name"
+                          />
+                          <button
+                            onClick={() => removeSection(section.id)}
+                            className="text-[#E74C3C] hover:bg-red-50 p-1 rounded transition-colors"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </div>
                     </div>
-                    <div className="space-y-4">
+
+                    {/* Videos Area */}
+                    <div className="space-y-6">
                       {section.videos.map((video, vIndex) => (
-                        <div key={vIndex} className="grid grid-cols-12 gap-4 items-center bg-gray-50 p-3 rounded">
-                          <div className="col-span-8">
-                            <input type="url" value={video.url} onChange={e => updateVideo(section.id, vIndex, 'url', e.target.value)} className="w-full border rounded px-2 py-1" placeholder="Video URL (YouTube)" />
-                          </div>
-                          <div className="col-span-3">
-                            <select value={video.type} onChange={e => updateVideo(section.id, vIndex, 'type', e.target.value)} className="w-full border rounded px-2 py-1">
-                              <option value="youtube">YouTube</option>
-                              <option value="upload">Upload</option>
-                            </select>
-                          </div>
-                          <div className="col-span-1 text-right">
-                            <button onClick={() => removeVideo(section.id, vIndex)} className="text-red-500"><Trash2 className="h-4 w-4" /></button>
+                        <div key={vIndex} className="bg-white transition-all">
+                          {/* Row 2: Upload Video & YouTube Link */}
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-4">
+                            <div className="flex flex-col">
+                              <label className="text-sm font-bold text-gray-700 mb-2">Upload Video</label>
+                              <div className="flex border border-gray-200 rounded-lg overflow-hidden bg-white h-[42px] items-center">
+                                <label className="bg-[#F8F9FA] px-4 py-2 text-[10px] font-bold border border-gray-300 rounded m-1 cursor-pointer hover:bg-gray-200 h-[30px] flex items-center shadow-sm">
+                                  Choose File
+                                  <input
+                                    type="file"
+                                    className="hidden"
+                                    onChange={e => {
+                                      const file = e.target.files[0];
+                                      if (file) updateVideo(section.id, vIndex, 'file', file);
+                                    }}
+                                  />
+                                </label>
+                                <span className="px-2 py-2 text-[10px] text-gray-400">
+                                  {video.file ? video.file.name : 'No file chosen'}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="flex flex-col relative">
+                              <label className="text-sm font-bold text-gray-700 mb-2">Or YouTube Link</label>
+                              <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden bg-white h-[42px]">
+                                <input
+                                  type="url"
+                                  value={video.url}
+                                  onChange={e => updateVideo(section.id, vIndex, 'url', e.target.value)}
+                                  className="w-full px-4 py-2 text-sm outline-none bg-transparent"
+                                  placeholder="https://youtube.com/xyz"
+                                />
+                                {vIndex > 0 && (
+                                  <button onClick={() => removeVideo(section.id, vIndex)} className="p-2 text-red-500 hover:bg-red-50 h-full flex items-center pr-3">
+                                    <Trash2 className="h-4 w-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
                           </div>
                         </div>
                       ))}
-                      <button onClick={() => addVideoToSection(section.id)} className="text-sm text-blue-600 flex items-center"><Plus className="h-3 w-3 mr-1" /> Add Video</button>
+
+                      {/* Row 3: Add Video & Save Section Buttons */}
+                      <div className="flex gap-4">
+                        <button
+                          onClick={() => addVideoToSection(section.id)}
+                          className="bg-[#0077B6] text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-blue-700 transition-all shadow-sm flex items-center whitespace-nowrap"
+                        >
+                          Add Video
+                        </button>
+                        <button
+                          onClick={saveTrainingSettings}
+                          className="bg-[#2ECC71] text-white px-6 py-2.5 rounded-lg text-sm font-bold hover:bg-green-600 transition-all shadow-sm flex items-center whitespace-nowrap"
+                        >
+                          Save Section
+                        </button>
+                      </div>
                     </div>
                   </div>
                 ))}
-              </div>
-            </div>
 
-            <div className="flex justify-end mb-8">
-              <button onClick={saveTrainingSettings} disabled={isSaving} className="px-6 py-3 bg-green-500 text-white rounded-lg hover:bg-green-600 font-semibold flex items-center disabled:opacity-50">
-                <Save className="h-5 w-5 mr-2" />
-                {isSaving ? 'Saving...' : 'Save Training Settings'}
-              </button>
-            </div>
-
-            {/* Training Summary Section */}
-            <div className="bg-gray-50 border-l-4 border-blue-600 rounded-r-lg p-6 mb-8 mt-12 shadow-sm">
-              <h3 className="text-xl font-bold text-blue-800 mb-6 flex items-center">
-                Training Summary
-              </h3>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                {/* Location Coverage */}
-                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <h4 className="font-semibold text-gray-700 flex items-center mb-3">
-                    Location Coverage
-                  </h4>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentState?.name || 'N/A'}</span>
-                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{selectedCities.length === cities.length ? 'All Clusters' : `${selectedCities.length} Clusters`}</span>
-                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{selectedDistricts.length === districts.length ? 'All Districts' : `${selectedDistricts.length} Districts`}</span>
+                {sections.length === 0 && (
+                  <div className="text-center py-12 text-gray-400 bg-gray-50 rounded-lg border border-dashed">
+                    No sections added yet. Click "Add Section" to begin training configuration.
                   </div>
-                  <p className="text-xs text-gray-500">Training will be available in selected locations</p>
-                </div>
-
-                {/* Department & Position */}
-                <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                  <h4 className="font-semibold text-gray-700 flex items-center mb-3">
-                    <Users className="w-4 h-4 mr-1" /> Department & Position
-                  </h4>
-                  <div className="flex flex-wrap gap-2 mb-2">
-                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentDepartment?.name || 'N/A'}</span>
-                    <span className="bg-blue-400 text-white text-xs px-3 py-1 rounded-full">{currentPosition?.name || 'N/A'}</span>
-                  </div>
-                  <p className="text-xs text-gray-500">Training configured for specific department roles</p>
-                </div>
+                )}
               </div>
 
-              {/* Training Content */}
-              <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm">
-                <h4 className="font-semibold text-gray-700 flex items-center mb-4">
-                  <PlayCircle className="w-4 h-4 mr-1" /> Training Content
-                </h4>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                  {/* We compute dynamic summary from sections state */}
-                  {['solarrooftop', 'solarpump', 'solarstreetlight'].map(cat => {
-                    const catSections = sections.filter(s => s.category === cat);
-                    const videoCount = catSections.reduce((acc, s) => acc + s.videos.length, 0);
-                    if (videoCount === 0 && catSections.length === 0) return null;
+              <div className="mt-8 flex justify-end">
+                <button onClick={saveTrainingSettings} disabled={isSaving} className="px-8 py-3 bg-[#2ECC71] text-white rounded-lg text-sm font-extrabold hover:shadow-lg transition-all disabled:opacity-50 flex items-center uppercase tracking-wide">
+                  <Save className="w-4 h-4 mr-2" />
+                  {isSaving ? 'Processing...' : 'Final Save Training Settings'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )
+        }
 
-                    const catName = cat === 'solarrooftop' ? 'Solar Rooftop Basics' :
-                      cat === 'solarpump' ? 'Solar Pump Guide' : 'Solar Street Light';
+        {/* Training Summary Section */}
+        <div className="bg-[#F8F9FA] border-l-[6px] border-[#1565C0] rounded-lg p-8 mb-12 shadow-sm">
+          <h3 className="text-2xl font-bold text-[#1565C0] mb-8">Training Summary</h3>
 
-                    return (
-                      <div key={cat} className="flex items-start">
-                        <FileVideo className="w-6 h-6 text-blue-500 mr-2 mt-1" />
-                        <div>
-                          <h5 className="font-semibold text-sm text-gray-800">{catName}</h5>
-                          <p className="text-xs text-gray-500">{videoCount} videos</p>
+          {/* Training Summary Cards List */}
+          <div className="space-y-8">
+            {allTrainings.length > 0 ? (
+              allTrainings.map((training, index) => (
+                <div key={training._id || index} className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden transition-all hover:shadow-md relative group">
+                  {/* Action Buttons */}
+                  <div className="absolute top-4 right-4 flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleEditTraining(training)}
+                      className="p-2 bg-blue-50 text-blue-600 rounded-full hover:bg-blue-600 hover:text-white transition-all shadow-sm"
+                      title="Edit Training"
+                    >
+                      <Edit className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTraining(training._id)}
+                      className="p-2 bg-red-50 text-red-600 rounded-full hover:bg-red-600 hover:text-white transition-all shadow-sm"
+                      title="Delete Training"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+
+                  <div className="p-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                      {/* Location Information */}
+                      <div>
+                        <h4 className="font-bold text-gray-700 flex items-center mb-3 text-xs uppercase tracking-wider">
+                          <MapPin className="w-3.5 h-3.5 mr-2 text-blue-500" /> Location Coverage
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          {training.country?.name && (
+                            <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.country.name}</span>
+                          )}
+                          {training.state?.name && (
+                            <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.state.name}</span>
+                          )}
+                          {training.cluster?.name && (
+                            <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.cluster.name}</span>
+                          )}
+                          {training.district?.name && (
+                            <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.district.name}</span>
+                          )}
                         </div>
                       </div>
-                    );
-                  })}
-                  {sections.length === 0 || sections.every(s => s.videos.length === 0) ? (
-                    <p className="text-sm text-gray-500 col-span-full">No training content added yet.</p>
-                  ) : null}
+
+                      {/* Role Information */}
+                      <div>
+                        <h4 className="font-bold text-gray-700 flex items-center mb-3 text-xs uppercase tracking-wider">
+                          <Users className="w-3.5 h-3.5 mr-2 text-blue-500" /> Department & Position
+                        </h4>
+                        <div className="flex flex-wrap gap-2">
+                          <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.department?.name || 'General'}</span>
+                          {training.position && (
+                            <span className="bg-[#EBF5FB] text-[#2980B9] text-[9px] px-2.5 py-1 rounded font-bold uppercase">{training.position}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Content Summary */}
+                    <div className="bg-[#F8F9FA] rounded-xl p-5 border border-gray-50">
+                      <h4 className="font-bold text-gray-700 flex items-center mb-4 text-xs uppercase tracking-wider">
+                        <Globe className="w-3.5 h-3.5 mr-2 text-blue-500" /> Training Modules
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        {['solarrooftop', 'solarpump', 'solarstreetlight'].map(cat => {
+                          const catSections = (training.sections || []).filter(s => s.category === cat);
+                          const videoCount = catSections.reduce((acc, s) => acc + (s.videos?.length || 0), 0);
+
+                          const catLabel = cat === 'solarrooftop' ? 'Solar Rooftop' :
+                            cat === 'solarpump' ? 'Solar Pump' : 'Street Light';
+
+                          const Icon = cat === 'solarrooftop' ? PlayCircle : cat === 'solarpump' ? Layers : FileVideo;
+
+                          return (
+                            <div key={cat} className="flex items-center">
+                              <div className="p-1.5 bg-white rounded shadow-sm mr-3">
+                                <Icon className="w-4 h-4 text-blue-500" />
+                              </div>
+                              <div>
+                                <p className="font-extrabold text-[10px] text-gray-800 leading-tight">{catLabel}</p>
+                                <p className="text-[9px] text-gray-400 font-bold">{videoCount} Videos</p>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
                 </div>
-                <div className="border-t pt-3 mt-4">
-                  <p className="text-xs text-gray-500">
-                    Total: {sections.reduce((acc, s) => acc + s.videos.length, 0)} training videos across {new Set(sections.map(s => s.category)).size} categories
-                  </p>
-                </div>
+              ))
+            ) : (
+              <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+                <Video className="w-12 h-12 text-gray-100 mx-auto mb-4" />
+                <p className="text-gray-400 text-sm font-bold">No training data found for current filters.</p>
               </div>
+            )}
+          </div>
+        </div>
+
+        {/* Success Modal */}
+        {showSuccessModal && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-8 max-w-sm w-full text-center shadow-xl transform transition-all scale-100">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <CheckCircle className="w-10 h-10 text-green-600" />
+              </div>
+              <h3 className="text-2xl font-bold text-gray-800 mb-2">Success!</h3>
+              <p className="text-gray-600 mb-6">Training data has been saved successfully in the database.</p>
+              <button
+                onClick={() => setShowSuccessModal(false)}
+                className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors"
+              >
+                OK
+              </button>
             </div>
           </div>
         )}
 
-      </div>
-
-      {/* Success Modal */}
-      {showSuccessModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg p-8 max-w-sm w-full text-center shadow-xl transform transition-all scale-100">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="w-10 h-10 text-green-600" />
-            </div>
-            <h3 className="text-2xl font-bold text-gray-800 mb-2">Success!</h3>
-            <p className="text-gray-600 mb-6">Training data has been saved successfully in the database.</p>
-            <button
-              onClick={() => setShowSuccessModal(false)}
-              className="w-full py-3 bg-green-600 text-white font-semibold rounded-lg hover:bg-green-700 transition-colors"
-            >
-              OK
-            </button>
-          </div>
+        {/* Copyright Footer */}
+        <div className="text-center py-6 border-t mt-12">
+          <p className="text-gray-500 text-xs">Copyright © 2025 <span className="font-bold">Solarkits. All</span> Rights Reserved.</p>
         </div>
-      )}
+      </div>
     </div>
   );
 };

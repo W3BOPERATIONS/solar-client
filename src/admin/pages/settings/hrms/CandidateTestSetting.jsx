@@ -4,24 +4,28 @@ import {
   Plus, X, Save, ArrowLeft, CheckCircle,
   Trash2, Clock, Percent, ListChecks, Edit, Loader, GraduationCap, ChevronLeft
 } from 'lucide-react';
-import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getCountries, getStates, getClusters, getDistricts, getCities } from '../../../../services/core/locationApi';
 import { getDepartments } from '../../../../services/core/masterApi';
 import { getCandidateTests, createCandidateTest, deleteCandidateTest } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 
 const CandidateTestSetting = () => {
   // Data States
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [cities, setCities] = useState([]);
   const [departments, setDepartments] = useState([]);
   const [tests, setTests] = useState([]);
 
   // Selection States
-  const [currentStep, setCurrentStep] = useState('state');
+  const [currentStep, setCurrentStep] = useState('country');
+  const [currentCountry, setCurrentCountry] = useState(null);
   const [currentState, setCurrentState] = useState(null);
+  const [currentCluster, setCurrentCluster] = useState(null);
+  const [currentDistrict, setCurrentDistrict] = useState(null);
   const [selectedCities, setSelectedCities] = useState([]);
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
   const [currentDepartment, setCurrentDepartment] = useState(null);
 
   const [showTestForm, setShowTestForm] = useState(false);
@@ -55,12 +59,12 @@ const CandidateTestSetting = () => {
     const fetchData = async () => {
       try {
         setIsLoading(true);
-        const [statesData, departmentsData] = await Promise.all([
-          getStates(),
+        const [countriesData, departmentsData] = await Promise.all([
+          getCountries(),
           getDepartments()
         ]);
-        setStates(statesData);
-        setDepartments(departmentsData);
+        setCountries(countriesData || []);
+        setDepartments(departmentsData?.data || departmentsData || []);
       } catch (error) {
         console.error("Error loading initial data:", error);
         toast.error("Failed to load initial data");
@@ -71,45 +75,84 @@ const CandidateTestSetting = () => {
     fetchData();
   }, []);
 
-  // Fetch Cities when State Selects
+  // Fetch States when Country Selects
   useEffect(() => {
-    if (currentState?._id) {
-      const fetchCities = async () => {
+    if (currentCountry?._id) {
+      const fetchStates = async () => {
         try {
-          const data = await getCities(currentState._id);
-          setCities(data);
+          const data = await getStates(currentCountry._id);
+          setStates(data);
+          setCurrentState(null);
+          setCurrentCluster(null);
+          setCurrentDistrict(null);
           setSelectedCities([]);
-          setSelectedDistricts([]);
-          if (currentStep === 'state') setCurrentStep('city');
+          if (currentStep === 'country') setCurrentStep('state');
         } catch (error) {
-          console.error("Error fetching cities:", error);
-          toast.error("Failed to load clusters/cities");
+          console.error("Error fetching states:", error);
+          toast.error("Failed to load states");
         }
       };
-      fetchCities();
+      fetchStates();
+    }
+  }, [currentCountry]);
+
+  // Fetch Clusters when State Selects
+  useEffect(() => {
+    if (currentState?._id) {
+      const fetchClusters = async () => {
+        try {
+          const data = await getClusters({ stateId: currentState._id });
+          setClusters(data);
+          setCurrentCluster(null);
+          setCurrentDistrict(null);
+          setSelectedCities([]);
+          if (currentStep === 'state') setCurrentStep('cluster');
+        } catch (error) {
+          console.error("Error fetching clusters:", error);
+          toast.error("Failed to load clusters");
+        }
+      };
+      fetchClusters();
     }
   }, [currentState]);
 
-  // Fetch Districts when Selected Cities Change
+  // Fetch Districts when Cluster Selects
   useEffect(() => {
-    if (selectedCities.length > 0) {
-      const fetchDistrictsForCities = async () => {
+    if (currentCluster?._id) {
+      const fetchDistricts = async () => {
         try {
-          const promises = selectedCities.map(city => getDistricts(city._id));
-          const results = await Promise.all(promises);
-          const allDistricts = results.flat();
-          const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
-          setDistricts(uniqueDistricts);
+          const data = await getDistricts({ clusterId: currentCluster._id });
+          setDistricts(data);
+          setCurrentDistrict(null);
+          setSelectedCities([]);
+          if (currentStep === 'cluster') setCurrentStep('district');
         } catch (error) {
           console.error("Error fetching districts:", error);
           toast.error("Failed to load districts");
         }
       };
-      fetchDistrictsForCities();
-    } else {
-      setDistricts([]);
+      fetchDistricts();
     }
-  }, [selectedCities]);
+  }, [currentCluster]);
+
+  // Fetch Cities when District Selects
+  useEffect(() => {
+    if (currentDistrict?._id) {
+      const fetchCities = async () => {
+        try {
+          const data = await getCities({ districtId: currentDistrict._id });
+          setCities(data);
+          setSelectedCities([]);
+          if (currentStep === 'district') setCurrentStep('city');
+        } catch (error) {
+          console.error("Error fetching cities:", error);
+          toast.error("Failed to load cities");
+        }
+      };
+      fetchCities();
+    }
+  }, [currentDistrict]);
+
 
   // Fetch Tests when Department Selected
   useEffect(() => {
@@ -126,7 +169,10 @@ const CandidateTestSetting = () => {
     if (!currentDepartment?._id) return;
     try {
       const params = { department: currentDepartment._id };
+      if (currentCountry?._id) params.country = currentCountry._id;
       if (currentState?._id) params.state = currentState._id;
+      if (currentCluster?._id) params.cluster = currentCluster._id;
+      if (currentDistrict?._id) params.district = currentDistrict._id;
 
       const response = await getCandidateTests(params);
       setTests(response.data || []);
@@ -137,8 +183,23 @@ const CandidateTestSetting = () => {
   };
 
   // HANDLERS
+  const handleCountrySelect = (country) => {
+    setCurrentCountry(country);
+    setCurrentStep('state');
+  };
+
   const handleStateSelect = (state) => {
     setCurrentState(state);
+    setCurrentStep('cluster');
+  };
+
+  const handleClusterSelect = (cluster) => {
+    setCurrentCluster(cluster);
+    setCurrentStep('district');
+  };
+
+  const handleDistrictSelect = (district) => {
+    setCurrentDistrict(district);
     setCurrentStep('city');
   };
 
@@ -151,16 +212,6 @@ const CandidateTestSetting = () => {
   };
 
   const handleSelectAllCities = () => setSelectedCities([...cities]);
-
-  const toggleDistrictSelect = (district) => {
-    if (selectedDistricts.find(d => d._id === district._id)) {
-      setSelectedDistricts(selectedDistricts.filter(d => d._id !== district._id));
-    } else {
-      setSelectedDistricts([...selectedDistricts, district]);
-    }
-  };
-
-  const handleSelectAllDistricts = () => setSelectedDistricts([...districts]);
 
   const handleDepartmentSelect = (dept) => {
     setCurrentDepartment(dept);
@@ -237,8 +288,8 @@ const CandidateTestSetting = () => {
   const saveTestSettings = async () => {
     if (!testConfig.name.trim()) return toast.error('Enter test name');
     if (questions.length === 0) return toast.error('Add at least one question');
-    if (!currentState || selectedCities.length === 0 || selectedDistricts.length === 0) {
-      return toast.error('Please select State, Cities and Districts');
+    if (!currentCountry || !currentState || !currentCluster || !currentDistrict || selectedCities.length === 0) {
+      return toast.error('Please select Country, State, Cluster, District, and Cities');
     }
 
     const validQuestions = questions.filter(q => q.text.trim() !== '');
@@ -255,9 +306,11 @@ const CandidateTestSetting = () => {
     const payload = {
       ...testConfig,
       department: currentDepartment._id,
+      country: currentCountry._id,
       state: currentState._id,
+      cluster: currentCluster._id,
+      district: currentDistrict._id,
       cities: selectedCities.map(c => c._id),
-      districts: selectedDistricts.map(d => d._id),
       questions: formattedQuestions
     };
 
@@ -297,15 +350,36 @@ const CandidateTestSetting = () => {
           </div>
         )}
 
-        {/* State Selection */}
-        {currentStep === 'state' && !isLoading && (
+        {/* Country Selection */}
+        {currentStep === 'country' && !isLoading && (
           <div className="mb-8">
-            <h2 className="text-xl font-semibold text-blue-900 border-b-2 border-gray-200 pb-3 mb-6">Select State</h2>
+            <h2 className="text-xl font-semibold text-blue-900 border-b-2 border-gray-200 pb-3 mb-6">Select Country</h2>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {countries.map((country) => (
+                <div
+                  key={country._id}
+                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentCountry?._id === country._id ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : ''}`}
+                  onClick={() => handleCountrySelect(country)}
+                >
+                  <h3 className="font-medium">{country.name}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* State Selection */}
+        {currentStep === 'state' && currentCountry && (
+          <div className="mb-8">
+            <div className="flex items-center mb-6">
+              <button onClick={() => setCurrentStep('country')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
+              <h2 className="text-xl font-semibold">Select State in <span className="text-blue-600">{currentCountry.name}</span></h2>
+            </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {states.map((state) => (
                 <div
                   key={state._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentState?._id === state._id ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' : ''}`}
+                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentState?._id === state._id ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : ''}`}
                   onClick={() => handleStateSelect(state)}
                 >
                   <h3 className="font-medium">{state.name}</h3>
@@ -315,16 +389,58 @@ const CandidateTestSetting = () => {
           </div>
         )}
 
-        {/* City/Cluster Selection */}
-        {currentStep === 'city' && currentState && (
+        {/* Cluster Selection */}
+        {currentStep === 'cluster' && currentState && (
           <div className="mb-8">
             <div className="flex items-center mb-6">
               <button onClick={() => setCurrentStep('state')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Clusters in <span className="text-blue-600">{currentState.name}</span></h2>
+              <h2 className="text-xl font-semibold">Select Cluster in <span className="text-blue-600">{currentState.name}</span></h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {clusters.map((cluster) => (
+                <div
+                  key={cluster._id}
+                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentCluster?._id === cluster._id ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : ''}`}
+                  onClick={() => handleClusterSelect(cluster)}
+                >
+                  <h3 className="font-medium">{cluster.name}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* District Selection */}
+        {currentStep === 'district' && currentCluster && (
+          <div className="mb-8">
+            <div className="flex items-center mb-6">
+              <button onClick={() => setCurrentStep('cluster')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
+              <h2 className="text-xl font-semibold">Select District in <span className="text-blue-600">{currentCluster.name}</span></h2>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {districts.map((district) => (
+                <div
+                  key={district._id}
+                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${currentDistrict?._id === district._id ? 'bg-gradient-to-r from-blue-500 to-indigo-600 text-white' : ''}`}
+                  onClick={() => handleDistrictSelect(district)}
+                >
+                  <h3 className="font-medium">{district.name}</h3>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* City Selection (Multi-select) */}
+        {currentStep === 'city' && currentDistrict && (
+          <div className="mb-8">
+            <div className="flex items-center mb-6">
+              <button onClick={() => setCurrentStep('district')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
+              <h2 className="text-xl font-semibold">Select Cities in <span className="text-blue-600">{currentDistrict.name}</span></h2>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-100" onClick={handleSelectAllCities}>
-                <div className="flex items-center justify-center"><CheckCircle className="h-5 w-5 text-green-500 mr-2" /><h3 className="font-medium">All Clusters</h3></div>
+                <div className="flex items-center justify-center"><CheckCircle className="h-5 w-5 text-green-500 mr-2" /><h3 className="font-medium">All Cities</h3></div>
               </div>
               {cities.map((city) => (
                 <div
@@ -337,42 +453,15 @@ const CandidateTestSetting = () => {
               ))}
             </div>
             {selectedCities.length > 0 && (
-              <div className="mt-6 text-right">
-                <button onClick={() => setCurrentStep('district')} className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Next: Select Districts</button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* District Selection */}
-        {currentStep === 'district' && selectedCities.length > 0 && (
-          <div className="mb-8">
-            <div className="flex items-center mb-6">
-              <button onClick={() => setCurrentStep('city')} className="mr-4 p-2 rounded-lg hover:bg-gray-100"><ChevronLeft className="h-5 w-5" /></button>
-              <h2 className="text-xl font-semibold">Select Districts in All Clusters</h2>
-            </div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              <div className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:bg-gray-100" onClick={handleSelectAllDistricts}>
-                <div className="flex items-center justify-center"><CheckCircle className="h-5 w-5 text-green-500 mr-2" /><h3 className="font-medium">All Districts</h3></div>
-              </div>
-              {districts.map((dist) => (
-                <div
-                  key={dist._id}
-                  className={`bg-white rounded-lg shadow-md p-6 text-center cursor-pointer transition-all ${selectedDistricts.find(d => d._id === dist._id) ? 'bg-gradient-to-r from-green-500 to-emerald-500 text-white' : 'hover:shadow-lg'}`}
-                  onClick={() => toggleDistrictSelect(dist)}
-                >
-                  <h3 className="font-medium">{dist.name}</h3>
-                </div>
-              ))}
-            </div>
-            {selectedDistricts.length > 0 && (
               <div className="mt-8">
                 <div className="bg-gray-100 p-4 rounded-lg mb-6">
                   <p className="font-semibold text-sm mb-2">Selected Locations:</p>
                   <div className="flex gap-2 flex-wrap">
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs">{currentState?.name}</span>
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs">{selectedCities.length === cities.length ? 'All Clusters' : `${selectedCities.length} Clusters`}</span>
-                    <span className="bg-green-500 text-white px-3 py-1 rounded-full text-xs">{selectedDistricts.length === districts.length ? 'All Districts' : `${selectedDistricts.length} Districts`}</span>
+                    <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-xs">{currentCountry?.name}</span>
+                    <span className="bg-indigo-600 text-white px-3 py-1 rounded-full text-xs">{currentState?.name}</span>
+                    <span className="bg-teal-600 text-white px-3 py-1 rounded-full text-xs">{currentCluster?.name}</span>
+                    <span className="bg-green-600 text-white px-3 py-1 rounded-full text-xs">{currentDistrict?.name}</span>
+                    <span className="bg-emerald-500 text-white px-3 py-1 rounded-full text-xs">{selectedCities.length === cities.length ? 'All Cities' : `${selectedCities.length} Cities`}</span>
                   </div>
                 </div>
                 <div className="text-right">

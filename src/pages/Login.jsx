@@ -37,6 +37,12 @@ export default function Login() {
         navigate('/dealer-manager/dashboard');
       } else if (response.data.user.role === 'franchiseeManager') {
         navigate('/franchisee-manager/dashboard');
+      } else if (response.data.user.role === 'employee') {
+        if (!response.data.user.trainingCompleted) {
+          navigate('/employee/training');
+        } else {
+          navigate('/dashboard'); // Assuming employee goes to main dashboard or a specific one based on dynamic role later
+        }
       } else {
         navigate('/');
       }
@@ -89,21 +95,21 @@ export default function Login() {
           {/* Login Form */}
           <form onSubmit={handleLogin}>
             <div className="space-y-6">
-              {/* Email Input */}
+              {/* Email/Mobile Input */}
               <div>
                 <label className="block text-sm font-semibold text-slate-700 mb-2">
-                  Email Address
+                  Email Address / Mobile Number
                 </label>
                 <div className="relative">
                   <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
                     <Mail size={20} className="text-gray-400" />
                   </div>
                   <input
-                    type="email"
+                    type="text"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
                     className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition"
-                    placeholder="Enter your email"
+                    placeholder="Enter email or mobile number"
                     required
                   />
                 </div>
@@ -254,7 +260,41 @@ export default function Login() {
                 </div>
                 <span className="text-xs font-medium text-orange-600">Click to use</span>
               </button>
+            </div>
+          </div>
 
+          {/* Alternative Portals */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-slate-700 mb-4 text-center">
+              Other Portals
+            </h3>
+
+            <div className="grid grid-cols-2 gap-4">
+              {/* Employee Portal Link */}
+              <button
+                type="button"
+                onClick={() => navigate('/employee-login')}
+                className="w-full flex flex-col items-center justify-center p-4 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-100 transition-all duration-200 group text-center"
+              >
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm group-hover:shadow text-emerald-600">
+                  <Shield size={20} />
+                </div>
+                <p className="font-semibold text-emerald-800 text-sm">Employee</p>
+                <p className="text-xs text-emerald-600/70 mt-0.5">Login</p>
+              </button>
+
+              {/* Candidate Portal Link */}
+              <button
+                type="button"
+                onClick={() => navigate('/candidate-login')}
+                className="w-full flex flex-col items-center justify-center p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-100 transition-all duration-200 group text-center"
+              >
+                <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center mb-2 shadow-sm group-hover:shadow text-indigo-600">
+                  <Store size={20} />
+                </div>
+                <p className="font-semibold text-indigo-800 text-sm">Candidate</p>
+                <p className="text-xs text-indigo-600/70 mt-0.5">Portal</p>
+              </button>
             </div>
           </div>
 

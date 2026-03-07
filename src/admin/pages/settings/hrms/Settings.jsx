@@ -6,27 +6,33 @@ import {
   Loader, CheckCircle
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
-import { getDepartments, getDesignationsByDepartment } from '../../../../services/core/masterApi';
+import { getStates, getClustersHierarchy, getDistrictsHierarchy, getCountries } from '../../../../services/core/locationApi';
+import { getDepartments, getRoles } from '../../../../services/core/masterApi';
 import { getHRMSSettings, saveHRMSSettings } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
+
+const toId = (val) => (val && typeof val === 'object' ? val._id : val);
 
 const AdminHrmssettings = () => {
   const navigate = useNavigate();
   // Data States
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
   const [departments, setDepartments] = useState([]);
+  const [allRoles, setAllRoles] = useState([]);
   const [designations, setDesignations] = useState([]);
 
   // Selection States
+  const [currentCountry, setCurrentCountry] = useState(null); // Objects
   const [currentState, setCurrentState] = useState(null); // Objects
-  const [currentCity, setCurrentCity] = useState(null); // Objects
+  const [currentCluster, setCurrentCluster] = useState(null); // Objects
   const [currentDistrict, setCurrentDistrict] = useState(null); // Objects
   const [currentDepartment, setCurrentDepartment] = useState(null); // Objects
   const [currentPosition, setCurrentPosition] = useState(null); // Objects (Designation)
 
+  const [savedSettingsList, setSavedSettingsList] = useState([]);
   const [activeTab, setActiveTab] = useState('payroll');
   const [isLoading, setIsLoading] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
@@ -95,12 +101,18 @@ const AdminHrmssettings = () => {
     const fetchInitialData = async () => {
       try {
         setIsLoading(true);
-        const [statesData, departmentsData] = await Promise.all([
-          getStates(),
-          getDepartments()
+        const [countriesData, rolesData] = await Promise.all([
+          getCountries(),
+          getRoles()
         ]);
-        setStates(statesData);
-        setDepartments(departmentsData);
+        setCountries(countriesData || []);
+        setAllRoles(rolesData?.data || []);
+
+        // Set India as default country to ensure hierarchical filtering works
+        if (countriesData && countriesData.length > 0) {
+          const india = countriesData.find(c => c.name?.toLowerCase() === 'india') || countriesData[0];
+          setCurrentCountry(india);
+        }
       } catch (error) {
         console.error("Error fetching initial data:", error);
         toast.error("Failed to load initial data");
@@ -110,6 +122,29 @@ const AdminHrmssettings = () => {
     };
     fetchInitialData();
   }, []);
+
+  // Fetch Departments and States when Country changes
+  useEffect(() => {
+    if (currentCountry?.name) {
+      const fetchDataByCountry = async () => {
+        try {
+          const [statesData, departmentsData] = await Promise.all([
+            getStates(currentCountry._id),
+            getDepartments({ country: currentCountry.name })
+          ]);
+          setStates(statesData || []);
+          setDepartments(departmentsData?.data || []);
+        } catch (error) {
+          console.error("Error fetching country data:", error);
+          toast.error("Failed to load data for selected country");
+        }
+      };
+      fetchDataByCountry();
+    } else {
+      setStates([]);
+      setDepartments([]);
+    }
+  }, [currentCountry]);
 
   // ... other useEffects for Location ...
 
@@ -122,11 +157,11 @@ const AdminHrmssettings = () => {
           position: currentPosition.name
         });
 
-        if (response.data && response.data.length > 0) {
-          setSavedSettings(response.data[0]);
+        if (response.data) {
+          setSavedSettingsList(response.data);
           // populateForms(response.data[0]); // Disabled to prevent pre-fill
         } else {
-          setSavedSettings(null);
+          setSavedSettingsList([]);
           resetForms();
         }
       } catch (error) {
@@ -141,31 +176,31 @@ const AdminHrmssettings = () => {
     loadSettings();
   }, [currentDepartment, currentPosition]);
 
-  // Fetch Cities when State changes
+  // Fetch Clusters when State changes
   useEffect(() => {
     if (currentState?._id) {
-      const fetchCities = async () => {
+      const fetchClusters = async () => {
         try {
-          const data = await getCities(currentState._id);
-          setCities(data);
+          const data = await getClustersHierarchy(currentState._id);
+          setClusters(data || []);
         } catch (error) {
-          console.error("Error fetching cities:", error);
-          toast.error("Failed to load cities");
+          console.error("Error fetching clusters:", error);
+          toast.error("Failed to load clusters");
         }
       };
-      fetchCities();
+      fetchClusters();
     } else {
-      setCities([]);
+      setClusters([]);
     }
   }, [currentState]);
 
-  // Fetch Districts when City changes
+  // Fetch Districts when Cluster changes
   useEffect(() => {
-    if (currentCity?._id) {
+    if (currentCluster?._id) {
       const fetchDistricts = async () => {
         try {
-          const data = await getDistricts(currentCity._id);
-          setDistricts(data);
+          const data = await getDistrictsHierarchy(currentCluster._id);
+          setDistricts(data || []);
         } catch (error) {
           console.error("Error fetching districts:", error);
           toast.error("Failed to load districts");
@@ -175,25 +210,69 @@ const AdminHrmssettings = () => {
     } else {
       setDistricts([]);
     }
-  }, [currentCity]);
+  }, [currentCluster]);
 
-  // Fetch Designations when Department changes
+  // Filter Designations (Positions) when Department or Location changes
   useEffect(() => {
     if (currentDepartment?._id) {
-      const fetchDesignations = async () => {
-        try {
-          const data = await getDesignationsByDepartment(currentDepartment._id);
-          setDesignations(data);
-        } catch (error) {
-          console.error("Error fetching designations:", error);
-          toast.error("Failed to load positions");
+      // Filter roles by Department AND Location
+      const filtered = allRoles.filter(role => {
+        const matchesDept = toId(role.department) === currentDepartment._id;
+
+        const roleCountryId = toId(role.country);
+        const roleStateId = toId(role.state);
+        const roleClusterId = toId(role.cluster);
+        const roleDistrictId = toId(role.district);
+
+        const selCountryId = currentCountry?._id;
+        const selStateId = currentState?._id;
+        const selClusterId = currentCluster?._id;
+        const selDistrictId = currentDistrict?._id;
+
+        // Hierarchical Location Matching Rules (Case-Insensitive):
+        const roleLevel = role.level?.toLowerCase();
+
+        // 1. If role is at Country level -> Show if it matches selected Country (or if no country selected yet)
+        if (roleLevel === 'country') {
+          return matchesDept && (!selCountryId || roleCountryId === selCountryId);
         }
-      };
-      fetchDesignations();
+
+        // 2. If role is at State level -> Show if it matches selected Country AND (no state selected OR matches selected State)
+        if (roleLevel === 'state') {
+          return matchesDept &&
+            (!selCountryId || roleCountryId === selCountryId) &&
+            (!selStateId || roleStateId === selStateId);
+        }
+
+        // 3. If role is at Cluster level -> Show if matches Country + State AND (no cluster selected OR matches selected Cluster)
+        if (roleLevel === 'cluster') {
+          return matchesDept &&
+            (!selCountryId || roleCountryId === selCountryId) &&
+            (!selStateId || roleStateId === selStateId) &&
+            (!selClusterId || roleClusterId === selClusterId);
+        }
+
+        // 4. If role is at District level -> Show if matches Country + State + Cluster AND (no district selected OR matches selected District)
+        if (roleLevel === 'district') {
+          return matchesDept &&
+            (!selCountryId || roleCountryId === selCountryId) &&
+            (!selStateId || roleStateId === selStateId) &&
+            (!selClusterId || roleClusterId === selClusterId) &&
+            (!selDistrictId || roleDistrictId === selDistrictId);
+        }
+
+        // Default fallback (should not hit if level is one of the above)
+        return matchesDept &&
+          (!selCountryId || roleCountryId === selCountryId) &&
+          (!selStateId || roleStateId === selStateId) &&
+          (!selClusterId || roleClusterId === selClusterId) &&
+          (!selDistrictId || roleDistrictId === selDistrictId);
+      });
+      setDesignations(filtered);
     } else {
       setDesignations([]);
     }
-  }, [currentDepartment]);
+  }, [currentDepartment, currentCountry, currentState, currentCluster, currentDistrict, allRoles]);
 
   const populateForms = (settings) => {
     if (settings.payroll) {
@@ -319,14 +398,21 @@ const AdminHrmssettings = () => {
   };
 
   // Handlers
-  const handleStateSelect = (state) => {
-    setCurrentState(state);
-    setCurrentCity(null);
+  const handleCountrySelect = (country) => {
+    setCurrentCountry(country);
+    setCurrentState(null);
+    setCurrentCluster(null);
     setCurrentDistrict(null);
   };
 
-  const handleCitySelect = (city) => {
-    setCurrentCity(city);
+  const handleStateSelect = (state) => {
+    setCurrentState(state);
+    setCurrentCluster(null);
+    setCurrentDistrict(null);
+  };
+
+  const handleClusterSelect = (cluster) => {
+    setCurrentCluster(cluster);
     setCurrentDistrict(null);
   };
 
@@ -371,6 +457,7 @@ const AdminHrmssettings = () => {
       const payload = {
         department: currentDepartment._id,
         position: currentPosition.name,
+        settingType: activeTab,
       };
 
       if (activeTab === 'payroll') {
@@ -467,56 +554,74 @@ const AdminHrmssettings = () => {
           </div>
         )}
 
-        {/* State Selection */}
+        {/* Country Selection */}
         <div className="location-section mb-8">
-          <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">Select State</h3>
+          <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">Select a Country</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {states.map((state) => (
+            {countries.map((country) => (
               <div
-                key={state._id}
-                className={`bg-gradient-to-br from-blue-500 to-blue-700 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentState?._id === state._id ? 'ring-4 ring-blue-400' : ''}`}
-                onClick={() => handleStateSelect(state)}
+                key={country._id}
+                className={`bg-gradient-to-br from-blue-600 to-blue-800 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentCountry?._id === country._id ? 'ring-4 ring-blue-400' : ''}`}
+                onClick={() => handleCountrySelect(country)}
               >
-                <Building className="w-8 h-8 mx-auto mb-2" />
-                <h6 className="font-medium">{state.name}</h6>
+                <Home className="w-8 h-8 mx-auto mb-2" />
+                <h6 className="font-medium">{country.name}</h6>
               </div>
             ))}
-            {states.length === 0 && !isLoading && <p className="text-gray-500 italic">No states found.</p>}
+            {countries.length === 0 && !isLoading && <p className="text-gray-500 italic">No countries found.</p>}
           </div>
         </div>
 
-        {/* City Selection */}
-        {currentState && (
+        {/* State Selection */}
+        {currentCountry && (
           <div className="location-section mb-8">
-            <div className="flex items-center mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">
-                Select a City in <span className="text-blue-600">{currentState.name}</span>
-              </h3>
-            </div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Select a State in <span className="text-blue-600">{currentCountry.name}</span>
+            </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-              {cities.map((city) => (
+              {states.map((state) => (
                 <div
-                  key={city._id}
-                  className={`bg-gradient-to-br from-orange-500 to-orange-700 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentCity?._id === city._id ? 'ring-4 ring-orange-400' : ''}`}
-                  onClick={() => handleCitySelect(city)}
+                  key={state._id}
+                  className={`bg-gradient-to-br from-indigo-500 to-indigo-700 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentState?._id === state._id ? 'ring-4 ring-indigo-400' : ''}`}
+                  onClick={() => handleStateSelect(state)}
                 >
                   <MapPin className="w-8 h-8 mx-auto mb-2" />
-                  <h6 className="font-medium">{city.name}</h6>
+                  <h6 className="font-medium">{state.name}</h6>
                 </div>
               ))}
-              {cities.length === 0 && !isLoading && <p className="text-gray-500 italic">No cities found.</p>}
+              {states.length === 0 && !isLoading && <p className="text-gray-500 italic">No states found.</p>}
+            </div>
+          </div>
+        )}
+
+        {/* Cluster Selection */}
+        {currentState && (
+          <div className="location-section mb-8">
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Select a Cluster in <span className="text-blue-600">{currentState.name}</span>
+            </h3>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+              {clusters.map((cluster) => (
+                <div
+                  key={cluster._id}
+                  className={`bg-gradient-to-br from-orange-500 to-orange-700 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentCluster?._id === cluster._id ? 'ring-4 ring-orange-400' : ''}`}
+                  onClick={() => handleClusterSelect(cluster)}
+                >
+                  <MapPin className="w-8 h-8 mx-auto mb-2" />
+                  <h6 className="font-medium">{cluster.name}</h6>
+                </div>
+              ))}
+              {clusters.length === 0 && !isLoading && <p className="text-gray-500 italic">No clusters found.</p>}
             </div>
           </div>
         )}
 
         {/* District Selection */}
-        {currentCity && (
+        {currentCluster && (
           <div className="location-section mb-8">
-            <div className="flex items-center mb-4">
-              <h3 className="text-xl font-semibold text-gray-800">
-                Select a District in <span className="text-blue-600">{currentCity.name}</span>
-              </h3>
-            </div>
+            <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">
+              Select a District in <span className="text-blue-600">{currentCluster.name}</span>
+            </h3>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {districts.map((district) => (
                 <div
@@ -537,7 +642,7 @@ const AdminHrmssettings = () => {
         <div className="location-section mb-8">
           <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">Select a Department</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
-            {departments.map((dept) => (
+            {Array.isArray(departments) && departments.map((dept) => (
               <div
                 key={dept._id}
                 className={getDepartmentCardClass(dept._id)}
@@ -556,7 +661,7 @@ const AdminHrmssettings = () => {
           <div className="location-section mb-8">
             <h3 className="text-xl font-semibold text-gray-800 mb-4 pb-2 border-b border-gray-200">Select a Position</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {designations.map((pos) => (
+              {Array.isArray(designations) && designations.map((pos) => (
                 <div
                   key={pos._id}
                   className={`bg-gradient-to-br from-blue-500 to-blue-700 text-white text-center p-4 rounded-lg shadow-md transition-all duration-300 hover:scale-105 cursor-pointer ${currentPosition?._id === pos._id ? 'ring-4 ring-blue-400' : ''}`}
@@ -786,72 +891,80 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Saved Payroll Settings Summary Card */}
-              {activeTab === 'payroll' && savedSettings?.payroll && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
-                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                    Saved Payroll Configuration
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
-                      <p className="font-medium capitalize">{savedSettings.payroll.payrollType || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Salary Range</p>
-                      <p className="font-medium">{savedSettings.payroll.salary || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Working Hours</p>
-                      <p className="font-medium">{savedSettings.payroll.performanceWorkingHours ? `${savedSettings.payroll.performanceWorkingHours} hrs` : 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Login Time</p>
-                      <p className="font-medium">{savedSettings.payroll.performanceLoginTime || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">ESOPs</p>
-                      <p className="font-medium capitalize">{savedSettings.payroll.esops || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Monthly Leaves</p>
-                      <p className="font-medium">{savedSettings.payroll.leaves || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">PE Tax (%)</p>
-                      <p className="font-medium">{savedSettings.payroll.peCheck ? `${savedSettings.payroll.peInput}%` : 'Disabled'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">ESIC Tax (%)</p>
-                      <p className="font-medium">{savedSettings.payroll.esicCheck ? `${savedSettings.payroll.esicInput}%` : 'Disabled'}</p>
-                    </div>
-                    {savedSettings.payroll.activeCpField && (
-                      <div>
-                        <p className="font-semibold text-gray-500 text-xs">Active CP Goal</p>
-                        <p className="font-medium">{savedSettings.payroll.activeCpField}</p>
+              {/* Saved Payroll Settings Summary Cards */}
+              {activeTab === 'payroll' && savedSettingsList.filter(s => s.settingType === 'payroll').length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h4 className="text-xl font-bold text-gray-800 border-b pb-2">Saved Payroll Configurations</h4>
+                  {savedSettingsList.filter(s => s.settingType === 'payroll').map((settings, index) => (
+                    <div key={settings._id || index} className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 shadow-sm relative transition-all hover:shadow-md">
+                      <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono">
+                        Saved: {new Date(settings.createdAt).toLocaleString()}
                       </div>
-                    )}
-                    {savedSettings.payroll.salaryIncrement && (
-                      <div>
-                        <p className="font-semibold text-gray-500 text-xs">Salary Increment</p>
-                        <p className="font-medium">{savedSettings.payroll.salaryIncrement}</p>
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" /> Card #{savedSettingsList.filter(s => s.settingType === 'payroll').length - index}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                          <p className="font-medium capitalize">{settings.payroll.payrollType || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Salary Range</p>
+                          <p className="font-medium">{settings.payroll.salary || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Working Hours</p>
+                          <p className="font-medium">{settings.payroll.performanceWorkingHours ? `${settings.payroll.performanceWorkingHours} hrs` : 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Login Time</p>
+                          <p className="font-medium">{settings.payroll.performanceLoginTime || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">ESOPs</p>
+                          <p className="font-medium capitalize">{settings.payroll.esops || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Monthly Leaves</p>
+                          <p className="font-medium">{settings.payroll.leaves || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">PE Tax (%)</p>
+                          <p className="font-medium">{settings.payroll.peCheck ? `${settings.payroll.peInput}%` : 'Disabled'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">ESIC Tax (%)</p>
+                          <p className="font-medium">{settings.payroll.esicCheck ? `${settings.payroll.esicInput}%` : 'Disabled'}</p>
+                        </div>
+                        {settings.payroll.activeCpField && (
+                          <div>
+                            <p className="font-semibold text-gray-500 text-xs">Active CP Goal</p>
+                            <p className="font-medium">{settings.payroll.activeCpField}</p>
+                          </div>
+                        )}
+                        {settings.payroll.salaryIncrement && (
+                          <div>
+                            <p className="font-semibold text-gray-500 text-xs">Salary Increment</p>
+                            <p className="font-medium">{settings.payroll.salaryIncrement}</p>
+                          </div>
+                        )}
+                        {settings.payroll.cpOnboardingGoal && (
+                          <div>
+                            <p className="font-semibold text-gray-500 text-xs">CP Onboarding Goal</p>
+                            <p className="font-medium">{settings.payroll.cpOnboardingGoal}</p>
+                          </div>
+                        )}
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Perks</p>
+                          <p className="font-medium">{settings.payroll.perks || 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Benefits</p>
+                          <p className="font-medium">{settings.payroll.benefits || 'N/A'}</p>
+                        </div>
                       </div>
-                    )}
-                    {savedSettings.payroll.cpOnboardingGoal && (
-                      <div>
-                        <p className="font-semibold text-gray-500 text-xs">CP Onboarding Goal</p>
-                        <p className="font-medium">{savedSettings.payroll.cpOnboardingGoal}</p>
-                      </div>
-                    )}
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Perks</p>
-                      <p className="font-medium">{savedSettings.payroll.perks || 'N/A'}</p>
                     </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Benefits</p>
-                      <p className="font-medium">{savedSettings.payroll.benefits || 'N/A'}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -901,26 +1014,34 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Saved Recruitment Settings Summary Card */}
-              {activeTab === 'recruitment' && savedSettings?.recruitment && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
-                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                    Saved Recruitment Configuration
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
-                      <p className="font-medium capitalize">{savedSettings.recruitment.payrollType || 'N/A'}</p>
+              {/* Saved Recruitment Settings Summary Cards */}
+              {activeTab === 'recruitment' && savedSettingsList.filter(s => s.settingType === 'recruitment').length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h4 className="text-xl font-bold text-gray-800 border-b pb-2">Saved Recruitment Configurations</h4>
+                  {savedSettingsList.filter(s => s.settingType === 'recruitment').map((settings, index) => (
+                    <div key={settings._id || index} className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 shadow-sm relative transition-all hover:shadow-md">
+                      <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono">
+                        Saved: {new Date(settings.createdAt).toLocaleString()}
+                      </div>
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" /> Card #{savedSettingsList.filter(s => s.settingType === 'recruitment').length - index}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-gray-700">
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                          <p className="font-medium capitalize">{settings.recruitment.payrollType || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Probation Period</p>
+                          <p className="font-medium">{settings.recruitment.probation ? `${settings.recruitment.probation} Months` : 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Training</p>
+                          <p className="font-medium">{settings.recruitment.training || 'N/A'}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Probation Period</p>
-                      <p className="font-medium">{savedSettings.recruitment.probation ? `${savedSettings.recruitment.probation} Months` : 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Training</p>
-                      <p className="font-medium">{savedSettings.recruitment.training || 'N/A'}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -1057,50 +1178,58 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Saved Performance Settings Summary Card */}
-              {activeTab === 'performance' && savedSettings?.performance && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
-                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                    Saved Performance Configuration
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
-                      <p className="font-medium capitalize">{savedSettings.performance.payrollType || 'N/A'}</p>
+              {/* Saved Performance Settings Summary Cards */}
+              {activeTab === 'performance' && savedSettingsList.filter(s => s.settingType === 'performance').length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h4 className="text-xl font-bold text-gray-800 border-b pb-2">Saved Performance Configurations</h4>
+                  {savedSettingsList.filter(s => s.settingType === 'performance').map((settings, index) => (
+                    <div key={settings._id || index} className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 shadow-sm relative transition-all hover:shadow-md">
+                      <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono">
+                        Saved: {new Date(settings.createdAt).toLocaleString()}
+                      </div>
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" /> Card #{savedSettingsList.filter(s => s.settingType === 'performance').length - index}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Payroll Type</p>
+                          <p className="font-medium capitalize">{settings.performance.payrollType || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Efficiency Formula</p>
+                          <p className="font-medium">{settings.performance.efficiencyFormula || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Attendance Req (%)</p>
+                          <p className="font-medium">{settings.performance.attendanceReq ? `${settings.performance.attendanceReq}%` : 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Leave Impact</p>
+                          <p className="font-medium">{settings.performance.leaveImpact || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Overdue Impact</p>
+                          <p className="font-medium">{settings.performance.overdueImpact || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Productivity Target (%)</p>
+                          <p className="font-medium">{settings.performance.productivity ? `${settings.performance.productivity}%` : 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Break Time (mins)</p>
+                          <p className="font-medium">{settings.performance.breakTime || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Ideal Time (mins)</p>
+                          <p className="font-medium">{settings.performance.idealTime || 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-4">
+                          <p className="font-semibold text-gray-500 text-xs">Efficiency Decrease Grid</p>
+                          <p className="font-medium">{settings.performance.efficiencyDecreaseGrid?.length ? 'Configured (10 Rows)' : 'Not Configured'}</p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Efficiency Formula</p>
-                      <p className="font-medium">{savedSettings.performance.efficiencyFormula || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Attendance Req (%)</p>
-                      <p className="font-medium">{savedSettings.performance.attendanceReq ? `${savedSettings.performance.attendanceReq}%` : 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Leave Impact</p>
-                      <p className="font-medium">{savedSettings.performance.leaveImpact || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Overdue Impact</p>
-                      <p className="font-medium">{savedSettings.performance.overdueImpact || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Productivity Target (%)</p>
-                      <p className="font-medium">{savedSettings.performance.productivity ? `${savedSettings.performance.productivity}%` : 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Break Time (mins)</p>
-                      <p className="font-medium">{savedSettings.performance.breakTime || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Ideal Time (mins)</p>
-                      <p className="font-medium">{savedSettings.performance.idealTime || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-4">
-                      <p className="font-semibold text-gray-500 text-xs">Efficiency Decrease Grid</p>
-                      <p className="font-medium">{savedSettings.performance.efficiencyDecreaseGrid?.length ? 'Configured (10 Rows)' : 'Not Configured'}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -1223,58 +1352,66 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Saved Vacancy Settings Summary Card */}
-              {activeTab === 'vacancy' && savedSettings?.vacancy && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
-                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                    Saved Vacancy Configuration
-                  </h4>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Number of Vacancies</p>
-                      <p className="font-medium">{savedSettings.vacancy.count || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Experience (years)</p>
-                      <p className="font-medium">{savedSettings.vacancy.experience || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Job Type</p>
-                      <p className="font-medium capitalize">{savedSettings.vacancy.jobType || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="font-semibold text-gray-500 text-xs">Deadline</p>
-                      <p className="font-medium">{savedSettings.vacancy.deadline ? new Date(savedSettings.vacancy.deadline).toLocaleDateString() : 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Education</p>
-                      <p className="font-medium">{savedSettings.vacancy.education || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Certifications</p>
-                      <p className="font-medium">{savedSettings.vacancy.certifications || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-4">
-                      <p className="font-semibold text-gray-500 text-xs">Required Skills</p>
-                      <div className="flex flex-wrap gap-2 mt-1">
-                        {savedSettings.vacancy.skills?.length > 0 && savedSettings.vacancy.skills[0] !== '' ? (
-                          savedSettings.vacancy.skills.map((skill, idx) => (
-                            <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs">{skill}</span>
-                          ))
-                        ) : (
-                          <span className="font-medium">N/A</span>
-                        )}
+              {/* Saved Vacancy Settings Summary Cards */}
+              {activeTab === 'vacancy' && savedSettingsList.filter(s => s.settingType === 'vacancy').length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h4 className="text-xl font-bold text-gray-800 border-b pb-2">Saved Vacancy Configurations</h4>
+                  {savedSettingsList.filter(s => s.settingType === 'vacancy').map((settings, index) => (
+                    <div key={settings._id || index} className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 shadow-sm relative transition-all hover:shadow-md">
+                      <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono">
+                        Saved: {new Date(settings.createdAt).toLocaleString()}
+                      </div>
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" /> Card #{savedSettingsList.filter(s => s.settingType === 'vacancy').length - index}
+                      </h4>
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm text-gray-700">
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Number of Vacancies</p>
+                          <p className="font-medium">{settings.vacancy.count || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Experience (years)</p>
+                          <p className="font-medium">{settings.vacancy.experience || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Job Type</p>
+                          <p className="font-medium capitalize">{settings.vacancy.jobType || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="font-semibold text-gray-500 text-xs">Deadline</p>
+                          <p className="font-medium">{settings.vacancy.deadline ? new Date(settings.vacancy.deadline).toLocaleDateString() : 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Education</p>
+                          <p className="font-medium">{settings.vacancy.education || 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Certifications</p>
+                          <p className="font-medium">{settings.vacancy.certifications || 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-4">
+                          <p className="font-semibold text-gray-500 text-xs">Required Skills</p>
+                          <div className="flex flex-wrap gap-2 mt-1">
+                            {settings.vacancy.skills?.length > 0 && settings.vacancy.skills[0] !== '' ? (
+                              settings.vacancy.skills.map((skill, idx) => (
+                                <span key={idx} className="px-2 py-1 bg-blue-100 text-blue-700 rounded-md text-xs">{skill}</span>
+                              ))
+                            ) : (
+                              <span className="font-medium">N/A</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Job Description</p>
+                          <p className="font-medium line-clamp-3">{settings.vacancy.description || 'N/A'}</p>
+                        </div>
+                        <div className="md:col-span-2">
+                          <p className="font-semibold text-gray-500 text-xs">Responsibilities</p>
+                          <p className="font-medium line-clamp-3">{settings.vacancy.responsibilities || 'N/A'}</p>
+                        </div>
                       </div>
                     </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Job Description</p>
-                      <p className="font-medium line-clamp-3">{savedSettings.vacancy.description || 'N/A'}</p>
-                    </div>
-                    <div className="md:col-span-2">
-                      <p className="font-semibold text-gray-500 text-xs">Responsibilities</p>
-                      <p className="font-medium line-clamp-3">{savedSettings.vacancy.responsibilities || 'N/A'}</p>
-                    </div>
-                  </div>
+                  ))}
                 </div>
               )}
 
@@ -1314,19 +1451,27 @@ const AdminHrmssettings = () => {
                 </form>
               )}
 
-              {/* Saved Test Settings Summary Card */}
-              {activeTab === 'test' && savedSettings?.test?.selectedTests && savedSettings.test.selectedTests.length > 0 && (
-                <div className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 mt-4 mb-4 shadow-sm">
-                  <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
-                    Saved Test Configuration
-                  </h4>
-                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    {savedSettings.test.selectedTests.map((t, idx) => (
-                      <li key={idx} className="bg-white border border-gray-200 rounded-md p-3 text-sm text-gray-700 shadow-sm flex items-center">
-                        <CheckCircle className="w-5 h-5 text-green-500 mr-3" /> {t}
-                      </li>
-                    ))}
-                  </ul>
+              {/* Saved Test Settings Summary Cards */}
+              {activeTab === 'test' && savedSettingsList.filter(s => s.settingType === 'test').length > 0 && (
+                <div className="space-y-4 mt-6">
+                  <h4 className="text-xl font-bold text-gray-800 border-b pb-2">Saved Test Configurations</h4>
+                  {savedSettingsList.filter(s => s.settingType === 'test').map((settings, index) => (
+                    <div key={settings._id || index} className="bg-blue-50 border-l-4 border-blue-500 rounded p-6 shadow-sm relative transition-all hover:shadow-md">
+                      <div className="absolute top-2 right-4 text-[10px] text-gray-400 font-mono">
+                        Saved: {new Date(settings.createdAt).toLocaleString()}
+                      </div>
+                      <h4 className="text-lg font-semibold text-blue-800 mb-4 flex items-center">
+                        <CheckCircle className="w-5 h-5 mr-2 text-green-600" /> Card #{savedSettingsList.filter(s => s.settingType === 'test').length - index}
+                      </h4>
+                      <ul className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        {settings.test.selectedTests.map((t, idx) => (
+                          <li key={idx} className="bg-white border border-gray-200 rounded-md p-3 text-sm text-gray-700 shadow-sm flex items-center">
+                            <CheckCircle className="w-5 h-5 text-green-500 mr-3" /> {t}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

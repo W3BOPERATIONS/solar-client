@@ -110,8 +110,10 @@ import PartnerProfessionType from './admin/pages/settings/partner/ProfessionType
 
 // HRMS Settings
 import HrmsSettings from './admin/pages/settings/hrms/Settings';
+import CandidateList from './admin/pages/settings/hrms/CandidateList';
 import CandidateTestSetting from './admin/pages/settings/hrms/CandidateTestSetting';
 import CandidateTrainingSetting from './admin/pages/settings/hrms/CandidateTrainingSetting';
+import VacancySetting from './admin/pages/settings/hrms/VacancySetting';
 
 // Project Settings
 import JourneyStageSetting from './admin/pages/settings/project/JourneyStageSetting';
@@ -240,6 +242,17 @@ import FMReassignToCompany from './franchiseeManager/pages/dealerManagement/Reas
 import FMServiceTicket from './franchiseeManager/pages/tickets/Service';
 import FMDisputeTicket from './franchiseeManager/pages/tickets/Dispute';
 
+// Candidate Portal Imports
+import CandidateLayout from './candidate/layouts/CandidateLayout';
+import CandidateLogin from './candidate/pages/Login';
+import CandidateDashboard from './candidate/pages/Dashboard';
+import CandidateTest from './candidate/pages/Test';
+import CandidateCompleteApplication from './candidate/pages/CompleteApplication';
+
+// Employee Imports
+import OnboardingTraining from './employee/pages/OnboardingTraining';
+import EmployeeLogin from './employee/pages/EmployeeLogin';
+
 function ProtectedRoute({ children, requiredRole }) {
   const user = authStore((state) => state.user);
   const token = authStore((state) => state.token);
@@ -309,6 +322,20 @@ function App() {
       <Router>
         <Routes>
           <Route path="/login" element={<Login />} />
+
+          {/* Candidate Portal Routes */}
+          <Route path="/candidate-login" element={<CandidateLogin />} />
+          <Route
+            path="/candidate-portal/*"
+            element={
+              <CandidateLayout />
+            }
+          >
+            <Route path="dashboard" element={<CandidateDashboard />} />
+            <Route path="test" element={<CandidateTest />} />
+            <Route path="complete-application" element={<CandidateCompleteApplication />} />
+            <Route path="" element={<Navigate to="dashboard" />} />
+          </Route>
 
           {/* Admin Routes */}
           <Route
@@ -436,8 +463,10 @@ function App() {
 
             {/* HRMS Settings */}
             <Route path="settings/hrms/settings" element={<HrmsSettings />} />
+            <Route path="settings/hrms/candidates" element={<CandidateList />} />
             <Route path="settings/hrms/candidate-test-setting" element={<CandidateTestSetting />} />
             <Route path="settings/hrms/candidate-training-setting" element={<CandidateTrainingSetting />} />
+            <Route path="settings/hrms/vacancy-module" element={<VacancySetting />} />
 
             {/* Project Settings */}
             <Route path="settings/project/journey-stage-setting" element={<JourneyStageSetting />} />
@@ -645,6 +674,22 @@ function App() {
             <Route path="" element={<Navigate to="dashboard" />} />
           </Route>
 
+          {/* Employee Routes */}
+          <Route
+            path="/employee/*"
+            element={
+              <ProtectedRoute requiredRole="employee">
+                {/* A simple wrapper or straight rendering if we had an EmployeeLayout. For now we just route inline. */}
+                <Routes>
+                  <Route path="training" element={<OnboardingTraining />} />
+                  {/* Add an employee dashboard catch-all later, for now just redirect to root or show a placeholder */}
+                  <Route path="dashboard" element={<div className="p-8 text-center text-xl font-bold">Employee Dashboard Integration Pending...</div>} />
+                  <Route path="" element={<Navigate to="training" />} />
+                </Routes>
+              </ProtectedRoute>
+            }
+          />
+
           <Route path="/" element={<Navigate to={redirectPath()} />} />
           <Route path="/dashboard" element={<Navigate to={redirectPath()} />} />
         </Routes>
@@ -656,6 +701,8 @@ function App() {
     <Router>
       <Routes>
         <Route path="/login" element={<Login />} />
+        <Route path="/candidate-login" element={<CandidateLogin />} />
+        <Route path="/employee-login" element={<EmployeeLogin />} />
         <Route path="*" element={<Navigate to="/login" />} />
       </Routes>
     </Router>

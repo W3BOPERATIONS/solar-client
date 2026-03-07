@@ -230,6 +230,8 @@ const DEFAULT_ROLE_MAPPINGS = [
   }
 ];
 
+const toId = (val) => (val && typeof val === 'object' ? val._id : val);
+
 export default function RoleSettings() {
   const [roles, setRoles] = useState([]);
   const [departments, setDepartments] = useState([]);
@@ -670,7 +672,7 @@ export default function RoleSettings() {
                       state: s._id,
                       cluster: '',
                       district: '',
-                      country: s.country?._id || s.country || ''
+                      country: toId(s.country) || ''
                     });
                   }}
                 />
@@ -846,9 +848,10 @@ export default function RoleSettings() {
                         onChange={(e) => handleInputChange('department', e.target.value)}
                       >
                         <option value="">Select Dept</option>
-                        {/* Show unique department names only */}
-                        {[...new Map(departments.map(d => [d.name, d])).values()].map(d => (
-                          <option key={d._id} value={d._id}>{d.name}</option>
+                        {departments.map(d => (
+                          <option key={d._id} value={d._id}>
+                            {d.name} {d.country ? `(${d.country})` : ''}
+                          </option>
                         ))}
                       </select>
                     </td>
@@ -940,10 +943,6 @@ export default function RoleSettings() {
                         ))}
                       </select>
                     </td>
-
-                    {/* (Removed Set Task Button Column) */}
-
-                    {/* Create/Update Button */}
                     <td className="p-3 text-center align-middle">
                       <div className="flex flex-col gap-2">
                         <button
