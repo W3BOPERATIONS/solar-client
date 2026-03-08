@@ -10,8 +10,10 @@ export default function TemporaryInchargeSetting() {
   const [dashboardData, setDashboardData] = useState({
     totalAbsent: 0,
     stateStats: {},
+    totalNotice: 0,
+    noticeStateStats: {},
     clusterStats: {},
-    allStateStats: {},
+    allStateStats: { absent: {}, notice: {} },
     employeeList: []
   });
 
@@ -133,10 +135,41 @@ export default function TemporaryInchargeSetting() {
   // Derived filtered employees
   const filteredEmployees = dashboardData.employeeList.filter(emp => {
     let match = true;
+
+    // Type Filter
+    if (managementType === 'Absent Employee Management' && !emp.isAbsent) match = false;
+    if (managementType === 'Notice Period Employee Management' && !emp.isNoticePeriod) match = false;
+
+    // Additional Filters
     if (selectedDeptFilter && emp.department !== selectedDeptFilter) match = false;
     if (selectedStateFilter && emp.state !== selectedStateFilter) match = false;
     return match;
   });
+
+  const isNoticeView = managementType === 'Notice Period Employee Management';
+  const isAllView = managementType === 'All Employee Management';
+  const totalDisplayCount = isNoticeView ? dashboardData.totalNotice : isAllView ? dashboardData.employeeList.length : dashboardData.totalAbsent;
+
+  // Choose the right state dictionary to use for the top cards
+  let stateStatsDisplay = dashboardData.stateStats; // Default to absent
+  if (isNoticeView) stateStatsDisplay = dashboardData.noticeStateStats;
+  if (isAllView) stateStatsDisplay = dashboardData.employeeList.reduce((acc, emp) => {
+    acc[emp.state] = (acc[emp.state] || 0) + 1;
+    return acc;
+  }, {});
+
+  // The counts for the bottom Select State clickable cards should exactly match
+  // the number of employees that will appear in the list for that state
+  const stateCountsForCards = dashboardData.employeeList.reduce((acc, emp) => {
+    let match = true;
+    if (managementType === 'Absent Employee Management' && !emp.isAbsent) match = false;
+    if (managementType === 'Notice Period Employee Management' && !emp.isNoticePeriod) match = false;
+
+    if (match) {
+      acc[emp.state] = (acc[emp.state] || 0) + 1;
+    }
+    return acc;
+  }, {});
 
   return (
     <div className="p-6 bg-gray-50 min-h-screen font-sans">
@@ -166,35 +199,45 @@ export default function TemporaryInchargeSetting() {
                   <div className="absolute top-11 left-0 w-full bg-white border border-gray-200 rounded shadow-lg z-10 text-sm">
                     <button
                       className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700 border-b border-gray-100"
-                      onClick={() => { setManagementType('Leave Employee Management'); setIsDropdownOpen(false); }}
+                      onClick={() => { setManagementType('Absent Employee Management'); setIsDropdownOpen(false); }}
                     >
-                      Leave Employee Management
+                      Absent Employee Management
                     </button>
                     <button
                       className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700"
-                      onClick={() => { setManagementType('Assigned Employee Management'); setIsDropdownOpen(false); }}
+                      onClick={() => { setManagementType('Notice Period Employee Management'); setIsDropdownOpen(false); }}
                     >
-                      Assigned Employee Management
+                      Notice Period Employee Management
+                    </button>
+                    <button
+                      className="w-full text-left px-4 py-2 hover:bg-gray-50 text-gray-700"
+                      onClick={() => { setManagementType('All Employee Management'); setIsDropdownOpen(false); }}
+                    >
+                      All Employee Management
                     </button>
                   </div>
                 )}
               </div>
 
-              {/* Total Absent Card */}
+              {/* Total Card */}
               <div className="bg-[#4b8feb] text-white rounded-md p-6 flex flex-col items-center justify-center shadow-sm h-32">
-                <div className="text-3xl font-bold text-red-100">{dashboardData.totalAbsent}</div>
-                <div className="text-sm tracking-wide mt-1">Absent Employees</div>
+                <div className="text-3xl font-bold text-red-100">{totalDisplayCount || 0}</div>
+                <div className="text-sm tracking-wide mt-1 text-center leading-tight">
+                  {isNoticeView ? 'Notice Period Employees' : isAllView ? 'Total Employees' : 'Absent Employees'}
+                </div>
               </div>
             </div>
 
             {/* State Cards Mapping */}
             <div className="w-full md:w-3/4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 items-end">
-              {Object.keys(dashboardData.stateStats || {}).length > 0 ? (
-                Object.entries(dashboardData.stateStats).map(([stateName, count]) => (
+              {Object.keys(stateStatsDisplay || {}).length > 0 ? (
+                Object.entries(stateStatsDisplay).map(([stateName, count]) => (
                   <div key={stateName} className="bg-white rounded-md p-6 border border-gray-100 shadow-sm flex flex-col items-center justify-center h-32">
                     <div className="text-sm font-bold text-gray-700 mb-2">{stateName}</div>
                     <div className="text-3xl font-bold text-red-500 mb-1">{count}</div>
-                    <div className="text-xs text-gray-500">Absent Employees</div>
+                    <div className="text-xs text-gray-500 text-center leading-tight">
+                      {isNoticeView ? 'Notice Period Employees' : isAllView ? 'Total Employees' : 'Absent Employees'}
+                    </div>
                   </div>
                 ))
               ) : (
@@ -219,16 +262,18 @@ export default function TemporaryInchargeSetting() {
               >
                 <div className="text-sm font-bold mb-2">All States</div>
                 <div className={`text-3xl font-bold mb-1 ${!selectedStateFilter ? 'text-red-100' : 'text-blue-600'}`}>
-                  {dashboardData.employeeList.length}
+                  {totalDisplayCount || 0}
                 </div>
-                <div className={`text-xs ${!selectedStateFilter ? 'text-blue-100' : 'text-gray-500'}`}>Total Employees</div>
+                <div className={`text-xs ${!selectedStateFilter ? 'text-blue-100' : 'text-gray-500'} text-center leading-tight`}>
+                  {isNoticeView ? 'Notice Employees' : isAllView ? 'Total Employees' : 'Absent Employees'}
+                </div>
               </div>
 
               {states.length > 0 && (
                 states.map((stateObj) => {
                   const stateName = stateObj.name;
                   const isSelected = selectedStateFilter === stateName;
-                  const count = dashboardData.allStateStats?.[stateName] || 0;
+                  const count = stateCountsForCards[stateName] || 0;
                   return (
                     <div
                       key={stateObj._id || stateName}
@@ -237,7 +282,9 @@ export default function TemporaryInchargeSetting() {
                     >
                       <div className="text-sm font-bold mb-2">{stateName}</div>
                       <div className={`text-3xl font-bold mb-1 ${isSelected ? 'text-red-100' : 'text-blue-600'}`}>{count}</div>
-                      <div className={`text-xs ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>Total Employees</div>
+                      <div className={`text-xs ${isSelected ? 'text-blue-100' : 'text-gray-500'} text-center leading-tight`}>
+                        {isNoticeView ? 'Notice Employees' : isAllView ? 'Total Employees' : 'Absent Employees'}
+                      </div>
                     </div>
                   );
                 })
@@ -276,7 +323,9 @@ export default function TemporaryInchargeSetting() {
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Department</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Position</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Status</th>
-                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Absent Days</th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">
+                        {isNoticeView ? 'Notice Period Status' : 'Absent Days'}
+                      </th>
                       <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Pending Task</th>
                       <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Overdue Task</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Temp Incharge</th>
@@ -299,11 +348,16 @@ export default function TemporaryInchargeSetting() {
                           <td className="px-6 py-4 text-gray-500">{emp.department}</td>
                           <td className="px-6 py-4 text-gray-500 capitalize">{emp.position}</td>
                           <td className="px-6 py-4 text-center">
-                            <span className={`px-2.5 py-1 text-xs font-semibold rounded ${emp.status === 'Absent' ? 'bg-red-500 text-white' : 'bg-green-500 text-white'}`}>
+                            <span className={`px-2.5 py-1 text-xs font-semibold rounded ${emp.status === 'Absent' ? 'bg-red-500 text-white' :
+                              emp.status === 'Notice Period' ? 'bg-orange-500 text-white' :
+                                'bg-green-500 text-white'
+                              }`}>
                               {emp.status}
                             </span>
                           </td>
-                          <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">{emp.absentDays}</td>
+                          <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">
+                            {isNoticeView ? emp.noticeStatus : emp.absentDays}
+                          </td>
                           <td className="px-4 py-4 text-center text-yellow-500 font-medium font-mono text-xs">{emp.pendingTask}</td>
                           <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">{emp.overdueTask}</td>
                           <td className="px-6 py-4 text-center">

@@ -47,3 +47,8 @@ export const getAllDepartmentStats = async () => {
     const response = await api.get(`/department-modules/department-modules/stats/all`);
     return response.data; // { success: true, stats: { deptId: { country: N, ... } } }
 };
+
+export const deleteDepartmentModule = async (mappingId) => {
+    const response = await api.delete(`/department-modules/department-modules/mapping/${mappingId}`);
+    return response.data;
+};

@@ -22,7 +22,7 @@ const Login = () => {
             if (data.success) {
                 setCandidateToken(data.token);
                 setCandidate(data.candidate);
-                navigate('/candidate-portal/dashboard');
+                navigate('/candidate-portal/test');
             }
         } catch (err) {
             setError(err.response?.data?.message || 'Login failed. Please try again.');

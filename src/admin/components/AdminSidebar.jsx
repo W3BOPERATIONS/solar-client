@@ -205,6 +205,7 @@ export default function AdminSidebar() {
 
             { name: '- Department-wise Modules', href: '/admin/settings/hr/department-wise-modules', icon: LayoutDashboard },
             { name: '- Temporary Incharge Setting', href: '/admin/settings/hr/temporary-incharge-setting', icon: Users },
+            { name: '- Leave Approvals', href: '/admin/settings/hr/leave-approvals', icon: CheckCircle2 },
           ],
         },
         {

@@ -42,6 +42,7 @@ import ManageEmployees from './admin/pages/settings/hr/ManageEmployees';
 import ManageModules from './admin/pages/settings/hr/ManageModules';
 import DepartmentWiseModules from './admin/pages/settings/hr/DepartmentWiseModules';
 import TemporaryInchargeSetting from './admin/pages/settings/hr/TemporaryInchargeSetting';
+import LeaveApprovals from './admin/pages/settings/hr/LeaveApprovals';
 
 // Vendor Settings
 import InstallerVendors from './admin/pages/settings/vendor/InstallerVendors';
@@ -253,6 +254,9 @@ import CandidateCompleteApplication from './candidate/pages/CompleteApplication'
 import OnboardingTraining from './employee/pages/OnboardingTraining';
 import EmployeeLogin from './employee/pages/EmployeeLogin';
 
+// Components
+import GlobalLoader from './components/GlobalLoader';
+
 function ProtectedRoute({ children, requiredRole }) {
   const user = authStore((state) => state.user);
   const token = authStore((state) => state.token);
@@ -319,393 +323,408 @@ function App() {
     };
 
     return (
-      <Router>
-        <Routes>
-          <Route path="/login" element={<Login />} />
+      <>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
 
-          {/* Candidate Portal Routes */}
-          <Route path="/candidate-login" element={<CandidateLogin />} />
-          <Route
-            path="/candidate-portal/*"
-            element={
-              <CandidateLayout />
-            }
-          >
-            <Route path="dashboard" element={<CandidateDashboard />} />
-            <Route path="test" element={<CandidateTest />} />
-            <Route path="complete-application" element={<CandidateCompleteApplication />} />
-            <Route path="" element={<Navigate to="dashboard" />} />
-          </Route>
-
-          {/* Admin Routes */}
-          <Route
-            path="/admin/*"
-            element={
-              <ProtectedRoute requiredRole="admin">
-                <AdminLayout />
-              </ProtectedRoute>
-            }
-          >
-            {/* Dashboard section */}
-            <Route path="dashboard" element={<AdminInventoryDashboard />} />
-            <Route path="dashboard/inventory" element={<AdminInventoryDashboard />} />
-            <Route path="dashboard/delivery" element={<AdminDeliveryDashboard />} />
-            <Route path="dashboard/installer" element={<AdminInstallerDashboard />} />
-            <Route path="dashboard/orders" element={<AdminOrdersDashboard />} />
-            <Route path="dashboard/orders-by-loan" element={<AdminOrdersByLoanDashboard />} />
-            <Route path="dashboard/vendors" element={<AdminVendorsDashboard />} />
-
-            {/* User Performance sub-dashboards */}
+            {/* Candidate Portal Routes */}
+            <Route path="/candidate-login" element={<CandidateLogin />} />
             <Route
-              path="dashboard/user-performance/franchise-manager"
-              element={<FranchiseManagerDashboard />}
-            />
+              path="/candidate-portal/*"
+              element={
+                <CandidateLayout />
+              }
+            >
+              <Route path="dashboard" element={<CandidateDashboard />} />
+              <Route path="test" element={<CandidateTest />} />
+              <Route path="complete-application" element={<CandidateCompleteApplication />} />
+              <Route path="" element={<Navigate to="test" />} />
+            </Route>
+
+            {/* Admin Routes */}
             <Route
-              path="dashboard/user-performance/franchise"
-              element={<FranchisePerformanceDashboard />}
-            />
+              path="/admin/*"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              {/* Dashboard section */}
+              <Route path="dashboard" element={<AdminInventoryDashboard />} />
+              <Route path="dashboard/inventory" element={<AdminInventoryDashboard />} />
+              <Route path="dashboard/delivery" element={<AdminDeliveryDashboard />} />
+              <Route path="dashboard/installer" element={<AdminInstallerDashboard />} />
+              <Route path="dashboard/orders" element={<AdminOrdersDashboard />} />
+              <Route path="dashboard/orders-by-loan" element={<AdminOrdersByLoanDashboard />} />
+              <Route path="dashboard/vendors" element={<AdminVendorsDashboard />} />
+
+              {/* User Performance sub-dashboards */}
+              <Route
+                path="dashboard/user-performance/franchise-manager"
+                element={<FranchiseManagerDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/franchise"
+                element={<FranchisePerformanceDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/dealer-manager"
+                element={<DealerManagerPerformanceDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/dealer"
+                element={<DealerPerformanceDashboard />}
+              />
+
+              <Route path="departments" element={<AdminDepartments />} />
+              <Route
+                path="departments/organization-chart"
+                element={<AdminOrganizationChart />}
+              />
+              <Route path="approvals" element={<AdminApprovals />} />
+              <Route path="project-management" element={<AdminProjects />} />
+              <Route path="operations/warehouse" element={<AdminWarehouse />} />
+              <Route path="operations/add-inventory" element={<AdminAddInventory />} />
+              <Route
+                path="operations/inventory-management"
+                element={<AdminInventoryManagement />}
+              />
+              {/* Settings section */}
+              {/* Location Settings */}
+              <Route path="settings/location/setup-locations" element={<SetupLocations />} />
+
+              {/* HR Settings */}
+              <Route path="settings/hr/role-settings" element={<RoleSettings />} />
+              <Route path="settings/hr/create-department" element={<CreateDepartment />} />
+              <Route path="settings/hr/manage-employees" element={<ManageEmployees />} />
+              <Route path="settings/hr/manage-modules" element={<ManageModules />} />
+              <Route path="settings/hr/department-wise-modules" element={<DepartmentWiseModules />} />
+              <Route path="settings/hr/temporary-incharge-setting" element={<TemporaryInchargeSetting />} />
+              <Route path="settings/hr/leave-approvals" element={<LeaveApprovals />} />
+
+              {/* Vendor Settings */}
+              <Route path="settings/vendor/installer-vendors" element={<InstallerVendors />} />
+              <Route path="settings/vendor/supplier-type" element={<SupplierType />} />
+              <Route path="settings/vendor/supplier-vendors" element={<SupplierVendors />} />
+
+              {/* Sales Settings */}
+              <Route path="settings/sales/set-price" element={<SetPrice />} />
+              <Route path="settings/sales/set-price-amc" element={<SetPriceAmc />} />
+              <Route path="settings/sales/offers" element={<Offers />} />
+              <Route path="settings/sales/solar-panel-bundle-setting" element={<SolarPanelBundleSetting />} />
+
+              {/* Marketing Settings */}
+              <Route path="settings/marketing/campaign-management" element={<CampaignManagement />} />
+
+
+
+              {/* Installer Settings */}
+              <Route path="settings/installer/solar-installer" element={<SolarInstaller />} />
+              <Route path="settings/installer/tool-requirements" element={<ToolRequirements />} />
+              <Route path="settings/installer/rating-setting" element={<RatingSetting />} />
+              <Route path="settings/installer/agency" element={<Agency />} />
+              <Route path="settings/installer/agency-plans" element={<AgencyPlan />} />
+
+
+              {/* Inventory Settings */}
+              <Route path="settings/inventory/inventory-overview" element={<InventoryOverview />} />
+              <Route path="settings/inventory/level-management-setting" element={<LevelManagementSetting />} />
+              <Route path="settings/inventory/restock-order-limit" element={<RestockOrderLimit />} />
+              <Route path="settings/inventory/combokit-brand-overview" element={<CombokitBrandOverview />} />
+
+              {/* Product Settings */}
+              <Route path="settings/product/add-project-type" element={<AddProjectType />} />
+              <Route path="settings/product/add-project-category" element={<AddProjectCategory />} />
+              <Route path="settings/product/add-product" element={<AddProduct />} />
+              <Route path="settings/product/sku" element={<Sku />} />
+              <Route path="settings/product/price-master" element={<PriceMaster />} />
+              <Route path="settings/product/add-unit-management" element={<AddUnitManagement />} />
+
+              {/* Brand Settings */}
+              <Route path="settings/brand/add-brand-manufacturer" element={<AddBrandManufacturer />} />
+              <Route path="settings/brand/supplier-overview" element={<SupplierOverview />} />
+
+              {/* ComboKit Settings */}
+              <Route path="settings/combokit/create-solarkit" element={<CreateSolarkit />} />
+              <Route path="settings/combokit/create-amc" element={<CreateAmc />} />
+              <Route path="settings/combokit/amc-services" element={<AmcServices />} />
+              <Route path="settings/combokit/bundle-plans" element={<BundlePlans />} />
+              <Route path="settings/combokit/add-combokit" element={<AddComboKit />} />
+              <Route path="settings/combokit/customize" element={<Customize />} />
+
+              {/* ComboKit Overview Settings */}
+              <Route path="settings/combokit-overview" element={<CombokitOverview />} />
+
+              {/* Order Procurement Settings */}
+              <Route path="settings/order-procurement" element={<OrderProcurement />} />
+
+              {/* Partner Settings (Unified) */}
+              <Route path="settings/partner/add-partner" element={<AddPartner />} />
+              <Route path="settings/partner/plans" element={<PartnerPlans />} />
+              <Route path="settings/partner/points-rewards" element={<PartnerPointsRewards />} />
+              <Route path="settings/partner/onboarding-goals" element={<PartnerOnboardingGoals />} />
+              <Route path="settings/partner/profession-type" element={<PartnerProfessionType />} />
+
+              {/* HRMS Settings */}
+              <Route path="settings/hrms/settings" element={<HrmsSettings />} />
+              <Route path="settings/hrms/candidates" element={<CandidateList />} />
+              <Route path="settings/hrms/candidate-test-setting" element={<CandidateTestSetting />} />
+              <Route path="settings/hrms/candidate-training-setting" element={<CandidateTrainingSetting />} />
+              <Route path="settings/hrms/vacancy-module" element={<VacancySetting />} />
+
+              {/* Project Settings */}
+              <Route path="settings/project/journey-stage-setting" element={<JourneyStageSetting />} />
+              <Route path="settings/project/overdue-setting" element={<ProjectOverdueSetting />} />
+              <Route path="settings/project/configuration-setting" element={<ConfigurationSetting />} />
+              <Route path="settings/project/documentation-setting" element={<DocumentationSetting />} />
+              <Route path="settings/project/placeholder-name-setting" element={<PlaceholderNameSetting />} />
+
+              {/* Quote Settings */}
+              <Route path="settings/quote/quote-setting" element={<QuoteSetting />} />
+              <Route path="settings/quote/survey-bom-setting" element={<SurveyBomSetting />} />
+              <Route path="settings/quote/terrace-setting" element={<TerraceSetting />} />
+              <Route path="settings/quote/structure-setting" element={<StructureSetting />} />
+              <Route path="settings/quote/building-setting" element={<BuildingSetting />} />
+              <Route path="settings/quote/discom-master" element={<DiscomMaster />} />
+
+              {/* New Main Settings Sections (at the bottom) */}
+              <Route path="settings/approval-overdue" element={<ApprovalOverdueSetting />} />
+              <Route path="settings/overdue-task" element={<OverdueTaskSetting />} />
+              <Route path="settings/overdue-status" element={<OverdueStatusSetting />} />
+              <Route path="settings/franchisee-manager" element={<FranchiseeManagerSetting />} />
+              <Route path="settings/franchise-buy-lead" element={<FranchiseBuyLeadSetting />} />
+              <Route path="settings/loan" element={<LoanSetting />} />
+              <Route path="settings/checklist" element={<ChecklistSetting />} />
+              <Route path="reports/financial-pl" element={<AdminFinancialPLReport />} />
+              <Route path="reports/cashflow" element={<AdminCashflowReport />} />
+              <Route path="reports/inventory" element={<AdminInventoryReport />} />
+              <Route path="reports/loans-summary" element={<AdminLoansSummaryReport />} />
+              <Route path="reports/captable" element={<AdminCaptableReport />} />
+              <Route
+                path="reports/revenue-by-cp-types"
+                element={<AdminRevenueByCPTypesReport />}
+              />
+              <Route path="reports/cluster" element={<AdminClusterReport />} />
+              <Route path="reports/district" element={<AdminDistrictReport />} />
+              <Route path="reports/city" element={<AdminCityReport />} />
+            </Route>
+
+            {/* Dealer Routes */}
             <Route
-              path="dashboard/user-performance/dealer-manager"
-              element={<DealerManagerPerformanceDashboard />}
-            />
+              path="/dealer/*"
+              element={
+                <ProtectedRoute requiredRole="dealer">
+                  <DealerLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<DealerDashboard />} />
+
+              {/* Project Signup */}
+              <Route path="project-signup/lead" element={<Lead />} />
+              <Route path="project-signup/survey-bom" element={<SurveyBOM />} />
+              <Route path="project-signup/project-quote" element={<ProjectQuote />} />
+              <Route path="project-signup/project-signup" element={<ProjectSignupPage />} />
+              <Route path="project-signup" element={<Navigate to="project-signup/lead" />} />
+
+              {/* Project Management */}
+              <Route path="project-management/manage" element={<Manage />} />
+              <Route path="project-management/track" element={<TrackPM />} />
+              <Route path="residential-project" element={<DealerResidentialProject />} />
+              <Route path="commercial-project" element={<DealerCommercialProject />} />
+              <Route path="project-management" element={<Navigate to="project-management/manage" />} />
+
+              {/* Track */}
+              <Route path="track/project-progress" element={<ProjectProgress />} />
+              <Route path="track/my-commission" element={<MyCommission />} />
+              <Route path="track" element={<Navigate to="track/project-progress" />} />
+
+              {/* Tickets */}
+              <Route path="tickets/raise-ticket" element={<RaiseTicket />} />
+              <Route path="tickets/ticket-status" element={<TicketStatus />} />
+              <Route path="tickets" element={<Navigate to="tickets/raise-ticket" />} />
+
+              <Route path="solar-kit" element={<SolarKit />} />
+              <Route path="loan" element={<Loan />} />
+              <Route path="reports" element={<Reports />} />
+            </Route>
+
+            {/* Franchisee Routes */}
             <Route
-              path="dashboard/user-performance/dealer"
-              element={<DealerPerformanceDashboard />}
-            />
+              path="/franchisee/*"
+              element={
+                <ProtectedRoute requiredRole="franchisee">
+                  <FranchiseeLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<FranchiseDashboard />} />
+              <Route path="dashboard/lead-assign" element={<LeadAssignDashboard />} />
 
-            <Route path="departments" element={<AdminDepartments />} />
+              <Route path="survey-bom" element={<SurveyBom />} />
+              <Route path="district-manager" element={<DistrictManager />} />
+              <Route path="dealer-manager" element={<DealerManager />} />
+              <Route path="lead-partner/create" element={<CreateLeadPartner />} />
+              <Route path="lead-partner/management" element={<LeadManagement />} />
+
+              <Route path="my-team" element={<MyTeam />} />
+
+              <Route path="account/track-payments" element={<TrackPayments />} />
+
+              <Route path="solarkits" element={<Solarkits />} />
+              <Route path="solarkits/bulk-order" element={<BulkOrder />} />
+
+              <Route path="settings" element={<Settings />} />
+
+              <Route path="project-signup/lead" element={<FranchiseeLead />} />
+              <Route path="project-signup/create-quotation" element={<FranchiseeCreateQuotation />} />
+              <Route path="project-signup/project-signup" element={<FranchiseeProjectSignup />} />
+              <Route path="project-signup/loan" element={<FranchiseeLoan />} />
+
+              <Route path="project-management/management" element={<FranchiseeManagement />} />
+              <Route path="project-management/install" element={<FranchiseeInstall />} />
+              <Route path="project-management/service" element={<FranchiseeService />} />
+              <Route path="project-management/track-service" element={<FranchiseeTrackService />} />
+            </Route>
+
+            {/* Dealer Manager Routes */}
             <Route
-              path="departments/organization-chart"
-              element={<AdminOrganizationChart />}
-            />
-            <Route path="approvals" element={<AdminApprovals />} />
-            <Route path="project-management" element={<AdminProjects />} />
-            <Route path="operations/warehouse" element={<AdminWarehouse />} />
-            <Route path="operations/add-inventory" element={<AdminAddInventory />} />
+              path="/dealer-manager/*"
+              element={
+                <ProtectedRoute requiredRole="dealerManager">
+                  <DealerManagerLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<DealerManagerDashboard />} />
+              <Route path="leads" element={<DealerManagerLeads />} />
+              <Route path="onboarding/company-lead" element={<DealerManagerOnboardingCompanyLead />} />
+              <Route path="onboarding/my-lead" element={<DealerManagerMyLeads />} />
+              <Route path="onboarding/sub-leads/:id" element={<DealerManagerSubLeads />} />
+
+              <Route path="my-task/app-demo" element={<DealerManagerAppDemo />} />
+
+              {/* Dealer Onboarding Sub-menu */}
+              <Route path="my-task/dealer-onboarding/dealer-signup" element={<DealerManagerDealerSignup />} />
+              <Route path="my-task/dealer-onboarding/dealer-orientation" element={<DealerManagerDealerOrientation />} />
+              <Route path="orientation/video" element={<DealerManagerOrientationVideo />} />
+              <Route path="my-task/dealer-onboarding" element={<Navigate to="dealer-signup" />} />
+
+              {/* Project Management Sub-menu */}
+              <Route path="my-task/project-management/project-in-progress" element={<DealerManagerProjectInProgress />} />
+              <Route path="my-task/project-management/completed-projects" element={<DealerManagerCompletedProjects />} />
+              <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
+
+              <Route path="my-task/dealer-performance" element={<DealerManagerDealerPerformance />} />
+              <Route path="my-task/dealer-performance/:type" element={<DealerManagerDealerPerformanceList />} />
+              <Route path="my-task" element={<Navigate to="app-demo" />} />
+
+              <Route path="onboarding-goals" element={<DealerManagerOnboardingGoals />} />
+
+              {/* Tickets */}
+              <Route path="tickets/service" element={<DealerManagerServiceTicket />} />
+              <Route path="tickets/dispute" element={<DealerManagerDisputeTicket />} />
+              <Route path="tickets" element={<Navigate to="service" />} />
+
+              <Route path="report" element={<DealerManagerReport />} />
+              <Route path="" element={<Navigate to="dashboard" />} />
+            </Route>
+
+            {/* Franchisee Manager Routes */}
             <Route
-              path="operations/inventory-management"
-              element={<AdminInventoryManagement />}
-            />
-            {/* Settings section */}
-            {/* Location Settings */}
-            <Route path="settings/location/setup-locations" element={<SetupLocations />} />
+              path="/franchisee-manager/*"
+              element={
+                <ProtectedRoute requiredRole="franchiseeManager">
+                  <FranchiseeManagerLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<FranchiseeManagerDashboard />} />
+              <Route path="leads" element={<FranchiseeManagerLeads />} />
+              <Route path="lead-management" element={<FranchiseeManagerLeadManagement />} />
 
-            {/* HR Settings */}
-            <Route path="settings/hr/role-settings" element={<RoleSettings />} />
-            <Route path="settings/hr/create-department" element={<CreateDepartment />} />
-            <Route path="settings/hr/manage-employees" element={<ManageEmployees />} />
-            <Route path="settings/hr/manage-modules" element={<ManageModules />} />
-            <Route path="settings/hr/department-wise-modules" element={<DepartmentWiseModules />} />
-            <Route path="settings/hr/temporary-incharge-setting" element={<TemporaryInchargeSetting />} />
+              <Route path="onboarding-goals" element={<FranchiseeManagerOnboardingGoals />} />
 
-            {/* Vendor Settings */}
-            <Route path="settings/vendor/installer-vendors" element={<InstallerVendors />} />
-            <Route path="settings/vendor/supplier-type" element={<SupplierType />} />
-            <Route path="settings/vendor/supplier-vendors" element={<SupplierVendors />} />
+              {/* My Task Sub-menu */}
+              <Route path="my-task/app-demo" element={<FMAppDemo />} />
+              <Route path="my-task/franchisee-onboarding/franchisee-signup" element={<FMFranchiseeSignup />} />
+              <Route path="my-task/franchisee-onboarding/franchisee-orientation" element={<FMFranchiseeOrientation />} />
+              <Route path="my-task/franchisee-onboarding" element={<Navigate to="franchisee-signup" />} />
+              <Route path="my-task/project-management/project-in-progress" element={<FMProjectInProgress />} />
+              <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
+              <Route path="my-task/franchisee-performance" element={<FMFranchiseePerformance />} />
+              <Route path="my-task" element={<Navigate to="app-demo" />} />
 
-            {/* Sales Settings */}
-            <Route path="settings/sales/set-price" element={<SetPrice />} />
-            <Route path="settings/sales/set-price-amc" element={<SetPriceAmc />} />
-            <Route path="settings/sales/offers" element={<Offers />} />
-            <Route path="settings/sales/solar-panel-bundle-setting" element={<SolarPanelBundleSetting />} />
+              {/* Franchise Setting Sub-menu */}
+              <Route path="franchisee-setting/combokit-customization" element={<FMComboKitCustomization />} />
+              <Route path="franchisee-setting/offers" element={<FMOffers />} />
+              <Route path="franchisee-setting/track-cashback" element={<FMTrackCashback />} />
+              <Route path="franchisee-setting" element={<Navigate to="combokit-customization" />} />
 
-            {/* Marketing Settings */}
-            <Route path="settings/marketing/campaign-management" element={<CampaignManagement />} />
+              {/* Dealer Management Sub-menu */}
+              <Route path="dealer-management/assign-to-franchisee" element={<FMAssignToFranchisee />} />
+              <Route path="dealer-management/track-dealer" element={<FMTrackDealer />} />
+              <Route path="dealer-management/reasign-to-company" element={<FMReassignToCompany />} />
+              <Route path="dealer-management" element={<Navigate to="assign-to-franchisee" />} />
 
+              {/* Tickets */}
+              <Route path="tickets/service" element={<FMServiceTicket />} />
+              <Route path="tickets/dispute" element={<FMDisputeTicket />} />
+              <Route path="tickets" element={<Navigate to="service" />} />
 
+              <Route path="find-resources" element={<FranchiseeManagerFindResources />} />
+              <Route path="report" element={<FranchiseeManagerReport />} />
 
-            {/* Installer Settings */}
-            <Route path="settings/installer/solar-installer" element={<SolarInstaller />} />
-            <Route path="settings/installer/tool-requirements" element={<ToolRequirements />} />
-            <Route path="settings/installer/rating-setting" element={<RatingSetting />} />
-            <Route path="settings/installer/agency" element={<Agency />} />
-            <Route path="settings/installer/agency-plans" element={<AgencyPlan />} />
+              <Route path="" element={<Navigate to="dashboard" />} />
+            </Route>
 
-
-            {/* Inventory Settings */}
-            <Route path="settings/inventory/inventory-overview" element={<InventoryOverview />} />
-            <Route path="settings/inventory/level-management-setting" element={<LevelManagementSetting />} />
-            <Route path="settings/inventory/restock-order-limit" element={<RestockOrderLimit />} />
-            <Route path="settings/inventory/combokit-brand-overview" element={<CombokitBrandOverview />} />
-
-            {/* Product Settings */}
-            <Route path="settings/product/add-project-type" element={<AddProjectType />} />
-            <Route path="settings/product/add-project-category" element={<AddProjectCategory />} />
-            <Route path="settings/product/add-product" element={<AddProduct />} />
-            <Route path="settings/product/sku" element={<Sku />} />
-            <Route path="settings/product/price-master" element={<PriceMaster />} />
-            <Route path="settings/product/add-unit-management" element={<AddUnitManagement />} />
-
-            {/* Brand Settings */}
-            <Route path="settings/brand/add-brand-manufacturer" element={<AddBrandManufacturer />} />
-            <Route path="settings/brand/supplier-overview" element={<SupplierOverview />} />
-
-            {/* ComboKit Settings */}
-            <Route path="settings/combokit/create-solarkit" element={<CreateSolarkit />} />
-            <Route path="settings/combokit/create-amc" element={<CreateAmc />} />
-            <Route path="settings/combokit/amc-services" element={<AmcServices />} />
-            <Route path="settings/combokit/bundle-plans" element={<BundlePlans />} />
-            <Route path="settings/combokit/add-combokit" element={<AddComboKit />} />
-            <Route path="settings/combokit/customize" element={<Customize />} />
-
-            {/* ComboKit Overview Settings */}
-            <Route path="settings/combokit-overview" element={<CombokitOverview />} />
-
-            {/* Order Procurement Settings */}
-            <Route path="settings/order-procurement" element={<OrderProcurement />} />
-
-            {/* Partner Settings (Unified) */}
-            <Route path="settings/partner/add-partner" element={<AddPartner />} />
-            <Route path="settings/partner/plans" element={<PartnerPlans />} />
-            <Route path="settings/partner/points-rewards" element={<PartnerPointsRewards />} />
-            <Route path="settings/partner/onboarding-goals" element={<PartnerOnboardingGoals />} />
-            <Route path="settings/partner/profession-type" element={<PartnerProfessionType />} />
-
-            {/* HRMS Settings */}
-            <Route path="settings/hrms/settings" element={<HrmsSettings />} />
-            <Route path="settings/hrms/candidates" element={<CandidateList />} />
-            <Route path="settings/hrms/candidate-test-setting" element={<CandidateTestSetting />} />
-            <Route path="settings/hrms/candidate-training-setting" element={<CandidateTrainingSetting />} />
-            <Route path="settings/hrms/vacancy-module" element={<VacancySetting />} />
-
-            {/* Project Settings */}
-            <Route path="settings/project/journey-stage-setting" element={<JourneyStageSetting />} />
-            <Route path="settings/project/overdue-setting" element={<ProjectOverdueSetting />} />
-            <Route path="settings/project/configuration-setting" element={<ConfigurationSetting />} />
-            <Route path="settings/project/documentation-setting" element={<DocumentationSetting />} />
-            <Route path="settings/project/placeholder-name-setting" element={<PlaceholderNameSetting />} />
-
-            {/* Quote Settings */}
-            <Route path="settings/quote/quote-setting" element={<QuoteSetting />} />
-            <Route path="settings/quote/survey-bom-setting" element={<SurveyBomSetting />} />
-            <Route path="settings/quote/terrace-setting" element={<TerraceSetting />} />
-            <Route path="settings/quote/structure-setting" element={<StructureSetting />} />
-            <Route path="settings/quote/building-setting" element={<BuildingSetting />} />
-            <Route path="settings/quote/discom-master" element={<DiscomMaster />} />
-
-            {/* New Main Settings Sections (at the bottom) */}
-            <Route path="settings/approval-overdue" element={<ApprovalOverdueSetting />} />
-            <Route path="settings/overdue-task" element={<OverdueTaskSetting />} />
-            <Route path="settings/overdue-status" element={<OverdueStatusSetting />} />
-            <Route path="settings/franchisee-manager" element={<FranchiseeManagerSetting />} />
-            <Route path="settings/franchise-buy-lead" element={<FranchiseBuyLeadSetting />} />
-            <Route path="settings/loan" element={<LoanSetting />} />
-            <Route path="settings/checklist" element={<ChecklistSetting />} />
-            <Route path="reports/financial-pl" element={<AdminFinancialPLReport />} />
-            <Route path="reports/cashflow" element={<AdminCashflowReport />} />
-            <Route path="reports/inventory" element={<AdminInventoryReport />} />
-            <Route path="reports/loans-summary" element={<AdminLoansSummaryReport />} />
-            <Route path="reports/captable" element={<AdminCaptableReport />} />
+            {/* Employee Routes */}
             <Route
-              path="reports/revenue-by-cp-types"
-              element={<AdminRevenueByCPTypesReport />}
+              path="/employee/*"
+              element={
+                <ProtectedRoute requiredRole="employee">
+                  {/* A simple wrapper or straight rendering if we had an EmployeeLayout. For now we just route inline. */}
+                  <Routes>
+                    <Route path="training" element={<OnboardingTraining />} />
+                    {/* Add an employee dashboard catch-all later, for now just redirect to root or show a placeholder */}
+                    <Route path="dashboard" element={<div className="p-8 text-center text-xl font-bold">Employee Dashboard Integration Pending...</div>} />
+                    <Route path="" element={<Navigate to="training" />} />
+                  </Routes>
+                </ProtectedRoute>
+              }
             />
-            <Route path="reports/cluster" element={<AdminClusterReport />} />
-            <Route path="reports/district" element={<AdminDistrictReport />} />
-            <Route path="reports/city" element={<AdminCityReport />} />
-          </Route>
 
-          {/* Dealer Routes */}
-          <Route
-            path="/dealer/*"
-            element={
-              <ProtectedRoute requiredRole="dealer">
-                <DealerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="dashboard" element={<DealerDashboard />} />
-
-            {/* Project Signup */}
-            <Route path="project-signup/lead" element={<Lead />} />
-            <Route path="project-signup/survey-bom" element={<SurveyBOM />} />
-            <Route path="project-signup/project-quote" element={<ProjectQuote />} />
-            <Route path="project-signup/project-signup" element={<ProjectSignupPage />} />
-            <Route path="project-signup" element={<Navigate to="project-signup/lead" />} />
-
-            {/* Project Management */}
-            <Route path="project-management/manage" element={<Manage />} />
-            <Route path="project-management/track" element={<TrackPM />} />
-            <Route path="residential-project" element={<DealerResidentialProject />} />
-            <Route path="commercial-project" element={<DealerCommercialProject />} />
-            <Route path="project-management" element={<Navigate to="project-management/manage" />} />
-
-            {/* Track */}
-            <Route path="track/project-progress" element={<ProjectProgress />} />
-            <Route path="track/my-commission" element={<MyCommission />} />
-            <Route path="track" element={<Navigate to="track/project-progress" />} />
-
-            {/* Tickets */}
-            <Route path="tickets/raise-ticket" element={<RaiseTicket />} />
-            <Route path="tickets/ticket-status" element={<TicketStatus />} />
-            <Route path="tickets" element={<Navigate to="tickets/raise-ticket" />} />
-
-            <Route path="solar-kit" element={<SolarKit />} />
-            <Route path="loan" element={<Loan />} />
-            <Route path="reports" element={<Reports />} />
-          </Route>
-
-          {/* Franchisee Routes */}
-          <Route
-            path="/franchisee/*"
-            element={
-              <ProtectedRoute requiredRole="franchisee">
-                <FranchiseeLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="dashboard" element={<FranchiseDashboard />} />
-            <Route path="dashboard/lead-assign" element={<LeadAssignDashboard />} />
-
-            <Route path="survey-bom" element={<SurveyBom />} />
-            <Route path="district-manager" element={<DistrictManager />} />
-            <Route path="dealer-manager" element={<DealerManager />} />
-            <Route path="lead-partner/create" element={<CreateLeadPartner />} />
-            <Route path="lead-partner/management" element={<LeadManagement />} />
-
-            <Route path="my-team" element={<MyTeam />} />
-
-            <Route path="account/track-payments" element={<TrackPayments />} />
-
-            <Route path="solarkits" element={<Solarkits />} />
-            <Route path="solarkits/bulk-order" element={<BulkOrder />} />
-
-            <Route path="settings" element={<Settings />} />
-
-            <Route path="project-signup/lead" element={<FranchiseeLead />} />
-            <Route path="project-signup/create-quotation" element={<FranchiseeCreateQuotation />} />
-            <Route path="project-signup/project-signup" element={<FranchiseeProjectSignup />} />
-            <Route path="project-signup/loan" element={<FranchiseeLoan />} />
-
-            <Route path="project-management/management" element={<FranchiseeManagement />} />
-            <Route path="project-management/install" element={<FranchiseeInstall />} />
-            <Route path="project-management/service" element={<FranchiseeService />} />
-            <Route path="project-management/track-service" element={<FranchiseeTrackService />} />
-          </Route>
-
-          {/* Dealer Manager Routes */}
-          <Route
-            path="/dealer-manager/*"
-            element={
-              <ProtectedRoute requiredRole="dealerManager">
-                <DealerManagerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="dashboard" element={<DealerManagerDashboard />} />
-            <Route path="leads" element={<DealerManagerLeads />} />
-            <Route path="onboarding/company-lead" element={<DealerManagerOnboardingCompanyLead />} />
-            <Route path="onboarding/my-lead" element={<DealerManagerMyLeads />} />
-            <Route path="onboarding/sub-leads/:id" element={<DealerManagerSubLeads />} />
-
-            <Route path="my-task/app-demo" element={<DealerManagerAppDemo />} />
-
-            {/* Dealer Onboarding Sub-menu */}
-            <Route path="my-task/dealer-onboarding/dealer-signup" element={<DealerManagerDealerSignup />} />
-            <Route path="my-task/dealer-onboarding/dealer-orientation" element={<DealerManagerDealerOrientation />} />
-            <Route path="orientation/video" element={<DealerManagerOrientationVideo />} />
-            <Route path="my-task/dealer-onboarding" element={<Navigate to="dealer-signup" />} />
-
-            {/* Project Management Sub-menu */}
-            <Route path="my-task/project-management/project-in-progress" element={<DealerManagerProjectInProgress />} />
-            <Route path="my-task/project-management/completed-projects" element={<DealerManagerCompletedProjects />} />
-            <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
-
-            <Route path="my-task/dealer-performance" element={<DealerManagerDealerPerformance />} />
-            <Route path="my-task/dealer-performance/:type" element={<DealerManagerDealerPerformanceList />} />
-            <Route path="my-task" element={<Navigate to="app-demo" />} />
-
-            <Route path="onboarding-goals" element={<DealerManagerOnboardingGoals />} />
-
-            {/* Tickets */}
-            <Route path="tickets/service" element={<DealerManagerServiceTicket />} />
-            <Route path="tickets/dispute" element={<DealerManagerDisputeTicket />} />
-            <Route path="tickets" element={<Navigate to="service" />} />
-
-            <Route path="report" element={<DealerManagerReport />} />
-            <Route path="" element={<Navigate to="dashboard" />} />
-          </Route>
-
-          {/* Franchisee Manager Routes */}
-          <Route
-            path="/franchisee-manager/*"
-            element={
-              <ProtectedRoute requiredRole="franchiseeManager">
-                <FranchiseeManagerLayout />
-              </ProtectedRoute>
-            }
-          >
-            <Route path="dashboard" element={<FranchiseeManagerDashboard />} />
-            <Route path="leads" element={<FranchiseeManagerLeads />} />
-            <Route path="lead-management" element={<FranchiseeManagerLeadManagement />} />
-
-            <Route path="onboarding-goals" element={<FranchiseeManagerOnboardingGoals />} />
-
-            {/* My Task Sub-menu */}
-            <Route path="my-task/app-demo" element={<FMAppDemo />} />
-            <Route path="my-task/franchisee-onboarding/franchisee-signup" element={<FMFranchiseeSignup />} />
-            <Route path="my-task/franchisee-onboarding/franchisee-orientation" element={<FMFranchiseeOrientation />} />
-            <Route path="my-task/franchisee-onboarding" element={<Navigate to="franchisee-signup" />} />
-            <Route path="my-task/project-management/project-in-progress" element={<FMProjectInProgress />} />
-            <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
-            <Route path="my-task/franchisee-performance" element={<FMFranchiseePerformance />} />
-            <Route path="my-task" element={<Navigate to="app-demo" />} />
-
-            {/* Franchise Setting Sub-menu */}
-            <Route path="franchisee-setting/combokit-customization" element={<FMComboKitCustomization />} />
-            <Route path="franchisee-setting/offers" element={<FMOffers />} />
-            <Route path="franchisee-setting/track-cashback" element={<FMTrackCashback />} />
-            <Route path="franchisee-setting" element={<Navigate to="combokit-customization" />} />
-
-            {/* Dealer Management Sub-menu */}
-            <Route path="dealer-management/assign-to-franchisee" element={<FMAssignToFranchisee />} />
-            <Route path="dealer-management/track-dealer" element={<FMTrackDealer />} />
-            <Route path="dealer-management/reasign-to-company" element={<FMReassignToCompany />} />
-            <Route path="dealer-management" element={<Navigate to="assign-to-franchisee" />} />
-
-            {/* Tickets */}
-            <Route path="tickets/service" element={<FMServiceTicket />} />
-            <Route path="tickets/dispute" element={<FMDisputeTicket />} />
-            <Route path="tickets" element={<Navigate to="service" />} />
-
-            <Route path="find-resources" element={<FranchiseeManagerFindResources />} />
-            <Route path="report" element={<FranchiseeManagerReport />} />
-
-            <Route path="" element={<Navigate to="dashboard" />} />
-          </Route>
-
-          {/* Employee Routes */}
-          <Route
-            path="/employee/*"
-            element={
-              <ProtectedRoute requiredRole="employee">
-                {/* A simple wrapper or straight rendering if we had an EmployeeLayout. For now we just route inline. */}
-                <Routes>
-                  <Route path="training" element={<OnboardingTraining />} />
-                  {/* Add an employee dashboard catch-all later, for now just redirect to root or show a placeholder */}
-                  <Route path="dashboard" element={<div className="p-8 text-center text-xl font-bold">Employee Dashboard Integration Pending...</div>} />
-                  <Route path="" element={<Navigate to="training" />} />
-                </Routes>
-              </ProtectedRoute>
-            }
-          />
-
-          <Route path="/" element={<Navigate to={redirectPath()} />} />
-          <Route path="/dashboard" element={<Navigate to={redirectPath()} />} />
-        </Routes>
-      </Router>
+            <Route path="/" element={<Navigate to={redirectPath()} />} />
+            <Route path="/dashboard" element={<Navigate to={redirectPath()} />} />
+          </Routes>
+        </Router>
+        <GlobalLoader />
+      </>
     );
   }
 
   return (
-    <Router>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/candidate-login" element={<CandidateLogin />} />
-        <Route path="/employee-login" element={<EmployeeLogin />} />
-        <Route path="*" element={<Navigate to="/login" />} />
-      </Routes>
-    </Router>
+    <>
+      <Router>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/candidate-login" element={<CandidateLogin />} />
+          <Route path="/employee-login" element={<EmployeeLogin />} />
+
+          <Route path="/candidate-portal/*" element={<CandidateLayout />}>
+            <Route path="dashboard" element={<CandidateDashboard />} />
+            <Route path="test" element={<CandidateTest />} />
+            <Route path="complete-application" element={<CandidateCompleteApplication />} />
+            <Route path="" element={<Navigate to="test" />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/login" />} />
+        </Routes>
+      </Router>
+      <GlobalLoader />
+    </>
   );
 }
 

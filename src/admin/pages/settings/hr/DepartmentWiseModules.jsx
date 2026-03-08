@@ -4,9 +4,10 @@ import {
   getDepartments,
   saveDepartmentModules,
   getAllDepartmentStats,
-  getDepartmentModules
+  getDepartmentModules,
+  deleteDepartmentModule
 } from '../../../../services/hr/departmentModuleApi';
-import { X } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 
 const SIDEBAR_MODULES = [
   {
@@ -107,6 +108,7 @@ const DepartmentWiseModules = () => {
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState('view'); // 'view' or 'edit'
   const [selectedModalDepartment, setSelectedModalDepartment] = useState(null);
   const [departmentModulesList, setDepartmentModulesList] = useState([]);
   const [loadingModal, setLoadingModal] = useState(false);
@@ -234,8 +236,9 @@ const DepartmentWiseModules = () => {
     }
   };
 
-  const handleViewModules = async (department) => {
+  const handleViewModules = async (department, mode = 'view') => {
     setSelectedModalDepartment(department);
+    setModalMode(mode);
     setIsModalOpen(true);
     setLoadingModal(true);
     try {
@@ -250,6 +253,30 @@ const DepartmentWiseModules = () => {
       toast.error('An error occurred while fetching modules');
     } finally {
       setLoadingModal(false);
+    }
+  };
+
+  const handleEdit = (dept) => {
+    handleViewModules(dept, 'edit');
+  };
+
+  const handleRemoveModule = async (mappingId) => {
+    if (!window.confirm("Are you sure you want to remove this module access?")) return;
+
+    try {
+      const res = await deleteDepartmentModule(mappingId);
+      if (res.success) {
+        toast.success("Module removed successfully");
+        // refresh list
+        setDepartmentModulesList(prev => prev.filter(m => m._id !== mappingId));
+        // refresh main stats
+        loadInitialData();
+      } else {
+        toast.error(res.message || "Failed to remove module");
+      }
+    } catch (error) {
+      console.error("Error removing module:", error);
+      toast.error(error.message || "Error removing module");
     }
   };
 
@@ -375,13 +402,21 @@ const DepartmentWiseModules = () => {
               </div>
 
               {/* Footer text link */}
-              <div className="pb-4 w-full text-center mt-2">
+              <div className="pb-4 w-full text-center mt-2 flex items-center justify-center gap-6">
                 <button
-                  className="text-sm font-medium hover:underline text-gray-500"
+                  className="text-sm font-medium hover:underline text-gray-500 transition-colors"
                   style={{ color: headerBg.replace('bg-[', '').replace(']', '') }}
                   onClick={() => handleViewModules(dept)}
                 >
                   View Modules
+                </button>
+                <span className="text-gray-300">|</span>
+                <button
+                  className="text-sm font-medium hover:underline text-gray-500 transition-colors"
+                  style={{ color: headerBg.replace('bg-[', '').replace(']', '') }}
+                  onClick={() => handleEdit(dept)}
+                >
+                  Edit
                 </button>
               </div>
             </div>
@@ -394,8 +429,9 @@ const DepartmentWiseModules = () => {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             <div className="flex justify-between items-center p-6 border-b border-gray-200">
-              <h2 className="text-xl font-semibold text-gray-800">
-                Modules for <span className="text-[#0074b7]">{selectedModalDepartment?.name}</span>
+              <h2 className="text-xl font-semibold text-gray-800 flex items-center gap-2">
+                {modalMode === 'edit' ? 'Edit Modules for ' : 'View Modules for '}
+                <span className="text-[#0074b7]">{selectedModalDepartment?.name}</span>
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -422,6 +458,9 @@ const DepartmentWiseModules = () => {
                         <th className="px-6 py-3 font-semibold">Module Name</th>
                         <th className="px-6 py-3 font-semibold text-center">Access Level</th>
                         <th className="px-6 py-3 font-semibold text-center">Status</th>
+                        {modalMode === 'edit' && (
+                          <th className="px-6 py-3 font-semibold text-center">Action</th>
+                        )}
                       </tr>
                     </thead>
                     <tbody>
@@ -453,6 +492,17 @@ const DepartmentWiseModules = () => {
                               </span>
                             )}
                           </td>
+                          {modalMode === 'edit' && (
+                            <td className="px-6 py-4 text-center">
+                              <button
+                                onClick={() => handleRemoveModule(mapping._id)}
+                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded transition-colors"
+                                title="Remove Module"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))}
                     </tbody>

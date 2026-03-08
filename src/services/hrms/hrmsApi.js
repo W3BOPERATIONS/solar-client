@@ -22,6 +22,24 @@ export const saveHRMSSettings = async (data) => {
     }
 };
 
+export const updateHRMSSettings = async (id, data) => {
+    try {
+        const res = await api.put(`/hrms-settings/settings/${id}`, data);
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
+export const deleteHRMSSettings = async (id) => {
+    try {
+        const res = await api.delete(`/hrms-settings/settings/${id}`);
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
 // --- Candidate Tests ---
 
 export const getCandidateTests = async (params) => {

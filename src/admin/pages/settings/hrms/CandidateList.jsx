@@ -205,6 +205,7 @@ const CandidateList = () => {
                                 <th className="p-4 font-semibold">Candidate Info</th>
                                 <th className="p-4 font-semibold">Applied Role</th>
                                 <th className="p-4 font-semibold">Department</th>
+                                <th className="p-4 font-semibold text-center">Location</th>
                                 <th className="p-4 font-semibold">Applied Date</th>
                                 <th className="p-4 font-semibold text-center">Status</th>
                                 <th className="p-4 font-semibold text-center">Actions</th>
@@ -213,7 +214,7 @@ const CandidateList = () => {
                         <tbody>
                             {isLoading ? (
                                 <tr>
-                                    <td colSpan="6" className="p-12 text-center border-b">
+                                    <td colSpan="7" className="p-12 text-center border-b">
                                         <div className="flex justify-center items-center">
                                             <RefreshCw className="h-8 w-8 text-blue-500 animate-spin mr-3" />
                                             <span className="text-gray-500 font-medium tracking-wide">Loading candidates...</span>
@@ -222,7 +223,7 @@ const CandidateList = () => {
                                 </tr>
                             ) : filteredCandidates.length === 0 ? (
                                 <tr>
-                                    <td colSpan="6" className="p-12 text-center border-b">
+                                    <td colSpan="7" className="p-12 text-center border-b">
                                         <div className="flex flex-col items-center">
                                             <Users className="h-12 w-12 text-gray-300 mb-3" />
                                             <span className="text-gray-500 font-medium">No candidates found matching your criteria.</span>
@@ -253,6 +254,14 @@ const CandidateList = () => {
                                         </td>
                                         <td className="p-4 text-sm text-gray-600 font-medium">
                                             {candidate.vacancy?.department?.name || 'Unknown Department'}
+                                        </td>
+                                        <td className="p-4 text-center">
+                                            <div className="text-sm font-semibold text-gray-700">
+                                                {candidate.vacancy?.state?.name || '-'}
+                                            </div>
+                                            <div className="text-xs text-gray-500 mt-0.5">
+                                                {candidate.vacancy?.cluster?.name || '-'}
+                                            </div>
                                         </td>
                                         <td className="p-4">
                                             <div className="flex items-center text-sm text-gray-500">

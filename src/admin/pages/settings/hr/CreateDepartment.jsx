@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Building2, PlusCircle, Trash2, Edit } from 'lucide-react';
-import { createDepartment, getDepartments, deleteDepartment, getRoles } from '../../../../services/core/masterApi';
+import { Building2, PlusCircle, Trash2, Edit, X } from 'lucide-react';
+import { createDepartment, getDepartments, deleteDepartment, updateDepartment, getRoles } from '../../../../services/core/masterApi';
 import { getEmployees, createEmployee, updateEmployee, deleteEmployee, getModules, createModule, updateModule, deleteModule, assignTemporaryIncharge, getTemporaryIncharges, deleteTemporaryIncharge } from '../../../../services/hr/hrApi';
 import { getCountries } from '../../../../services/core/locationApi';
 import { toast } from 'react-hot-toast';
@@ -14,6 +14,9 @@ export default function CreateDepartment() {
     country: '', // Now added dynamically
     description: ''
   });
+
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [editingDept, setEditingDept] = useState(null);
 
   useEffect(() => {
     fetchDepartments();
@@ -39,9 +42,13 @@ export default function CreateDepartment() {
         res.data.forEach(d => {
           let existing = grouped.find(g => g.name.toLowerCase().trim() === d.name.toLowerCase().trim());
           if (existing) {
-            if (!existing.countries.includes(d.country)) existing.countries.push(d.country);
+            existing.allIds.push(d._id);
+            if (!existing.countries.includes(d.country)) {
+              existing.countries.push(d.country);
+              existing.countryRecords.push({ id: d._id, country: d.country });
+            }
           } else {
-            grouped.push({ ...d, countries: [d.country] });
+            grouped.push({ ...d, countries: [d.country], allIds: [d._id], countryRecords: [{ id: d._id, country: d.country }] });
           }
         });
         setDepartments(grouped);
@@ -122,19 +129,49 @@ export default function CreateDepartment() {
     }
   };
 
-  const handleDelete = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this department?")) return;
+  const handleDelete = async (dept) => {
+    if (!window.confirm(`Are you sure you want to delete ${dept.name} from all its assigned countries?`)) return;
     try {
-      const res = await deleteDepartment(id);
-      if (res.success) {
-        toast.success("Department deleted");
-        fetchDepartments();
-      }
+      const promises = dept.allIds.map(id => deleteDepartment(id));
+      await Promise.all(promises);
+      toast.success("Department deleted successfully");
+      fetchDepartments();
     } catch (error) {
       console.error("Delete error:", error);
       toast.error("Failed to delete department");
     }
   }
+
+  const handleEdit = (dept) => {
+    setEditingDept({
+      originalIds: dept.allIds || [dept._id],
+      name: dept.name,
+      countryRecords: dept.countryRecords || [{ id: dept._id, country: dept.country }]
+    });
+    setIsEditModalOpen(true);
+  };
+
+  const handleUpdate = async (e) => {
+    e.preventDefault();
+    try {
+      const remainingIds = editingDept.countryRecords.map(r => r.id);
+      const deletedIds = editingDept.originalIds.filter(id => !remainingIds.includes(id));
+
+      const deletePromises = deletedIds.map(id => deleteDepartment(id));
+      await Promise.all(deletePromises);
+
+      const updatePromises = remainingIds.map(id =>
+        updateDepartment(id, { name: editingDept.name })
+      );
+      await Promise.all(updatePromises);
+
+      toast.success("Department updated successfully");
+      setIsEditModalOpen(false);
+      fetchDepartments();
+    } catch (error) {
+      toast.error(error.message || "Failed to update department");
+    }
+  };
 
   return (
     <div className="p-4 bg-[#f8f9fa] min-h-screen">
@@ -237,8 +274,11 @@ export default function CreateDepartment() {
                     <th className="py-2.5 px-4 font-semibold text-gray-700 text-sm first:rounded-l-md">
                       Department Name
                     </th>
-                    <th className="py-2.5 px-4 font-semibold text-gray-700 text-sm last:rounded-r-md">
+                    <th className="py-2.5 px-4 font-semibold text-gray-700 text-sm">
                       Country
+                    </th>
+                    <th className="py-2.5 px-4 font-semibold text-gray-700 text-sm last:rounded-r-md text-center">
+                      Action
                     </th>
                   </tr>
                 </thead>
@@ -251,7 +291,7 @@ export default function CreateDepartment() {
                     </tr>
                   ) : departments.length === 0 ? (
                     <tr>
-                      <td colSpan="2" className="py-4 px-4 text-center text-gray-500 text-sm border-b">
+                      <td colSpan="3" className="py-4 px-4 text-center text-gray-500 text-sm border-b">
                         No departments created yet.
                       </td>
                     </tr>
@@ -263,6 +303,14 @@ export default function CreateDepartment() {
                         </td>
                         <td className="py-3 px-4 text-sm text-gray-700">
                           {dept.countries?.join(', ') || dept.country || '-'}
+                        </td>
+                        <td className="py-3 px-4 text-sm text-center">
+                          <button onClick={() => handleEdit(dept)} className="text-blue-500 hover:text-blue-700 mr-3" title="Edit">
+                            <Edit size={16} />
+                          </button>
+                          <button onClick={() => handleDelete(dept)} className="text-red-500 hover:text-red-700" title="Delete">
+                            <Trash2 size={16} />
+                          </button>
                         </td>
                       </tr>
                     ))
@@ -278,6 +326,66 @@ export default function CreateDepartment() {
           Copyright &copy; 2025 Solarkits. All Rights Reserved.
         </div>
       </div>
+
+      {/* Edit Modal */}
+      {isEditModalOpen && editingDept && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-gray-200">
+              <h2 className="text-xl font-semibold text-gray-800">Edit Department</h2>
+              <button onClick={() => setIsEditModalOpen(false)} className="text-gray-500 hover:text-gray-700">
+                <X size={24} />
+              </button>
+            </div>
+            <form onSubmit={handleUpdate} className="p-6">
+              <div className="mb-4">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Department Name</label>
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 border border-gray-300 rounded focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+                  value={editingDept.name}
+                  onChange={(e) => setEditingDept({ ...editingDept, name: e.target.value })}
+                  required
+                />
+              </div>
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Active In Countries</label>
+                <div className="flex flex-wrap gap-2">
+                  {editingDept.countryRecords.map(record => (
+                    <span key={record.country} className="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm font-medium border border-gray-200 flex items-center gap-1">
+                      {record.country}
+                      {editingDept.countryRecords.length > 1 && (
+                        <button
+                          type="button"
+                          className="hover:text-red-500 transition-colors focus:outline-none ml-1 flex items-center justify-center p-0.5"
+                          onClick={() => setEditingDept({
+                            ...editingDept,
+                            countryRecords: editingDept.countryRecords.filter(r => r.id !== record.id)
+                          })}
+                          title="Remove country"
+                        >
+                          <X size={14} />
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  * To assign this department to another country, use the "Create New Department" form above.
+                </p>
+              </div>
+              <div className="flex justify-end gap-3">
+                <button type="button" onClick={() => setIsEditModalOpen(false)} className="px-4 py-2 border border-gray-300 rounded text-gray-700 hover:bg-gray-50">
+                  Cancel
+                </button>
+                <button type="submit" className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

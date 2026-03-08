@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { getCountries, getStates, getClusters, getDistricts, getCities } from '../../../../services/core/locationApi';
 import { getDepartments } from '../../../../services/core/masterApi';
-import { getCandidateTests, createCandidateTest, deleteCandidateTest } from '../../../../services/hrms/hrmsApi';
+import { getCandidateTests, createCandidateTest, deleteCandidateTest, updateCandidateTest } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 
 const CandidateTestSetting = () => {
@@ -29,6 +29,7 @@ const CandidateTestSetting = () => {
   const [currentDepartment, setCurrentDepartment] = useState(null);
 
   const [showTestForm, setShowTestForm] = useState(false);
+  const [editingTestId, setEditingTestId] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -162,6 +163,7 @@ const CandidateTestSetting = () => {
         setCurrentStep('tests');
       }
       setShowTestForm(false);
+      setEditingTestId(null);
     }
   }, [currentDepartment]);
 
@@ -230,6 +232,44 @@ const CandidateTestSetting = () => {
         toast.error("Failed to delete test");
       }
     }
+  };
+
+  const handleEditTest = (test) => {
+    setEditingTestId(test._id);
+
+    // Pre-populate testConfig
+    setTestConfig({
+      name: test.name,
+      duration: test.duration,
+      totalQuestions: test.totalQuestions || test.questions?.length || 30,
+      passingPercentage: test.passingPercentage,
+      negativeMarking: test.negativeMarking || false,
+      negativeMarkValue: test.negativeMarkValue || 0.25
+    });
+
+    // Formatting questions for the state
+    if (test.questions && test.questions.length > 0) {
+      const formattedQuestions = test.questions.map((q, idx) => ({
+        id: Date.now() + idx, // unique id string
+        text: q.text,
+        type: q.type === 'multiple' ? 'Multiple Choice' : 'Single Choice',
+        options: q.options || [],
+        correctAnswer: q.correctAnswer.map(ans => parseInt(ans, 10)),
+        marks: q.marks || 1
+      }));
+      setQuestions(formattedQuestions);
+    } else {
+      setQuestions([{ id: Date.now(), text: '', type: 'Multiple Choice', options: ['', '', '', ''], correctAnswer: [], marks: 1 }]);
+    }
+
+    setShowTestForm(true);
+  };
+
+  const handleAddNewTestClick = () => {
+    setEditingTestId(null);
+    setTestConfig({ name: '', duration: 60, totalQuestions: 30, passingPercentage: 60, negativeMarking: false, negativeMarkValue: 0.25 });
+    setQuestions([{ id: Date.now(), text: '', type: 'Multiple Choice', options: ['', '', '', ''], correctAnswer: [], marks: 1 }]);
+    setShowTestForm(true);
   };
 
   // --- FORM HANDLERS ---
@@ -316,16 +356,22 @@ const CandidateTestSetting = () => {
 
     try {
       setIsSaving(true);
-      await createCandidateTest(payload);
-      toast.success("Test created successfully");
+      if (editingTestId) {
+        await updateCandidateTest(editingTestId, payload);
+        toast.success("Test updated successfully");
+      } else {
+        await createCandidateTest(payload);
+        toast.success("Test created successfully");
+      }
       setShowTestForm(false);
+      setEditingTestId(null);
       setCurrentStep('tests');
       fetchTests();
       setTestConfig({ name: '', duration: 60, totalQuestions: 30, passingPercentage: 60, negativeMarking: false, negativeMarkValue: 0.25 });
       setQuestions([{ id: Date.now(), text: '', type: 'Multiple Choice', options: ['', '', '', ''], correctAnswer: [], marks: 1 }]);
     } catch (error) {
       console.error("Error saving test:", error);
-      toast.error("Failed to save test");
+      toast.error(editingTestId ? "Failed to update test" : "Failed to save test");
     } finally {
       setIsSaving(false);
     }
@@ -503,7 +549,7 @@ const CandidateTestSetting = () => {
                   Back
                 </button>
                 <button
-                  onClick={() => setShowTestForm(true)}
+                  onClick={handleAddNewTestClick}
                   className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center text-sm font-semibold"
                 >
                   <Plus className="w-4 h-4 mr-2" /> Add Test
@@ -517,11 +563,16 @@ const CandidateTestSetting = () => {
                 </div>
               ) : (
                 tests.map(test => (
-                  <div key={test._id} className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-lg p-4 shadow-lg relative cursor-pointer hover:scale-105 transition-all">
-                    <button className="absolute top-2 right-2 text-white/80 hover:text-white bg-red-500/20 p-1 rounded hover:bg-red-500" onClick={(e) => handleDeleteTest(e, test._id)}>
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                    <h6 className="font-semibold text-lg mb-2">{test.name}</h6>
+                  <div key={test._id} className="bg-gradient-to-br from-indigo-500 to-indigo-700 text-white rounded-lg p-4 shadow-lg relative cursor-pointer hover:scale-[1.02] transition-all">
+                    <div className="absolute top-2 right-2 flex gap-1">
+                      <button className="text-white/80 hover:text-white bg-blue-500/30 p-1.5 rounded hover:bg-blue-500 transition-colors" onClick={(e) => { e.stopPropagation(); handleEditTest(test); }} title="Edit Test">
+                        <Edit className="w-3.5 h-3.5" />
+                      </button>
+                      <button className="text-white/80 hover:text-white bg-red-500/30 p-1.5 rounded hover:bg-red-500 transition-colors" onClick={(e) => handleDeleteTest(e, test._id)} title="Delete Test">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <h6 className="font-semibold text-lg mb-2 pr-16 truncate">{test.name}</h6>
                     <div className="text-xs opacity-90 space-y-1 mt-3">
                       <div className="flex justify-between border-b border-indigo-400/30 pb-1"><span>Duration:</span> <span>{test.duration} min</span></div>
                       <div className="flex justify-between border-b border-indigo-400/30 pb-1"><span>Questions:</span> <span>{test.totalQuestions || test.questions?.length || 0}</span></div>
@@ -539,8 +590,10 @@ const CandidateTestSetting = () => {
           <div className="bg-white rounded-xl shadow-lg p-0 mt-6 overflow-hidden">
             {/* Header matching PHP screenshot */}
             <div className="bg-white border-b px-6 py-4 flex justify-between items-center bg-gray-50/50">
-              <h4 className="text-lg font-bold text-blue-800">Create Test for {currentDepartment.name}</h4>
-              <button onClick={() => setShowTestForm(false)} className="text-sm font-semibold text-gray-500 hover:text-gray-800 flex items-center">
+              <h4 className="text-lg font-bold text-blue-800">
+                {editingTestId ? `Edit Test: ${testConfig.name}` : `Create Test for ${currentDepartment.name}`}
+              </h4>
+              <button onClick={() => { setShowTestForm(false); setEditingTestId(null); }} className="text-sm font-semibold text-gray-500 hover:text-gray-800 flex items-center">
                 <ArrowLeft className="w-4 h-4 mr-1" /> Back to Tests
               </button>
             </div>
@@ -687,9 +740,9 @@ const CandidateTestSetting = () => {
                 </div>
 
                 <div className="mt-8">
-                  <button onClick={saveTestSettings} disabled={isSaving} className="px-5 py-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-sm transition-colors flex items-center disabled:opacity-70 disabled:cursor-not-allowed">
-                    <Save className="w-4 h-4 mr-2" />
-                    {isSaving ? 'Saving Test...' : 'Save Test'}
+                  <button onClick={saveTestSettings} disabled={isSaving} className="px-5 py-2.5 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-sm transition-colors flex items-center disabled:opacity-70 disabled:cursor-not-allowed shadow-md hover:shadow-lg">
+                    {editingTestId ? <Edit className="w-4 h-4 mr-2" /> : <Save className="w-4 h-4 mr-2" />}
+                    {isSaving ? 'Saving Test...' : (editingTestId ? 'Update Test' : 'Save Test')}
                   </button>
                 </div>
               </div>

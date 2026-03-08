@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { candidateApi } from '../../api/candidateApi';
 import candidateStore from '../../store/candidateStore';
+import { Briefcase, FileText, CheckCircle } from 'lucide-react';
 
 const CompleteApplication = () => {
     const navigate = useNavigate();
@@ -85,24 +86,51 @@ const CompleteApplication = () => {
                     )}
                 </div>
 
-                <div className="bg-gray-50 p-4 border rounded">
-                    <h4 className="font-semibold text-gray-700 mb-2">Job Description Summary</h4>
-                    <p className="text-sm text-gray-600 mb-4">
-                        {candidate?.vacancy?.description?.substring(0, 300)}
-                        {candidate?.vacancy?.description?.length > 300 ? '...' : ''}
-                    </p>
-                    <label className="flex items-start space-x-3 cursor-pointer">
-                        <input
-                            type="checkbox"
-                            checked={agreedToTerms}
-                            onChange={(e) => setAgreedToTerms(e.target.checked)}
-                            className="mt-1 h-4 w-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                            required
-                        />
-                        <span className="text-sm text-gray-700">
-                            I agree with the job description and I am willing to join on the selected joining date if I am selected for this position.
-                        </span>
-                    </label>
+                <div className="bg-gray-50 p-6 border border-gray-100 rounded-xl">
+                    <div className="flex items-center gap-2 mb-4">
+                        <FileText className="w-5 h-5 text-indigo-600" />
+                        <h4 className="font-bold text-gray-800 tracking-tight">Job Role & Responsibilities</h4>
+                    </div>
+
+                    <div className="bg-white border border-gray-200 rounded-xl p-8 mb-6 max-h-[600px] overflow-y-auto text-base text-gray-700 leading-relaxed shadow-inner border-l-8 border-l-indigo-500">
+                        <div className="flex items-center gap-2 mb-6 text-gray-900 border-b-2 border-indigo-50 pb-4">
+                            <Briefcase className="w-5 h-5 text-indigo-500" />
+                            <span className="font-extrabold uppercase tracking-widest text-sm">Full Job Description & Responsibilities</span>
+                        </div>
+
+                        <div className="prose prose-indigo max-w-none">
+                            <p className="whitespace-pre-line mb-8 text-gray-700 font-medium text-lg leading-relaxed">
+                                {candidate?.vacancy?.description || "No description provided."}
+                            </p>
+
+                            {candidate?.vacancy?.responsibilities && (
+                                <div className="mt-10 pt-8 border-t-2 border-indigo-50">
+                                    <h5 className="text-lg font-bold text-gray-900 mb-6 flex items-center">
+                                        <CheckCircle className="w-5 h-5 mr-3 text-green-500" />
+                                        Key Responsibilities:
+                                    </h5>
+                                    <div className="text-gray-600 whitespace-pre-line pl-6 border-l-4 border-indigo-100 italic bg-indigo-50/30 p-4 rounded-r-xl">
+                                        {candidate?.vacancy?.responsibilities}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="bg-indigo-50/50 p-4 rounded-lg">
+                        <label className="flex items-start space-x-3 cursor-pointer group">
+                            <input
+                                type="checkbox"
+                                checked={agreedToTerms}
+                                onChange={(e) => setAgreedToTerms(e.target.checked)}
+                                className="mt-1 h-5 w-5 text-indigo-600 rounded-md border-gray-300 focus:ring-indigo-500 transition-all cursor-pointer"
+                                required
+                            />
+                            <span className="text-sm text-gray-700 group-hover:text-indigo-900 transition-colors">
+                                I confirm that I have read the complete job description above and I am willing to join on the selected date if selected.
+                            </span>
+                        </label>
+                    </div>
                 </div>
 
                 <button

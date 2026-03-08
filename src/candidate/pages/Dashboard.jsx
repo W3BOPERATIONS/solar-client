@@ -83,9 +83,9 @@ const Dashboard = () => {
                 <h2 className="text-xl font-semibold mb-4 text-gray-800">Application Status</h2>
                 <div className="flex items-center">
                     <div className={`px-4 py-2 rounded-full font-medium ${status === 'Joined' ? 'bg-green-100 text-green-800' :
-                            status === 'Rejected' ? 'bg-red-100 text-red-800' :
-                                status === 'Selected' ? 'bg-indigo-100 text-indigo-800' :
-                                    'bg-blue-100 text-blue-800'
+                        status === 'Rejected' ? 'bg-red-100 text-red-800' :
+                            status === 'Selected' ? 'bg-indigo-100 text-indigo-800' :
+                                'bg-blue-100 text-blue-800'
                         }`}>
                         {status}
                     </div>
@@ -115,9 +115,13 @@ const Dashboard = () => {
                                 {vacancy.joiningDate ? new Date(vacancy.joiningDate).toLocaleDateString() : 'TBD'}
                             </p>
                         </div>
-                        <div className="md:col-span-2 mt-2">
-                            <p className="text-sm border-b pb-1 text-gray-500">Job Description</p>
-                            <p className="text-sm text-gray-700 mt-1 whitespace-pre-wrap">{vacancy.description}</p>
+                        <div className="md:col-span-2 mt-4">
+                            <p className="text-sm font-bold text-gray-500 uppercase tracking-wider mb-2">Detailed Job Description</p>
+                            <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 max-h-[400px] overflow-y-auto shadow-inner">
+                                <p className="text-base text-gray-700 leading-relaxed whitespace-pre-wrap font-medium">
+                                    {vacancy.description || "No description provided."}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 ) : (
