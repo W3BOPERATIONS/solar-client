@@ -821,6 +821,7 @@ const AdminHrmssettings = () => {
                       )}
 
                       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                        {/* 1. Payroll Type */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Type</label>
                           <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollType} onChange={(e) => setPayrollForm({ ...payrollForm, payrollType: e.target.value })}>
@@ -831,74 +832,61 @@ const AdminHrmssettings = () => {
                           </select>
                         </div>
 
+                        {/* 2. Hybrid Base Type (Condition: Hybrid only) */}
                         {payrollForm.payrollType === 'hybrid' && (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Hybrid Base Type</label>
-                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridBaseType} onChange={(e) => setPayrollForm({ ...payrollForm, hybridBaseType: e.target.value })}>
-                                <option value="Monthly">Monthly</option>
-                                <option value="Hourly">Hourly</option>
-                              </select>
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type Selection</label>
-                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.commissionTypeSelection} onChange={(e) => setPayrollForm({ ...payrollForm, commissionTypeSelection: e.target.value })}>
-                                <option value="Per kW Commission">Per kW Commission</option>
-                                <option value="Per Customer File">Per Customer File</option>
-                              </select>
-                            </div>
-                            {payrollForm.commissionTypeSelection === 'Per kW Commission' ? (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Per kW Commission (₹)</label>
-                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perKwCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perKwCommission: e.target.value })} placeholder="Enter per kW commission" />
-                              </div>
-                            ) : (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Per Customer File Commission (₹)</label>
-                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perCustomerFileCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perCustomerFileCommission: e.target.value })} placeholder="Enter per file commission" />
-                              </div>
-                            )}
-                          </>
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Hybrid Base Type</label>
+                            <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridBaseType} onChange={(e) => setPayrollForm({ ...payrollForm, hybridBaseType: e.target.value })}>
+                              <option value="Monthly">Monthly</option>
+                              <option value="Hourly">Hourly</option>
+                            </select>
+                          </div>
                         )}
 
-                        {payrollForm.payrollType === 'commisionbased' && (
-                          <>
-                            <div>
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type Selection</label>
-                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.commissionTypeSelection} onChange={(e) => setPayrollForm({ ...payrollForm, commissionTypeSelection: e.target.value })}>
-                                <option value="Per kW Commission">Per kW Commission</option>
-                                <option value="Per Customer File">Per Customer File</option>
-                              </select>
-                            </div>
-                            {payrollForm.commissionTypeSelection === 'Per kW Commission' ? (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Per kW Commission (₹)</label>
-                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perKwCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perKwCommission: e.target.value })} placeholder="Enter per kW commission" />
-                              </div>
+                        {/* 3. Salary Range (Condition: NOT commission-based) */}
+                        {payrollForm.payrollType !== 'commisionbased' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {payrollForm.payrollType === 'hybrid'
+                                ? `${payrollForm.hybridBaseType} Hybrid Salary Range (₹)`
+                                : payrollForm.payrollType === 'hourly'
+                                  ? 'Per Hourly Salary (₹)'
+                                  : `${payrollForm.payrollType?.charAt(0).toUpperCase() + payrollForm.payrollType?.slice(1)} Salary Range (₹)`}
+                            </label>
+                            {payrollForm.payrollType === 'hybrid' ? (
+                              <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridSalary} onChange={(e) => setPayrollForm({ ...payrollForm, hybridSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
                             ) : (
-                              <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-2">Per Customer File Commission (₹)</label>
-                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perCustomerFileCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perCustomerFileCommission: e.target.value })} placeholder="Enter per file commission" />
-                              </div>
+                              <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollSalary} onChange={(e) => setPayrollForm({ ...payrollForm, payrollSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
                             )}
-                          </>
+                          </div>
                         )}
 
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">
-                            {payrollForm.payrollType === 'hybrid'
-                              ? `${payrollForm.hybridBaseType} Hybrid Salary Range (₹)`
-                              : payrollForm.payrollType === 'hourly'
-                                ? 'Per Hourly Salary (₹)'
-                                : `${payrollForm.payrollType?.charAt(0).toUpperCase() + payrollForm.payrollType?.slice(1)} Salary Range (₹)`}
-                          </label>
-                          {payrollForm.payrollType === 'hybrid' ? (
-                            <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridSalary} onChange={(e) => setPayrollForm({ ...payrollForm, hybridSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
-                          ) : (
-                            <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollSalary} onChange={(e) => setPayrollForm({ ...payrollForm, payrollSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
-                          )}
-                        </div>
+                        {/* 4. Commission Type Selection (Condition: Hybrid or Commission Based) */}
+                        {(payrollForm.payrollType === 'hybrid' || payrollForm.payrollType === 'commisionbased') && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type Selection</label>
+                            <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.commissionTypeSelection} onChange={(e) => setPayrollForm({ ...payrollForm, commissionTypeSelection: e.target.value })}>
+                              <option value="Per kW Commission">Per kW Commission</option>
+                              <option value="Per Customer File">Per Customer File</option>
+                            </select>
+                          </div>
+                        )}
 
+                        {/* 5. Commission Amount (Condition: Hybrid or Commission Based) */}
+                        {(payrollForm.payrollType === 'hybrid' || payrollForm.payrollType === 'commisionbased') && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">
+                              {payrollForm.commissionTypeSelection === 'Per kW Commission' ? 'Per kW Commission (₹)' : 'Per Customer File Commission (₹)'}
+                            </label>
+                            {payrollForm.commissionTypeSelection === 'Per kW Commission' ? (
+                              <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perKwCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perKwCommission: e.target.value })} placeholder="Enter per kW commission" />
+                            ) : (
+                              <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perCustomerFileCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perCustomerFileCommission: e.target.value })} placeholder="Enter per file commission" />
+                            )}
+                          </div>
+                        )}
+
+                        {/* 6. Govt Tax Deduction (Always) */}
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Govt Tax Deduction</label>
                           <div className="space-y-3">
