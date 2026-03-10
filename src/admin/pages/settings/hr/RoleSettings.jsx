@@ -363,11 +363,12 @@ export default function RoleSettings() {
   }, [selectedLocation.cluster, selectedLocation.state]);
 
 
+  // Fetch department modules on department or level change
   useEffect(() => {
     const fetchDeptMods = async () => {
-      if (formData.department) {
+      if (formData.department && formData.level) {
         try {
-          const res = await getDepartmentModules(formData.department);
+          const res = await getDepartmentModules(formData.department, formData.level);
           if (res.success && res.accessList) {
             setDeptModulesList(res.accessList.map(m => m.moduleId));
           } else {
@@ -383,9 +384,13 @@ export default function RoleSettings() {
     };
 
     fetchDeptMods();
-    // Real-time reset when department changes
+    // Real-time reset when department or level changes
     setSelectedMandatoryTasks([]);
     setSelectedOptionalTasks([]);
+  }, [formData.department, formData.level]);
+
+  // Real-time position reset when ONLY department changes
+  useEffect(() => {
     setFormData(prev => ({ ...prev, name: '' }));
   }, [formData.department]);
 
@@ -401,8 +406,8 @@ export default function RoleSettings() {
   }, [showSuggestions]);
 
   const handleOpenTaskModal = (type) => {
-    if (!formData.department) {
-      toast.error("Please select a Department first to view tasks.");
+    if (!formData.department || !formData.level) {
+      toast.error("Please select a Department and Level first to view tasks.");
       return;
     }
 
@@ -1099,7 +1104,26 @@ export default function RoleSettings() {
                     const setter = activeTaskModalType === 'mandatory' ? setSelectedMandatoryTasks : setSelectedOptionalTasks;
 
                     // Use distinct structure for Mandatory vs Optional
-                    const taskStructure = activeTaskModalType === 'mandatory' ? MANDATORY_TASK_STRUCTURE : OPTIONAL_TASK_STRUCTURE;
+                    let taskStructure = activeTaskModalType === 'mandatory' ? MANDATORY_TASK_STRUCTURE : OPTIONAL_TASK_STRUCTURE;
+
+                    // Filter task structure based on allowed categories from Department + Level
+                    // IMPORTANT: Only restrict Mandatory Tasks. Optional Tasks should show all modules.
+                    if (activeTaskModalType === 'mandatory') {
+                      if (deptModulesList.length > 0) {
+                        const allowedKeys = deptModulesList.map(m => m && m.key ? m.key.toLowerCase() : '');
+                        taskStructure = taskStructure.filter(catObj => {
+                          const catKey = catObj.category.toLowerCase().replace(/\s+/g, '_');
+                          return allowedKeys.includes(catKey);
+                        });
+                      } else {
+                        // If no modules enabled, show nothing
+                        taskStructure = [];
+                      }
+
+                      if (taskStructure.length === 0) {
+                        return <div className="p-4 text-center text-gray-500 text-sm">No modules enabled for this Department + Level combination. Please enable them in Department-wise Modules settings.</div>;
+                      }
+                    }
 
                     return taskStructure.map((catObj) => {
                       const isExpanded = expandedCategories.includes(catObj.category);

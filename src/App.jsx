@@ -43,6 +43,7 @@ import ManageModules from './admin/pages/settings/hr/ManageModules';
 import DepartmentWiseModules from './admin/pages/settings/hr/DepartmentWiseModules';
 import TemporaryInchargeSetting from './admin/pages/settings/hr/TemporaryInchargeSetting';
 import LeaveApprovals from './admin/pages/settings/hr/LeaveApprovals';
+import ResignApprovals from './admin/pages/settings/hr/ResignApprovals';
 
 // Vendor Settings
 import InstallerVendors from './admin/pages/settings/vendor/InstallerVendors';
@@ -403,6 +404,7 @@ function App() {
               <Route path="settings/hr/department-wise-modules" element={<DepartmentWiseModules />} />
               <Route path="settings/hr/temporary-incharge-setting" element={<TemporaryInchargeSetting />} />
               <Route path="settings/hr/leave-approvals" element={<LeaveApprovals />} />
+              <Route path="settings/hr/resign-approvals" element={<ResignApprovals />} />
 
               {/* Vendor Settings */}
               <Route path="settings/vendor/installer-vendors" element={<InstallerVendors />} />

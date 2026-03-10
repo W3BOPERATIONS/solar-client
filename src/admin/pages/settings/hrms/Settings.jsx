@@ -8,7 +8,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { getStates, getClustersHierarchy, getDistrictsHierarchy, getCountries } from '../../../../services/core/locationApi';
 import { getDepartments, getRoles } from '../../../../services/core/masterApi';
-import { getHRMSSettings, saveHRMSSettings, updateHRMSSettings, deleteHRMSSettings } from '../../../../services/hrms/hrmsApi';
+import { getHRMSSettings, saveHRMSSettings, updateHRMSSettings, deleteHRMSSettings, getCandidateTrainings } from '../../../../services/hrms/hrmsApi';
 import toast from 'react-hot-toast';
 
 const toId = (val) => (val && typeof val === 'object' ? val._id : val);
@@ -23,6 +23,7 @@ const AdminHrmssettings = () => {
   const [departments, setDepartments] = useState([]);
   const [allRoles, setAllRoles] = useState([]);
   const [designations, setDesignations] = useState([]);
+  const [candidateTrainings, setCandidateTrainings] = useState([]);
 
   // Selection States
   const [currentCountry, setCurrentCountry] = useState(null); // Objects
@@ -60,13 +61,13 @@ const AdminHrmssettings = () => {
     payrollEsops: 'eligible',
     activeCpField: '',
     salaryIncrement: '',
-    cpOnboardingGoal: '30'
+    cpOnboardingGoal: '30',
+    hybridType: 'monthly'
   });
 
   const [recruitmentForm, setRecruitmentForm] = useState({
     recruitmentProbation: '',
-    recruitmentTraining: '',
-    recruitmentPayrollType: 'monthly'
+    recruitmentTrainings: []
   });
 
   const [performanceForm, setPerformanceForm] = useState({
@@ -90,12 +91,14 @@ const AdminHrmssettings = () => {
     const fetchInitialData = async () => {
       try {
         setIsLoading(true);
-        const [countriesData, rolesData] = await Promise.all([
+        const [countriesData, rolesData, trainingsData] = await Promise.all([
           getCountries(),
-          getRoles()
+          getRoles(),
+          getCandidateTrainings()
         ]);
         setCountries(countriesData || []);
         setAllRoles(rolesData?.data || []);
+        setCandidateTrainings(trainingsData?.data || []);
 
         // Set India as default country to ensure hierarchical filtering works
         if (countriesData && countriesData.length > 0) {
@@ -314,6 +317,7 @@ const AdminHrmssettings = () => {
         payrollPerks: settings.payroll.perks || '',
         payrollBenefits: settings.payroll.benefits || '',
         payrollEsops: settings.payroll.esops || 'eligible',
+        hybridType: settings.payroll.hybridType || 'monthly',
         activeCpField: settings.payroll.activeCpField || '',
         salaryIncrement: settings.payroll.salaryIncrement || '',
         cpOnboardingGoal: settings.payroll.cpOnboardingGoal || '30'
@@ -323,8 +327,7 @@ const AdminHrmssettings = () => {
     if (settings.recruitment) {
       setRecruitmentForm({
         recruitmentProbation: settings.recruitment.probation || '',
-        recruitmentTraining: settings.recruitment.training || '',
-        recruitmentPayrollType: settings.recruitment.payrollType || 'monthly'
+        recruitmentTrainings: settings.recruitment.training || []
       });
     }
 
@@ -334,7 +337,6 @@ const AdminHrmssettings = () => {
         decrease: ''
       }));
       setPerformanceForm({
-        performancePayrollType: settings.performance.payrollType || 'monthly',
         performanceEfficiency: settings.performance.efficiencyFormula || '',
         performanceAttendance: settings.performance.attendanceReq || '',
         performanceLeaveImpact: settings.performance.leaveImpact || '',
@@ -352,6 +354,7 @@ const AdminHrmssettings = () => {
   const resetForms = () => {
     setPayrollForm({
       payrollType: 'monthly',
+      hybridType: 'monthly',
       payrollSalary: '',
       peCheck: false,
       peInput: '',
@@ -369,11 +372,9 @@ const AdminHrmssettings = () => {
     });
     setRecruitmentForm({
       recruitmentProbation: '',
-      recruitmentTraining: '',
-      recruitmentPayrollType: 'monthly'
+      recruitmentTrainings: []
     });
     setPerformanceForm({
-      performancePayrollType: 'monthly',
       performanceEfficiency: '',
       performanceAttendance: '',
       performanceLeaveImpact: '',
@@ -457,6 +458,7 @@ const AdminHrmssettings = () => {
 
       payload.payroll = {
         payrollType: payrollForm.payrollType,
+        hybridType: payrollForm.hybridType,
         salary: payrollForm.payrollSalary,
         peCheck: payrollForm.peCheck,
         peInput: payrollForm.peInput,
@@ -476,12 +478,10 @@ const AdminHrmssettings = () => {
 
       payload.recruitment = {
         probation: recruitmentForm.recruitmentProbation,
-        training: recruitmentForm.recruitmentTraining,
-        payrollType: recruitmentForm.recruitmentPayrollType
+        training: recruitmentForm.recruitmentTrainings
       };
 
       payload.performance = {
-        payrollType: performanceForm.performancePayrollType,
         efficiencyFormula: performanceForm.performanceEfficiency,
         attendanceReq: performanceForm.performanceAttendance,
         leaveImpact: performanceForm.performanceLeaveImpact,
@@ -537,12 +537,10 @@ const AdminHrmssettings = () => {
 
     setRecruitmentForm({
       recruitmentProbation: setting.recruitment?.probation || '',
-      recruitmentTraining: setting.recruitment?.training || '',
-      recruitmentPayrollType: setting.recruitment?.payrollType || 'monthly'
+      recruitmentTrainings: setting.recruitment?.training || []
     });
 
     setPerformanceForm({
-      performancePayrollType: setting.performance?.payrollType || 'monthly',
       performanceEfficiency: setting.performance?.efficiencyFormula || '',
       performanceAttendance: setting.performance?.attendanceReq || '',
       performanceLeaveImpact: setting.performance?.leaveImpact || '',
@@ -807,8 +805,20 @@ const AdminHrmssettings = () => {
                           </select>
                         </div>
 
+                        {payrollForm.payrollType === 'hybrid' && (
+                          <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Hybrid Base Type</label>
+                            <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridType} onChange={(e) => setPayrollForm({ ...payrollForm, hybridType: e.target.value })}>
+                              <option value="monthly">Monthly</option>
+                              <option value="hourly">Hourly</option>
+                            </select>
+                          </div>
+                        )}
+
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Salary Range (₹)</label>
+                          <label className="block text-sm font-medium text-gray-700 mb-2">
+                            {payrollForm.payrollType === 'commisionbased' ? 'Commission Based' : payrollForm.payrollType === 'hybrid' ? `${payrollForm.hybridType?.charAt(0).toUpperCase() + payrollForm.hybridType?.slice(1)} Hybrid` : payrollForm.payrollType?.charAt(0).toUpperCase() + payrollForm.payrollType?.slice(1)} Salary Range (₹)
+                          </label>
                           <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollSalary} onChange={(e) => setPayrollForm({ ...payrollForm, payrollSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
                         </div>
 
@@ -872,23 +882,38 @@ const AdminHrmssettings = () => {
                     {/* Section 2: Recruitment Settings */}
                     <div className="mb-8 p-6 border rounded-lg bg-gray-50 border-gray-200">
                       <h5 className="text-xl font-semibold text-gray-800 mb-6 border-b pb-2 text-blue-700">Section 2: Recruitment Settings</h5>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Type</label>
-                          <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={recruitmentForm.recruitmentPayrollType} onChange={(e) => setRecruitmentForm({ ...recruitmentForm, recruitmentPayrollType: e.target.value })}>
-                            <option value="monthly">Monthly</option>
-                            <option value="hourly">Hourly</option>
-                            <option value="commisionbased">Commission Based</option>
-                            <option value="hybrid">Hybrid</option>
-                          </select>
-                        </div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">Probation Period (Months)</label>
                           <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={recruitmentForm.recruitmentProbation} onChange={(e) => setRecruitmentForm({ ...recruitmentForm, recruitmentProbation: e.target.value })} placeholder="e.g. 3" />
                         </div>
                         <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Training Required</label>
-                          <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={recruitmentForm.recruitmentTraining} onChange={(e) => setRecruitmentForm({ ...recruitmentForm, recruitmentTraining: e.target.value })} placeholder="e.g. Sales Training, Compliance" />
+                          <label className="block text-sm font-medium text-gray-700 mb-2">Training Modules Required</label>
+                          <div className="bg-white border text-sm border-gray-300 rounded-md overflow-hidden max-h-48 overflow-y-auto w-full">
+                            {['solarrooftop', 'solarpump', 'solarstreetlight'].map(moduleCat => {
+                              const isChecked = recruitmentForm.recruitmentTrainings.includes(moduleCat);
+                              const moduleName = moduleCat === 'solarrooftop' ? 'Solar Rooftop' : moduleCat === 'solarpump' ? 'Solar Pump' : 'Street Light';
+
+                              return (
+                                <label key={moduleCat} className={`flex items-center px-4 py-3 border-b border-gray-100 cursor-pointer transition-colors ${isChecked ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+                                  <input
+                                    type="checkbox"
+                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 mr-3"
+                                    checked={isChecked}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        setRecruitmentForm(prev => ({ ...prev, recruitmentTrainings: [...prev.recruitmentTrainings, moduleCat] }));
+                                      } else {
+                                        setRecruitmentForm(prev => ({ ...prev, recruitmentTrainings: prev.recruitmentTrainings.filter(i => i !== moduleCat) }));
+                                      }
+                                    }}
+                                  />
+                                  <span className={`font-medium ${isChecked ? 'text-blue-700' : 'text-gray-700'}`}>{moduleName} Training</span>
+                                </label>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-gray-500 mt-2">Select the required training modules mapped from the Candidate Training Settings.</p>
                         </div>
                       </div>
                     </div>
@@ -899,15 +924,6 @@ const AdminHrmssettings = () => {
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
                         {/* Column 1 */}
                         <div className="space-y-6">
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Payroll Type</label>
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={performanceForm.performancePayrollType} onChange={(e) => setPerformanceForm({ ...performanceForm, performancePayrollType: e.target.value })}>
-                              <option value="monthly">Monthly</option>
-                              <option value="hourly">Hourly</option>
-                              <option value="commisionbased">Commission Based</option>
-                              <option value="hybrid">Hybrid</option>
-                            </select>
-                          </div>
                           <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Attendance Required (%)</label>
                             <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md bg-white" value={performanceForm.performanceAttendance} onChange={(e) => setPerformanceForm({ ...performanceForm, performanceAttendance: e.target.value })} placeholder="95" />
@@ -1003,7 +1019,7 @@ const AdminHrmssettings = () => {
                         <div>
                           <h6 className="font-bold text-gray-900 border-b pb-1 mb-2">1. Payroll</h6>
                           <div className="space-y-1 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.payroll?.payrollType || 'N/A'}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.payroll?.payrollType === 'hybrid' ? `${settings.payroll.hybridType} Hybrid` : settings.payroll?.payrollType || 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Salary Range:</span> <span className="font-medium">{settings.payroll?.salary || 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Working Hrs:</span> <span className="font-medium">{settings.payroll?.performanceWorkingHours ? `${settings.payroll.performanceWorkingHours} hrs` : 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Login Time:</span> <span className="font-medium">{settings.payroll?.performanceLoginTime || 'N/A'}</span></div>
@@ -1020,9 +1036,12 @@ const AdminHrmssettings = () => {
                         <div>
                           <h6 className="font-bold text-gray-900 border-b pb-1 mb-2">2. Recruitment</h6>
                           <div className="space-y-1 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.recruitment?.payrollType || 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Probation:</span> <span className="font-medium">{settings.recruitment?.probation ? `${settings.recruitment.probation} Months` : 'N/A'}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-500">Training:</span> <span className="font-medium">{settings.recruitment?.training || 'N/A'}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-500">Training Modules:</span> <span className="font-medium text-right pl-2 break-words max-w-[150px]">
+                              {settings.recruitment?.training?.length
+                                ? settings.recruitment.training.map(cat => cat === 'solarrooftop' ? 'Solar Rooftop' : cat === 'solarpump' ? 'Solar Pump' : 'Street Light').join(', ')
+                                : 'None'}
+                            </span></div>
                           </div>
                         </div>
 
@@ -1030,7 +1049,6 @@ const AdminHrmssettings = () => {
                         <div>
                           <h6 className="font-bold text-gray-900 border-b pb-1 mb-2">3. Performance</h6>
                           <div className="space-y-1 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.performance?.payrollType || 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Target (%):</span> <span className="font-medium">{settings.performance?.productivity ? `${settings.performance.productivity}% ` : 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Attendance (%):</span> <span className="font-medium">{settings.performance?.attendanceReq ? `${settings.performance.attendanceReq}% ` : 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Formula:</span> <span className="font-medium">{settings.performance?.efficiencyFormula || 'N/A'}</span></div>

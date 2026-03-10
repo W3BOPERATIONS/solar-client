@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { toast } from 'react-hot-toast';
 import { getDepartments } from '../../../../services/core/masterApi';
-import { getEmployees as getUsers, getTemporaryInchargeDashboard, createTemporaryIncharge } from '../../../../services/hr/hrApi';
+import { getEmployees as getUsers, getTemporaryInchargeDashboard, createTemporaryIncharge, updateTemporaryIncharge } from '../../../../services/hr/hrApi';
 import { getStates } from '../../../../services/core/locationApi';
 import { X, ChevronDown, Clock } from 'lucide-react';
 
@@ -74,12 +74,12 @@ export default function TemporaryInchargeSetting() {
     }
   };
 
-  const openAssignModal = (employee) => {
+  const openAssignModal = (employee, isEdit = false) => {
     setSelectedEmployee(employee);
     setFormData({
-      tempInchargeUser: '',
-      startDate: '',
-      endDate: '',
+      tempInchargeUser: isEdit ? employee.tempInchargeId || '' : '',
+      startDate: isEdit && employee.startDate ? new Date(employee.startDate).toISOString().split('T')[0] : '',
+      endDate: isEdit && employee.endDate ? new Date(employee.endDate).toISOString().split('T')[0] : '',
       reason: 'Leave'
     });
     setIsModalOpen(true);
@@ -118,11 +118,20 @@ export default function TemporaryInchargeSetting() {
         reason: formData.reason
       };
 
-      const res = await createTemporaryIncharge(payload);
-      if (res.success) {
-        toast.success("Temporary In-charge assigned successfully");
-        setIsModalOpen(false);
-        fetchDashboard(); // Refresh UI
+      if (selectedEmployee.inchargeRecordId) {
+        const res = await updateTemporaryIncharge(selectedEmployee.inchargeRecordId, payload);
+        if (res.success) {
+          toast.success("Temporary In-charge updated successfully");
+          setIsModalOpen(false);
+          fetchDashboard(); // Refresh UI
+        }
+      } else {
+        const res = await createTemporaryIncharge(payload);
+        if (res.success) {
+          toast.success("Temporary In-charge assigned successfully");
+          setIsModalOpen(false);
+          fetchDashboard(); // Refresh UI
+        }
       }
     } catch (error) {
       console.error("Assignment error:", error);
@@ -323,9 +332,8 @@ export default function TemporaryInchargeSetting() {
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Department</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider">Position</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Status</th>
-                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">
-                        {isNoticeView ? 'Notice Period Status' : 'Absent Days'}
-                      </th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Absent Days</th>
+                      <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Notice Period (Days)</th>
                       <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Pending Task</th>
                       <th className="px-4 py-3 font-medium text-xs uppercase tracking-wider text-center">Overdue Task</th>
                       <th className="px-6 py-3 font-medium text-xs uppercase tracking-wider text-center">Temp Incharge</th>
@@ -356,7 +364,10 @@ export default function TemporaryInchargeSetting() {
                             </span>
                           </td>
                           <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">
-                            {isNoticeView ? emp.noticeStatus : emp.absentDays}
+                            {emp.absentDays}
+                          </td>
+                          <td className="px-4 py-4 text-center text-orange-500 font-medium font-mono text-xs">
+                            {emp.noticeStatus}
                           </td>
                           <td className="px-4 py-4 text-center text-yellow-500 font-medium font-mono text-xs">{emp.pendingTask}</td>
                           <td className="px-4 py-4 text-center text-red-500 font-medium font-mono text-xs">{emp.overdueTask}</td>
@@ -369,10 +380,15 @@ export default function TemporaryInchargeSetting() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             {emp.tempInchargeName && emp.tempInchargeName !== '-' ? (
-                              <span className="text-gray-400 text-xs">N/A</span>
+                              <button
+                                onClick={() => openAssignModal(emp, true)}
+                                className="bg-yellow-500 text-white px-4 py-1.5 rounded text-xs font-medium hover:bg-yellow-600 transition"
+                              >
+                                Edit
+                              </button>
                             ) : (
                               <button
-                                onClick={() => openAssignModal(emp)}
+                                onClick={() => openAssignModal(emp, false)}
                                 className="bg-[#0074b7] text-white px-4 py-1.5 rounded text-xs font-medium hover:bg-blue-700 transition"
                               >
                                 Assign
@@ -396,7 +412,9 @@ export default function TemporaryInchargeSetting() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-xl w-full max-w-md flex flex-col overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-              <h2 className="text-lg font-bold text-gray-800">Assign Temporary In-Charge</h2>
+              <h2 className="text-lg font-bold text-gray-800">
+                {selectedEmployee?.inchargeRecordId ? 'Edit Temporary In-Charge' : 'Assign Temporary In-Charge'}
+              </h2>
               <button onClick={() => setIsModalOpen(false)} className="text-gray-500 hover:text-gray-700">
                 <X size={20} />
               </button>

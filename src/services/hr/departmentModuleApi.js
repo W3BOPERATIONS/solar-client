@@ -28,8 +28,12 @@ export const getModules = async () => {
     return response.data; // { success: true, modules: [] }
 };
 
-export const getDepartmentModules = async (departmentId) => {
-    const response = await api.get(`/department-modules/department-modules/${departmentId}`);
+export const getDepartmentModules = async (departmentId, level = '') => {
+    let url = `/department-modules/department-modules/${departmentId}`;
+    if (level) {
+        url += `?level=${level}`;
+    }
+    const response = await api.get(url);
     return response.data; // { success: true, accessList: [] }
 };
 
