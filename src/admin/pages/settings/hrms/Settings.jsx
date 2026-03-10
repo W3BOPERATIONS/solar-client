@@ -62,7 +62,12 @@ const AdminHrmssettings = () => {
     activeCpField: '',
     salaryIncrement: '',
     cpOnboardingGoal: '30',
-    hybridType: 'monthly'
+    hybridType: 'monthly',
+    perKwCommission: 0,
+    perCustomerFileCommission: 0,
+    hybridBaseType: 'Monthly',
+    hybridSalary: '',
+    commissionTypeSelection: 'Per kW Commission'
   });
 
   const [recruitmentForm, setRecruitmentForm] = useState({
@@ -320,7 +325,12 @@ const AdminHrmssettings = () => {
         hybridType: settings.payroll.hybridType || 'monthly',
         activeCpField: settings.payroll.activeCpField || '',
         salaryIncrement: settings.payroll.salaryIncrement || '',
-        cpOnboardingGoal: settings.payroll.cpOnboardingGoal || '30'
+        cpOnboardingGoal: settings.payroll.cpOnboardingGoal || '30',
+        perKwCommission: settings.payroll.perKwCommission || 0,
+        perCustomerFileCommission: settings.payroll.perCustomerFileCommission || 0,
+        hybridBaseType: settings.payroll.hybridBaseType || 'Monthly',
+        hybridSalary: settings.payroll.hybridSalary || '',
+        commissionTypeSelection: settings.payroll.commissionTypeSelection || 'Per kW Commission'
       });
     }
 
@@ -368,7 +378,12 @@ const AdminHrmssettings = () => {
       payrollEsops: 'eligible',
       activeCpField: '',
       salaryIncrement: '',
-      cpOnboardingGoal: '30'
+      cpOnboardingGoal: '30',
+      perKwCommission: 0,
+      perCustomerFileCommission: 0,
+      hybridBaseType: 'Monthly',
+      hybridSalary: '',
+      commissionTypeSelection: 'Per kW Commission'
     });
     setRecruitmentForm({
       recruitmentProbation: '',
@@ -473,7 +488,12 @@ const AdminHrmssettings = () => {
         esops: payrollForm.payrollEsops,
         activeCpField: payrollForm.activeCpField,
         salaryIncrement: payrollForm.salaryIncrement,
-        cpOnboardingGoal: payrollForm.cpOnboardingGoal
+        cpOnboardingGoal: payrollForm.cpOnboardingGoal,
+        perKwCommission: payrollForm.perKwCommission,
+        perCustomerFileCommission: payrollForm.perCustomerFileCommission,
+        hybridBaseType: payrollForm.hybridBaseType,
+        hybridSalary: payrollForm.hybridSalary,
+        commissionTypeSelection: payrollForm.commissionTypeSelection
       };
 
       payload.recruitment = {
@@ -506,7 +526,8 @@ const AdminHrmssettings = () => {
       await fetchAllConfigsOverview(); // Refresh counts
     } catch (error) {
       console.error("Error saving settings:", error);
-      toast.error(typeof error === 'string' ? error : "Failed to save settings");
+      const errorMsg = error.message || (typeof error === 'string' ? error : "Failed to save settings");
+      toast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }
@@ -532,7 +553,12 @@ const AdminHrmssettings = () => {
       payrollEsops: setting.payroll?.esops || 'eligible',
       activeCpField: setting.payroll?.activeCpField || '',
       salaryIncrement: setting.payroll?.salaryIncrement || '',
-      cpOnboardingGoal: setting.payroll?.cpOnboardingGoal || '30'
+      cpOnboardingGoal: setting.payroll?.cpOnboardingGoal || '30',
+      perKwCommission: setting.payroll?.perKwCommission || 0,
+      perCustomerFileCommission: setting.payroll?.perCustomerFileCommission || 0,
+      hybridBaseType: setting.payroll?.hybridBaseType || 'Monthly',
+      hybridSalary: setting.payroll?.hybridSalary || '',
+      commissionTypeSelection: setting.payroll?.commissionTypeSelection || 'Per kW Commission'
     });
 
     setRecruitmentForm({
@@ -806,20 +832,71 @@ const AdminHrmssettings = () => {
                         </div>
 
                         {payrollForm.payrollType === 'hybrid' && (
-                          <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Hybrid Base Type</label>
-                            <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridType} onChange={(e) => setPayrollForm({ ...payrollForm, hybridType: e.target.value })}>
-                              <option value="monthly">Monthly</option>
-                              <option value="hourly">Hourly</option>
-                            </select>
-                          </div>
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Hybrid Base Type</label>
+                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridBaseType} onChange={(e) => setPayrollForm({ ...payrollForm, hybridBaseType: e.target.value })}>
+                                <option value="Monthly">Monthly</option>
+                                <option value="Hourly">Hourly</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type Selection</label>
+                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.commissionTypeSelection} onChange={(e) => setPayrollForm({ ...payrollForm, commissionTypeSelection: e.target.value })}>
+                                <option value="Per kW Commission">Per kW Commission</option>
+                                <option value="Per Customer File">Per Customer File</option>
+                              </select>
+                            </div>
+                            {payrollForm.commissionTypeSelection === 'Per kW Commission' ? (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Per kW Commission (₹)</label>
+                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perKwCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perKwCommission: e.target.value })} placeholder="Enter per kW commission" />
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Per Customer File Commission (₹)</label>
+                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perCustomerFileCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perCustomerFileCommission: e.target.value })} placeholder="Enter per file commission" />
+                              </div>
+                            )}
+                          </>
+                        )}
+
+                        {payrollForm.payrollType === 'commisionbased' && (
+                          <>
+                            <div>
+                              <label className="block text-sm font-medium text-gray-700 mb-2">Commission Type Selection</label>
+                              <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.commissionTypeSelection} onChange={(e) => setPayrollForm({ ...payrollForm, commissionTypeSelection: e.target.value })}>
+                                <option value="Per kW Commission">Per kW Commission</option>
+                                <option value="Per Customer File">Per Customer File</option>
+                              </select>
+                            </div>
+                            {payrollForm.commissionTypeSelection === 'Per kW Commission' ? (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Per kW Commission (₹)</label>
+                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perKwCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perKwCommission: e.target.value })} placeholder="Enter per kW commission" />
+                              </div>
+                            ) : (
+                              <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Per Customer File Commission (₹)</label>
+                                <input type="number" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.perCustomerFileCommission} onChange={(e) => setPayrollForm({ ...payrollForm, perCustomerFileCommission: e.target.value })} placeholder="Enter per file commission" />
+                              </div>
+                            )}
+                          </>
                         )}
 
                         <div>
                           <label className="block text-sm font-medium text-gray-700 mb-2">
-                            {payrollForm.payrollType === 'commisionbased' ? 'Commission Based' : payrollForm.payrollType === 'hybrid' ? `${payrollForm.hybridType?.charAt(0).toUpperCase() + payrollForm.hybridType?.slice(1)} Hybrid` : payrollForm.payrollType?.charAt(0).toUpperCase() + payrollForm.payrollType?.slice(1)} Salary Range (₹)
+                            {payrollForm.payrollType === 'hybrid'
+                              ? `${payrollForm.hybridBaseType} Hybrid Salary Range (₹)`
+                              : payrollForm.payrollType === 'hourly'
+                                ? 'Per Hourly Salary (₹)'
+                                : `${payrollForm.payrollType?.charAt(0).toUpperCase() + payrollForm.payrollType?.slice(1)} Salary Range (₹)`}
                           </label>
-                          <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollSalary} onChange={(e) => setPayrollForm({ ...payrollForm, payrollSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
+                          {payrollForm.payrollType === 'hybrid' ? (
+                            <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.hybridSalary} onChange={(e) => setPayrollForm({ ...payrollForm, hybridSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
+                          ) : (
+                            <input type="text" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white" value={payrollForm.payrollSalary} onChange={(e) => setPayrollForm({ ...payrollForm, payrollSalary: e.target.value })} placeholder="e.g. 30,000 - 50,000" />
+                          )}
                         </div>
 
                         <div>
@@ -989,7 +1066,7 @@ const AdminHrmssettings = () => {
                         </button>
                       )}
                       <button type="submit" disabled={isSaving} className="px-10 py-3 bg-gradient-to-r from-green-500 to-green-700 text-white font-bold text-lg rounded-full shadow-lg hover:from-green-600 hover:to-green-800 focus:outline-none focus:ring-4 focus:ring-green-300 transition-all disabled:opacity-50 inline-flex items-center">
-                        {isSaving ? 'Saving...' : (editId ? 'Update Configure' : 'Save Configure')}
+                        {isSaving ? 'Saving...' : (editId ? 'Update Configure' : 'Create Configure')}
                       </button>
                     </div>
                   </form>
@@ -1019,8 +1096,33 @@ const AdminHrmssettings = () => {
                         <div>
                           <h6 className="font-bold text-gray-900 border-b pb-1 mb-2">1. Payroll</h6>
                           <div className="space-y-1 text-sm">
-                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.payroll?.payrollType === 'hybrid' ? `${settings.payroll.hybridType} Hybrid` : settings.payroll?.payrollType || 'N/A'}</span></div>
-                            <div className="flex justify-between"><span className="text-gray-500">Salary Range:</span> <span className="font-medium">{settings.payroll?.salary || 'N/A'}</span></div>
+                            <div className="flex justify-between"><span className="text-gray-500">Type:</span> <span className="font-medium capitalize">{settings.payroll?.payrollType === 'hybrid' ? `${settings.payroll.hybridBaseType} Hybrid` : settings.payroll?.payrollType || 'N/A'}</span></div>
+                            {settings.payroll?.payrollType === 'commisionbased' && (
+                              <>
+                                <div className="flex justify-between"><span className="text-gray-500">Comm. Type:</span> <span className="font-medium">{settings.payroll.commissionTypeSelection}</span></div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-500">Amount:</span>
+                                  <span className="font-medium">
+                                    ₹{settings.payroll.commissionTypeSelection === 'Per kW Commission' ? settings.payroll.perKwCommission : settings.payroll.perCustomerFileCommission}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {settings.payroll?.payrollType === 'hybrid' && (
+                              <>
+                                <div className="flex justify-between"><span className="text-gray-500">Salary:</span> <span className="font-medium">{settings.payroll.hybridSalary || 'N/A'}</span></div>
+                                <div className="flex justify-between"><span className="text-gray-500">Comm. Type:</span> <span className="font-medium">{settings.payroll.commissionTypeSelection}</span></div>
+                                <div className="flex justify-between">
+                                  <span className="text-gray-500">Comm. Amount:</span>
+                                  <span className="font-medium">
+                                    ₹{settings.payroll.commissionTypeSelection === 'Per kW Commission' ? settings.payroll.perKwCommission : settings.payroll.perCustomerFileCommission}
+                                  </span>
+                                </div>
+                              </>
+                            )}
+                            {settings.payroll?.payrollType !== 'hybrid' && settings.payroll?.payrollType !== 'commisionbased' && (
+                              <div className="flex justify-between"><span className="text-gray-500">Salary Range:</span> <span className="font-medium">{settings.payroll?.salary || 'N/A'}</span></div>
+                            )}
                             <div className="flex justify-between"><span className="text-gray-500">Working Hrs:</span> <span className="font-medium">{settings.payroll?.performanceWorkingHours ? `${settings.payroll.performanceWorkingHours} hrs` : 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">Login Time:</span> <span className="font-medium">{settings.payroll?.performanceLoginTime || 'N/A'}</span></div>
                             <div className="flex justify-between"><span className="text-gray-500">ESOPs:</span> <span className="font-medium capitalize">{settings.payroll?.esops || 'N/A'}</span></div>

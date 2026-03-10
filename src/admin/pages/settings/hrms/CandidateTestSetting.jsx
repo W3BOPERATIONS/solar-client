@@ -371,7 +371,8 @@ const CandidateTestSetting = () => {
       setQuestions([{ id: Date.now(), text: '', type: 'Multiple Choice', options: ['', '', '', ''], correctAnswer: [], marks: 1 }]);
     } catch (error) {
       console.error("Error saving test:", error);
-      toast.error(editingTestId ? "Failed to update test" : "Failed to save test");
+      const errorMsg = error.message || (typeof error === 'string' ? error : "Failed to save test");
+      toast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }

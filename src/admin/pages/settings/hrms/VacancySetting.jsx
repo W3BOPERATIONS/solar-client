@@ -337,7 +337,8 @@ const VacancySetting = () => {
             setCurrentPosition(null);
         } catch (error) {
             console.error("Error saving vacancy:", error);
-            toast.error("Failed to save vacancy");
+            const errorMsg = error.message || (typeof error === 'string' ? error : "Failed to save vacancy");
+            toast.error(errorMsg);
         } finally {
             setIsSaving(false);
         }

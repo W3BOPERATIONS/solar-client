@@ -342,7 +342,8 @@ const CandidateTrainingSetting = () => {
       }
     } catch (error) {
       console.error("Error saving training:", error);
-      toast.error("Failed to save settings");
+      const errorMsg = error.message || (typeof error === 'string' ? error : "Failed to save settings");
+      toast.error(errorMsg);
     } finally {
       setIsSaving(false);
     }
