@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Search,
   Plus,
+  Eye,
   Edit2,
   Trash2,
   CheckCircle,
@@ -11,10 +12,15 @@ import {
   ChevronRight
 } from 'lucide-react';
 import { productApi } from '../../../../api/productApi';
+import { masterApi } from '../../../../api/masterApi';
 import AddProductModal from './AddProductModal';
+import GenerateSkuModal from './GenerateSkuModal';
+import ViewSkuModal from './ViewSkuModal';
 
 const SkuManagement = () => {
   // Data States
+  const [countries, setCountries] = useState([]);
+  const [selectedCountries, setSelectedCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [clusters, setClusters] = useState([]);
   const [products, setProducts] = useState([]);
@@ -27,6 +33,7 @@ const SkuManagement = () => {
   // Selection States
   const [selectedStates, setSelectedStates] = useState([]);
   const [selectedClusters, setSelectedClusters] = useState([]);
+  const [selectAllCountries, setSelectAllCountries] = useState(false);
   const [selectAllStates, setSelectAllStates] = useState(false);
   const [selectAllClusters, setSelectAllClusters] = useState(false);
 
@@ -36,6 +43,9 @@ const SkuManagement = () => {
   const [toasts, setToasts] = useState([]);
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingProduct, setEditingProduct] = useState(null);
+  const [showGenerateSkuModal, setShowGenerateSkuModal] = useState(false);
+  const [showViewSkuModal, setShowViewSkuModal] = useState(false);
+  const [selectedProductForSku, setSelectedProductForSku] = useState(null);
 
   const showToast = (message, type = 'success') => {
     const id = Date.now();
@@ -51,6 +61,7 @@ const SkuManagement = () => {
     try {
       setLoading(true);
       const [
+        countryRes,
         stateRes,
         clusterRes,
         productRes,
@@ -60,7 +71,8 @@ const SkuManagement = () => {
         pTypeRes,
         subPTypeRes
       ] = await Promise.all([
-        productApi.getStates(),
+        masterApi.getCountries(),
+        masterApi.getStates(),
         productApi.getClusters(),
         productApi.getAll(),
         productApi.getBrands(),
@@ -70,7 +82,13 @@ const SkuManagement = () => {
         productApi.getSubProjectTypes()
       ]);
 
-      setStates(stateRes?.data?.data || []);
+      const fetchedCountries = countryRes?.data || countryRes || [];
+      setCountries(fetchedCountries);
+      if (fetchedCountries.length > 0) {
+        setSelectedCountries([fetchedCountries[0]._id]);
+      }
+
+      setStates(stateRes?.data?.data || stateRes?.data || stateRes || []);
       setClusters(clusterRes?.data?.data || []);
       setProducts(productRes?.data?.data || []);
       setBrands(Array.isArray(brandRes?.data) ? brandRes.data : brandRes?.data?.data || []);
@@ -87,13 +105,34 @@ const SkuManagement = () => {
     }
   };
 
+  const handleCountryToggle = (countryId) => {
+    setSelectedCountries(prev => {
+      const next = prev.includes(countryId) ? prev.filter(id => id !== countryId) : [...prev, countryId];
+      // Clear states that no longer belong to selected countries
+      setSelectedStates(sPrev => sPrev.filter(sId => {
+        const state = states.find(st => st._id === sId);
+        return state && next.includes(state.country?._id || state.country || state.countryId);
+      }));
+      // Clear clusters that no longer belong to selected states
+      setSelectedClusters(cPrev => cPrev.filter(cId => {
+        const cluster = clusters.find(cl => cl._id === cId);
+        // re-filter states first conceptually, but taking shortcut here:
+        // just clear all clusters if we are toggling countries heavily, or depend on states getting cleared
+        return false; // simpler robust reset: changing country bounds resets lower selections
+      }));
+      setSelectAllStates(false);
+      setSelectAllClusters(false);
+      return next;
+    });
+  };
+
   const handleStateToggle = (stateId) => {
     setSelectedStates(prev => {
       const next = prev.includes(stateId) ? prev.filter(id => id !== stateId) : [...prev, stateId];
       // Clear clusters that no longer belong to selected states
       setSelectedClusters(cPrev => cPrev.filter(cId => {
         const cluster = clusters.find(cl => cl._id === cId);
-        return cluster && next.includes(cluster.state?._id || cluster.state);
+        return cluster && next.includes(cluster.state?._id || cluster.state || cluster.stateId);
       }));
       return next;
     });
@@ -105,12 +144,25 @@ const SkuManagement = () => {
     );
   };
 
+  const toggleSelectAllCountries = () => {
+    if (selectAllCountries) {
+      setSelectedCountries([]);
+      setSelectedStates([]);
+      setSelectedClusters([]);
+    } else {
+      setSelectedCountries(countries.map(c => c._id));
+    }
+    setSelectAllCountries(!selectAllCountries);
+    setSelectAllStates(false);
+    setSelectAllClusters(false);
+  };
+
   const toggleSelectAllStates = () => {
     if (selectAllStates) {
       setSelectedStates([]);
       setSelectedClusters([]);
     } else {
-      setSelectedStates(states.map(s => s._id));
+      setSelectedStates(filteredStates.map(s => s._id));
     }
     setSelectAllStates(!selectAllStates);
   };
@@ -124,9 +176,14 @@ const SkuManagement = () => {
     setSelectAllClusters(!selectAllClusters);
   };
 
+  // Filter states based on selected countries
+  const filteredStates = states.filter(s => 
+    selectedCountries.length > 0 && selectedCountries.includes(s.country?._id || s.country || s.countryId)
+  );
+
   // Filter clusters based on state
   const filteredClusters = clusters.filter(c =>
-    selectedStates.length > 0 && selectedStates.includes(c.state?._id || c.state)
+    selectedStates.length > 0 && selectedStates.includes(c.state?._id || c.state || c.stateId)
   );
 
   // Helper to get name from master data
@@ -136,6 +193,9 @@ const SkuManagement = () => {
   };
 
   const filteredProducts = products.filter(p => {
+    // Only include products created via SKU generator (must have state/cluster)
+    if (!p.stateId && !p.clusterId) return false;
+
     const matchesSearch = p.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.skuId?.skuCode?.toLowerCase().includes(searchTerm.toLowerCase());
 
@@ -184,10 +244,47 @@ const SkuManagement = () => {
             <h1 className="text-blue-500 font-bold text-lg">SKU Generator</h1>
           </div>
 
+          {/* Select Country */}
+          <div className="bg-white border border-gray-200 mb-6 font-sans">
+            <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+              <h2 className="text-blue-500 font-bold text-sm uppercase tracking-tight">Select Country</h2>
+            </div>
+            
+            <div className="p-4">
+              <div className="flex items-center gap-2 mb-4">
+                <input
+                  type="checkbox"
+                  id="selectAllCountries"
+                  className="w-3.5 h-3.5 text-blue-500 rounded focus:ring-blue-500 border-gray-300"
+                  checked={selectAllCountries}
+                  onChange={toggleSelectAllCountries}
+                />
+                <label htmlFor="selectAllCountries" className="text-gray-500 text-xs cursor-pointer">Select All Countries</label>
+              </div>
+
+              <div className="flex flex-wrap gap-4 overflow-hidden pb-2">
+                {countries.map((country) => (
+                  <button
+                    key={country._id}
+                    onClick={() => handleCountryToggle(country._id)}
+                    className={`min-w-[176px] h-24 flex flex-col justify-center items-center border rounded transition-all duration-200 ${
+                      selectedCountries.includes(country._id)
+                        ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                        : 'bg-white border-blue-200 text-gray-700 hover:border-blue-300'
+                    }`}
+                  >
+                    <span className="font-bold uppercase tracking-wider text-xs">{country.name}</span>
+                    <span className="text-xs mt-1 opacity-80">{country.shortName || country.name.substring(0,2).toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
           {/* Select States */}
           <div className="bg-white border border-gray-200 mb-6 font-sans">
             <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-              <h2 className="text-blue-500 font-bold text-sm uppercase tracking-tight">Select States</h2>
+              <h2 className="text-blue-500 font-bold text-sm uppercase tracking-tight">Select States (Filtered by Country)</h2>
             </div>
 
             <div className="p-4">
@@ -203,7 +300,7 @@ const SkuManagement = () => {
               </div>
 
               <div className="flex flex-wrap gap-4">
-                {states.map((state) => (
+                {filteredStates.map((state) => (
                   <div
                     key={state._id}
                     onClick={() => handleStateToggle(state._id)}
@@ -218,7 +315,7 @@ const SkuManagement = () => {
                     </div>
                   </div>
                 ))}
-                {states.length === 0 && <div className="text-gray-400 text-sm p-4 w-full text-center">No states found in database.</div>}
+                {filteredStates.length === 0 && <div className="text-gray-400 text-sm p-4 w-full text-center">No states found for selected country.</div>}
               </div>
             </div>
           </div>
@@ -340,51 +437,88 @@ const SkuManagement = () => {
                     {filteredProducts.map((p, idx) => (
                       <tr key={p._id} className="hover:bg-blue-50 transition border-b border-gray-100 group">
                         <td className="p-4 text-gray-500 bg-gray-50 group-hover:bg-blue-100 text-center font-bold">{idx + 1}</td>
-                        <td className="p-4 text-center font-bold whitespace-nowrap">{p.brandId?.brand || p.brandId?.companyName || '-'}</td>
-                        <td className="p-4 text-center text-blue-700 font-bold min-w-[150px]">{p.name || '-'}</td>
+                        <td className="p-4 text-center font-bold whitespace-nowrap text-blue-800">{p.brandId?.name || p.brandId?.brand || p.brandId?.companyName || '-'}</td>
+                        <td className="p-4 text-center text-blue-700 font-bold min-w-[200px]">{p.name || '-'}</td>
                         <td className="p-4 text-center">{p.subCategoryId?.name || '-'}</td>
                         <td className="p-4 text-center">{p.categoryId?.name || '-'}</td>
-                        <td className="p-4 text-center">{p.projectTypeId?.name || '-'}</td>
-                        <td className="p-4 text-center">{p.subProjectTypeId?.name || '-'}</td>
-                        <td className="p-4 text-center text-gray-400 italic">{p.serialNo || '-'}</td>
-                        <td className="p-4 text-center">{p.subtype || '-'}</td>
-                        <td className="p-4 text-center">{p.technology || '-'}</td>
-                        <td className="p-4 text-center">{p.tolerance || '-'}</td>
-                        <td className="p-4 text-center">{p.dcr || '-'}</td>
+                        <td className="p-4 text-center">
+                          {p.projectTypes && p.projectTypes.length > 0 
+                            ? p.projectTypes.map((pt, i) => `${pt.from} to ${pt.to} kW`).join(', ')
+                            : (p.projectTypeFrom !== undefined && p.projectTypeTo !== undefined 
+                                ? `${p.projectTypeFrom} to ${p.projectTypeTo} kW` 
+                                : (p.projectTypeId?.name || '-'))}
+                        </td>
+                        <td className="p-4 text-center">
+                          {p.subProjectTypeIds && p.subProjectTypeIds.length > 0
+                            ? p.subProjectTypeIds.map(s => s.name || s.subProjectType || s.type).join(', ')
+                            : (p.subProjectTypeId?.name || p.subProjectTypeId?.subProjectType || '-')}
+                        </td>
+                        <td className="p-4 text-center text-gray-600 font-medium">{p.serialNo || '-'}</td>
+                        <td className="p-4 text-center text-gray-600">{p.subtype || '-'}</td>
+                        <td className="p-4 text-center text-gray-600 capitalize">{Array.isArray(p.technology) ? p.technology.join(', ') : (p.technology || '-')}</td>
+                        <td className="p-4 text-center text-gray-600">{p.tolerance || '-'}</td>
+                        <td className="p-4 text-center text-gray-600">{p.dcr || '-'}</td>
                         <td className="p-4 text-center">
                           {p.datasheet ? (
                             <a href={p.datasheet} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline text-xs font-bold">View</a>
-                          ) : '-'}
+                          ) : 'No file'}
                         </td>
                         <td className="p-4 text-center">{p.stateId?.name || p.stateId || '-'}</td>
-                        <td className="p-4 text-center">{p.clusterId?.name || p.clusterId || '-'}</td>
-                        <td className="p-4 text-center font-mono text-xs">{p.skuId?.skuCode || '-'}</td>
-                        <td className="p-4 text-center flex justify-center gap-2">
-                          <button
-                            onClick={() => {
-                              setEditingProduct(p);
-                              setShowAddModal(true);
-                            }}
-                            className="text-blue-500 hover:text-blue-700 bg-blue-100 p-2 rounded-full transition shadow-inner"
-                          >
-                            <Edit2 size={16} />
-                          </button>
-                          <button
-                            onClick={async () => {
-                              if (window.confirm('Delete this product?')) {
-                                try {
-                                  await productApi.delete(p._id);
-                                  showToast("Product deleted");
-                                  fetchAllData();
-                                } catch (e) {
-                                  showToast("Delete failed", "error");
+                        <td className="p-4 text-center whitespace-nowrap">{p.clusterId?.name || p.clusterId || '-'}</td>
+                        <td className="p-4 text-center">
+                          <div className="flex flex-col gap-1.5 items-center justify-center min-w-[70px]">
+                            {/* Add SKU Button - Blue */}
+                            <button
+                              onClick={() => {
+                                setSelectedProductForSku(p);
+                                setShowGenerateSkuModal(true);
+                              }}
+                              className="w-full bg-[#0066cc] hover:bg-blue-700 text-white py-1.5 rounded transition shadow-sm font-bold text-[10px] uppercase"
+                            >
+                              Add
+                            </button>
+                            {/* View SKU Button - Cyan */}
+                            <button
+                              onClick={() => {
+                                setSelectedProductForSku(p);
+                                setShowViewSkuModal(true);
+                              }}
+                              className="w-full bg-[#17a2b8] hover:bg-cyan-600 text-white py-1.5 rounded transition shadow-sm font-bold text-[10px] uppercase"
+                            >
+                              View
+                            </button>
+                          </div>
+                        </td>
+                        <td className="p-4 text-center">
+                          <div className="flex flex-col gap-1.5 items-center justify-center min-w-[70px]">
+                            {/* Edit Button - Amber/Yellow */}
+                            <button
+                              onClick={() => {
+                                setEditingProduct(p);
+                                setShowAddModal(true);
+                              }}
+                              className="w-full bg-[#ffc107] hover:bg-amber-500 text-white py-1.5 rounded transition shadow-sm font-bold text-[10px] uppercase"
+                            >
+                              Edit
+                            </button>
+                            {/* Delete Button - Red */}
+                            <button
+                              onClick={async () => {
+                                if (window.confirm('Delete this product?')) {
+                                  try {
+                                    await productApi.delete(p._id);
+                                    showToast("Product deleted");
+                                    fetchAllData();
+                                  } catch (e) {
+                                    showToast("Delete failed", "error");
+                                  }
                                 }
-                              }
-                            }}
-                            className="text-red-500 hover:text-red-700 bg-red-100 p-2 rounded-full transition shadow-inner"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                              }}
+                              className="w-full bg-[#dc3545] hover:bg-red-600 text-white py-1.5 rounded transition shadow-sm font-bold text-[10px] uppercase"
+                            >
+                              Delete
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -422,6 +556,25 @@ const SkuManagement = () => {
           </div>
         </>
       )}
+      <GenerateSkuModal
+        isOpen={showGenerateSkuModal}
+        onClose={() => {
+          setShowGenerateSkuModal(false);
+          setSelectedProductForSku(null);
+        }}
+        product={selectedProductForSku}
+        onSuccess={() => {
+          fetchAllData();
+        }}
+      />
+      <ViewSkuModal
+        isOpen={showViewSkuModal}
+        onClose={() => {
+          setShowViewSkuModal(false);
+          setSelectedProductForSku(null);
+        }}
+        product={selectedProductForSku}
+      />
     </div>
   );
 };

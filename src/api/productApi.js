@@ -43,12 +43,16 @@ export const productApi = {
     createSku: (data) => axiosInstance.post('/masters/skus', data),
     updateSku: (id, data) => axiosInstance.put(`/masters/skus/${id}`, data),
     deleteSku: (id) => axiosInstance.delete(`/masters/skus/${id}`),
+    bulkCreateSkus: (data) => axiosInstance.post('/masters/skus/bulk', data),
+    getSkusByProduct: (productId) => axiosInstance.get(`/masters/skus/product/${productId}`),
 
     // Price Master
     getPriceMasters: (params) => axiosInstance.get('/masters/price-master', { params }),
     createPriceMaster: (data) => axiosInstance.post('/masters/price-master', data),
     updatePriceMaster: (id, data) => axiosInstance.put(`/masters/price-master/${id}`, data),
     deletePriceMaster: (id) => axiosInstance.delete(`/masters/price-master/${id}`),
+    bulkUpsertPriceMaster: (data) => axiosInstance.post('/masters/product-prices/bulk', data),
+    getProductPrices: (params) => axiosInstance.get('/masters/product-prices', { params }),
 
     // Project Category Mappings
     getProjectCategoryMappings: (params) => axiosInstance.get('/masters/project-category-mappings', { params }),

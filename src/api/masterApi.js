@@ -28,4 +28,12 @@ export const masterApi = {
     getClusters: (params) => fetchMaster('/locations/clusters', params),
     getZones: (params) => fetchMaster('/locations/zones', params),
     getAreas: (params) => fetchMaster('/locations/areas', params),
+    
+    // SKU Parameters
+    saveSkuParameters: (data) => axiosInstance.post('/masters/skus/parameters', data),
+    getSkuParameters: (skuCode) => fetchMaster(`/masters/skus/${skuCode}/parameters`),
+    
+    // SKU Image
+    saveSkuImage: (data) => axiosInstance.post('/masters/skus/image', data),
+    getSkuImage: (skuCode) => fetchMaster(`/masters/skus/${skuCode}/image`),
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Search, Save, Edit2, Trash2, CheckCircle, AlertCircle, Loader2, Plus, X } from 'lucide-react';
+import { Search, Save, Edit2, Trash2, CheckCircle, AlertCircle, Loader2, Plus, X, Check } from 'lucide-react';
 import { productApi } from '../../../../api/productApi';
 
 const AddProjectType = () => {
@@ -23,6 +23,48 @@ const AddProjectType = () => {
 
     const [newSubProjectTypeName, setNewSubProjectTypeName] = useState('');
     const [selectedProjectTypeForSubPT, setSelectedProjectTypeForSubPT] = useState('');
+
+    // Editing State
+    const [editingItem, setEditingItem] = useState(null);
+
+    const handleEditStart = (type, item) => {
+        setEditingItem({ 
+            id: item._id, 
+            name: item.name, 
+            type,
+            ...(type === 'subCat' ? { categoryId: item.categoryId?._id || item.category?._id || item.categoryId || '' } : {})
+        });
+    };
+
+    const handleEditCancel = () => {
+        setEditingItem(null);
+    };
+
+    const handleEditSave = async () => {
+        if (!editingItem?.name.trim()) return showToast("Name is required", "error");
+        
+        try {
+            if (editingItem.type === 'cat') {
+                const item = categories.find(c => c._id === editingItem.id);
+                await productApi.updateCategory(editingItem.id, { ...item, name: editingItem.name.trim() });
+            } else if (editingItem.type === 'subCat') {
+                const item = subCategories.find(c => c._id === editingItem.id);
+                await productApi.updateSubCategory(editingItem.id, { 
+                    ...item, 
+                    name: editingItem.name.trim(),
+                    categoryId: editingItem.categoryId 
+                });
+            } else if (editingItem.type === 'subPT') {
+                const item = subProjectTypes.find(c => c._id === editingItem.id);
+                await productApi.updateSubProjectType(editingItem.id, { ...item, name: editingItem.name.trim() });
+            }
+            showToast("Item updated successfully");
+            setEditingItem(null);
+            fetchInitialData();
+        } catch (err) {
+            showToast(err.response?.data?.message || "Failed to update item", "error");
+        }
+    };
 
     const showToast = (message, type = 'success') => {
         const id = Date.now();
@@ -244,16 +286,43 @@ const AddProjectType = () => {
                                 ) : (
                                     categories.map((item, idx) => (
                                         <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
-                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            {editingItem?.id === item._id && editingItem?.type === 'cat' ? (
+                                                <div className="flex-1 flex items-center gap-2 mr-4">
+                                                    <span className="text-sm text-gray-800">{idx + 1}.</span>
+                                                    <input 
+                                                        type="text" 
+                                                        className="flex-1 border border-blue-300 rounded px-2 py-1 text-sm outline-none focus:border-blue-500"
+                                                        value={editingItem.name}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            )}
+                                            
                                             <div className="flex items-center gap-4">
-                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
-                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
-                                                </button>
-                                                <button onClick={() => handleDelete('cat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
-                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
-                                                        <X size={10} strokeWidth={3} className="text-red-500" />
-                                                    </div>
-                                                </button>
+                                                {editingItem?.id === item._id && editingItem?.type === 'cat' ? (
+                                                    <>
+                                                        <button onClick={handleEditSave} className="text-green-500 flex items-center gap-1 text-[13px] font-medium hover:text-green-600 transition-colors">
+                                                            <Check size={14} strokeWidth={2.5} /> Save
+                                                        </button>
+                                                        <button onClick={handleEditCancel} className="text-gray-500 flex items-center gap-1 text-[13px] font-medium hover:text-gray-600 transition-colors">
+                                                            <X size={14} strokeWidth={2.5} /> Cancel
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleEditStart('cat', item)} className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                            <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                        </button>
+                                                        <button onClick={() => handleDelete('cat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                            <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                                <X size={10} strokeWidth={3} className="text-red-500" />
+                                                            </div>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))
@@ -272,16 +341,61 @@ const AddProjectType = () => {
                                 ) : (
                                     subCategories.map((item, idx) => (
                                         <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
-                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
-                                            <div className="flex items-center gap-4">
-                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
-                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
-                                                </button>
-                                                <button onClick={() => handleDelete('subCat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
-                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
-                                                        <X size={10} strokeWidth={3} className="text-red-500" />
+                                            {editingItem?.id === item._id && editingItem?.type === 'subCat' ? (
+                                                <div className="flex-1 flex flex-col gap-2 mr-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-sm text-gray-800">{idx + 1}.</span>
+                                                        <input 
+                                                            type="text" 
+                                                            className="flex-1 border border-[#28A745] rounded px-2 py-1 text-sm outline-none focus:border-[#218838]"
+                                                            value={editingItem.name}
+                                                            onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                                            placeholder="Sub Category Name"
+                                                            autoFocus
+                                                        />
                                                     </div>
-                                                </button>
+                                                    <div className="flex items-center gap-2 pl-4">
+                                                        <select
+                                                            className="flex-1 text-xs border border-gray-300 rounded px-2 py-1 outline-none focus:border-[#218838] bg-white"
+                                                            value={editingItem.categoryId || ''}
+                                                            onChange={(e) => setEditingItem({ ...editingItem, categoryId: e.target.value })}
+                                                        >
+                                                            <option value="">Select Category</option>
+                                                            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex flex-col">
+                                                    <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                                    {(item.categoryId?.name || item.category?.name) && (
+                                                        <span className="text-[10px] text-gray-500 pl-4 bg-gray-50 rounded mt-0.5 max-w-max px-1 border border-gray-100">{item.categoryId?.name || item.category?.name}</span>
+                                                    )}
+                                                </div>
+                                            )}
+                                            
+                                            <div className="flex items-center gap-4">
+                                                {editingItem?.id === item._id && editingItem?.type === 'subCat' ? (
+                                                    <>
+                                                        <button onClick={handleEditSave} className="text-green-500 flex items-center gap-1 text-[13px] font-medium hover:text-green-600 transition-colors">
+                                                            <Check size={14} strokeWidth={2.5} /> Save
+                                                        </button>
+                                                        <button onClick={handleEditCancel} className="text-gray-500 flex items-center gap-1 text-[13px] font-medium hover:text-gray-600 transition-colors">
+                                                            <X size={14} strokeWidth={2.5} /> Cancel
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleEditStart('subCat', item)} className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                            <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                        </button>
+                                                        <button onClick={() => handleDelete('subCat', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                            <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                                <X size={10} strokeWidth={3} className="text-red-500" />
+                                                            </div>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))
@@ -300,16 +414,43 @@ const AddProjectType = () => {
                                 ) : (
                                     subProjectTypes.map((item, idx) => (
                                         <div key={item._id} className="flex justify-between items-center py-2.5 border-b border-gray-100 last:border-0 border-dashed">
-                                            <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            {editingItem?.id === item._id && editingItem?.type === 'subPT' ? (
+                                                <div className="flex-1 flex items-center gap-2 mr-4">
+                                                    <span className="text-sm text-gray-800">{idx + 1}.</span>
+                                                    <input 
+                                                        type="text" 
+                                                        className="flex-1 border border-[#FFC107] rounded px-2 py-1 text-sm outline-none focus:border-[#E0A800]"
+                                                        value={editingItem.name}
+                                                        onChange={(e) => setEditingItem({ ...editingItem, name: e.target.value })}
+                                                        autoFocus
+                                                    />
+                                                </div>
+                                            ) : (
+                                                <span className="text-sm text-gray-800">{idx + 1}. {item.name}</span>
+                                            )}
+                                            
                                             <div className="flex items-center gap-4">
-                                                <button className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
-                                                    <Edit2 size={12} strokeWidth={2.5} /> Edit
-                                                </button>
-                                                <button onClick={() => handleDelete('subPT', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
-                                                    <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
-                                                        <X size={10} strokeWidth={3} className="text-red-500" />
-                                                    </div>
-                                                </button>
+                                                {editingItem?.id === item._id && editingItem?.type === 'subPT' ? (
+                                                    <>
+                                                        <button onClick={handleEditSave} className="text-green-500 flex items-center gap-1 text-[13px] font-medium hover:text-green-600 transition-colors">
+                                                            <Check size={14} strokeWidth={2.5} /> Save
+                                                        </button>
+                                                        <button onClick={handleEditCancel} className="text-gray-500 flex items-center gap-1 text-[13px] font-medium hover:text-gray-600 transition-colors">
+                                                            <X size={14} strokeWidth={2.5} /> Cancel
+                                                        </button>
+                                                    </>
+                                                ) : (
+                                                    <>
+                                                        <button onClick={() => handleEditStart('subPT', item)} className="text-orange-500 flex items-center gap-1 text-[13px] font-medium hover:text-orange-600 transition-colors">
+                                                            <Edit2 size={12} strokeWidth={2.5} /> Edit
+                                                        </button>
+                                                        <button onClick={() => handleDelete('subPT', item._id)} className="text-red-500 hover:text-red-600 transition-colors flex items-center justify-center">
+                                                            <div className="w-[15px] h-[15px] rounded-full border-2 border-red-500 flex items-center justify-center">
+                                                                <X size={10} strokeWidth={3} className="text-red-500" />
+                                                            </div>
+                                                        </button>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     ))

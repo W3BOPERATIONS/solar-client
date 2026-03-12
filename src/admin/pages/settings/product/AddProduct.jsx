@@ -210,7 +210,11 @@ const AddProduct = () => {
   };
 
 
-  const filteredList = products.filter(p => p.name.toLowerCase().includes(searchTerm.toLowerCase()));
+  const filteredList = products.filter(p => 
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) && 
+    !p.stateId && 
+    !p.clusterId
+  );
 
   // --- Create/Edit View ---
   if (view === 'create' || view === 'edit') {
@@ -237,7 +241,9 @@ const AddProduct = () => {
           <div>
             <label className="block text-sm font-medium mb-1">Product Category *</label>
             <select className="w-full border rounded p-2"
-              value={formData.categoryId} onChange={e => setFormData({ ...formData, categoryId: e.target.value })}>
+              value={formData.categoryId} 
+              onChange={e => setFormData({ ...formData, categoryId: e.target.value, subCategoryId: '' })}
+            >
               <option value="">Select Category</option>
               {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
             </select>
@@ -246,9 +252,14 @@ const AddProduct = () => {
           <div>
             <label className="block text-sm font-medium mb-1">Sub Category</label>
             <select className="w-full border rounded p-2"
-              value={formData.subCategoryId} onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}>
+              value={formData.subCategoryId} 
+              onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}
+              disabled={!formData.categoryId}
+            >
               <option value="">Select Sub Category</option>
-              {subCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+              {subCategories
+                .filter(c => (c.categoryId?._id || c.category?._id || c.categoryId || c.category) === formData.categoryId)
+                .map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
             </select>
           </div>
 
