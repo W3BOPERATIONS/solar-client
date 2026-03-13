@@ -61,8 +61,6 @@ const CreateAmc = () => {
   // Available services
   const [availableServices, setAvailableServices] = useState([]);
   const [selectedServices, setSelectedServices] = useState([]);
-  const [customServices, setCustomServices] = useState([]);
-  const [customServiceInput, setCustomServiceInput] = useState('');
   const [servicesLoading, setServicesLoading] = useState(false);
 
   // Form states for configuration
@@ -74,7 +72,12 @@ const CreateAmc = () => {
     subProjectType: 'On-Grid',
     monthlyCharge: 0,
     yearlyCharge: 0,
+    paymentType: 'Monthly',
+    amcDuration: [],
+    monthlyVisits: 1,
     annualVisits: 4,
+    basicPricePerKw: 0,
+    amcServiceCharges: 0,
     description: 'Standard residential AMC plan'
   });
 
@@ -334,8 +337,6 @@ const CreateAmc = () => {
       // Editing an existing plan
       setCurrentPlan(plan);
       setSelectedServices(plan.services?.map(s => s._id) || []);
-      setCustomServices([]);
-      setCustomServiceInput('');
       setPlanForm({
         planName: plan.planName || 'Basic Plan',
         category: plan.category || 'Solar Rooftop',
@@ -344,15 +345,18 @@ const CreateAmc = () => {
         subProjectType: plan.subProjectType || 'On-Grid',
         monthlyCharge: plan.monthlyCharge || 0,
         yearlyCharge: plan.yearlyCharge || 0,
+        paymentType: plan.paymentType || 'Monthly',
+        amcDuration: plan.amcDuration || [],
+        monthlyVisits: plan.monthlyVisits || (plan.annualVisits ? Math.ceil(plan.annualVisits / 12) : 1),
         annualVisits: plan.annualVisits || 4,
+        basicPricePerKw: plan.basicPricePerKw || 0,
+        amcServiceCharges: plan.amcServiceCharges || 0,
         description: plan.description || ''
       });
     } else {
       // Creating a new AMC from scratch
       setCurrentPlan(null);
       setSelectedServices([]);
-      setCustomServices([]);
-      setCustomServiceInput('');
       setPlanForm({
         planName: 'Basic Plan',
         category: 'Solar top',
@@ -361,7 +365,12 @@ const CreateAmc = () => {
         subProjectType: 'On-Grid',
         monthlyCharge: 0,
         yearlyCharge: 0,
+        paymentType: 'Monthly',
+        amcDuration: [],
+        monthlyVisits: 1,
         annualVisits: 4,
+        basicPricePerKw: 0,
+        amcServiceCharges: 0,
         description: 'Standard residential AMC plan'
       });
     }
@@ -382,8 +391,8 @@ const CreateAmc = () => {
 
   // Save configuration
   const saveConfiguration = async () => {
-    if (selectedServices.length === 0 && customServices.length === 0) {
-      toast.error('Please select or add at least one service');
+    if (selectedServices.length === 0) {
+      toast.error('Please select at least one service');
       return;
     }
     try {
@@ -411,33 +420,14 @@ const CreateAmc = () => {
         }));
       }
 
-      const newServiceIds = [];
-      if (customServices.length > 0) {
-        const promises = customServices.map(serviceName => 
-          createAMCService({ serviceName, status: 'Active' })
-        );
-        const results = await Promise.allSettled(promises);
-        results.forEach(res => {
-          if (res.status === 'fulfilled' && res.value?._id) {
-            newServiceIds.push(res.value._id);
-          }
-        });
-      }
-
-      const finalServiceIds = [...selectedServices, ...newServiceIds];
+      const finalServiceIds = [...selectedServices];
+      const annualVisitsValue = (parseInt(planForm.monthlyVisits) || 1) * 12;
 
       if (currentPlan && currentPlan._id) {
         // Updating a specific existing plan
         const payload = {
-          planName: planForm.planName,
-          category: planForm.category,
-          subCategory: planForm.subCategory,
-          projectType: planForm.projectType,
-          subProjectType: planForm.subProjectType,
-          monthlyCharge: planForm.monthlyCharge,
-          yearlyCharge: planForm.yearlyCharge,
-          annualVisits: planForm.annualVisits,
-          description: planForm.description,
+          ...planForm,
+          annualVisits: annualVisitsValue,
           serviceIds: finalServiceIds
         };
         await updateAMCPlan(currentPlan._id, payload);
@@ -448,6 +438,7 @@ const CreateAmc = () => {
           const payload = {
             ...target,
             ...planForm,
+            annualVisits: annualVisitsValue,
             serviceIds: finalServiceIds
           };
           return createAMCPlan(payload);
@@ -1019,6 +1010,32 @@ const CreateAmc = () => {
                             placeholder="Basic Plan"
                           />
                         </div>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">BASIC PRICE PER KW (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={planForm.basicPricePerKw}
+                              onChange={(e) => setPlanForm({ ...planForm, basicPricePerKw: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all hover:border-slate-200"
+                              placeholder="0"
+                              required
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">AMC SERVICE CHARGES (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={planForm.amcServiceCharges}
+                              onChange={(e) => setPlanForm({ ...planForm, amcServiceCharges: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all hover:border-slate-200"
+                              placeholder="0"
+                              required
+                            />
+                          </div>
+                        </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PLAN DESCRIPTION</label>
                           <textarea
@@ -1036,36 +1053,112 @@ const CreateAmc = () => {
                         PRICING & SCHEDULE
                       </h4>
                       <div className="grid grid-cols-2 gap-5">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">MONTHLY (₹)</label>
-                          <input
-                            type="number"
-                            value={planForm.monthlyCharge}
-                            onChange={(e) => setPlanForm({ ...planForm, monthlyCharge: e.target.value })}
-                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
-                          />
+                        {/* Payment Type Selection */}
+                        <div className="col-span-1">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PAYMENT TYPE</label>
+                          <div className="relative">
+                            <select
+                              value={planForm.paymentType}
+                              onChange={(e) => setPlanForm({ ...planForm, paymentType: e.target.value })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                            >
+                              <option value="Monthly">Monthly</option>
+                              <option value="Annually">Annually</option>
+                              <option value="Both">Both</option>
+                            </select>
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                              <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M5 6L0 0H10L5 6Z"/>
+                              </svg>
+                            </div>
+                          </div>
                         </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">YEARLY (₹)</label>
-                          <input
-                            type="number"
-                            value={planForm.yearlyCharge}
-                            onChange={(e) => setPlanForm({ ...planForm, yearlyCharge: e.target.value })}
-                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
-                          />
-                        </div>
+
+                        {/* Duration of AMC Checkbox UI */}
                         <div className="col-span-2">
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">ANNUAL VISITS</label>
-                          <div className="flex items-center gap-5 bg-slate-50/50 p-4 rounded-xl border-2 border-slate-50 hover:border-slate-100 transition-all">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1">DURATION OF AMC</label>
+                          <div className="grid grid-cols-4 gap-3">
+                            {['1 Month', '3 Months', '6 Months', '12 Months'].map((duration) => {
+                              const isSelected = planForm.amcDuration.includes(duration);
+                              return (
+                                <button
+                                  key={duration}
+                                  type="button"
+                                  onClick={() => {
+                                    const next = isSelected 
+                                      ? planForm.amcDuration.filter(d => d !== duration)
+                                      : [...planForm.amcDuration, duration];
+                                    setPlanForm({ ...planForm, amcDuration: next });
+                                  }}
+                                  className={`
+                                    relative p-4 rounded-xl border-2 transition-all duration-300 text-left
+                                    ${isSelected 
+                                      ? 'border-emerald-500 bg-emerald-50 shadow-sm' 
+                                      : 'border-slate-100 bg-white hover:border-slate-200'}
+                                  `}
+                                >
+                                  <div className="text-sm font-bold text-slate-700">{duration}</div>
+                                  {isSelected && (
+                                    <div className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg transform transition-all scale-110">
+                                      <CheckSquare size={12} className="text-white" strokeWidth={4} />
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Conditional Price Inputs */}
+                        {(planForm.paymentType === 'Monthly' || planForm.paymentType === 'Both') && (
+                          <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">MONTHLY PRICE (₹)</label>
                             <input
-                              type="range"
-                              min="1"
-                              max="12"
-                              value={planForm.annualVisits}
-                              onChange={(e) => setPlanForm({ ...planForm, annualVisits: e.target.value })}
-                              className="flex-1 accent-emerald-500 h-2 bg-slate-200 rounded-lg appearance-none cursor-pointer"
+                              type="number"
+                              min="0"
+                              value={planForm.monthlyCharge}
+                              onChange={(e) => setPlanForm({ ...planForm, monthlyCharge: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
+                              placeholder="0"
                             />
-                            <span className="w-10 h-10 bg-white border-2 border-slate-100 rounded-lg flex items-center justify-center text-sm font-black text-emerald-600 shadow-sm">{planForm.annualVisits}</span>
+                          </div>
+                        )}
+
+                        {(planForm.paymentType === 'Annually' || planForm.paymentType === 'Both') && (
+                          <div className="col-span-1">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">YEARLY PRICE (₹)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={planForm.yearlyCharge}
+                              onChange={(e) => setPlanForm({ ...planForm, yearlyCharge: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
+                              placeholder="0"
+                            />
+                          </div>
+                        )}
+
+                        {/* Monthly Visits Input */}
+                        <div className="col-span-2">
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">MONTHLY VISITS (NOS)</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1"
+                              max="30"
+                              value={planForm.monthlyVisits}
+                              onChange={(e) => {
+                                let val = parseInt(e.target.value) || 1;
+                                if (val > 30) val = 30;
+                                if (val < 1) val = 1;
+                                setPlanForm({ ...planForm, monthlyVisits: val });
+                              }}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
+                              placeholder="1-30"
+                            />
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                              Max 30
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -1076,87 +1169,39 @@ const CreateAmc = () => {
                         INCLUDED SERVICES
                       </h4>
 
-                      <div className="space-y-4">
-                        {/* Custom Service Input Box */}
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">WRITE CUSTOM SERVICES</label>
-                          <div className="flex gap-2">
-                            <input
-                              type="text"
-                              value={customServiceInput}
-                              onChange={(e) => setCustomServiceInput(e.target.value)}
-                              onKeyDown={(e) => {
-                                if (e.key === 'Enter') {
-                                  e.preventDefault();
-                                  if (customServiceInput.trim()) {
-                                    if (!customServices.includes(customServiceInput.trim())) {
-                                      setCustomServices([...customServices, customServiceInput.trim()]);
-                                    }
-                                    setCustomServiceInput('');
-                                  }
-                                }
-                              }}
-                              className="flex-1 bg-white border-2 border-slate-100 hover:border-slate-200 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all"
-                              placeholder="Type a service and press Enter to add..."
-                            />
+                      <div className="grid grid-cols-2 gap-4">
+                        {availableServices.map((service) => {
+                          const isSelected = selectedServices.includes(service._id);
+                          return (
                             <button
-                              onClick={(e) => {
-                                e.preventDefault();
-                                if (customServiceInput.trim()) {
-                                  if (!customServices.includes(customServiceInput.trim())) {
-                                    setCustomServices([...customServices, customServiceInput.trim()]);
-                                  }
-                                  setCustomServiceInput('');
-                                }
-                              }}
-                              className="px-6 py-3 bg-slate-800 text-white rounded-xl text-sm font-bold hover:bg-slate-700 transition"
+                              key={service._id}
+                              type="button"
+                              onClick={() => toggleService(service._id)}
+                              className={`
+                                relative flex items-center justify-between p-4 rounded-xl border-2 transition-all duration-300
+                                ${isSelected 
+                                  ? 'border-blue-500 bg-blue-50 shadow-sm' 
+                                  : 'border-slate-100 bg-white hover:border-slate-200'}
+                              `}
                             >
-                              Add
+                              <div className="flex flex-col text-left">
+                                <span className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-slate-700'}`}>
+                                  {service.serviceName}
+                                </span>
+                                <span className={`text-[10px] font-bold ${isSelected ? 'text-blue-400' : 'text-slate-400'} uppercase tracking-wider`}>
+                                  Base Price: ₹{service.basePrice || 0}
+                                </span>
+                              </div>
+                              {isSelected ? (
+                                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center shadow-lg">
+                                  <CheckSquare size={12} className="text-white" strokeWidth={4} />
+                                </div>
+                              ) : (
+                                <div className="w-5 h-5 border-2 border-slate-200 rounded-full"></div>
+                              )}
                             </button>
-                          </div>
-                        </div>
-
-                        {/* Combined Chips matching the UI standard */}
-                        <div className="flex flex-wrap gap-2 pt-2">
-                          {/* Selected Pre-existing Services */}
-                          {availableServices.filter(s => selectedServices.includes(s._id)).map((service) => (
-                            <div key={service._id} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full border border-blue-100 text-[11.5px] font-bold">
-                              {service.serviceName}
-                              <button onClick={() => toggleService(service._id)} className="text-blue-400 hover:text-blue-600">
-                                &times;
-                              </button>
-                            </div>
-                          ))}
-                          {/* Newly custom added services */}
-                          {customServices.map((service, idx) => (
-                            <div key={`custom-${idx}`} className="flex items-center gap-2 bg-blue-50 text-blue-700 px-4 py-2 rounded-full border border-blue-100 text-[11.5px] font-bold">
-                              {service}
-                              <button onClick={() => setCustomServices(customServices.filter((_, i) => i !== idx))} className="text-blue-400 hover:text-blue-600">
-                                &times;
-                              </button>
-                            </div>
-                          ))}
-                        </div>
-
-                        {/* Expandable predefined choices when user hits "Add More" - or simply list them out. 
-                            Let's keep a tight list above the button only if needed, or simple small chips.
-                        */}
-                        {availableServices.length > 0 && availableServices.filter(s => !selectedServices.includes(s._id)).length > 0 && (
-                          <div className="pt-2">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">QUICK ADD FROM EXISTING</label>
-                            <div className="flex flex-wrap gap-2 max-h-[140px] overflow-y-auto no-scrollbar pb-2">
-                              {availableServices.filter(s => !selectedServices.includes(s._id)).map((service) => (
-                                <button
-                                  key={service._id}
-                                  onClick={() => toggleService(service._id)}
-                                  className="bg-white border-2 border-slate-100 hover:border-blue-100 hover:bg-blue-50/50 text-slate-500 hover:text-blue-600 text-[11px] font-bold px-3 py-1.5 rounded-full transition-all"
-                                >
-                                  + {service.serviceName}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                          );
+                        })}
                       </div>
                     </div>
                   </div>
@@ -1182,7 +1227,7 @@ const CreateAmc = () => {
                     <button
                       className="px-8 py-3 bg-[#8b919a] hover:bg-[#727882] text-white text-xs font-bold rounded-xl transition-all shadow-sm flex items-center gap-2 disabled:opacity-50"
                       onClick={saveConfiguration}
-                      disabled={loading || (selectedServices.length === 0 && customServices.length === 0)}
+                      disabled={loading || selectedServices.length === 0}
                     >
                       {loading ? <Loader className="animate-spin" size={16} /> : <Save size={16} />}
                       Save Configuration
@@ -1230,31 +1275,47 @@ const CreateAmc = () => {
                     <div className="text-xs text-gray-400 mb-1">Sub Project Type</div>
                     <div className="text-[13px] font-bold text-gray-800">{currentPlan.subProjectType}</div>
                   </div>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Basic Price per kW</div>
+                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.basicPricePerKw || 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Service Charges</div>
+                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.amcServiceCharges || 0}</div>
+                  </div>
                 </div>
               </div>
 
               {/* Pricing */}
               <div>
-                <h4 className="text-[14px] font-bold text-gray-900 mb-3">Pricing</h4>
+                <h4 className="text-[14px] font-bold text-gray-900 mb-3">Pricing & Payment</h4>
                 <div className="grid grid-cols-4 gap-6">
-                  <div className="col-span-2">
-                    <div className="text-xs text-gray-400 mb-1">Charge Type</div>
-                    <div className="text-[13px] font-bold text-gray-800">Fixed Monthly/Yearly Charges</div>
+                  <div>
+                    <div className="text-xs text-gray-400 mb-1">Payment Type</div>
+                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.paymentType || 'Monthly'}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-gray-400 mb-1">Monthly Charge</div>
-                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.monthlyCharge?.toLocaleString() || 0}</div>
+                    <div className="text-xs text-gray-400 mb-1">Duration</div>
+                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.amcDuration?.join(', ') || 'N/A'}</div>
                   </div>
-                  <div>
-                    <div className="text-xs text-gray-400 mb-1">Yearly Charge</div>
-                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.yearlyCharge?.toLocaleString() || 0}</div>
-                  </div>
+                  {(currentPlan.paymentType === 'Monthly' || currentPlan.paymentType === 'Both') && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1">Monthly Price</div>
+                      <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.monthlyCharge?.toLocaleString() || 0}</div>
+                    </div>
+                  )}
+                  {(currentPlan.paymentType === 'Annually' || currentPlan.paymentType === 'Both') && (
+                    <div>
+                      <div className="text-xs text-gray-400 mb-1">Yearly Price</div>
+                      <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.yearlyCharge?.toLocaleString() || 0}</div>
+                    </div>
+                  )}
                 </div>
               </div>
 
               {/* Services */}
               <div>
-                <h4 className="text-[14px] font-bold text-gray-900 mb-3 flex items-center gap-2">Services include_onced</h4>
+                <h4 className="text-[14px] font-bold text-gray-900 mb-3 flex items-center gap-2">Included Services</h4>
                 <div className="flex flex-wrap gap-2">
                   {currentPlan.services && currentPlan.services.map((service, idx) => (
                     <span key={idx} className="bg-gray-100/80 text-gray-600 text-xs px-3 py-1 rounded-full whitespace-nowrap">
@@ -1266,11 +1327,15 @@ const CreateAmc = () => {
 
               {/* Visits and State */}
               <div>
-                <h4 className="text-[14px] font-bold text-gray-900 mb-3">Visits</h4>
+                <h4 className="text-[14px] font-bold text-gray-900 mb-3">Visits & Location</h4>
                 <div className="grid grid-cols-4 gap-6">
-                  <div className="col-span-2">
+                  <div className="col-span-1">
+                    <div className="text-xs text-gray-400 mb-1">Monthly Visits</div>
+                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.monthlyVisits || 1} Nos</div>
+                  </div>
+                  <div className="col-span-1">
                     <div className="text-xs text-gray-400 mb-1">Annual Visits</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.annualVisits} visits per year</div>
+                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.annualVisits} visits</div>
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-400 mb-1">State</div>
