@@ -109,9 +109,9 @@ export const getBrands = async () => {
     }
 };
 
-export const getSkus = async () => {
+export const getSkus = async (params) => {
     try {
-        const res = await api.get('/masters/skus');
+        const res = await api.get('/masters/skus', { params });
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;

@@ -63,6 +63,18 @@ const CreateAmc = () => {
   const [selectedServices, setSelectedServices] = useState([]);
   const [servicesLoading, setServicesLoading] = useState(false);
 
+  // Auto-fill AMC Service Charges from selected services
+  useEffect(() => {
+    const total = availableServices
+      .filter(s => selectedServices.includes(s._id))
+      .reduce((sum, s) => sum + (s.basePrice || 0), 0);
+    
+    setPlanForm(prev => ({
+      ...prev,
+      amcServiceCharges: total
+    }));
+  }, [selectedServices, availableServices]);
+
   // Form states for configuration
   const [planForm, setPlanForm] = useState({
     planName: 'Basic Plan',
@@ -73,7 +85,7 @@ const CreateAmc = () => {
     monthlyCharge: 0,
     yearlyCharge: 0,
     paymentType: 'Monthly',
-    amcDuration: [],
+    amcDuration: 12,
     monthlyVisits: 1,
     annualVisits: 4,
     basicPricePerKw: 0,
@@ -346,7 +358,7 @@ const CreateAmc = () => {
         monthlyCharge: plan.monthlyCharge || 0,
         yearlyCharge: plan.yearlyCharge || 0,
         paymentType: plan.paymentType || 'Monthly',
-        amcDuration: plan.amcDuration || [],
+        amcDuration: Array.isArray(plan.amcDuration) ? (parseInt(plan.amcDuration[0]) || 12) : (plan.amcDuration || 12),
         monthlyVisits: plan.monthlyVisits || (plan.annualVisits ? Math.ceil(plan.annualVisits / 12) : 1),
         annualVisits: plan.annualVisits || 4,
         basicPricePerKw: plan.basicPricePerKw || 0,
@@ -359,14 +371,14 @@ const CreateAmc = () => {
       setSelectedServices([]);
       setPlanForm({
         planName: 'Basic Plan',
-        category: 'Solar top',
+        category: 'Solar Rooftop',
         subCategory: '',
         projectType: '',
         subProjectType: 'On-Grid',
         monthlyCharge: 0,
         yearlyCharge: 0,
         paymentType: 'Monthly',
-        amcDuration: [],
+        amcDuration: 12,
         monthlyVisits: 1,
         annualVisits: 4,
         basicPricePerKw: 0,
@@ -759,7 +771,7 @@ const CreateAmc = () => {
               className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md shadow-blue-200"
             >
               <PlusCircle size={18} />
-              Create AMC
+              Create AMC Plan
             </button>
           </div>
         )}
@@ -792,7 +804,7 @@ const CreateAmc = () => {
                   <Package size={32} className="text-slate-300" />
                 </div>
                 <h4 className="text-slate-800 font-bold mb-1">No AMC Plans Found</h4>
-                <p className="text-slate-500 text-xs">Click the "Create AMC" button above to get started.</p>
+                <p className="text-slate-500 text-xs">Click the "Create AMC Plan" button above to get started.</p>
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
@@ -903,103 +915,101 @@ const CreateAmc = () => {
                         PLAN IDENTITY
                       </h4>
                       <div className="space-y-5">
-                        {!selectedConfig && (
-                          <div className="grid grid-cols-2 gap-5">
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">CATEGORY</label>
-                              <div className="relative">
-                                <select
-                                  value={planForm.category}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setPlanForm({ ...planForm, category: val, subCategory: '' });
-                                  }}
-                                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
-                                >
-                                  <option value="">Select Category</option>
-                                  {masterCategories.map((cat, i) => (
-                                    <option key={i} value={cat.name}>{cat.name}</option>
-                                  ))}
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                  <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M5 6L0 0H10L5 6Z"/>
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">SUB CATEGORY</label>
-                              <div className="relative">
-                                <select
-                                  value={planForm.subCategory}
-                                  onChange={(e) => setPlanForm({ ...planForm, subCategory: e.target.value })}
-                                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
-                                  disabled={!planForm.category}
-                                >
-                                  <option value="">Select Sub Category</option>
-                                  {masterSubCategories
-                                    .filter(sub => {
-                                      const selectedCat = masterCategories.find(c => c.name === planForm.category);
-                                      const subCatId = sub.categoryId?._id || sub.categoryId;
-                                      return selectedCat && subCatId === selectedCat._id;
-                                    })
-                                    .map((sub, i) => (
-                                      <option key={i} value={sub.name}>{sub.name}</option>
-                                    ))
-                                  }
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                  <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M5 6L0 0H10L5 6Z"/>
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PROJECT TYPE</label>
-                              <div className="relative">
-                                <select
-                                  value={planForm.projectType}
-                                  onChange={(e) => setPlanForm({ ...planForm, projectType: e.target.value })}
-                                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
-                                >
-                                  <option value="">Select Project Type</option>
-                                  {Array.from(new Set(projectMappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)))
-                                    .map((range, i) => (
-                                      <option key={i} value={range}>{range}</option>
-                                    ))
-                                  }
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                  <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M5 6L0 0H10L5 6Z"/>
-                                  </svg>
-                                </div>
-                              </div>
-                            </div>
-                            <div>
-                              <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">SUB PROJECT TYPE</label>
-                              <div className="relative">
-                                <select
-                                  value={planForm.subProjectType}
-                                  onChange={(e) => setPlanForm({ ...planForm, subProjectType: e.target.value })}
-                                  className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
-                                >
-                                  <option value="">Select Sub Project Type</option>
-                                  {masterSubProjectTypes.map((spt, i) => (
-                                    <option key={i} value={spt.name}>{spt.name}</option>
-                                  ))}
-                                </select>
-                                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                                  <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                    <path d="M5 6L0 0H10L5 6Z"/>
-                                  </svg>
-                                </div>
+                        <div className="grid grid-cols-2 gap-5">
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">CATEGORY</label>
+                            <div className="relative">
+                              <select
+                                value={planForm.category}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  setPlanForm({ ...planForm, category: val, subCategory: '' });
+                                }}
+                                className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                              >
+                                <option value="">Select Category</option>
+                                {masterCategories.map((cat, i) => (
+                                  <option key={i} value={cat.name}>{cat.name}</option>
+                                ))}
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M5 6L0 0H10L5 6Z"/>
+                                </svg>
                               </div>
                             </div>
                           </div>
-                        )}
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">SUB CATEGORY</label>
+                            <div className="relative">
+                              <select
+                                value={planForm.subCategory}
+                                onChange={(e) => setPlanForm({ ...planForm, subCategory: e.target.value })}
+                                className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                                disabled={!planForm.category}
+                              >
+                                <option value="">Select Sub Category</option>
+                                {masterSubCategories
+                                  .filter(sub => {
+                                    const selectedCat = masterCategories.find(c => c.name === planForm.category);
+                                    const subCatId = sub.categoryId?._id || sub.categoryId;
+                                    return selectedCat && subCatId === selectedCat._id;
+                                  })
+                                  .map((sub, i) => (
+                                    <option key={i} value={sub.name}>{sub.name}</option>
+                                  ))
+                                }
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M5 6L0 0H10L5 6Z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PROJECT TYPE</label>
+                            <div className="relative">
+                              <select
+                                value={planForm.projectType}
+                                onChange={(e) => setPlanForm({ ...planForm, projectType: e.target.value })}
+                                className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                              >
+                                <option value="">Select Project Type</option>
+                                {Array.from(new Set(projectMappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)))
+                                  .map((range, i) => (
+                                    <option key={i} value={range}>{range}</option>
+                                  ))
+                                }
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M5 6L0 0H10L5 6Z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">SUB PROJECT TYPE</label>
+                            <div className="relative">
+                              <select
+                                value={planForm.subProjectType}
+                                onChange={(e) => setPlanForm({ ...planForm, subProjectType: e.target.value })}
+                                className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                              >
+                                <option value="">Select Sub Project Type</option>
+                                {masterSubProjectTypes.map((spt, i) => (
+                                  <option key={i} value={spt.name}>{spt.name}</option>
+                                ))}
+                              </select>
+                              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                                <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                                  <path d="M5 6L0 0H10L5 6Z"/>
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PLAN NAME</label>
                           <input
@@ -1036,6 +1046,59 @@ const CreateAmc = () => {
                             />
                           </div>
                         </div>
+
+                        {/* Example Calculation Box */}
+                        <div className="bg-slate-50 border-2 border-slate-100 rounded-2xl p-5 mb-2 shadow-sm">
+                          <div className="flex items-center gap-3 mb-4">
+                            <div className="w-8 h-8 bg-cyan-100 rounded-lg flex items-center justify-center text-cyan-600">
+                              <Info size={18} />
+                            </div>
+                            <div>
+                              <h5 className="text-[12px] font-bold text-slate-700">Example Calculation</h5>
+                              <p className="text-[10px] text-slate-500 font-medium tracking-tight">How the total AMC price is calculated</p>
+                            </div>
+                          </div>
+                          
+                          <div className="space-y-4">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">SELECTED SERVICES</p>
+                              <div className="space-y-2">
+                                {selectedServices.length > 0 ? (
+                                  availableServices.filter(s => selectedServices.includes(s._id)).map(s => (
+                                    <div key={s._id} className="flex justify-between items-center text-[11px] font-bold">
+                                      <div className="flex items-center gap-2">
+                                        <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
+                                        <span className="text-slate-600">{s.serviceName}</span>
+                                      </div>
+                                      <span className="text-slate-800">₹{s.basePrice || 0}</span>
+                                    </div>
+                                  ))
+                                ) : (
+                                  <p className="text-[11px] text-slate-400 italic font-medium">No services selected</p>
+                                )}
+                                <div className="pt-2.5 border-t border-dashed border-slate-200 flex justify-between items-center text-[12px] font-black">
+                                  <span className="text-slate-700 uppercase tracking-tight">AMC Service Charges</span>
+                                  <span className="text-cyan-600 bg-cyan-50 px-2 py-1 rounded">₹{planForm.amcServiceCharges}</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-full -mr-8 -mt-8 opacity-50"></div>
+                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">FINAL PRICE FORMULA</p>
+                              <div className="text-[11px] font-bold text-slate-600 mb-3 leading-relaxed">
+                                (Basic Price per kW × System KW) + AMC Service Charges
+                              </div>
+                              <div className="flex items-center gap-2 text-[12px] font-black text-slate-800 bg-slate-50/80 p-3 rounded-lg border border-slate-100">
+                                <span className="text-slate-400 font-bold">( {planForm.basicPricePerKw} × <span className="text-slate-600">3 kW</span> ) + {planForm.amcServiceCharges} = </span>
+                                <div className="ml-auto text-emerald-500 flex items-center gap-1.5">
+                                  <span className="text-[14px]">₹{(planForm.basicPricePerKw * 3) + planForm.amcServiceCharges}</span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PLAN DESCRIPTION</label>
                           <textarea
@@ -1074,69 +1137,23 @@ const CreateAmc = () => {
                           </div>
                         </div>
 
-                        {/* Duration of AMC Checkbox UI */}
+                        {/* Duration of AMC Input */}
                         <div className="col-span-2">
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 ml-1">DURATION OF AMC</label>
-                          <div className="grid grid-cols-4 gap-3">
-                            {['1 Month', '3 Months', '6 Months', '12 Months'].map((duration) => {
-                              const isSelected = planForm.amcDuration.includes(duration);
-                              return (
-                                <button
-                                  key={duration}
-                                  type="button"
-                                  onClick={() => {
-                                    const next = isSelected 
-                                      ? planForm.amcDuration.filter(d => d !== duration)
-                                      : [...planForm.amcDuration, duration];
-                                    setPlanForm({ ...planForm, amcDuration: next });
-                                  }}
-                                  className={`
-                                    relative p-4 rounded-xl border-2 transition-all duration-300 text-left
-                                    ${isSelected 
-                                      ? 'border-emerald-500 bg-emerald-50 shadow-sm' 
-                                      : 'border-slate-100 bg-white hover:border-slate-200'}
-                                  `}
-                                >
-                                  <div className="text-sm font-bold text-slate-700">{duration}</div>
-                                  {isSelected && (
-                                    <div className="absolute top-2 right-2 w-5 h-5 bg-emerald-500 rounded-full flex items-center justify-center shadow-lg transform transition-all scale-110">
-                                      <CheckSquare size={12} className="text-white" strokeWidth={4} />
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">DURATION OF AMC (MONTHS)</label>
+                          <div className="relative">
+                            <input
+                              type="number"
+                              min="1"
+                              value={planForm.amcDuration}
+                              onChange={(e) => setPlanForm({ ...planForm, amcDuration: Math.max(1, parseInt(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
+                              placeholder="12"
+                            />
+                            <div className="absolute right-4 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400">
+                              Months
+                            </div>
                           </div>
                         </div>
-
-                        {/* Conditional Price Inputs */}
-                        {(planForm.paymentType === 'Monthly' || planForm.paymentType === 'Both') && (
-                          <div className="col-span-1">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">MONTHLY PRICE (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={planForm.monthlyCharge}
-                              onChange={(e) => setPlanForm({ ...planForm, monthlyCharge: Math.max(0, parseFloat(e.target.value) || 0) })}
-                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
-                              placeholder="0"
-                            />
-                          </div>
-                        )}
-
-                        {(planForm.paymentType === 'Annually' || planForm.paymentType === 'Both') && (
-                          <div className="col-span-1">
-                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">YEARLY PRICE (₹)</label>
-                            <input
-                              type="number"
-                              min="0"
-                              value={planForm.yearlyCharge}
-                              onChange={(e) => setPlanForm({ ...planForm, yearlyCharge: Math.max(0, parseFloat(e.target.value) || 0) })}
-                              className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-emerald-500 transition-all hover:border-slate-200"
-                              placeholder="0"
-                            />
-                          </div>
-                        )}
 
                         {/* Monthly Visits Input */}
                         <div className="col-span-2">
@@ -1296,20 +1313,8 @@ const CreateAmc = () => {
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Duration</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.amcDuration?.join(', ') || 'N/A'}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.amcDuration ? `${currentPlan.amcDuration} Months` : 'N/A'}</div>
                   </div>
-                  {(currentPlan.paymentType === 'Monthly' || currentPlan.paymentType === 'Both') && (
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Monthly Price</div>
-                      <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.monthlyCharge?.toLocaleString() || 0}</div>
-                    </div>
-                  )}
-                  {(currentPlan.paymentType === 'Annually' || currentPlan.paymentType === 'Both') && (
-                    <div>
-                      <div className="text-xs text-gray-400 mb-1">Yearly Price</div>
-                      <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.yearlyCharge?.toLocaleString() || 0}</div>
-                    </div>
-                  )}
                 </div>
               </div>
 

@@ -140,7 +140,7 @@ const MANDATORY_TASK_STRUCTURE = [
       { label: "Inventory Management", items: ["Inventory Overview", "Inventory Level Management", "Restock Order Limit", "Combokit Brand Overview"] },
       { label: "Product Configuration", items: ["Add Project Type", "Add Project Category", "Add Product", "SKU", "Price Master", "Add Unit Management"] },
       { label: "Brand Manufacturer", items: ["Add Brand Manufacturer", "Brand Supplier Overview"] },
-      { label: "ComboKit", items: ["Create Solarkit", "Create AMC", "AMC Services", "Solarkit Bundle Plans", "Add ComboKit", "Customize Combokit"] },
+      { label: "ComboKit", items: ["Create Solarkit", "Create AMC Plans", "AMC Services", "Solarkit Bundle Plans", "Add ComboKit", "Customize Combokit"] },
       { label: "Combokit Overview", items: ["Combokit Overview"] },
       { label: "Order Procurement", items: ["Order Procurement"] },
       { label: "Partner Settings", items: ["Partner Plans", "Partner Points & Reward Setting", "Partner Onboarding Goals", "Partner Profession Type", "Add Partner"] },

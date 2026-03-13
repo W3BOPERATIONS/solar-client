@@ -317,7 +317,7 @@ export default function AdminSidebar() {
           isExpanded: expandedSections.settingsCombokit,
           children: [
             { name: '- Create Solarkit', href: '/admin/settings/combokit/create-solarkit', icon: Package },
-            { name: '- Create AMC', href: '/admin/settings/combokit/create-amc', icon: FileText },
+            { name: '- Create AMC Plans', href: '/admin/settings/combokit/create-amc', icon: FileText },
             { name: '- AMC Services', href: '/admin/settings/combokit/amc-services', icon: ClipboardList },
             { name: '- Solarkit Bundle Plans', href: '/admin/settings/combokit/bundle-plans', icon: Package },
             { name: '- Add ComboKit', href: '/admin/settings/combokit/add-combokit', icon: Building },

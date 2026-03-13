@@ -1,21 +1,69 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Eye, Edit, Save, X,
+  Plus, Eye, Edit, Save, X,
   CheckSquare, XCircle,
-  Download, Filter
+  Download, Filter, Trash2
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import { locationAPI } from '../../../../api/api';
-import { getAssignments, updateAssignment, getPartnerTypes } from '../../../../services/combokit/combokitApi';
+import { 
+  getAssignments, 
+  createAssignment,
+  updateAssignment, 
+  deleteAssignment,
+  getPartnerTypes, 
+  getSolarKits, 
+  getCategories, 
+  getSubCategories, 
+  getProjectTypes, 
+  getSubProjectTypes,
+  getProjectCategoryMappings
+} from '../../../../services/combokit/combokitApi';
+import { getSkus } from '../../../../services/settings/orderProcurementSettingApi';
+import Select from 'react-select';
 import toast from 'react-hot-toast';
 
 const CustomizeCombokit = () => {
   const { countries, states: allStates, fetchCountries, fetchStates } = useLocations();
 
+  // Custom CSS for refined scrollbars and UI
+  const scrollbarStyles = `
+    .custom-scrollbar::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-track {
+      background: #f8fafc;
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 10px;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #94a3b8;
+    }
+    .table-container {
+      border: 1px solid #e2e8f0;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    }
+  `;
+
   // Default options
-  const panelOptions = ['Adani', 'Waree', 'Tata'];
-  const inverterOptions = ['Sungrow', 'ABB', 'Fronius'];
-  const boskitOptions = ['Boskit A', 'Boskit B', 'Boskit C'];
+  // Master data for dropdowns
+  const [panelOptions, setPanelOptions] = useState([]);
+  const [inverterOptions, setInverterOptions] = useState([]);
+  const [boskitOptions, setBoskitOptions] = useState([]);
+  const [solarKitsList, setSolarKitsList] = useState([]);
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [masterSubCategories, setMasterSubCategories] = useState([]);
+  const [masterProjectTypes, setMasterProjectTypes] = useState([]);
+  const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
+  
+  const [lastSavedConfig, setLastSavedConfig] = useState(null);
+  const [showSummary, setShowSummary] = useState(false);
 
   const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedCountryName, setSelectedCountryName] = useState('');
@@ -35,11 +83,69 @@ const CustomizeCombokit = () => {
   const [modalContent, setModalContent] = useState(null);
   const [modalType, setModalType] = useState(null); // 'view', 'cluster', 'district'
 
+  const [showConfigureModal, setShowConfigureModal] = useState(false);
+  const [assignmentForm, setAssignmentForm] = useState({
+    solarkitName: '',
+    panels: [],
+    inverters: [],
+    boskits: [],
+    role: '',
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: '',
+    state: null,
+    cluster: null,
+    districts: []
+  });
+  const [currentAssignment, setCurrentAssignment] = useState(null);
+
   // Initial Data
   useEffect(() => {
     fetchCountries();
     fetchPartners();
+    fetchAssignments();
+    fetchMasterData();
   }, []);
+
+  const fetchMasterData = async () => {
+    try {
+      const [kits, cats, subCats, projs, subProjs, panels, inverters, bos, mappings] = await Promise.all([
+        getSolarKits(),
+        getCategories(),
+        getSubCategories(),
+        getProjectTypes(),
+        getSubProjectTypes(),
+        getSkus({ category: 'Solar Panel' }),
+        getSkus({ category: 'Inverter' }),
+        getSkus({ category: 'BOS' }),
+        getProjectCategoryMappings()
+      ]);
+
+      setSolarKitsList(kits || []);
+      setMasterCategories(cats || []);
+      setMasterSubCategories(subCats || []);
+      
+      // Derive unique project types from mappings if available, else use generic projs
+      const uniqueProjectTypes = (mappings?.length > 0) 
+        ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
+        : projs?.map(p => p.name) || [];
+
+      setMasterProjectTypes(uniqueProjectTypes);
+      setMasterSubProjectTypes(subProjs || []);
+      setProjectMappings(mappings || []);
+      
+      const pData = Array.isArray(panels) ? panels : panels?.data || [];
+      const iData = Array.isArray(inverters) ? inverters : inverters?.data || [];
+      const bData = Array.isArray(bos) ? bos : bos?.data || [];
+
+      setPanelOptions(pData.map(p => p.skuName || p.name));
+      setInverterOptions(iData.map(i => i.skuName || i.name));
+      setBoskitOptions(bData.map(b => b.skuName || b.name));
+    } catch (err) {
+      console.error("Error fetching master data", err);
+    }
+  };
 
   const fetchPartners = async () => {
     try {
@@ -84,7 +190,9 @@ const CustomizeCombokit = () => {
     try {
       setLoading(true);
       const res = await getAssignments();
-      setAssignments(res || []);
+      // Handle both direct array or wrapped {success, data} responses
+      const data = res?.data || (Array.isArray(res) ? res : []);
+      setAssignments(data);
     } catch (error) {
       console.error("Failed to fetch assignments", error);
       toast.error("Failed to fetch assignments");
@@ -270,29 +378,152 @@ const CustomizeCombokit = () => {
 
 
 
-  // Handle edit mode
-  const handleEditClick = (assignmentId) => {
-    setEditMode(prev => ({ ...prev, [assignmentId]: true }));
+  // Custom styles for React Select
+  const selectStyles = {
+    control: (base) => ({
+      ...base,
+      minHeight: '32px',
+      fontSize: '11px',
+      borderRadius: '6px',
+      borderColor: '#d1d5db',
+      '&:hover': { borderColor: '#4f46e5' }
+    }),
+    valueContainer: (base) => ({
+      ...base,
+      padding: '0 8px'
+    }),
+    input: (base) => ({
+      ...base,
+      margin: '0'
+    }),
+    dropdownIndicator: (base) => ({
+      ...base,
+      padding: '2px'
+    }),
+    clearIndicator: (base) => ({
+      ...base,
+      padding: '2px'
+    }),
+    menu: (base) => ({
+      ...base,
+      fontSize: '11px',
+      zIndex: 100
+    }),
+    multiValue: (base) => ({
+      ...base,
+      backgroundColor: '#e0e7ff',
+      borderRadius: '4px'
+    }),
+    multiValueLabel: (base) => ({
+      ...base,
+      color: '#3730a3',
+      padding: '1px 4px'
+    }),
+    menuPortal: base => ({ ...base, zIndex: 9999 })
   };
 
-  const handleSaveClick = async (assignmentId) => {
+  const handleEditClick = (assignment) => {
+    setAssignmentForm({
+      solarkitName: assignment.solarkitName || '',
+      panels: assignment.panels || [],
+      inverters: assignment.inverters || [],
+      boskits: assignment.boskits || [],
+      role: assignment.role || assignment.cpTypes?.[0] || '',
+      category: assignment.category || '',
+      subCategory: assignment.subCategory || '',
+      projectType: assignment.projectType || '',
+      subProjectType: assignment.subProjectType || '',
+      state: assignment.state,
+      cluster: assignment.cluster,
+      districts: assignment.districts || []
+    });
+    setCurrentAssignment(assignment);
+    setShowConfigureModal(true);
+  };
+
+  const deleteAssignmentById = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this configuration?")) return;
+    
     try {
-      const assignment = assignments.find(a => a._id === assignmentId);
-      if (!assignment) return;
+      await deleteAssignment(id);
+      toast.success("Configuration deleted successfully");
+      fetchAssignments();
+    } catch (error) {
+      console.error("Failed to delete assignment", error);
+      toast.error("Failed to delete configuration");
+    }
+  };
+
+  const handleSaveClick = async () => {
+    try {
+      if (!assignmentForm.solarkitName) {
+        toast.error("Please select a Solarkit name");
+        return;
+      }
 
       const payload = {
-        panels: assignment.panels,
-        inverters: assignment.inverters,
-        boskits: assignment.boskits
+        solarkitName: assignmentForm.solarkitName,
+        panels: assignmentForm.panels,
+        inverters: assignmentForm.inverters,
+        boskits: assignmentForm.boskits,
+        state: assignmentForm.state?._id || assignmentForm.state,
+        cluster: assignmentForm.cluster?._id || assignmentForm.cluster,
+        districts: assignmentForm.districts?.map(d => d._id || d),
+        role: assignmentForm.role,
+        category: assignmentForm.category,
+        subCategory: assignmentForm.subCategory,
+        projectType: assignmentForm.projectType,
+        subProjectType: assignmentForm.subProjectType,
+        country: selectedCountry || assignmentForm.state?.country?._id || assignmentForm.state?.country
       };
 
-      await updateAssignment(assignmentId, payload);
-      toast.success("Details updated successfully");
-      setEditMode(prev => ({ ...prev, [assignmentId]: false }));
+      if (!currentAssignment) {
+        await createAssignment(payload);
+        toast.success("New configuration created successfully");
+      } else {
+        await updateAssignment(currentAssignment._id, payload);
+        toast.success("Details updated successfully");
+      }
+      
+      setShowConfigureModal(false);
+      fetchAssignments();
     } catch (error) {
-      console.error("Failed to update assignment", error);
-      toast.error("Failed to update details");
+      console.error("Failed to save assignment", error);
+      toast.error("Failed to save details");
     }
+  };
+
+  const addNewCustomization = () => {
+    if (selectedStates.size === 0) {
+      toast.error("Please select at least one State first");
+      return;
+    }
+
+    const stateId = Array.from(selectedStates)[0];
+    const clusterId = Array.from(selectedClusters)[0];
+    const districtIds = Array.from(selectedDistricts);
+    const role = Array.from(selectedRoles)[0];
+
+    const stateObj = allStates.find(s => s._id === stateId);
+    const clusterObj = getDisplayedClusters().find(c => c._id === clusterId);
+    const districtObjs = getDisplayedDistricts().filter(d => districtIds.includes(d._id));
+
+    setAssignmentForm({
+      solarkitName: '',
+      panels: [],
+      inverters: [],
+      boskits: [],
+      role: role || '',
+      category: '',
+      subCategory: '',
+      projectType: '',
+      subProjectType: '',
+      state: stateObj,
+      cluster: clusterObj,
+      districts: districtObjs
+    });
+    setCurrentAssignment(null);
+    setShowConfigureModal(true);
   };
 
   const handleCancelClick = (assignmentId) => {
@@ -318,6 +549,34 @@ const CustomizeCombokit = () => {
     setAssignments(prev => prev.map(a =>
       a._id === assignmentId ? { ...a, boskits: selectedOptions } : a
     ));
+  };
+
+  const handleFieldChange = (assignmentId, field, value) => {
+    setAssignments(prev => prev.map(a =>
+      a._id === assignmentId ? { ...a, [field]: value } : a
+    ));
+  };
+
+  const handleLocationChange = (assignmentId, field, id) => {
+    setAssignments(prev => prev.map(a => {
+      if (a._id !== assignmentId) return a;
+      
+      let update = { [field]: id };
+      
+      if (field === 'state' || field === 'stateId') {
+        const stateObj = allStates.find(s => s._id === id);
+        update = { ...update, state: stateObj };
+      } else if (field === 'cluster' || field === 'clusterId') {
+        const clusterObj = getDisplayedClusters().find(c => c._id === id);
+        update = { ...update, cluster: clusterObj };
+      } else if (field === 'districts') {
+        // value is array of IDs
+        const districtObjs = getDisplayedDistricts().filter(d => id.includes(d._id));
+        update = { ...update, districts: districtObjs };
+      }
+      
+      return { ...a, ...update };
+    }));
   };
 
   // Modal handlers
@@ -548,18 +807,19 @@ const CustomizeCombokit = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
               {getDisplayedDistricts().map((district, index) => (
-                <div
+                <button
                   key={`${district._id}-${index}`}
                   onClick={() => handleDistrictClick(district._id)}
-                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedDistricts.has(district._id)
-                    ? 'bg-green-600 text-white border-green-600'
-                    : 'border-gray-300 hover:border-green-500'
-                    }`}
+                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${
+                    selectedDistricts.has(district._id)
+                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-100'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
+                  }`}
                 >
                   {district.name}
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -589,18 +849,19 @@ const CustomizeCombokit = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
               {partners.map((p, index) => (
-                <div
+                <button
                   key={`${p._id}-${index}`}
                   onClick={() => handleRoleClick(p.name)}
-                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedRoles.has(p.name)
-                    ? 'bg-orange-600 text-white border-orange-600'
-                    : 'border-gray-300 hover:border-orange-500'
-                    }`}
+                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${
+                    selectedRoles.has(p.name)
+                      ? 'bg-orange-600 text-white border-orange-600 ring-2 ring-orange-100'
+                      : 'bg-white text-slate-600 border-slate-200 hover:border-orange-400 hover:bg-orange-50'
+                  }`}
                 >
                   {p.name}
-                </div>
+                </button>
               ))}
             </div>
           </div>
@@ -608,207 +869,206 @@ const CustomizeCombokit = () => {
       )}
 
       {/* Result Table */}
-      <div className="mt-6">
-        <div className="card shadow-lg rounded-lg bg-white">
-          <div className="card-body p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Customize Combokit Details</h3>
+      <style>{scrollbarStyles}</style>
+      <div className="mt-8 mb-10" id="result-table-container">
+        <div className="table-container bg-white overflow-hidden">
+            <div className="p-0">
+              <div className="flex justify-between items-center p-5 bg-slate-50 border-b border-gray-100">
+                <div className="flex items-center space-x-3">
+                  <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                  <h3 className="text-lg font-bold text-slate-800">Customize Combokit Details</h3>
+                </div>
+                <button
+                  onClick={addNewCustomization}
+                  className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-md text-sm font-bold active:scale-95"
+                >
+                  <Plus className="w-4 h-4" />
+                  Add New Configuration
+                </button>
+              </div>
 
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto custom-scrollbar">
               {loading ? (
-                <div className="text-center py-4">Loading assignments...</div>
+                <div className="flex flex-col items-center justify-center py-20 gap-3">
+                  <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-500 font-medium">Loading assignments...</p>
+                </div>
               ) : assignments.length === 0 ? (
-                <div className="text-center py-4">No assignments found.</div>
+                <div className="text-center py-20 bg-gray-50/30">
+                  <div className="w-16 h-16 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <Filter className="w-8 h-8" />
+                  </div>
+                  <p className="text-gray-500 mb-6 font-medium">No configurations found for the selected filters.</p>
+                  <button
+                    onClick={addNewCustomization}
+                    className="inline-flex items-center gap-2 bg-blue-600 text-white px-8 py-3 rounded-xl hover:bg-blue-700 transition-all shadow-lg font-bold active:scale-95"
+                  >
+                    <Plus className="w-5 h-5" />
+                    Create First Configuration
+                  </button>
+                </div>
               ) : (
                 <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-blue-50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Solarkit Name</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Panel</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Inverter</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Boskit</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">State</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Cluster</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Districts</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Partner</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Category</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Sub Category</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Project Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Sub Project Type</th>
-                      <th className="px-4 py-3 text-left text-xs font-medium text-gray-700 uppercase tracking-wider">Action</th>
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      {[
+                        "Solarkit Name", "Panel", "Inverter", "Boskit", "State", 
+                        "Cluster", "Districts", "Partner", "Category", 
+                        "Sub Category", "Project Type", "Sub Project Type", "Action"
+                      ].map((header) => (
+                        <th key={header} className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                          {header}
+                        </th>
+                      ))}
                     </tr>
                   </thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {assignments
-                      .filter(assignment => {
-                        // Global Country Filter
-                        if (selectedCountry && assignment.state?.country !== selectedCountry && assignment.country !== selectedCountry) {
-                           // Check both direct reference and state reference
+                  <tbody className="bg-white divide-y divide-gray-100">
+                    {(() => {
+                      const filtered = assignments.filter(assignment => {
+                        // Always show temporary rows being edited
+                        if (assignment.tempId) return true;
+
+                        // Global Country Filter - Robust ID comparison
+                        const assignmentCountryId = assignment.country?._id || assignment.country;
+                        const stateCountryId = assignment.state?.country?._id || assignment.state?.country;
+                        
+                        // Strict country matching for persistent view
+                        if (selectedCountry && 
+                            stateCountryId && stateCountryId !== selectedCountry && 
+                            assignmentCountryId !== selectedCountry) {
                            return false;
                         }
 
                         // Filter Logic
-                        if (selectedStates.size > 0 && !selectedStates.has(assignment.state?._id)) return false;
-                        if (selectedClusters.size > 0 && !selectedClusters.has(assignment.cluster?._id)) return false;
-                        // For districts, check if any of the assignment's districts are selected
-                        if (selectedDistricts.size > 0) {
-                          const hasSelectedDistrict = assignment.districts?.some(d => selectedDistricts.has(d._id));
-                          if (!hasSelectedDistrict) return false;
+                        const hasLocationFilters = selectedStates.size > 0 || selectedClusters.size > 0 || selectedDistricts.size > 0;
+                        
+                        if (hasLocationFilters) {
+                          if (selectedStates.size > 0 && !selectedStates.has(assignment.state?._id)) return false;
+                          if (selectedClusters.size > 0 && !selectedClusters.has(assignment.cluster?._id)) return false;
+                          
+                          if (selectedDistricts.size > 0) {
+                            const assignmentDistricts = assignment.districts || [];
+                            const hasSelectedDistrict = assignmentDistricts.some(d => {
+                              const dId = d?._id || d;
+                              return selectedDistricts.has(dId);
+                            });
+                            if (!hasSelectedDistrict) return false;
+                          }
                         }
-                        // For CP Type / Role
-                        if (selectedRoles.size > 0) {
-                          const assignmentRole = assignment.role || assignment.cpTypes?.[0];
-                          if (!selectedRoles.has(assignmentRole)) return false;
+
+                        const hasRoleFilters = selectedRoles.size > 0;
+                        if (hasRoleFilters) {
+                           const assignmentRole = assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes);
+                           if (!selectedRoles.has(assignmentRole)) return false;
                         }
+
                         return true;
-                      })
-                      .map((assignment, index) => {
-                        const isEditing = editMode[assignment._id];
+                      });
+
+                      if (filtered.length === 0) {
+                        return (
+                          <tr>
+                            <td colSpan="13" className="text-center py-20 bg-gray-50/30">
+                              <div className="w-16 h-16 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
+                                <Filter className="w-8 h-8" />
+                              </div>
+                              <p className="text-gray-500 font-medium">No configurations found for the selected filters.</p>
+                            </td>
+                          </tr>
+                        );
+                      }
+
+                      return filtered.map((assignment, index) => {
                         const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
-                        // Truncate district names if too long
                         const districtsDisplay = districtNames.length > 50 ? districtNames.substring(0, 50) + "..." : districtNames;
 
                         return (
-                          <tr key={`${assignment._id}-${index}`}>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.solarkitName}</td>
-
-                            {/* Panel Column */}
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                              {!isEditing ? (
-                                <div className="view-mode bg-gray-50 p-2 rounded">
-                                  {assignment.panels?.length ? assignment.panels.join(", ") : "Not Selected"}
-                                </div>
-                              ) : (
-                                <div className="edit-mode border border-gray-300 p-2 rounded">
-                                  <select
-                                    multiple
-                                    className="w-full border rounded p-1"
-                                    value={assignment.panels || []}
-                                    onChange={(e) => {
-                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                      handlePanelChange(assignment._id, selected);
-                                    }}
-                                  >
-                                    {panelOptions.map(opt => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
-                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                                </div>
-                              )}
+                          <tr key={`${assignment._id}-${index}`} className="hover:bg-gray-50 transition-colors">
+                            <td className="px-4 py-4 text-xs font-medium text-gray-900 min-w-[150px]">
+                              <div className="font-semibold text-blue-700">{assignment.solarkitName || '-'}</div>
                             </td>
 
-                            {/* Inverter Column */}
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                              {!isEditing ? (
-                                <div className="view-mode bg-gray-50 p-2 rounded">
-                                  {assignment.inverters?.length ? assignment.inverters.join(", ") : "Not Selected"}
-                                </div>
-                              ) : (
-                                <div className="edit-mode border border-gray-300 p-2 rounded">
-                                  <select
-                                    multiple
-                                    className="w-full border rounded p-1"
-                                    value={assignment.inverters || []}
-                                    onChange={(e) => {
-                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                      handleInverterChange(assignment._id, selected);
-                                    }}
-                                  >
-                                    {inverterOptions.map(opt => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
-                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                                </div>
-                              )}
+                            <td className="px-2 py-4 min-w-[180px]">
+                              <div className="flex flex-wrap gap-1">
+                                {assignment.panels?.length ? assignment.panels.map(p => (
+                                  <span key={p} className="bg-gray-100 text-[10px] px-1.5 py-0.5 rounded text-gray-600 border border-gray-200">{p}</span>
+                                )) : <span className="text-gray-400 italic text-[10px]">Not Selected</span>}
+                              </div>
                             </td>
 
-                            {/* Boskit Column */}
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                              {!isEditing ? (
-                                <div className="view-mode bg-gray-50 p-2 rounded">
-                                  {assignment.boskits?.length ? assignment.boskits.join(", ") : "Not Selected"}
-                                </div>
-                              ) : (
-                                <div className="edit-mode border border-gray-300 p-2 rounded">
-                                  <select
-                                    multiple
-                                    className="w-full border rounded p-1"
-                                    value={assignment.boskits || []}
-                                    onChange={(e) => {
-                                      const selected = Array.from(e.target.selectedOptions, option => option.value);
-                                      handleBoskitChange(assignment._id, selected);
-                                    }}
-                                  >
-                                    {boskitOptions.map(opt => (
-                                      <option key={opt} value={opt}>{opt}</option>
-                                    ))}
-                                  </select>
-                                  <p className="text-xs text-gray-500 mt-1">Hold Ctrl/Cmd to select multiple</p>
-                                </div>
-                              )}
+                            <td className="px-2 py-4 min-w-[180px]">
+                              <div className="flex flex-wrap gap-1">
+                                {assignment.inverters?.length ? assignment.inverters.map(i => (
+                                  <span key={i} className="bg-gray-100 text-[10px] px-1.5 py-0.5 rounded text-gray-600 border border-gray-200">{i}</span>
+                                )) : <span className="text-gray-400 italic text-[10px]">Not Selected</span>}
+                              </div>
                             </td>
 
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.state?.name}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.cluster?.name}</td>
-
-                            <td className="px-4 py-3 text-sm text-gray-900">
-                              <span title={districtNames}>{districtsDisplay}</span>
+                            <td className="px-2 py-4 min-w-[180px]">
+                              <div className="flex flex-wrap gap-1">
+                                {assignment.boskits?.length ? assignment.boskits.map(b => (
+                                  <span key={b} className="bg-gray-100 text-[10px] px-1.5 py-0.5 rounded text-gray-600 border border-gray-200">{b}</span>
+                                )) : <span className="text-gray-400 italic text-[10px]">Not Selected</span>}
+                              </div>
                             </td>
 
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                              {assignment.role || assignment.cpTypes?.join(", ") || '-'}
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[100px]">
+                              <span className="font-medium">{assignment.state?.name}</span>
+                            </td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
+                              <span>{assignment.cluster?.name}</span>
+                            </td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[150px]">
+                              <span className="truncate block max-w-[140px]" title={districtNames}>{districtsDisplay}</span>
                             </td>
 
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.category}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.subCategory}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.projectType}</td>
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">{assignment.subProjectType}</td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
+                              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold">{assignment.role || assignment.cpTypes?.[0] || 'Dealer'}</span>
+                            </td>
 
-                            <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                              <div className="flex space-x-2">
-                                {!isEditing && (
-                                  <>
-                                    <button
-                                      onClick={() => showCombokitDetails(assignment)}
-                                      className="btn btn-sm btn-info p-1.5 rounded bg-gray-600 text-white hover:bg-gray-700"
-                                      title="View Details"
-                                    >
-                                      <Eye className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleEditClick(assignment._id)}
-                                      className="btn btn-sm btn-primary p-1.5 rounded bg-blue-600 text-white hover:bg-blue-700"
-                                      title="Edit"
-                                    >
-                                      <Edit className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[130px]">
+                              <span>{assignment.category}</span>
+                            </td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[130px]">
+                              <span>{assignment.subCategory}</span>
+                            </td>
 
-                                {isEditing && (
-                                  <>
-                                    <button
-                                      onClick={() => handleSaveClick(assignment._id)}
-                                      className="btn btn-sm btn-success p-1.5 rounded bg-green-600 text-white hover:bg-green-700"
-                                      title="Save"
-                                    >
-                                      <Save className="w-4 h-4" />
-                                    </button>
-                                    <button
-                                      onClick={() => handleCancelClick(assignment._id)}
-                                      className="btn btn-sm btn-secondary p-1.5 rounded bg-gray-500 text-white hover:bg-gray-600"
-                                      title="Cancel"
-                                    >
-                                      <X className="w-4 h-4" />
-                                    </button>
-                                  </>
-                                )}
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[130px]">
+                              <span>{assignment.projectType}</span>
+                            </td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[130px]">
+                              <span>{assignment.subProjectType}</span>
+                            </td>
+
+                            <td className="px-4 py-4 whitespace-nowrap text-right text-sm font-medium">
+                              <div className="flex justify-end items-center space-x-3">
+                                <button
+                                  onClick={() => showCombokitDetails(assignment)}
+                                  className="text-gray-400 hover:text-blue-600 transition-colors p-1.5 rounded-full hover:bg-blue-50"
+                                  title="View Details"
+                                >
+                                  <Eye className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => handleEditClick(assignment)}
+                                  className="text-gray-400 hover:text-indigo-600 transition-colors p-1.5 rounded-full hover:bg-indigo-50"
+                                  title="Edit"
+                                >
+                                  <Edit className="w-4 h-4" />
+                                </button>
+                                <button
+                                  onClick={() => deleteAssignmentById(assignment._id)}
+                                  className="text-gray-400 hover:text-red-500 transition-colors p-1.5 rounded-full hover:bg-red-50"
+                                  title="Delete"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
                               </div>
                             </td>
                           </tr>
                         );
-                      })}
+                      });
+                    })()}
                   </tbody>
                 </table>
               )}
@@ -816,11 +1076,64 @@ const CustomizeCombokit = () => {
           </div>
         </div>
       </div>
+      {/* Summary Card */}
+      {showSummary && lastSavedConfig && (
+        <div className="mt-8 mb-12">
+          <div className="card shadow-lg rounded-lg bg-white overflow-hidden border-t-4 border-blue-600">
+            <div className="card-header px-6 py-4 bg-gray-50 border-b border-gray-200">
+              <h3 className="text-lg font-bold text-gray-800">Customize Combokit Summary</h3>
+            </div>
+            <div className="card-body p-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                <div className="space-y-3">
+                  <p className="text-sm"><span className="font-bold text-gray-700">Solarkit Name:</span> {lastSavedConfig.solarkitName}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Panel:</span> {lastSavedConfig.panels?.join(", ") || 'None'}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Inverter:</span> {lastSavedConfig.inverters?.join(", ") || 'None'}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Boskit:</span> {lastSavedConfig.boskits?.join(", ") || 'None'}</p>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm"><span className="font-bold text-gray-700">State:</span> {lastSavedConfig.state?.name}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Cluster:</span> {lastSavedConfig.cluster?.name}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">District:</span> {lastSavedConfig.districts?.map(d => d.name).join(", ") || 'None'}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Partner:</span> {lastSavedConfig.role || lastSavedConfig.cpTypes?.join(", ") || 'None'}</p>
+                </div>
+                <div className="space-y-3">
+                  <p className="text-sm"><span className="font-bold text-gray-700">Category:</span> {lastSavedConfig.category}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Sub Category:</span> {lastSavedConfig.subCategory}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Project Type:</span> {lastSavedConfig.projectType}</p>
+                  <p className="text-sm"><span className="font-bold text-gray-700">Sub Project Type:</span> {lastSavedConfig.subProjectType}</p>
+                </div>
+              </div>
 
-      {/* Modal */}
+              <div className="flex gap-4 mt-8 pt-6 border-t border-gray-100">
+                <button
+                  onClick={() => {
+                    handleEditClick(lastSavedConfig._id);
+                    setShowSummary(false);
+                    document.getElementById('result-table-container')?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  className="px-6 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-colors"
+                >
+                  Edit Configuration
+                </button>
+                <button
+                  onClick={() => {
+                    toast.success("ComboKit Generation Started!");
+                  }}
+                  className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                >
+                  Confirm & Generate Combokit
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal View/Filter */}
       {modalContent && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col relative">
             <div className={`modal-header px-6 py-4 text-white ${getModalHeaderColor()}`}>
               <h3 className="text-lg font-semibold">{modalContent.title}</h3>
               <button
@@ -836,12 +1149,197 @@ const CustomizeCombokit = () => {
             <div className="modal-footer px-6 py-4 bg-gray-50 border-t border-gray-200">
               <button
                 onClick={closeModal}
-                className="btn btn-secondary px-4 py-2 rounded bg-gray-600 text-white hover:bg-gray-700"
+                className="btn btn-secondary px-4 py-2 rounded bg-gray-600 text-white hover:bg-gray-700 font-bold"
               >
                 Close
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Configuration Modal */}
+      {showConfigureModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-300">
+           <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
+              {/* Modal Header */}
+              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-8 py-6 text-white shrink-0">
+                 <div className="flex justify-between items-center">
+                    <div>
+                       <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Configuration Wizard</p>
+                       <h3 className="text-2xl font-black tracking-tight">{currentAssignment ? 'Update Custom Configuration' : 'Create New Configuration'}</h3>
+                    </div>
+                    <button onClick={() => setShowConfigureModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors group">
+                       <X className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                    </button>
+                 </div>
+              </div>
+
+              {/* Modal Body */}
+              <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                  {/* Section 1: Identity */}
+                  <div className="space-y-6">
+                    <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-blue-500 pl-3">
+                      Plan Identity
+                    </h4>
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solarkit Name</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Kit Name"
+                          value={assignmentForm.solarkitName ? { label: assignmentForm.solarkitName, value: assignmentForm.solarkitName } : null}
+                          onChange={(opt) => setAssignmentForm({...assignmentForm, solarkitName: opt.value})}
+                          options={solarKitsList.map(kit => ({ label: kit.name, value: kit.name }))}
+                        />
+                      </div>
+                      
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Partner Role</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Role"
+                          value={assignmentForm.role ? { label: assignmentForm.role, value: assignmentForm.role } : null}
+                          onChange={(opt) => setAssignmentForm({...assignmentForm, role: opt.value})}
+                          options={partners.map(p => ({ label: p.name, value: p.name }))}
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+                          <Select
+                            styles={selectStyles}
+                            placeholder="Select"
+                            value={assignmentForm.category ? { label: assignmentForm.category, value: assignmentForm.category } : null}
+                            onChange={(opt) => setAssignmentForm({...assignmentForm, category: opt.value, subCategory: ''})}
+                            options={masterCategories.map(cat => ({ label: cat.name, value: cat.name }))}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Category</label>
+                          <Select
+                            styles={selectStyles}
+                            placeholder="Select"
+                            value={assignmentForm.subCategory ? { label: assignmentForm.subCategory, value: assignmentForm.subCategory } : null}
+                            onChange={(opt) => setAssignmentForm({...assignmentForm, subCategory: opt.value})}
+                            options={masterSubCategories
+                              .filter(sub => {
+                                const selCat = masterCategories.find(c => c.name === assignmentForm.category);
+                                const subCatId = sub.categoryId?._id || sub.categoryId;
+                                return selCat && subCatId === selCat._id;
+                              })
+                              .map(sub => ({ label: sub.name, value: sub.name }))
+                            }
+                          />
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Project Type Range</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Project Type"
+                          value={assignmentForm.projectType ? { label: assignmentForm.projectType, value: assignmentForm.projectType } : null}
+                          onChange={(opt) => setAssignmentForm({...assignmentForm, projectType: opt.value})}
+                          options={projectMappings?.length > 0 ? (
+                            projectMappings
+                              .filter(m => {
+                                const selCat = masterCategories.find(c => c.name === assignmentForm.category);
+                                const selSubCat = masterSubCategories.find(sc => sc.name === assignmentForm.subCategory);
+                                const mCatId = m.categoryId?._id || m.categoryId;
+                                const mSubCatId = m.subCategoryId?._id || m.subCategoryId;
+                                return (!selCat || mCatId === selCat._id) && (!selSubCat || mSubCatId === selSubCat._id);
+                              })
+                              .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                              .filter((v, i, a) => a.indexOf(v) === i)
+                              .map(pt => ({ label: pt, value: pt }))
+                          ) : (
+                            masterProjectTypes.map(pt => ({ label: pt, value: pt }))
+                          )}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Project Type</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Sub Project Type"
+                          value={assignmentForm.subProjectType ? { label: assignmentForm.subProjectType, value: assignmentForm.subProjectType } : null}
+                          onChange={(opt) => setAssignmentForm({...assignmentForm, subProjectType: opt.value})}
+                          options={masterSubProjectTypes.map(spt => ({ label: spt.name, value: spt.name }))}
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Section 2: Technical Specs */}
+                  <div className="space-y-6">
+                    <h4 className="text-[11px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-cyan-500 pl-3">
+                      Technical Specifications
+                    </h4>
+                    <div className="space-y-4">
+                       <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solar Panel Brands</label>
+                          <textarea 
+                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                            placeholder="e.g. Adani 540W, Tata 550W (Comma separated)"
+                            value={assignmentForm.panels?.join(", ")}
+                            onChange={(e) => setAssignmentForm({...assignmentForm, panels: e.target.value.split(",").map(v => v.trim())})}
+                          />
+                       </div>
+                       <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Inverter Models</label>
+                          <textarea 
+                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                            placeholder="e.g. Growatt 5kW, Havells (Comma separated)"
+                            value={assignmentForm.inverters?.join(", ")}
+                            onChange={(e) => setAssignmentForm({...assignmentForm, inverters: e.target.value.split(",").map(v => v.trim())})}
+                          />
+                       </div>
+                       <div>
+                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">BOS Kit Components</label>
+                          <textarea 
+                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                            placeholder="e.g. ACDB, DCDB, MC4 (Comma separated)"
+                            value={assignmentForm.boskits?.join(", ")}
+                            onChange={(e) => setAssignmentForm({...assignmentForm, boskits: e.target.value.split(",").map(v => v.trim())})}
+                          />
+                       </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Modal Footer */}
+              <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 shrink-0">
+                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                    <div className="flex items-center gap-3 text-slate-500">
+                       <div className="p-2 bg-slate-200 rounded-lg">
+                          <Filter className="w-4 h-4" />
+                       </div>
+                       <div className="text-[10px] font-bold uppercase tracking-tight">
+                          Applying to <span className="text-blue-600">{assignmentForm.state?.name || 'Selected'}</span> State context
+                       </div>
+                    </div>
+                    <div className="flex gap-4">
+                       <button 
+                          onClick={() => setShowConfigureModal(false)}
+                          className="px-8 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                       >
+                          CANCEL
+                       </button>
+                       <button 
+                          onClick={handleSaveClick}
+                          className="px-10 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-200 active:scale-95 transition-all uppercase tracking-widest"
+                       >
+                          {currentAssignment ? 'UPDATE CONFIG' : 'SAVE CONFIGURATION'}
+                       </button>
+                    </div>
+                 </div>
+              </div>
+           </div>
         </div>
       )}
     </div>

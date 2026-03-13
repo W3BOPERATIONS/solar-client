@@ -1,24 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, CheckCircle, Camera, ChevronUp, ChevronDown,
   X, Image as ImageIcon, Search, Edit, Eye, Trash2
 } from 'lucide-react';
 import Select from 'react-select';
 import { useLocations } from '../../../../hooks/useLocations';
-import { getAssignments, createAssignment, updateAssignment, getPartnerTypes, getPartnerPlans } from '../../../../services/combokit/combokitApi';
+import { getAssignments, createAssignment, updateAssignment, deleteAssignment, getPartnerTypes, getPartnerPlans } from '../../../../services/combokit/combokitApi';
+import { getBrands, getSkus } from '../../../../services/settings/orderProcurementSettingApi';
+import * as locationSvc from '../../../../services/core/locationApi';
 import { locationAPI } from '../../../../api/api';
 
 // Main Component
 export default function AddComboKit() {
   const { countries, states, fetchCountries, fetchStates, fetchClusters, fetchDistricts } = useLocations();
 
-  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountries, setSelectedCountries] = useState([]);
   const [selectedCountryName, setSelectedCountryName] = useState('');
   const [selectedStates, setSelectedStates] = useState([]);
   const [selectedClusters, setSelectedClusters] = useState([]);
 
   // CP Type is now Role
-  const [selectedRole, setSelectedRole] = useState('');
+  const [selectedRoles, setSelectedRoles] = useState([]);
   const [availablePlans, setAvailablePlans] = useState([]);
   const [selectedPlans, setSelectedPlans] = useState([]);
 
@@ -27,6 +29,8 @@ export default function AddComboKit() {
   const [showRoleSection, setShowRoleSection] = useState(false);
   const [showPlanSection, setShowPlanSection] = useState(false);
   const [showDistrictSection, setShowDistrictSection] = useState(false);
+  const [selectAllCountry, setSelectAllCountry] = useState(false);
+  const [selectAllRole, setSelectAllRole] = useState(false);
   const [selectAllState, setSelectAllState] = useState(false);
   const [selectAllCluster, setSelectAllCluster] = useState(false);
   const [selectAllPlan, setSelectAllPlan] = useState(false);
@@ -41,8 +45,15 @@ export default function AddComboKit() {
   const [editingRowId, setEditingRowId] = useState(null);
 
   // Dynamic Options
+  const [stateOptions, setStateOptions] = useState([]);
   const [clusterOptions, setClusterOptions] = useState([]);
   const [districtOptions, setDistrictOptions] = useState([]);
+
+  // State for unified combo kit management
+  const [modalMode, setModalMode] = useState('manage'); // 'edit-single' or 'manage'
+  const [modalKits, setModalKits] = useState([]);
+  const [activeKitIndex, setActiveKitIndex] = useState(0);
+  const [isNewKitTab, setIsNewKitTab] = useState(false);
 
   // State for main combo kit form
   const [comboKitName, setComboKitName] = useState('');
@@ -53,9 +64,6 @@ export default function AddComboKit() {
   const [showPanelSkuSelect, setShowPanelSkuSelect] = useState(false);
   const [showInverterConfigBtn, setShowInverterConfigBtn] = useState(false);
 
-  // State for additional combo kits
-  const [additionalComboKits, setAdditionalComboKits] = useState([]);
-
   // State for BOM
   const [showBomSection, setShowBomSection] = useState(false);
   const [bomSections, setBomSections] = useState([]);
@@ -65,19 +73,31 @@ export default function AddComboKit() {
 
   const [partners, setPartners] = useState([]);
 
-  const skuData = {
-    panels: {
-      Adani: ["ADN-12345", "ADN-23456", "ADN-34567"],
-      Tata: ["TAT-67890", "TAT-78901", "TAT-89012"],
-      Waree: ["WAR-45678", "WAR-56789", "WAR-67890"]
-    }
-  };
+  const [allManufacturers, setAllManufacturers] = useState([]);
+  const [availablePanelSkus, setAvailablePanelSkus] = useState([]);
+  const [availableInverterSkus, setAvailableInverterSkus] = useState([]);
+  const [loadingBrands, setLoadingBrands] = useState(false);
+  const [loadingSkus, setLoadingSkus] = useState(false);
 
   // Initial Data
   useEffect(() => {
     fetchCountries();
     fetchPartners();
+    loadAssignments();
+    fetchInitialBrands();
   }, []);
+
+  const fetchInitialBrands = async () => {
+    try {
+      setLoadingBrands(true);
+      const data = await getBrands();
+      setAllManufacturers(Array.isArray(data) ? data : data?.data || []);
+    } catch (err) {
+      console.error("Error fetching brands", err);
+    } finally {
+      setLoadingBrands(false);
+    }
+  };
 
   const fetchPartners = async () => {
     try {
@@ -90,14 +110,14 @@ export default function AddComboKit() {
 
   // When countries load, don't auto-fetch states for India if we want user to select
   useEffect(() => {
-    if (countries.length > 0 && !selectedCountry) {
-       // Optional: Auto-select India if available
-       const india = countries.find(c => c.name === 'India');
-       if (india) {
-         setSelectedCountry(india._id);
-         setSelectedCountryName(india.name);
-         fetchStates({ countryId: india._id });
-       }
+    if (countries.length > 0 && selectedCountries.length === 0) {
+      // Optional: Auto-select India if available
+      const india = countries.find(c => c.name === 'India');
+      if (india) {
+        setSelectedCountries([india._id]);
+        setSelectedCountryName(india.name);
+        handleCountrySelect(india._id, india.name, true);
+      }
     }
   }, [countries]);
 
@@ -124,27 +144,142 @@ export default function AddComboKit() {
   const loadAssignments = async () => {
     try {
       const data = await getAssignments();
-      // Map backend data to frontend structure if necessary
-      // Assuming backend returns array of assignments similar to rows
       setProjectRows(data.map(item => ({
         ...item,
-        id: item._id, // Ensure id matches backend _id
+        id: item._id,
+        countryId: item.country?._id || item.country,
         stateId: item.state?._id || item.state,
         state: item.state?.name || 'Unknown',
         clusterId: item.cluster?._id || item.cluster,
-        // cluster name might need to be resolved or is populated
         cluster: item.cluster?.name || 'Unknown',
         districts: item.districts ? item.districts.map(d => typeof d === 'object' ? d.name : d) : [],
+        districtIds: item.districts ? item.districts.map(d => typeof d === 'object' ? d._id : d) : [],
       })));
     } catch (error) {
       console.error("Error loading assignments:", error);
     }
   };
 
-  const handleCountrySelect = (countryId, countryName) => {
-    setSelectedCountry(countryId);
-    setSelectedCountryName(countryName);
-    fetchStates({ countryId: countryId });
+  const filteredProjects = useMemo(() => {
+    if (!projectRows || projectRows.length === 0) return [];
+    
+    // If no selections are made, return everything as requested
+    if (selectedCountries.length === 0 && 
+        selectedStates.length === 0 && 
+        selectedClusters.length === 0 && 
+        selectedDistricts.length === 0 && 
+        selectedRoles.length === 0 && 
+        selectedPlans.length === 0) {
+      return projectRows;
+    }
+
+    return projectRows.filter(row => {
+      // Apply location filters
+      if (selectedCountries.length > 0) {
+        if (row.countryId && !selectedCountries.some(id => String(id) === String(row.countryId))) return false;
+      }
+      if (selectedStates.length > 0) {
+        if (row.stateId && !selectedStates.some(id => String(id) === String(row.stateId))) return false;
+      }
+      if (selectedClusters.length > 0) {
+        if (row.clusterId && !selectedClusters.some(id => String(id) === String(row.clusterId))) return false;
+      }
+      if (selectedDistricts.length > 0) {
+        const rowDIds = (row.districtIds || []).map(d => String(d));
+        if (!selectedDistricts.some(id => rowDIds.includes(String(id)))) return false;
+      }
+      
+      // Apply partner filters
+      if (selectedRoles.length > 0) {
+        if (!selectedRoles.some(role => String(role).toLowerCase() === String(row.role).toLowerCase())) return false;
+      }
+      
+      if (selectedPlans.length > 0) {
+        const rowPlans = (row.cpTypes || []).map(p => String(p).toLowerCase());
+        const hasSelectedPlan = selectedPlans.some(p => rowPlans.includes(String(p).toLowerCase()));
+        if (!hasSelectedPlan) return false;
+      }
+
+      return true;
+    });
+  }, [projectRows, selectedCountries, selectedStates, selectedClusters, selectedDistricts, selectedRoles, selectedPlans]);
+
+  const getItemKitCount = (type, value) => {
+    if (!projectRows || projectRows.length === 0) return 0;
+    
+    // Normalize value for comparison
+    const targetValue = value ? String(value).toLowerCase().trim() : '';
+    if (!targetValue) return 0;
+
+    const matchingRows = projectRows.filter(row => {
+      // 1. Level Filter: Match the actual item we are counting
+      let isLevelMatch = false;
+      if (type === 'country') {
+         isLevelMatch = String(row.countryId) === targetValue;
+      } else if (type === 'state') {
+         isLevelMatch = String(row.stateId) === targetValue || String(row.state).toLowerCase().trim() === targetValue;
+      } else if (type === 'cluster') {
+         isLevelMatch = String(row.clusterId) === targetValue || String(row.cluster).toLowerCase().trim() === targetValue;
+      } else if (type === 'district') {
+         const rowD = (row.districts || []).map(d => String(d).toLowerCase().trim());
+         const rowDIds = (row.districtIds || []).map(d => String(d).toLowerCase().trim());
+         isLevelMatch = rowD.includes(targetValue) || rowDIds.includes(targetValue);
+      } else if (type === 'role') {
+         isLevelMatch = String(row.role).toLowerCase().trim() === targetValue;
+      } else if (type === 'plan') {
+         const rowPlans = (row.cpTypes || []).map(p => String(p).toLowerCase().trim());
+         isLevelMatch = rowPlans.includes(targetValue);
+      }
+      
+      if (!isLevelMatch) return false;
+
+      // 2. Hierarchy Filters (ONLY apply if row has the mapping data)
+      if (type !== 'country' && selectedCountries.length > 0) {
+         if (row.countryId) {
+            const countryMatch = selectedCountries.some(id => String(id) === String(row.countryId));
+            if (!countryMatch) return false;
+         }
+      }
+
+      if (['cluster', 'district', 'role', 'plan'].includes(type) && selectedStates.length > 0) {
+         if (row.stateId) {
+            const stateMatch = selectedStates.some(id => String(id) === String(row.stateId));
+            if (!stateMatch) return false;
+         }
+      }
+
+      if (['district', 'role', 'plan'].includes(type) && selectedClusters.length > 0) {
+         if (row.clusterId) {
+            const clusterMatch = selectedClusters.some(id => String(id) === String(row.clusterId));
+            if (!clusterMatch) return false;
+         }
+      }
+
+      return true;
+    });
+
+    return matchingRows.reduce((sum, row) => sum + (row.comboKits?.length || 0), 0);
+  };
+
+  const handleCountrySelect = (countryId, countryName, isAuto = false) => {
+    let newSelected = [];
+    if (selectedCountries.includes(countryId)) {
+      newSelected = selectedCountries.filter(id => id !== countryId);
+    } else {
+      newSelected = [...selectedCountries, countryId];
+    }
+    
+    setSelectedCountries(newSelected);
+    if (newSelected.length === 1) {
+      const c = countries.find(x => x._id === newSelected[0]);
+      setSelectedCountryName(c?.name || '');
+    } else if (newSelected.length > 1) {
+      setSelectedCountryName(`${newSelected.length} Countries`);
+    } else {
+      setSelectedCountryName('');
+    }
+
+    fetchStatesForCountries(newSelected);
 
     // Reset all following
     setSelectedStates([]);
@@ -153,11 +288,41 @@ export default function AddComboKit() {
     setShowDistrictSection(false);
     setShowRoleSection(false);
     setShowPlanSection(false);
+    setSelectedRoles([]); // Reset roles
     setClusterOptions([]);
     setDistrictOptions([]);
   };
 
-  // Handler functions
+  const handleSelectAllCountries = () => {
+     if (selectAllCountry) {
+        setSelectedCountries([]);
+        setSelectedCountryName('');
+        setStateOptions([]);
+     } else {
+        const allIds = countries.map(c => c._id);
+        setSelectedCountries(allIds);
+        setSelectedCountryName('All Countries');
+        fetchStatesForCountries(allIds);
+     }
+     setSelectAllCountry(!selectAllCountry);
+  };
+
+  const fetchStatesForCountries = async (countryIds) => {
+    try {
+      const allStates = [];
+      for (const id of countryIds) {
+        const data = await locationSvc.getStates(id);
+        allStates.push(...(data || []));
+      }
+      // Unique states
+      const uniqueStates = Array.from(new Map(allStates.map(s => [s._id, s])).values());
+      setStateOptions(uniqueStates);
+    } catch (e) {
+      console.error("Error fetching states", e);
+      setStateOptions([]);
+    }
+  };
+
   const handleStateSelect = (stateId) => {
     setShowProjectForm(true);
     if (selectedStates.includes(stateId)) {
@@ -165,7 +330,7 @@ export default function AddComboKit() {
     } else {
       setSelectedStates([...selectedStates, stateId]);
     }
-    
+
     // Reset following
     setSelectedClusters([]);
     setDistrictOptions([]);
@@ -173,13 +338,14 @@ export default function AddComboKit() {
     setShowDistrictSection(false);
     setShowRoleSection(false);
     setShowPlanSection(false);
+    setSelectedRoles([]);
   };
 
   const handleSelectAllStates = () => {
     if (selectAllState) {
       setSelectedStates([]);
     } else {
-      setSelectedStates(states.map(s => s._id));
+      setSelectedStates(stateOptions.map(s => s._id));
     }
     setSelectAllState(!selectAllState);
     setShowProjectForm(!selectAllState);
@@ -187,7 +353,7 @@ export default function AddComboKit() {
 
   const fetchClustersForStates = async (stateIds) => {
     try {
-      const allRes = await Promise.all(stateIds.map(id => 
+      const allRes = await Promise.all(stateIds.map(id =>
         locationAPI.getAllClusters({ stateId: id, isActive: 'true' })
       ));
       const allClusters = allRes.flatMap(res => res.data?.data || []);
@@ -207,11 +373,11 @@ export default function AddComboKit() {
       setSelectedClusters([...selectedClusters, clusterId]);
     }
     setShowDistrictSection(true);
-    setShowRoleSection(true);
+    setShowRoleSection(false);
 
     // Reset selections
     setSelectedDistricts([]);
-    setSelectedRole('');
+    setSelectedRoles([]);
     setSelectedPlans([]);
     setShowPlanSection(false);
     setSelectAllPlan(false);
@@ -226,19 +392,18 @@ export default function AddComboKit() {
     }
     setSelectAllCluster(!selectAllCluster);
     setShowDistrictSection(!selectAllCluster);
-    setShowRoleSection(!selectAllCluster);
+    setShowRoleSection(false);
   };
 
   const fetchDistrictsForClusters = async (clusterIds) => {
     try {
       const allDistricts = [];
       for (const id of clusterIds) {
-        const res = await locationAPI.getAllDistricts({ clusterId: id, isActive: 'true' });
-        const clusterDistricts = res.data?.data || [];
+        const clusterDistricts = await locationSvc.getDistrictsHierarchy(id);
         // Attach clusterId to each district for later mapping in handleAddProject
-        allDistricts.push(...clusterDistricts.map(d => ({ ...d, clusterId: id })));
+        allDistricts.push(...(clusterDistricts || []).map(d => ({ ...d, clusterId: id })));
       }
-      
+
       // Deduplicate by _id
       const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
       setDistrictOptions(uniqueDistricts);
@@ -249,15 +414,49 @@ export default function AddComboKit() {
   };
 
   const handleRoleSelect = async (roleName) => {
-    setSelectedRole(roleName);
+    let newRoles = [];
+    if (selectedRoles.includes(roleName)) {
+       newRoles = selectedRoles.filter(r => r !== roleName);
+    } else {
+       newRoles = [...selectedRoles, roleName];
+    }
+    
+    setSelectedRoles(newRoles);
     setSelectedPlans([]);
     setSelectAllPlan(false);
 
+    if (newRoles.length > 0) {
+      fetchPlansForRoles(newRoles);
+    } else {
+      setAvailablePlans([]);
+      setShowPlanSection(false);
+    }
+  };
+
+  const handleSelectAllRoles = () => {
+     if (selectAllRole) {
+        setSelectedRoles([]);
+        setAvailablePlans([]);
+        setShowPlanSection(false);
+     } else {
+        const allRoles = partners.map(p => p.name);
+        setSelectedRoles(allRoles);
+        fetchPlansForRoles(allRoles);
+     }
+     setSelectAllRole(!selectAllRole);
+  };
+
+  const fetchPlansForRoles = async (roleNames) => {
     try {
-      // Use the first selected state for filtering plans if available
       const stateId = selectedStates.length > 0 ? selectedStates[0] : null;
-      const plans = await getPartnerPlans(roleName, stateId);
-      setAvailablePlans(plans || []);
+      const allPlans = [];
+      for (const role of roleNames) {
+         const plans = await getPartnerPlans(role, stateId);
+         allPlans.push(...(plans || []));
+      }
+      // Unique plans by name
+      const uniquePlans = Array.from(new Map(allPlans.map(p => [p.name || p._id, p])).values());
+      setAvailablePlans(uniquePlans);
       setShowPlanSection(true);
     } catch (err) {
       console.error("Error fetching plans:", err);
@@ -285,17 +484,23 @@ export default function AddComboKit() {
 
   const handleDistrictSelect = (districtId) => {
     if (selectedDistricts.includes(districtId)) {
-      setSelectedDistricts(selectedDistricts.filter(d => d !== districtId));
+      const newSelected = selectedDistricts.filter(id => id !== districtId);
+      setSelectedDistricts(newSelected);
+      setShowRoleSection(newSelected.length > 0);
     } else {
-      setSelectedDistricts([...selectedDistricts, districtId]);
+      const newSelected = [...selectedDistricts, districtId];
+      setSelectedDistricts(newSelected);
+      setShowRoleSection(true);
     }
   };
 
   const handleSelectAllDistrict = () => {
     if (selectAllDistrict) {
       setSelectedDistricts([]);
+      setShowRoleSection(false);
     } else {
       setSelectedDistricts(districtOptions.map(d => d._id));
+      setShowRoleSection(true);
     }
     setSelectAllDistrict(!selectAllDistrict);
   };
@@ -309,8 +514,8 @@ export default function AddComboKit() {
       alert('Please select at least one District');
       return;
     }
-    if (!selectedRole) {
-      alert('Please select a Role (CP Type)');
+    if (selectedRoles.length === 0) {
+      alert('Please select at least one Role (Partner)');
       return;
     }
     if (selectedPlans.length === 0) {
@@ -321,7 +526,7 @@ export default function AddComboKit() {
     // Since our backend expects one assignment per cluster usually,
     // we'll loop through selected clusters that have districts selected in them.
     // Or just create one project row for now as UI shows state/cluster as strings.
-    
+
     try {
       const results = [];
       for (const clusterId of selectedClusters) {
@@ -329,42 +534,47 @@ export default function AddComboKit() {
         const currentClusterDistricts = districtOptions
           .filter(d => d.clusterId === clusterId)
           .filter(d => selectedDistricts.includes(d._id));
-        
+
         if (currentClusterDistricts.length === 0) continue;
 
         const clusterObj = clusterOptions.find(c => c._id === clusterId);
         const stateId = clusterObj?.state?._id || clusterObj?.state;
-        const stateObj = states.find(s => s._id === stateId);
+        const stateObj = stateOptions.find(s => s._id === stateId);
 
-        const payload = {
-          state: stateId,
-          cluster: clusterId,
-          cpTypes: [...selectedPlans],
-          role: selectedRole,
-          districts: currentClusterDistricts.map(d => d._id),
-          status: 'Inactive',
-          comboKits: [],
-          category: 'Solar Panel',
-          subCategory: 'Residential',
-          projectType: '1kw-10kw',
-          subProjectType: 'On Grid'
-        };
+        // Loop through each selected role to create separate projects
+        for (const roleName of selectedRoles) {
+           // Only add if this role has plans selected that belong to it?
+           // Actually, selectedPlans is global names. We'll just add it.
+           const payload = {
+            state: stateId,
+            cluster: clusterId,
+            cpTypes: [...selectedPlans],
+            role: roleName,
+            districts: currentClusterDistricts.map(d => d._id),
+            status: 'Inactive',
+            comboKits: [],
+            category: 'Solar Panel',
+            subCategory: 'Residential',
+            projectType: '1kw-10kw',
+            subProjectType: 'On Grid'
+          };
 
-        const newAssignment = await createAssignment(payload);
-        const newRow = {
-          ...newAssignment,
-          id: newAssignment._id,
-          state: stateObj?.name || 'Unknown',
-          stateId: stateId,
-          cluster: clusterObj?.name || 'Unknown',
-          clusterId: clusterId,
-          cpTypes: newAssignment.cpTypes,
-          districts: currentClusterDistricts.map(d => d.name),
-          districtIds: newAssignment.districts
-        };
-        results.push(newRow);
+          const newAssignment = await createAssignment(payload);
+          const newRow = {
+            ...newAssignment,
+            id: newAssignment._id,
+            state: stateObj?.name || 'Unknown',
+            stateId: stateId,
+            cluster: clusterObj?.name || 'Unknown',
+            clusterId: clusterId,
+            cpTypes: newAssignment.cpTypes,
+            districts: currentClusterDistricts.map(d => d.name),
+            districtIds: newAssignment.districts
+          };
+          results.push(newRow);
+        }
       }
-      
+
       if (results.length > 0) {
         setProjectRows([...projectRows, ...results]);
         alert(`${results.length} Project(s) added successfully!`);
@@ -377,22 +587,87 @@ export default function AddComboKit() {
     }
   };
 
-  const handleAddComboKit = (rowId, isEdit = false) => {
+  const handleAddComboKit = async (rowId, isEditSingle = false, kitIdx = 0) => {
     setCurrentRowId(rowId);
-    setIsEditMode(isEdit);
-    setEditingRowId(isEdit ? rowId : null);
-    setShowComboKitModal(true);
+    setModalMode(isEditSingle ? 'edit-single' : 'manage');
 
-    // Reset form if not in edit mode
-    if (!isEdit) {
-      setComboKitName('');
-      setComboKitImage(null);
-      setSolarPanelBrand('');
+    const row = projectRows.find(r => r.id === rowId);
+    const existingKits = row ? [...row.comboKits] : [];
+
+    setModalKits(existingKits);
+
+    if (isEditSingle) {
+      setActiveKitIndex(kitIdx);
+      setIsNewKitTab(false);
+      await loadKitIntoForm(existingKits[kitIdx]);
+    } else {
+      if (existingKits.length > 0) {
+        setActiveKitIndex(0);
+        setIsNewKitTab(false);
+        await loadKitIntoForm(existingKits[0]);
+      } else {
+        setIsNewKitTab(true);
+        resetComboKitForm();
+      }
+    }
+
+    setShowComboKitModal(true);
+  };
+
+  const loadKitIntoForm = async (kit) => {
+    if (!kit) {
+      resetComboKitForm();
+      return;
+    }
+    setComboKitName(kit.name || '');
+    setComboKitImage(kit.image || null);
+    setSolarPanelBrand(kit.panelBrand || '');
+    setInverterBrand(kit.inverterBrand || '');
+    setBomSections(kit.bomSections || []);
+    setShowBomSection(kit.bomSections?.length > 0);
+
+    if (kit.panelBrand) {
+      await handleSolarPanelBrandChange(kit.panelBrand, false);
+      setSelectedPanelSkus(kit.panelSkus || []);
+    } else {
       setSelectedPanelSkus([]);
-      setInverterBrand('');
-      setAdditionalComboKits([]);
-      setBomSections([]);
-      setShowBomSection(false);
+      setShowPanelSkuSelect(false);
+    }
+
+    if (kit.inverterBrand) {
+      setShowInverterConfigBtn(true);
+    } else {
+      setShowInverterConfigBtn(false);
+    }
+  };
+
+  const switchTab = async (newIdx, isNew = false) => {
+    // 1. Save current state into modalKits[activeKitIndex]
+    const currentKitData = {
+      name: comboKitName,
+      image: comboKitImage,
+      panelBrand: solarPanelBrand,
+      panelSkus: selectedPanelSkus,
+      inverterBrand: inverterBrand,
+      bomSections: bomSections
+    };
+
+    let updatedKits = [...modalKits];
+    if (!isNewKitTab) {
+      updatedKits[activeKitIndex] = currentKitData;
+    }
+
+    setModalKits(updatedKits);
+
+    // 2. Load the new tab
+    if (isNew) {
+      setIsNewKitTab(true);
+      setActiveKitIndex(updatedKits.length);
+      resetComboKitForm();
+    } else {
+      setIsNewKitTab(false);
+      setActiveKitIndex(newIdx);
+      await loadKitIntoForm(updatedKits[newIdx]);
     }
   };
 
@@ -402,35 +677,25 @@ export default function AddComboKit() {
     const currentRow = projectRows.find(r => r.id === currentRowId);
     if (!currentRow) return;
 
-    let updatedComboKits = [...currentRow.comboKits];
-
-    const comboKitData = {
+    const currentKitData = {
       name: comboKitName,
       image: comboKitImage,
       panelBrand: solarPanelBrand,
       panelSkus: selectedPanelSkus,
-      inverterBrand: inverterBrand
+      inverterBrand: inverterBrand,
+      bomSections: bomSections
     };
 
-    if (isEditMode) {
-      // Note: This logic seems to imply replacing ALL combokits with this one in edit mode based on original code?
-      // The original code was: comboKits: [comboKitData]. This looks like it wipes others?
-      // Wait, the UI has "Edit" on the main row, which adds/edits combokits for that PROJECT.
-      // But the modal has "Create Combokit" tab.
-      // If I am editing a specific combokit (handleViewCombokitDetails -> Edit?), that's different.
-      // The "Add" button on row calls handleAddComboKit(row.id, false).
-      // The "Edit" button on row calls handleAddComboKit(row.id, true).
-      // If isEditMode (Yellow Edit button on row), it seemingly REPLACES the combo kits list?
-      // Let's stick to updating the backend with the new list.
+    let updatedComboKits = [...modalKits];
 
-      if (editingRowId) {
-        // We are in the modal for a row.
-        // If we are strictly following original logic:
-        updatedComboKits = [comboKitData]; // This wipes others? That seems risky but matches original code logic.
-      }
+    if (modalMode === 'edit-single') {
+      updatedComboKits[activeKitIndex] = currentKitData;
     } else {
-      // Append
-      updatedComboKits = [...updatedComboKits, comboKitData, ...additionalComboKits];
+      if (isNewKitTab) {
+        updatedComboKits.push(currentKitData);
+      } else {
+        updatedComboKits[activeKitIndex] = currentKitData;
+      }
     }
 
     try {
@@ -445,11 +710,10 @@ export default function AddComboKit() {
 
       setProjectRows(updatedRows);
       setShowComboKitModal(false);
-      resetComboKitForm();
-      alert('ComboKits saved successfully');
-    } catch (error) {
-      console.error("Error updating combokits:", error);
-      alert('Failed to save ComboKits');
+      alert(modalMode === 'edit-single' ? 'ComboKit updated successfully!' : 'ComboKits updated successfully!');
+    } catch (err) {
+      console.error("Error saving combo kits", err);
+      alert("Failed to save. Please try again.");
     }
   };
 
@@ -475,6 +739,19 @@ export default function AddComboKit() {
     }
   };
 
+  const handleDeleteAssignment = async (rowId) => {
+    if (!window.confirm("Are you sure you want to delete this assignment?")) return;
+
+    try {
+      await deleteAssignment(rowId);
+      setProjectRows(projectRows.filter(r => r.id !== rowId));
+      alert('Assignment deleted successfully');
+    } catch (error) {
+      console.error("Error deleting assignment:", error);
+      alert('Failed to delete assignment');
+    }
+  };
+
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
     if (file) {
@@ -486,35 +763,52 @@ export default function AddComboKit() {
     }
   };
 
-  const handleSolarPanelBrandChange = (brand) => {
-    setSolarPanelBrand(brand);
-    setShowPanelSkuSelect(!!brand);
-    if (!brand) {
-      setSelectedPanelSkus([]);
+  const handleSolarPanelBrandChange = async (brandName, shouldResetSkus = true) => {
+    setSolarPanelBrand(brandName);
+    const manufacturer = allManufacturers.find(m => (m.brand || m.companyName || m.name) === brandName);
+    const brandId = manufacturer?._id;
+
+    if (!brandName || !brandId) {
+      setAvailablePanelSkus([]);
+      if (shouldResetSkus) setSelectedPanelSkus([]);
+      setShowPanelSkuSelect(false);
+      return;
+    }
+
+    try {
+      setLoadingSkus(true);
+      const res = await getSkus({ brand: brandId });
+      setAvailablePanelSkus(res.data || []);
+      if (shouldResetSkus) setSelectedPanelSkus([]);
+      setShowPanelSkuSelect(true);
+    } catch (err) {
+      console.error("Error fetching panel skus", err);
+    } finally {
+      setLoadingSkus(false);
     }
   };
 
-  const handleInverterBrandChange = (brand) => {
-    setInverterBrand(brand);
-    setShowInverterConfigBtn(!!brand);
-  };
+  const handleInverterBrandChange = async (brandName) => {
+    setInverterBrand(brandName);
+    const manufacturer = allManufacturers.find(m => (m.brand || m.companyName || m.name) === brandName);
+    const brandId = manufacturer?._id;
 
-  const handleAddAnotherComboKit = () => {
-    setAdditionalComboKits([
-      ...additionalComboKits,
-      {
-        id: Date.now().toString(),
-        name: '',
-        image: null,
-        panelBrand: '',
-        panelSkus: [],
-        inverterBrand: ''
-      }
-    ]);
-  };
+    if (!brandName || !brandId) {
+      setAvailableInverterSkus([]);
+      setShowInverterConfigBtn(false);
+      return;
+    }
 
-  const handleRemoveAdditionalComboKit = (id) => {
-    setAdditionalComboKits(additionalComboKits.filter(kit => kit.id !== id));
+    try {
+      setLoadingSkus(true);
+      const res = await getSkus({ brand: brandId });
+      setAvailableInverterSkus(res.data || []);
+      setShowInverterConfigBtn(true);
+    } catch (err) {
+      console.error("Error fetching inverter skus", err);
+    } finally {
+      setLoadingSkus(false);
+    }
   };
 
   const handleViewProjectCombokits = (rowId) => {
@@ -533,7 +827,6 @@ export default function AddComboKit() {
     setSolarPanelBrand('');
     setSelectedPanelSkus([]);
     setInverterBrand('');
-    setAdditionalComboKits([]);
     setBomSections([]);
     setShowBomSection(false);
     setIsEditMode(false);
@@ -556,18 +849,26 @@ export default function AddComboKit() {
         </label>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
           {clusterOptions.length === 0 ? <p className="text-gray-500 col-span-4">No clusters found for selected states.</p> :
-            clusterOptions.map(cluster => (
-              <div
-                key={cluster._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedClusters.includes(cluster._id)
-                  ? 'bg-purple-700 text-white border-purple-800 shadow-md'
-                  : 'bg-white border-gray-300 hover:border-blue-500'
-                  }`}
-                onClick={() => handleClusterSelect(cluster._id)}
-              >
-                <div className="font-medium">{cluster.name}</div>
-              </div>
-            ))}
+            clusterOptions.map(cluster => {
+              const count = getItemKitCount('cluster', cluster._id);
+              return (
+                <div
+                  key={cluster._id}
+                  className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedClusters.includes(cluster._id)
+                    ? 'bg-purple-700 text-white border-purple-800 shadow-md'
+                    : 'bg-white border-gray-300 hover:border-blue-500'
+                    }`}
+                  onClick={() => handleClusterSelect(cluster._id)}
+                >
+                  <div className="font-medium">{cluster.name}</div>
+                  {count > 0 && (
+                    <p className={`text-[10px] mt-1 font-bold ${selectedClusters.includes(cluster._id) ? 'text-purple-100' : 'text-purple-600'}`}>
+                      {count} ComboKit{count !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
     );
@@ -577,20 +878,40 @@ export default function AddComboKit() {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
         <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Partner</h5>
+        <div className="mb-4">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selectAllRole}
+              onChange={handleSelectAllRoles}
+              className="mr-2"
+            />
+            <span className="font-semibold">Select All</span>
+          </label>
+        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {partners.map(p => (
-            <div
-              key={p._id}
-              className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedRole === p.name
-                ? 'bg-blue-600 text-white border-blue-700 shadow-md'
-                : 'bg-white border-gray-300 hover:border-blue-500'
-                }`}
-              onClick={() => handleRoleSelect(p.name)}
-            >
-              <div className="font-medium">{p.name}</div>
-            </div>
-          ))}
+          {partners.map(p => {
+            const count = getItemKitCount('role', p.name);
+            const isSelected = selectedRoles.includes(p.name);
+            return (
+              <div
+                key={p._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${isSelected
+                  ? 'bg-blue-600 text-white border-blue-700 shadow-md'
+                  : 'bg-white border-gray-300 hover:border-blue-500'
+                  }`}
+                onClick={() => handleRoleSelect(p.name)}
+              >
+                <div className="font-medium">{p.name}</div>
+                {count > 0 && (
+                  <p className={`text-[10px] mt-1 font-bold ${isSelected ? 'text-blue-100' : 'text-blue-600'}`}>
+                    {count} ComboKit{count !== 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );
@@ -599,7 +920,9 @@ export default function AddComboKit() {
   const renderPlanCards = () => {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-        <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Plans for {selectedRole}</h5>
+        <h5 className="text-lg font-semibold text-gray-700 mb-4">
+           Select Plans {selectedRoles.length > 0 ? `for ${selectedRoles.join(', ')}` : ''}
+        </h5>
 
         <div className="mb-4">
           <label className="flex items-center cursor-pointer">
@@ -614,19 +937,27 @@ export default function AddComboKit() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {availablePlans.length === 0 ? <p className="text-gray-500 col-span-4">No active plans found for {selectedRole}.</p> :
-            availablePlans.map(plan => (
-              <div
-                key={plan._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedPlans.includes(plan.name)
-                  ? 'bg-green-600 text-white border-green-700'
-                  : 'border-gray-300 hover:border-green-500'
-                  }`}
-                onClick={() => handlePlanSelect(plan.name)}
-              >
-                <div className="font-medium">{plan.name}</div>
-              </div>
-            ))}
+          {availablePlans.length === 0 ? <p className="text-gray-500 col-span-4">No active plans found.</p> :
+            availablePlans.map(plan => {
+              const count = getItemKitCount('plan', plan.name);
+              return (
+                <div
+                  key={plan._id}
+                  className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedPlans.includes(plan.name)
+                    ? 'bg-green-600 text-white border-green-700'
+                    : 'border-gray-300 hover:border-green-500'
+                    }`}
+                  onClick={() => handlePlanSelect(plan.name)}
+                >
+                  <div className="font-medium">{plan.name}</div>
+                  {count > 0 && (
+                    <p className={`text-[10px] mt-1 font-bold ${selectedPlans.includes(plan.name) ? 'text-green-100' : 'text-green-600'}`}>
+                      {count} ComboKit{count !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
     );
@@ -652,18 +983,26 @@ export default function AddComboKit() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {districtOptions.length === 0 ? <p className="text-gray-500 col-span-4">No districts found for this cluster.</p> :
-            districtOptions.map(district => (
-              <div
-                key={district._id}
-                className={`border rounded-lg p-3 text-center cursor-pointer transition-all h-16 flex flex-col justify-center items-center ${selectedDistricts.includes(district._id)
-                  ? 'bg-cyan-600 text-white border-cyan-700'
-                  : 'border-gray-300 hover:border-cyan-500'
-                  }`}
-                onClick={() => handleDistrictSelect(district._id)}
-              >
-                <div className="font-medium text-sm">{district.name}</div>
-              </div>
-            ))}
+            districtOptions.map(district => {
+              const count = getItemKitCount('district', district.name);
+              return (
+                <div
+                  key={district._id}
+                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all h-16 flex flex-col justify-center items-center ${selectedDistricts.includes(district._id)
+                    ? 'bg-cyan-600 text-white border-cyan-700'
+                    : 'border-gray-300 hover:border-cyan-500'
+                    }`}
+                  onClick={() => handleDistrictSelect(district._id)}
+                >
+                  <div className="font-medium text-sm">{district.name}</div>
+                  {count > 0 && (
+                    <p className={`text-[10px] mt-1 font-bold ${selectedDistricts.includes(district._id) ? 'text-cyan-100' : 'text-cyan-600'}`}>
+                      {count} ComboKit{count !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
         </div>
       </div>
     );
@@ -689,10 +1028,18 @@ export default function AddComboKit() {
                 <th className="px4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Project Type</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Sub Project Type</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Cluster</th>
+                <th className="px-4 py-3 text-center text-xs font-semibold text-gray-700 uppercase tracking-wider">Actions</th>
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-200">
-              {projectRows.map(row => (
+              {filteredProjects.length === 0 ? (
+                <tr>
+                  <td colSpan="12" className="px-4 py-8 text-center text-gray-500 italic">
+                    No matching projects found for selected filters.
+                  </td>
+                </tr>
+              ) : (
+                filteredProjects.map(row => (
                 <tr key={row.id} className="hover:bg-gray-50">
                   <td className="px-4 py-3">
                     <div className="flex gap-1">
@@ -722,17 +1069,35 @@ export default function AddComboKit() {
                     </button>
                   </td>
                   <td className="px-4 py-3">
-                    <div
-                      className="bg-gray-100 rounded p-2 hover:bg-gray-200 cursor-pointer text-sm"
-                      onClick={() => handleViewProjectCombokits(row.id)}
-                    >
-                      {row.comboKits.length === 0
-                        ? '0 ComboKits'
-                        : row.comboKits.length === 1
-                          ? row.comboKits[0].name
-                          : `${row.comboKits[0].name} and ${row.comboKits.length - 1} more`
-                      }
-                    </div>
+                    {row.comboKits.length === 0 ? (
+                      <span className="text-gray-400 italic text-sm">No ComboKits</span>
+                    ) : (
+                      <div className="space-y-2">
+                        {row.comboKits.map((kit, idx) => (
+                          <div key={idx} className="flex justify-between items-center group bg-gray-50 hover:bg-white border hover:border-blue-300 p-2 rounded transition-all shadow-sm">
+                            <span className="text-sm font-medium text-gray-700 truncate mr-2" title={kit.name}>
+                              {kit.name}
+                            </span>
+                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                              <button
+                                onClick={() => handleAddComboKit(row.id, true, idx)}
+                                className="p-1 text-blue-500 hover:bg-blue-50 rounded"
+                                title="Edit this ComboKit"
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleViewCombokitDetails(kit)}
+                                className="p-1 text-green-500 hover:bg-green-50 rounded"
+                                title="View Details"
+                              >
+                                <Eye size={14} />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-sm">{row.state}</td>
                   <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={row.cpTypes.join(', ')}>
@@ -746,9 +1111,19 @@ export default function AddComboKit() {
                   <td className="px-4 py-3 text-sm">{row.projectType}</td>
                   <td className="px-4 py-3 text-sm">{row.subProjectType}</td>
                   <td className="px-4 py-3 text-sm">{row.cluster}</td>
+                  <td className="px-4 py-3 text-center">
+                    <button
+                      className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                      onClick={() => handleDeleteAssignment(row.id)}
+                      title="Delete Assignment"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </td>
                 </tr>
-              ))}
-            </tbody>
+              ))
+            )}
+          </tbody>
           </table>
         </div>
       </div>
@@ -765,281 +1140,232 @@ export default function AddComboKit() {
           <div className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl">
             <form onSubmit={handleSaveComboKits}>
               <div className="flex justify-between items-center p-6 border-b">
-                <h4 className="text-xl font-semibold">ComboKit Management</h4>
+                <h4 className="text-xl font-bold text-blue-800">ComboKit Management</h4>
                 <button
                   type="button"
-                  className="text-gray-400 hover:text-gray-600"
+                  className="text-gray-400 hover:text-gray-600 p-2"
                   onClick={() => setShowComboKitModal(false)}
                 >
-                  <X size={24} />
+                  <X size={28} />
                 </button>
               </div>
 
               <div className="p-6">
-                {/* Tabs */}
-                <div className="flex border-b mb-6">
-                  <button
-                    type="button"
-                    className={`px-6 py-3 font-medium ${activeTab === 'create' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
-                    onClick={() => setActiveTab('create')}
-                  >
-                    Create ComboKit
-                  </button>
-                  <button
-                    type="button"
-                    className={`px-6 py-3 font-medium ${activeTab === 'add' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-500'}`}
-                    onClick={() => setActiveTab('add')}
-                  >
-                    Add ComboKit
-                  </button>
-                </div>
-
-                {activeTab === 'create' && (
-                  <div>
-                    {/* Main ComboKit Form */}
-                    <div id="mainComboKitForm">
-                      {/* ComboKit Name */}
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">ComboKit Name</label>
-                        <input
-                          type="text"
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                          value={comboKitName}
-                          onChange={(e) => setComboKitName(e.target.value)}
-                          required
-                        />
-                      </div>
-
-                      {/* ComboKit Image */}
-                      <div className="mb-4">
-                        <label className="block text-sm font-medium text-gray-700 mb-2">ComboKit Image</label>
-                        <div className="relative w-full border border-gray-300 rounded-md bg-gray-50 flex items-center justify-center h-48">
-                          {comboKitImage ? (
-                            <img src={comboKitImage} alt="ComboKit" className="max-w-full max-h-full object-contain" />
-                          ) : (
-                            <div className="text-center text-gray-400">
-                              <ImageIcon size={48} className="mx-auto mb-2" />
-                              <p>No image selected</p>
-                            </div>
-                          )}
-                          <input
-                            type="file"
-                            className="hidden"
-                            id="combokitImage"
-                            accept="image/*"
-                            onChange={handleImageUpload}
-                          />
-                          <button
-                            type="button"
-                            className="absolute bottom-3 right-3 bg-black bg-opacity-50 hover:bg-opacity-70 text-white rounded-full p-2"
-                            onClick={() => document.getElementById('combokitImage').click()}
-                          >
-                            <Camera size={20} />
-                          </button>
-                        </div>
-                      </div>
-
-                      {/* Solar Panel Selection */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Select Solar Panel Brand</label>
-                          <select
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={solarPanelBrand}
-                            onChange={(e) => handleSolarPanelBrandChange(e.target.value)}
-                          >
-                            <option value="">Select a brand</option>
-                            <option value="Adani">Adani</option>
-                            <option value="Tata">Tata</option>
-                            <option value="Waree">Waree</option>
-                          </select>
-
-                          {showPanelSkuSelect && (
-                            <div className="mt-3">
-                              <label className="block text-sm font-medium text-gray-700 mb-2">Select Panel SKUs</label>
-                              <Select
-                                isMulti
-                                options={skuData.panels[solarPanelBrand]?.map(sku => ({ value: sku, label: sku })) || []}
-                                value={selectedPanelSkus.map(sku => ({ value: sku, label: sku }))}
-                                onChange={(selected) => setSelectedPanelSkus(selected.map(s => s.value))}
-                                className="basic-multi-select"
-                                classNamePrefix="select"
-                              />
-                            </div>
-                          )}
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Selected Panel SKUs</label>
-                          <div className="bg-gray-100 p-3 rounded-md font-mono font-semibold min-h-[42px]">
-                            {selectedPanelSkus.length > 0 ? (
-                              <div className="flex flex-wrap gap-2">
-                                {selectedPanelSkus.map(sku => (
-                                  <span key={sku} className="bg-gray-200 px-2 py-1 rounded text-sm flex items-center">
-                                    {sku}
-                                    <button
-                                      type="button"
-                                      className="ml-2 text-red-500 hover:text-red-700"
-                                      onClick={() => setSelectedPanelSkus(selectedPanelSkus.filter(s => s !== sku))}
-                                    >
-                                      <X size={14} />
-                                    </button>
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <span className="text-gray-400">No SKUs selected</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Inverter Selection */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Select Inverter Brand</label>
-                          <select
-                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            value={inverterBrand}
-                            onChange={(e) => handleInverterBrandChange(e.target.value)}
-                          >
-                            <option value="">Select a brand</option>
-                            <option value="Vesole">Vesole</option>
-                            <option value="Luminous">Luminous</option>
-                            <option value="Microtek">Microtek</option>
-                          </select>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-medium text-gray-700 mb-2">Inverter Brand Selected</label>
-                          <div className="bg-gray-100 p-3 rounded-md font-mono font-semibold min-h-[42px]">
-                            <div className="flex justify-between items-center">
-                              <span>{inverterBrand || 'No brand selected'}</span>
-                              {showInverterConfigBtn && (
-                                <button
-                                  type="button"
-                                  className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                                  onClick={() => window.open(`/combokit_inverter_configu?brand=${encodeURIComponent(inverterBrand)}`, '_blank')}
-                                >
-                                  Inverter Config
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* BOM Button */}
-                      <div className="mb-6">
-                        <button
-                          type="button"
-                          className="px-4 py-2 bg-blue-100 text-blue-700 rounded-md hover:bg-blue-200"
-                          onClick={() => setShowBomSection(!showBomSection)}
-                        >
-                          Edit BOM
-                        </button>
-                      </div>
-
-                      {/* BOM Section */}
-                      {showBomSection && (
-                        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
-                          <div className="flex justify-between items-center mb-4">
-                            <div className="text-lg font-semibold text-gray-700">Bill of Materials (BOM)</div>
-                            <button
-                              type="button"
-                              className="px-3 py-1 bg-gray-200 text-gray-700 rounded text-sm"
-                              onClick={() => setShowBomSection(false)}
-                            >
-                              <ChevronUp size={16} />
-                            </button>
-                          </div>
-
-                          <div className="mb-4">
-                            {bomSections.length === 0 && (
-                              <p className="text-gray-500 text-sm">No BOM sections added yet.</p>
-                            )}
-                          </div>
-
-                          <div className="text-right">
-                            <button
-                              type="button"
-                              className="px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 mr-2"
-                              onClick={() => setBomSections([...bomSections, { id: Date.now().toString() }])}
-                            >
-                              Add New BOM
-                            </button>
-                            <button
-                              type="button"
-                              className="px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                            >
-                              Save BOM
-                            </button>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === 'add' && (
-                  <div className="border border-dashed border-gray-300 rounded-lg p-4 bg-gray-50">
-                    <h6 className="font-semibold mb-3">Add More ComboKits</h6>
-
-                    <div className="space-y-4 mb-3">
-                      {additionalComboKits.map(kit => (
-                        <div key={kit.id} className="bg-white border border-gray-200 rounded-lg p-4 relative">
-                          <button
-                            type="button"
-                            className="absolute top-2 right-2 text-red-500 hover:text-red-700"
-                            onClick={() => handleRemoveAdditionalComboKit(kit.id)}
-                          >
-                            <X size={20} />
-                          </button>
-                          <h6 className="font-semibold mb-3">Additional ComboKit</h6>
-
-                          <div className="mb-3">
-                            <label className="block text-sm font-medium text-gray-700 mb-1">ComboKit Name</label>
-                            <input
-                              type="text"
-                              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                              value={kit.name}
-                              onChange={(e) => {
-                                const updatedKits = additionalComboKits.map(k =>
-                                  k.id === kit.id ? { ...k, name: e.target.value } : k
-                                );
-                                setAdditionalComboKits(updatedKits);
-                              }}
-                            />
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
+                {/* Tabs - Only show in manage mode */}
+                {modalMode === 'manage' && (
+                  <div className="flex items-center gap-2 border-b mb-6 overflow-x-auto no-scrollbar pb-1">
+                    {modalKits.map((kit, index) => (
+                      <button
+                        key={index}
+                        type="button"
+                        className={`px-4 py-2 font-semibold text-sm rounded-t-lg transition-all min-w-[120px] truncate ${!isNewKitTab && activeKitIndex === index
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+                        onClick={() => switchTab(index, false)}
+                      >
+                        {kit.name || `Untitled Kit`}
+                      </button>
+                    ))}
                     <button
                       type="button"
-                      className="px-4 py-2 border border-blue-500 text-blue-500 rounded-md hover:bg-blue-50 flex items-center"
-                      onClick={handleAddAnotherComboKit}
+                      className={`px-5 py-2 font-bold text-lg rounded-t-lg transition-all ${isNewKitTab
+                        ? 'bg-green-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}`}
+                      onClick={() => switchTab(modalKits.length, true)}
+                      title="Add New ComboKit"
                     >
-                      <Plus size={16} className="mr-1" />
-                      Add Another ComboKit
+                      <Plus size={20} />
                     </button>
                   </div>
                 )}
+
+                {/* Edit Form Header */}
+                {modalMode === 'edit-single' && (
+                  <div className="flex items-center gap-2 mb-6 bg-blue-50 p-4 rounded-lg border border-blue-100">
+                    <div className="bg-blue-600 text-white p-2 rounded-lg">
+                      <Edit size={24} />
+                    </div>
+                    <div>
+                      <h5 className="text-xl font-bold text-gray-800">Edit ComboKit</h5>
+                      <p className="text-sm text-blue-600 font-medium">{comboKitName || 'Unnamed Kit'}</p>
+                    </div>
+                  </div>
+                )}
+
+                <div id="mainComboKitForm">
+                  {/* ComboKit Name */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">ComboKit Name (Product Name)</label>
+                    <input
+                      type="text"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors text-lg font-semibold"
+                      value={comboKitName}
+                      onChange={(e) => setComboKitName(e.target.value)}
+                      placeholder="Enter ComboKit name"
+                      required
+                    />
+                  </div>
+
+                  {/* ComboKit Image */}
+                  <div className="mb-6">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">ComboKit Image</label>
+                    <div className="relative w-full border-2 border-dashed border-gray-300 rounded-xl bg-gray-50 flex items-center justify-center h-48 group hover:border-blue-400 transition-colors">
+                      {comboKitImage ? (
+                        <img src={comboKitImage} alt="ComboKit" className="max-w-full max-h-full object-contain p-4" />
+                      ) : (
+                        <div className="text-center text-gray-400">
+                          <ImageIcon size={48} className="mx-auto mb-2 opacity-50" />
+                          <p className="text-sm font-medium">Click the camera to upload image</p>
+                        </div>
+                      )}
+                      <input
+                        type="file"
+                        className="hidden"
+                        id="combokitImage"
+                        accept="image/*"
+                        onChange={handleImageUpload}
+                      />
+                      <button
+                        type="button"
+                        className="absolute bottom-4 right-4 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-3 shadow-lg transition-transform group-hover:scale-110"
+                        onClick={() => document.getElementById('combokitImage').click()}
+                      >
+                        <Camera size={20} />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Solar Panel Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 border-b pb-8 border-gray-100">
+                    <div className="space-y-4">
+                      <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Select Solar Panel Brand</label>
+                        <select
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                          value={solarPanelBrand}
+                          onChange={(e) => handleSolarPanelBrandChange(e.target.value)}
+                        >
+                          <option value="">Select a brand</option>
+                          {allManufacturers
+                            .filter(m => m.product?.toLowerCase().includes('panel'))
+                            .map(m => (
+                              <option key={m._id} value={m.brand || m.companyName || m.name}>
+                                {m.brand || m.companyName || m.name}
+                              </option>
+                            ))}
+                        </select>
+                      </div>
+
+                      {showPanelSkuSelect && (
+                        <div>
+                          <label className="block text-sm font-bold text-gray-700 mb-2">Select Panel SKUs</label>
+                          <Select
+                            isMulti
+                            isLoading={loadingSkus}
+                            options={availablePanelSkus.map(sku => ({ value: sku.skuCode, label: sku.skuCode }))}
+                            value={selectedPanelSkus.map(sku => ({ value: sku, label: sku }))}
+                            onChange={(selected) => setSelectedPanelSkus(selected ? selected.map(s => s.value) : [])}
+                            className="basic-multi-select"
+                            classNamePrefix="select"
+                            placeholder="Select SKUs..."
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Selected Panel SKUs</label>
+                      <div className="bg-blue-50 border border-blue-100 p-4 rounded-xl min-h-[100px]">
+                        {selectedPanelSkus.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {selectedPanelSkus.map(sku => (
+                              <span key={sku} className="bg-white border border-blue-200 text-blue-700 px-3 py-1 rounded-full text-xs font-bold flex items-center shadow-sm">
+                                {sku}
+                                <button
+                                  type="button"
+                                  className="ml-2 text-blue-400 hover:text-red-500 transition-colors"
+                                  onClick={() => setSelectedPanelSkus(prev => prev.filter(s => s !== sku))}
+                                >
+                                  <X size={14} />
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="flex flex-col items-center justify-center h-full text-gray-400 opacity-60 italic">
+                            <Search size={24} className="mb-1" />
+                            <span className="text-sm">No SKUs selected</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Inverter Selection */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 border-b pb-8 border-gray-100">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Select Inverter Brand</label>
+                      <select
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                        value={inverterBrand}
+                        onChange={(e) => setInverterBrand(e.target.value)}
+                      >
+                        <option value="">Select a brand</option>
+                        <option value="Vesole">Vesole</option>
+                        <option value="Luminous">Luminous</option>
+                        <option value="Microtek">Microtek</option>
+                        {allManufacturers
+                          .filter(m => m.product?.toLowerCase().includes('inverter') && !['Vesole', 'Luminous', 'Microtek'].includes(m.brand || m.companyName || m.name))
+                          .map(m => (
+                            <option key={m._id} value={m.brand || m.companyName || m.name}>
+                              {m.brand || m.companyName || m.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Selected Inverter Brand</label>
+                      <div className="bg-gray-100 p-4 rounded-xl flex items-center border border-gray-200 h-[50px]">
+                        <div className="bg-white px-4 py-1 rounded-lg shadow-sm border border-gray-200 font-bold text-gray-700">
+                          {inverterBrand || <span className="text-gray-400 font-normal">None</span>}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* BOM Link */}
+                  <div className="mb-6">
+                    <button
+                      type="button"
+                      className="px-6 py-2 bg-blue-50 text-blue-700 border border-blue-200 rounded-lg hover:bg-blue-100 font-bold flex items-center transition-all"
+                      onClick={() => setShowBomSection(!showBomSection)}
+                    >
+                      {showBomSection ? <ChevronUp size={20} className="mr-2" /> : <ChevronDown size={20} className="mr-2" />}
+                      {showBomSection ? "Hide BOM Editor" : "Configure Custom BOM"}
+                    </button>
+                    {showBomSection && (
+                      <div className="mt-4 p-6 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl text-center">
+                        <p className="text-gray-500 font-medium italic">BOM Editor features are active for this kit.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
-              <div className="flex justify-end gap-3 p-6 border-t">
-                <button
-                  type="submit"
-                  className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600"
-                >
-                  Save ComboKits
-                </button>
+              <div className="flex justify-end p-6 border-t gap-3 bg-gray-50 rounded-b-lg">
                 <button
                   type="button"
-                  className="px-6 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                  className="px-6 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-100 font-medium"
                   onClick={() => setShowComboKitModal(false)}
                 >
-                  Close
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className={`px-8 py-2 text-white rounded-md font-bold shadow-lg transition-transform hover:scale-105 ${isNewKitTab ? 'bg-green-600 hover:bg-green-700' : 'bg-blue-600 hover:bg-blue-700'}`}
+                >
+                  {isNewKitTab ? 'Create & Save ComboKit' : 'Update & Save Changes'}
                 </button>
               </div>
             </form>
@@ -1059,9 +1385,9 @@ export default function AddComboKit() {
         <div className="flex items-center justify-center min-h-screen px-4 pt-4 pb-20">
           <div className="fixed inset-0 bg-black opacity-50" onClick={() => setShowProjectCombokitsModal(false)}></div>
 
-          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-6xl">
-            <div className="flex justify-between items-center p-6 border-b">
-              <h5 className="text-xl font-semibold">Project ComboKits</h5>
+          <div className="relative bg-white rounded-lg shadow-xl w-full max-w-4xl">
+            <div className="flex justify-between items-center p-6 border-b bg-blue-50">
+              <h5 className="text-xl font-bold text-blue-800">Project ComboKits</h5>
               <button
                 type="button"
                 className="text-gray-400 hover:text-gray-600"
@@ -1073,42 +1399,41 @@ export default function AddComboKit() {
 
             <div className="p-6">
               {comboKits.length === 0 ? (
-                <p className="text-gray-500">No ComboKits available for this project</p>
+                <div className="text-center py-10">
+                  <p className="text-gray-500 text-lg">No ComboKits available for this project</p>
+                </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {comboKits.map((kit, index) => (
-                    <div key={index} className="border border-gray-200 rounded-lg p-4">
-                      <div className="flex justify-between items-center mb-3">
-                        <div className="font-semibold">{kit.name}</div>
+                    <div key={index} className="border-2 border-gray-100 rounded-xl p-4 hover:border-blue-200 transition-colors bg-gray-50">
+                      <div className="flex justify-between items-start mb-4">
+                        <div className="font-bold text-gray-800 text-lg">{kit.name}</div>
                         <div className="flex gap-2">
-                          {isEditMode && (
-                            <button className="px-3 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600">
-                              Delete
-                            </button>
-                          )}
                           <button
-                            className="px-3 py-1 bg-blue-500 text-white text-xs rounded hover:bg-blue-600"
-                            onClick={() => handleViewCombokitDetails(kit)}
+                            className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 shadow-sm"
+                            onClick={() => handleAddComboKit(row.id, true, index)}
+                            title="Edit"
                           >
-                            View Details
+                            <Edit size={16} />
+                          </button>
+                          <button
+                            className="p-2 bg-green-600 text-white rounded-lg hover:bg-green-700 shadow-sm"
+                            onClick={() => handleViewCombokitDetails(kit)}
+                            title="View"
+                          >
+                            <Eye size={16} />
                           </button>
                         </div>
                       </div>
 
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        <div className="bg-gray-100 rounded px-3 py-1 text-sm">
-                          <span className="font-medium text-gray-600">Panels:</span>
-                          <span className="font-semibold ml-1">
-                            {kit.panelBrand || 'Not specified'} ({kit.panelSkus?.length || 0} SKUs)
-                          </span>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex items-center text-gray-600">
+                          <span className="font-semibold w-24">Panels:</span>
+                          <span className="bg-white px-2 py-0.5 rounded border">{kit.panelBrand || 'N/A'}</span>
                         </div>
-                        <div className="bg-gray-100 rounded px-3 py-1 text-sm">
-                          <span className="font-medium text-gray-600">Inverter:</span>
-                          <span className="font-semibold ml-1">{kit.inverterBrand || 'Not specified'}</span>
-                        </div>
-                        <div className="bg-gray-100 rounded px-3 py-1 text-sm">
-                          <span className="font-medium text-gray-600">BOM:</span>
-                          <span className="font-semibold ml-1">Not Added</span>
+                        <div className="flex items-center text-gray-600">
+                          <span className="font-semibold w-24">Inverter:</span>
+                          <span className="bg-white px-2 py-0.5 rounded border">{kit.inverterBrand || 'N/A'}</span>
                         </div>
                       </div>
                     </div>
@@ -1120,7 +1445,7 @@ export default function AddComboKit() {
             <div className="flex justify-end p-6 border-t">
               <button
                 type="button"
-                className="px-6 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400"
+                className="px-6 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 font-bold"
                 onClick={() => setShowProjectCombokitsModal(false)}
               >
                 Close
@@ -1194,7 +1519,7 @@ export default function AddComboKit() {
                       <tr>
                         <td className="px-4 py-3 text-sm">Inverter</td>
                         <td className="px-4 py-3 text-sm">{viewingComboKit.inverterBrand || 'Not specified'}</td>
-                        <td className="px-4 py-3 text-sm">Brand only</td>
+                        <td className="px-4 py-3 text-sm">{viewingComboKit.inverterSkus?.join(', ') || 'None'}</td>
                       </tr>
                     </tbody>
                   </table>
@@ -1224,25 +1549,49 @@ export default function AddComboKit() {
         </h4>
       </div>
 
+
+
       {/* Country Selection */}
-      <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Country</h5>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        {countries.map(country => (
-           <div
-             key={country._id}
-             className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedCountry === country._id
-               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-               : 'bg-white border-blue-400 text-gray-700 hover:border-blue-600'
-               }`}
-             onClick={() => handleCountrySelect(country._id, country.name)}
-           >
-             <p className="font-bold uppercase tracking-wider">{country.name}</p>
-           </div>
-        ))}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
+        <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Country</h5>
+        <div className="mb-4">
+          <label className="flex items-center cursor-pointer">
+            <input
+              type="checkbox"
+              checked={selectAllCountry}
+              onChange={handleSelectAllCountries}
+              className="mr-2"
+            />
+            <span className="font-semibold">Select All</span>
+          </label>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          {countries.map(country => {
+            const count = getItemKitCount('country', country._id);
+            const isSelected = selectedCountries.includes(country._id);
+            return (
+              <div
+                key={country._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${isSelected
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                  : 'bg-white border-blue-400 text-gray-700 hover:border-blue-600'
+                  }`}
+                onClick={() => handleCountrySelect(country._id, country.name)}
+              >
+                <p className="font-bold uppercase tracking-wider text-sm">{country.name}</p>
+                {count > 0 && (
+                  <p className={`text-[10px] mt-1 font-bold ${isSelected ? 'text-blue-100' : 'text-blue-600'}`}>
+                    {count} ComboKit{count !== 1 ? 's' : ''}
+                  </p>
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {/* State Selection */}
-      {selectedCountry && (
+      {selectedCountries.length > 0 && (
         <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
           <h5 className="text-lg font-semibold text-gray-700 mb-4">Select State</h5>
           <label className="flex items-center cursor-pointer mb-4">
@@ -1255,18 +1604,26 @@ export default function AddComboKit() {
             <span className="font-semibold">Select All States</span>
           </label>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {states.map(state => (
-              <div
-                key={state._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedStates.includes(state._id)
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                  : 'bg-white border-blue-500 hover:border-blue-700'
-                  }`}
-                onClick={() => handleStateSelect(state._id)}
-              >
-                <p className="font-medium text-sm">{state.name}</p>
-              </div>
-            ))}
+            {stateOptions.map(state => {
+              const count = getItemKitCount('state', state._id);
+              return (
+                <div
+                  key={state._id}
+                  className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedStates.includes(state._id)
+                    ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                    : 'bg-white border-blue-500 hover:border-blue-700'
+                    }`}
+                  onClick={() => handleStateSelect(state._id)}
+                >
+                  <p className="font-medium text-sm">{state.name}</p>
+                  {count > 0 && (
+                    <p className={`text-[10px] mt-1 font-bold ${selectedStates.includes(state._id) ? 'text-blue-100' : 'text-blue-600'}`}>
+                      {count} ComboKit{count !== 1 ? 's' : ''}
+                    </p>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -1311,10 +1668,11 @@ export default function AddComboKit() {
             </button>
           </div>
 
-          {/* Project Table */}
-          {renderProjectTable()}
         </div>
       )}
+
+      {/* Project Table - Always show if there is data or even if empty to maintain UI structure */}
+      {renderProjectTable()}
 
       {/* Modals */}
       {renderComboKitModal()}

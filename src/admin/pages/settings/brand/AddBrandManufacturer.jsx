@@ -371,14 +371,9 @@ const AddBrandManufacturer = () => {
                   disabled={!form.state}
                 >
                   <option value="">-- Select City --</option>
-                  {cities.map(city => {
-                    const displayName = city.name
-                      ? city.name
-                      : `Zones: ${city.zones?.map(z => z.name).join(', ') || 'N/A'}`;
-                    return (
-                      <option key={city._id} value={city._id}>{displayName}</option>
-                    );
-                  })}
+                  {cities.map(city => (
+                    <option key={city._id} value={city._id}>{city.name}</option>
+                  ))}
                 </select>
               </div>
 
@@ -639,10 +634,7 @@ const AddBrandManufacturer = () => {
                     <td className="p-3 text-gray-600">{manufacturer.companyOriginCountry}</td>
                     <td className="p-3 text-gray-600">{manufacturer.state?.name || '-'}</td>
                     <td className="p-3 text-gray-600">
-                      {manufacturer.city
-                        ? (manufacturer.city.name
-                          || `Zones: ${manufacturer.city.zones?.map(z => z.name).join(', ') || 'N/A'}`)
-                        : '-'}
+                      {manufacturer.city?.name || '-'}
                     </td>
                     <td className="p-3 text-gray-600">{manufacturer.district?.name || '-'}</td>
                     <td className="p-3 text-gray-600">{manufacturer.brand}</td>
