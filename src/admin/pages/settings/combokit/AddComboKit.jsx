@@ -5,22 +5,17 @@ import {
 } from 'lucide-react';
 import Select from 'react-select';
 import { useLocations } from '../../../../hooks/useLocations';
-import {
-  getAssignments,
-  createAssignment,
-  updateAssignment,
-  getPlansByRole
-} from '../../../../services/combokit/combokitApi';
+import { getAssignments, createAssignment, updateAssignment, getPartnerTypes, getPartnerPlans } from '../../../../services/combokit/combokitApi';
 import { locationAPI } from '../../../../api/api';
 
 // Main Component
 export default function AddComboKit() {
   const { countries, states, fetchCountries, fetchStates, fetchClusters, fetchDistricts } = useLocations();
 
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedStateName, setSelectedStateName] = useState('');
-  const [selectedCluster, setSelectedCluster] = useState('');
-  const [selectedClusterName, setSelectedClusterName] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountryName, setSelectedCountryName] = useState('');
+  const [selectedStates, setSelectedStates] = useState([]);
+  const [selectedClusters, setSelectedClusters] = useState([]);
 
   // CP Type is now Role
   const [selectedRole, setSelectedRole] = useState('');
@@ -32,6 +27,8 @@ export default function AddComboKit() {
   const [showRoleSection, setShowRoleSection] = useState(false);
   const [showPlanSection, setShowPlanSection] = useState(false);
   const [showDistrictSection, setShowDistrictSection] = useState(false);
+  const [selectAllState, setSelectAllState] = useState(false);
+  const [selectAllCluster, setSelectAllCluster] = useState(false);
   const [selectAllPlan, setSelectAllPlan] = useState(false);
   const [selectAllDistrict, setSelectAllDistrict] = useState(false);
   const [projectRows, setProjectRows] = useState([]);
@@ -66,7 +63,7 @@ export default function AddComboKit() {
   // State for view combo kit
   const [viewingComboKit, setViewingComboKit] = useState(null);
 
-  const rolesList = ["Dealer", "Franchisee", "Channel Partner"];
+  const [partners, setPartners] = useState([]);
 
   const skuData = {
     panels: {
@@ -79,21 +76,50 @@ export default function AddComboKit() {
   // Initial Data
   useEffect(() => {
     fetchCountries();
+    fetchPartners();
   }, []);
 
-  // Fetch States for India (default)
+  const fetchPartners = async () => {
+    try {
+      const data = await getPartnerTypes();
+      setPartners(data || []);
+    } catch (err) {
+      console.error("Error fetching partners", err);
+    }
+  };
+
+  // When countries load, don't auto-fetch states for India if we want user to select
   useEffect(() => {
-    if (countries.length > 0) {
-      const india = countries.find(c => c.name === 'India');
-      if (india) fetchStates({ country: india._id });
-      else fetchStates({ country: countries[0]._id });
+    if (countries.length > 0 && !selectedCountry) {
+       // Optional: Auto-select India if available
+       const india = countries.find(c => c.name === 'India');
+       if (india) {
+         setSelectedCountry(india._id);
+         setSelectedCountryName(india.name);
+         fetchStates({ countryId: india._id });
+       }
     }
   }, [countries]);
 
-  // Load Assignments
+  // Fetch clusters when selected states change
   useEffect(() => {
-    loadAssignments();
-  }, []);
+    if (selectedStates.length > 0) {
+      fetchClustersForStates(selectedStates);
+    } else {
+      setClusterOptions([]);
+      setSelectedClusters([]);
+    }
+  }, [selectedStates]);
+
+  // Fetch districts when selected clusters change
+  useEffect(() => {
+    if (selectedClusters.length > 0) {
+      fetchDistrictsForClusters(selectedClusters);
+    } else {
+      setDistrictOptions([]);
+      setSelectedDistricts([]);
+    }
+  }, [selectedClusters]);
 
   const loadAssignments = async () => {
     try {
@@ -115,46 +141,73 @@ export default function AddComboKit() {
     }
   };
 
-  // Handler functions
-  const handleStateSelect = (stateId, stateName) => {
-    setSelectedState(stateId);
-    setSelectedStateName(stateName);
-    setShowProjectForm(true);
+  const handleCountrySelect = (countryId, countryName) => {
+    setSelectedCountry(countryId);
+    setSelectedCountryName(countryName);
+    fetchStates({ countryId: countryId });
 
-    // Fetch Clusters
-    fetchClustersForState(stateId);
-
+    // Reset all following
+    setSelectedStates([]);
+    setSelectedClusters([]);
+    setShowProjectForm(false);
+    setShowDistrictSection(false);
+    setShowRoleSection(false);
+    setShowPlanSection(false);
     setClusterOptions([]);
     setDistrictOptions([]);
-    setSelectedCluster('');
-    setSelectedClusterName('');
+  };
+
+  // Handler functions
+  const handleStateSelect = (stateId) => {
+    setShowProjectForm(true);
+    if (selectedStates.includes(stateId)) {
+      setSelectedStates(selectedStates.filter(id => id !== stateId));
+    } else {
+      setSelectedStates([...selectedStates, stateId]);
+    }
+    
+    // Reset following
+    setSelectedClusters([]);
+    setDistrictOptions([]);
+    setSelectedDistricts([]);
     setShowDistrictSection(false);
     setShowRoleSection(false);
     setShowPlanSection(false);
   };
 
-  const fetchClustersForState = async (stateId) => {
+  const handleSelectAllStates = () => {
+    if (selectAllState) {
+      setSelectedStates([]);
+    } else {
+      setSelectedStates(states.map(s => s._id));
+    }
+    setSelectAllState(!selectAllState);
+    setShowProjectForm(!selectAllState);
+  };
+
+  const fetchClustersForStates = async (stateIds) => {
     try {
-      const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
-      if (res.data && res.data.data) {
-        setClusterOptions(res.data.data);
-      } else {
-        setClusterOptions([]);
-      }
+      const allRes = await Promise.all(stateIds.map(id => 
+        locationAPI.getAllClusters({ stateId: id, isActive: 'true' })
+      ));
+      const allClusters = allRes.flatMap(res => res.data?.data || []);
+      // Deduplicate by _id
+      const uniqueClusters = Array.from(new Map(allClusters.map(c => [c._id, c])).values());
+      setClusterOptions(uniqueClusters);
     } catch (e) {
       console.error("Error fetching clusters", e);
       setClusterOptions([]);
     }
   };
 
-  const handleClusterSelect = (clusterId, clusterName) => {
-    setSelectedCluster(clusterId);
-    setSelectedClusterName(clusterName);
+  const handleClusterSelect = (clusterId) => {
+    if (selectedClusters.includes(clusterId)) {
+      setSelectedClusters(selectedClusters.filter(id => id !== clusterId));
+    } else {
+      setSelectedClusters([...selectedClusters, clusterId]);
+    }
     setShowDistrictSection(true);
     setShowRoleSection(true);
-
-    // Fetch Districts
-    fetchDistrictsForCluster(clusterId);
 
     // Reset selections
     setSelectedDistricts([]);
@@ -165,27 +218,45 @@ export default function AddComboKit() {
     setSelectAllDistrict(false);
   };
 
-  const fetchDistrictsForCluster = async (clusterId) => {
+  const handleSelectAllClusters = () => {
+    if (selectAllCluster) {
+      setSelectedClusters([]);
+    } else {
+      setSelectedClusters(clusterOptions.map(c => c._id));
+    }
+    setSelectAllCluster(!selectAllCluster);
+    setShowDistrictSection(!selectAllCluster);
+    setShowRoleSection(!selectAllCluster);
+  };
+
+  const fetchDistrictsForClusters = async (clusterIds) => {
     try {
-      const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
-      if (res.data && res.data.data) {
-        setDistrictOptions(res.data.data);
-      } else {
-        setDistrictOptions([]);
+      const allDistricts = [];
+      for (const id of clusterIds) {
+        const res = await locationAPI.getAllDistricts({ clusterId: id, isActive: 'true' });
+        const clusterDistricts = res.data?.data || [];
+        // Attach clusterId to each district for later mapping in handleAddProject
+        allDistricts.push(...clusterDistricts.map(d => ({ ...d, clusterId: id })));
       }
+      
+      // Deduplicate by _id
+      const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
+      setDistrictOptions(uniqueDistricts);
     } catch (e) {
       console.error("Error fetching districts", e);
       setDistrictOptions([]);
     }
   };
 
-  const handleRoleSelect = async (role) => {
-    setSelectedRole(role);
+  const handleRoleSelect = async (roleName) => {
+    setSelectedRole(roleName);
     setSelectedPlans([]);
     setSelectAllPlan(false);
 
     try {
-      const plans = await getPlansByRole(role);
+      // Use the first selected state for filtering plans if available
+      const stateId = selectedStates.length > 0 ? selectedStates[0] : null;
+      const plans = await getPartnerPlans(roleName, stateId);
       setAvailablePlans(plans || []);
       setShowPlanSection(true);
     } catch (err) {
@@ -230,8 +301,8 @@ export default function AddComboKit() {
   };
 
   const handleAddProject = async () => {
-    if (!selectedCluster) {
-      alert('Please select a cluster first');
+    if (selectedClusters.length === 0) {
+      alert('Please select at least one cluster');
       return;
     }
     if (selectedDistricts.length === 0) {
@@ -247,43 +318,62 @@ export default function AddComboKit() {
       return;
     }
 
-    // Get district names for display
-    const selectedDistrictNames = districtOptions
-      .filter(d => selectedDistricts.includes(d._id))
-      .map(d => d.name);
-
-    const payload = {
-      state: selectedState,
-      cluster: selectedCluster,
-      cpTypes: [...selectedPlans], // Store plans in cpTypes for backend compatibility
-      role: selectedRole,
-      districts: [...selectedDistricts], // Send IDs to backend
-      status: 'Inactive',
-      comboKits: [],
-      category: 'Solar Panel',
-      subCategory: 'Residential',
-      projectType: '1kw-10kw',
-      subProjectType: 'On Grid'
-    };
-
+    // Since our backend expects one assignment per cluster usually,
+    // we'll loop through selected clusters that have districts selected in them.
+    // Or just create one project row for now as UI shows state/cluster as strings.
+    
     try {
-      const newAssignment = await createAssignment(payload);
-      const newRow = {
-        ...newAssignment,
-        id: newAssignment._id,
-        state: selectedStateName,
-        stateId: selectedState,
-        cluster: selectedClusterName,
-        clusterId: selectedCluster,
-        cpTypes: newAssignment.cpTypes,
-        districts: selectedDistrictNames, // Use names for display if not populated yet
-        districtIds: newAssignment.districts
-      };
-      setProjectRows([...projectRows, newRow]);
-      alert('Project added successfully!');
+      const results = [];
+      for (const clusterId of selectedClusters) {
+        // Filter districts that belong to THIS cluster
+        const currentClusterDistricts = districtOptions
+          .filter(d => d.clusterId === clusterId)
+          .filter(d => selectedDistricts.includes(d._id));
+        
+        if (currentClusterDistricts.length === 0) continue;
+
+        const clusterObj = clusterOptions.find(c => c._id === clusterId);
+        const stateId = clusterObj?.state?._id || clusterObj?.state;
+        const stateObj = states.find(s => s._id === stateId);
+
+        const payload = {
+          state: stateId,
+          cluster: clusterId,
+          cpTypes: [...selectedPlans],
+          role: selectedRole,
+          districts: currentClusterDistricts.map(d => d._id),
+          status: 'Inactive',
+          comboKits: [],
+          category: 'Solar Panel',
+          subCategory: 'Residential',
+          projectType: '1kw-10kw',
+          subProjectType: 'On Grid'
+        };
+
+        const newAssignment = await createAssignment(payload);
+        const newRow = {
+          ...newAssignment,
+          id: newAssignment._id,
+          state: stateObj?.name || 'Unknown',
+          stateId: stateId,
+          cluster: clusterObj?.name || 'Unknown',
+          clusterId: clusterId,
+          cpTypes: newAssignment.cpTypes,
+          districts: currentClusterDistricts.map(d => d.name),
+          districtIds: newAssignment.districts
+        };
+        results.push(newRow);
+      }
+      
+      if (results.length > 0) {
+        setProjectRows([...projectRows, ...results]);
+        alert(`${results.length} Project(s) added successfully!`);
+      } else {
+        alert('No districts were selected for the chosen clusters.');
+      }
     } catch (error) {
       console.error("Error creating assignment:", error);
-      alert('Failed to create project');
+      alert('Failed to create projects');
     }
   };
 
@@ -454,20 +544,31 @@ export default function AddComboKit() {
   // Render cluster cards
   const renderClusterCards = () => {
     return (
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-        {clusterOptions.length === 0 ? <p className="text-gray-500 col-span-4">No clusters found for this state.</p> :
-          clusterOptions.map(cluster => (
-            <div
-              key={cluster._id}
-              className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedCluster === cluster._id
-                ? 'bg-purple-700 text-white border-purple-800'
-                : 'border-gray-300 hover:border-blue-500'
-                }`}
-              onClick={() => handleClusterSelect(cluster._id, cluster.name)}
-            >
-              <div className="font-medium">{cluster.name}</div>
-            </div>
-          ))}
+      <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
+        <label className="flex items-center cursor-pointer mb-4">
+          <input
+            type="checkbox"
+            checked={selectAllCluster}
+            onChange={handleSelectAllClusters}
+            className="mr-2"
+          />
+          <span className="font-semibold">Select All Clusters</span>
+        </label>
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
+          {clusterOptions.length === 0 ? <p className="text-gray-500 col-span-4">No clusters found for selected states.</p> :
+            clusterOptions.map(cluster => (
+              <div
+                key={cluster._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedClusters.includes(cluster._id)
+                  ? 'bg-purple-700 text-white border-purple-800 shadow-md'
+                  : 'bg-white border-gray-300 hover:border-blue-500'
+                  }`}
+                onClick={() => handleClusterSelect(cluster._id)}
+              >
+                <div className="font-medium">{cluster.name}</div>
+              </div>
+            ))}
+        </div>
       </div>
     );
   };
@@ -478,16 +579,16 @@ export default function AddComboKit() {
         <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Partner</h5>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {rolesList.map(role => (
+          {partners.map(p => (
             <div
-              key={role}
-              className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedRole === role
-                ? 'bg-blue-600 text-white border-blue-700'
-                : 'border-gray-300 hover:border-blue-500'
+              key={p._id}
+              className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedRole === p.name
+                ? 'bg-blue-600 text-white border-blue-700 shadow-md'
+                : 'bg-white border-gray-300 hover:border-blue-500'
                 }`}
-              onClick={() => handleRoleSelect(role)}
+              onClick={() => handleRoleSelect(p.name)}
             >
-              <div className="font-medium">{role}</div>
+              <div className="font-medium">{p.name}</div>
             </div>
           ))}
         </div>
@@ -1115,24 +1216,66 @@ export default function AddComboKit() {
       </div>
     );
   };
-
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
-        <h4 className="text-2xl font-semibold text-blue-600">Add Combokit - {selectedStateName || 'Select State'}</h4>
+        <h4 className="text-2xl font-semibold text-blue-600">
+          Add Combokit {selectedStates.length > 0 ? `- ${selectedStates.length} States` : selectedCountryName ? `- ${selectedCountryName}` : ''}
+        </h4>
+      </div>
+
+      {/* Country Selection */}
+      <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Country</h5>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+        {countries.map(country => (
+           <div
+             key={country._id}
+             className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedCountry === country._id
+               ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+               : 'bg-white border-blue-400 text-gray-700 hover:border-blue-600'
+               }`}
+             onClick={() => handleCountrySelect(country._id, country.name)}
+           >
+             <p className="font-bold uppercase tracking-wider">{country.name}</p>
+           </div>
+        ))}
       </div>
 
       {/* State Selection */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
-        {states.map(state => (
-          <StateCard key={state._id} stateCode={state._id} stateName={state.name} onSelect={handleStateSelect} selected={selectedState === state._id} />
-        ))}
-      </div>
+      {selectedCountry && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-8">
+          <h5 className="text-lg font-semibold text-gray-700 mb-4">Select State</h5>
+          <label className="flex items-center cursor-pointer mb-4">
+            <input
+              type="checkbox"
+              checked={selectAllState}
+              onChange={handleSelectAllStates}
+              className="mr-2"
+            />
+            <span className="font-semibold">Select All States</span>
+          </label>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {states.map(state => (
+              <div
+                key={state._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedStates.includes(state._id)
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                  : 'bg-white border-blue-500 hover:border-blue-700'
+                  }`}
+                onClick={() => handleStateSelect(state._id)}
+              >
+                <p className="font-medium text-sm">{state.name}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Project Form */}
       {showProjectForm && (
         <div>
           {/* Cluster Selection */}
+          <h5 className="text-lg font-semibold text-gray-700 mb-4">Select Cluster</h5>
           {renderClusterCards()}
 
           {/* District Selection FIRST */}
@@ -1156,11 +1299,11 @@ export default function AddComboKit() {
             <button
               className="px-6 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 flex items-center"
               onClick={() => {
-                if (!selectedState) {
-                  alert('Please select a state first');
+                if (selectedStates.length === 0) {
+                  alert('Please select at least one state');
                   return;
                 }
-                alert(`Approval process initiated for ${selectedStateName} state`);
+                alert(`Approval process initiated for ${selectedStates.length} selected states`);
               }}
             >
               <CheckCircle size={18} className="mr-2" />

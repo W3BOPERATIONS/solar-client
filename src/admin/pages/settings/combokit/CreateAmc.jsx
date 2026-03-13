@@ -14,19 +14,45 @@ import {
   getAMCPlans,
   deleteAMCPlan,
   getSolarKits,
-  createAMCService
+  createAMCService,
+  getCategories,
+  getSubCategories,
+  getProjectTypes,
+  getSubProjectTypes,
+  getProjectCategoryMappings
 } from '../../../../services/combokit/combokitApi';
+import * as locationApi from '../../../../services/core/locationApi';
 import toast from 'react-hot-toast';
 
 const CreateAmc = () => {
-  const { countries, states, loading: locationLoading, fetchStates } = useLocations();
+  const { countries, states: hookStates, clusters: hookClusters, districts: hookDistricts, loading: locationLoading, fetchCountries, fetchStates, fetchClusters, fetchDistricts } = useLocations();
+  
+  // Multi-select states
+  const [selectedCountries, setSelectedCountries] = useState(new Set());
+  const [selectedStates, setSelectedStates] = useState(new Set());
+  const [selectedClusters, setSelectedClusters] = useState(new Set());
+  const [selectedDistricts, setSelectedDistricts] = useState(new Set());
 
-  // State management
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedStateData, setSelectedStateData] = useState(null);
+  // Aggregate Data Lists
+  const [availableStates, setAvailableStates] = useState([]);
+  const [availableClusters, setAvailableClusters] = useState([]);
+  const [availableDistricts, setAvailableDistricts] = useState([]);
+  
+  // Child loading states
+  const [statesLoading, setStatesLoading] = useState(false);
+  const [clustersLoading, setClustersLoading] = useState(false);
+  const [districtsLoading, setDistrictsLoading] = useState(false);
+
   const [amcPlans, setAmcPlans] = useState([]);
   const [solarKits, setSolarKits] = useState([]);
   const [loading, setLoading] = useState(false);
+  
+  // Master lists for dropdowns
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [masterSubCategories, setMasterSubCategories] = useState([]);
+  const [masterProjectTypes, setMasterProjectTypes] = useState([]);
+  const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
   const [configureModalOpen, setConfigureModalOpen] = useState(false);
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState(null);
@@ -54,11 +80,167 @@ const CreateAmc = () => {
 
   // Fetch initial data
   useEffect(() => {
-    fetchStates('India');
+    fetchCountries();
     fetchServices();
     fetchSolarKits();
     fetchAllPlans();
+    fetchAllMasters();
   }, []);
+
+  const fetchAllMasters = async () => {
+    try {
+      const [cats, subCats, projs, subProjs, mappings] = await Promise.all([
+        getCategories(),
+        getSubCategories(),
+        getProjectTypes(),
+        getSubProjectTypes(),
+        getProjectCategoryMappings()
+      ]);
+      setMasterCategories(cats || []);
+      setMasterSubCategories(subCats || []);
+      setMasterProjectTypes(projs || []);
+      setMasterSubProjectTypes(subProjs || []);
+      setProjectMappings(mappings || []);
+    } catch (error) {
+      console.error("Error fetching project settings masters", error);
+    }
+  };
+
+  // When countries load, auto-select India if available
+  useEffect(() => {
+    if (countries.length > 0 && selectedCountries.size === 0) {
+      const india = countries.find(c => c.name === 'India');
+      if (india) {
+        handleToggleCountry(india._id);
+      }
+    }
+  }, [countries]);
+
+  // Hierarchical Data Fetching (AGGREGATE)
+  useEffect(() => {
+    const loadStates = async () => {
+      if (selectedCountries.size === 0) {
+        setAvailableStates([]);
+        return;
+      }
+      setStatesLoading(true);
+      try {
+        const results = await Promise.all(
+          Array.from(selectedCountries).map(id => locationApi.getStates(id))
+        );
+        setAvailableStates(results.flat());
+      } catch (err) {
+        console.error("Error fetching aggregate states", err);
+      } finally {
+        setStatesLoading(false);
+      }
+    };
+    loadStates();
+  }, [selectedCountries]);
+
+  useEffect(() => {
+    const loadClusters = async () => {
+      if (selectedStates.size === 0) {
+        setAvailableClusters([]);
+        return;
+      }
+      setClustersLoading(true);
+      try {
+        const results = await Promise.all(
+          Array.from(selectedStates).map(id => locationApi.getClustersHierarchy(id))
+        );
+        setAvailableClusters(results.flat());
+      } catch (err) {
+        console.error("Error fetching aggregate clusters", err);
+      } finally {
+        setClustersLoading(false);
+      }
+    };
+    loadClusters();
+  }, [selectedStates]);
+
+  useEffect(() => {
+    const loadDistricts = async () => {
+      if (selectedClusters.size === 0) {
+        setAvailableDistricts([]);
+        return;
+      }
+      setDistrictsLoading(true);
+      try {
+        const results = await Promise.all(
+          Array.from(selectedClusters).map(id => locationApi.getDistrictsHierarchy(id))
+        );
+        setAvailableDistricts(results.flat());
+      } catch (err) {
+        console.error("Error fetching aggregate districts", err);
+      } finally {
+        setDistrictsLoading(false);
+      }
+    };
+    loadDistricts();
+  }, [selectedClusters]);
+
+  // Handlers
+  const handleToggleCountry = (id) => {
+    const next = new Set(selectedCountries);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedCountries(next);
+    // Cascade Reset
+    setSelectedStates(new Set());
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+  };
+
+  const handleSelectAllCountries = () => {
+    if (selectedCountries.size === countries.length) setSelectedCountries(new Set());
+    else setSelectedCountries(new Set(countries.map(c => c._id)));
+    setSelectedStates(new Set());
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+  };
+
+  const handleToggleState = (id) => {
+    const next = new Set(selectedStates);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedStates(next);
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+  };
+
+  const handleSelectAllStates = () => {
+    if (selectedStates.size === availableStates.length) setSelectedStates(new Set());
+    else setSelectedStates(new Set(availableStates.map(s => s._id)));
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+  };
+
+  const handleToggleCluster = (id) => {
+    const next = new Set(selectedClusters);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedClusters(next);
+    setSelectedDistricts(new Set());
+  };
+
+  const handleSelectAllClusters = () => {
+    if (selectedClusters.size === availableClusters.length) setSelectedClusters(new Set());
+    else setSelectedClusters(new Set(availableClusters.map(c => c._id)));
+    setSelectedDistricts(new Set());
+  };
+
+  const handleToggleDistrict = (id) => {
+    const next = new Set(selectedDistricts);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelectedDistricts(next);
+  };
+
+  const handleSelectAllDistricts = () => {
+    if (selectedDistricts.size === availableDistricts.length) setSelectedDistricts(new Set());
+    else setSelectedDistricts(new Set(availableDistricts.map(d => d._id)));
+  };
 
   const fetchSolarKits = async () => {
     try {
@@ -115,16 +297,22 @@ const CreateAmc = () => {
     }
   };
 
-  // Handle state selection
-  const handleStateSelect = (state) => {
-    setSelectedState(state._id);
-    setSelectedStateData(state);
-  };
-
-  // Filter plans based on selected state
+  // Filter plans based on selected levels
   const getFilteredPlans = () => {
-    if (!selectedState) return amcPlans;
-    return amcPlans.filter(plan => plan.state && plan.state._id === selectedState);
+    if (selectedStates.size === 0) return [];
+    
+    return amcPlans.filter(plan => {
+      // Must match state
+      if (!plan.state || !selectedStates.has(plan.state._id)) return false;
+      
+      // If cluster selection is active, must match
+      if (selectedClusters.size > 0 && (!plan.cluster || !selectedClusters.has(plan.cluster._id))) return false;
+      
+      // If district selection is active, must match
+      if (selectedDistricts.size > 0 && (!plan.district || !selectedDistricts.has(plan.district._id))) return false;
+      
+      return true;
+    });
   };
 
   // Derive unique options from solarKits for the dynamic dropdowns
@@ -134,54 +322,31 @@ const CreateAmc = () => {
   const uniqueSubProjectTypes = [...new Set(solarKits.map(k => k.subProjectType))].filter(Boolean);
 
   // Open configuration modal
-  const openConfigureModal = (config) => {
-    if (!selectedState) {
-      toast.error('Please select a state first');
+  const openConfigureModal = (plan) => {
+    if (selectedStates.size === 0) {
+      toast.error('Please select at least one state');
       return;
     }
 
-    setSelectedConfig(config);
+    setSelectedConfig(plan);
 
-    if (config) {
-      const existingPlan = amcPlans.find(plan =>
-        plan.state && plan.state._id === selectedState &&
-        plan.category === config.category &&
-        plan.projectType === config.projectType
-      );
-
-      if (existingPlan) {
-        setCurrentPlan(existingPlan);
-        setSelectedServices(existingPlan.services?.map(s => s._id) || []);
-        setCustomServices([]);
-        setCustomServiceInput('');
-        setPlanForm({
-          planName: existingPlan.planName || 'Basic Plan',
-          category: existingPlan.category || config.category,
-          subCategory: existingPlan.subCategory || config.subCategory,
-          projectType: existingPlan.projectType || config.projectType,
-          subProjectType: existingPlan.subProjectType || config.subProjectType,
-          monthlyCharge: existingPlan.monthlyCharge || 0,
-          yearlyCharge: existingPlan.yearlyCharge || 0,
-          annualVisits: existingPlan.annualVisits || 4,
-          description: existingPlan.description || ''
-        });
-      } else {
-        setCurrentPlan(null);
-        setSelectedServices([]);
-        setCustomServices([]);
-        setCustomServiceInput('');
-        setPlanForm({
-          planName: 'Basic Plan',
-          category: config.category || 'Solar Rooftop',
-          subCategory: config.subCategory || 'Residential',
-          projectType: config.projectType || '3-5 kW',
-          subProjectType: config.subProjectType || 'On-Grid',
-          monthlyCharge: 0,
-          yearlyCharge: 0,
-          annualVisits: 4,
-          description: 'Standard residential AMC plan'
-        });
-      }
+    if (plan) {
+      // Editing an existing plan
+      setCurrentPlan(plan);
+      setSelectedServices(plan.services?.map(s => s._id) || []);
+      setCustomServices([]);
+      setCustomServiceInput('');
+      setPlanForm({
+        planName: plan.planName || 'Basic Plan',
+        category: plan.category || 'Solar Rooftop',
+        subCategory: plan.subCategory || 'Residential',
+        projectType: plan.projectType || '1 to 10 kW',
+        subProjectType: plan.subProjectType || 'On-Grid',
+        monthlyCharge: plan.monthlyCharge || 0,
+        yearlyCharge: plan.yearlyCharge || 0,
+        annualVisits: plan.annualVisits || 4,
+        description: plan.description || ''
+      });
     } else {
       // Creating a new AMC from scratch
       setCurrentPlan(null);
@@ -190,9 +355,9 @@ const CreateAmc = () => {
       setCustomServiceInput('');
       setPlanForm({
         planName: 'Basic Plan',
-        category: 'Solar Rooftop',
-        subCategory: 'Residential',
-        projectType: '3-5 kW',
+        category: 'Solar top',
+        subCategory: '',
+        projectType: '',
         subProjectType: 'On-Grid',
         monthlyCharge: 0,
         yearlyCharge: 0,
@@ -221,9 +386,31 @@ const CreateAmc = () => {
       toast.error('Please select or add at least one service');
       return;
     }
-
     try {
       setLoading(true);
+      
+      // Determine targets
+      let targets = [];
+      if (selectedDistricts.size > 0) {
+        targets = availableDistricts.filter(d => selectedDistricts.has(d._id)).map(d => ({
+          stateId: d.state?._id || d.state,
+          clusterId: d.cluster?._id || d.cluster,
+          districtId: d._id
+        }));
+      } else if (selectedClusters.size > 0) {
+        targets = availableClusters.filter(c => selectedClusters.has(c._id)).map(c => ({
+          stateId: c.state?._id || c.state,
+          clusterId: c._id,
+          districtId: null
+        }));
+      } else {
+        targets = Array.from(selectedStates).map(id => ({
+          stateId: id,
+          clusterId: null,
+          districtId: null
+        }));
+      }
+
       const newServiceIds = [];
       if (customServices.length > 0) {
         const promises = customServices.map(serviceName => 
@@ -239,24 +426,35 @@ const CreateAmc = () => {
 
       const finalServiceIds = [...selectedServices, ...newServiceIds];
 
-      const payload = {
-        stateId: selectedState,
-        serviceIds: finalServiceIds,
-        ...(selectedConfig ? selectedConfig : {
+      if (currentPlan && currentPlan._id) {
+        // Updating a specific existing plan
+        const payload = {
+          planName: planForm.planName,
           category: planForm.category,
           subCategory: planForm.subCategory,
           projectType: planForm.projectType,
           subProjectType: planForm.subProjectType,
-        }),
-        ...planForm
-      };
-
-      if (currentPlan) {
+          monthlyCharge: planForm.monthlyCharge,
+          yearlyCharge: planForm.yearlyCharge,
+          annualVisits: planForm.annualVisits,
+          description: planForm.description,
+          serviceIds: finalServiceIds
+        };
         await updateAMCPlan(currentPlan._id, payload);
         toast.success('AMC Plan updated successfully!');
       } else {
-        await createAMCPlan(payload);
-        toast.success('AMC Plan configuration saved successfully!');
+        // Creating new plans in bulk for selected locations
+        const batchPromises = targets.map(target => {
+          const payload = {
+            ...target,
+            ...planForm,
+            serviceIds: finalServiceIds
+          };
+          return createAMCPlan(payload);
+        });
+
+        await Promise.all(batchPromises);
+        toast.success(`AMC Plans created for ${targets.length} locations!`);
       }
 
       setConfigureModalOpen(false);
@@ -323,58 +521,253 @@ const CreateAmc = () => {
       </div>
 
       <div className="max-w-[1600px] mx-auto px-6">
-        {/* State Selection */}
+        {/* Country Selection */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8">
           <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-            <h2 className="text-sm font-bold text-gray-800">Select State</h2>
+            <h2 className="text-sm font-bold text-gray-800">Select Country</h2>
           </div>
           <div className="p-6">
             <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide no-scrollbar">
-              {locationLoading ? (
-                <div className="flex gap-4">
-                  {[1, 2, 3, 4, 5].map(i => (
-                    <div key={i} className="w-48 h-20 bg-slate-100 animate-pulse rounded-xl border border-slate-200"></div>
-                  ))}
+              {/* Select All Countries */}
+              <button
+                onClick={handleSelectAllCountries}
+                className={`
+                  flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                  ${selectedCountries.size === countries.length && countries.length > 0
+                    ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                    : 'border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100'}
+                `}
+              >
+                <div className="text-sm font-bold">
+                  {selectedCountries.size === countries.length ? 'Deselect All' : 'Select All'}
                 </div>
-              ) : (
-                states.map((state) => (
-                  <button
-                    key={state._id}
-                    onClick={() => handleStateSelect(state)}
-                    className={`
-                      flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
-                      ${selectedState === state._id
-                        ? 'border-blue-500 bg-blue-50/10 shadow-sm'
-                        : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'}
-                    `}
-                  >
-                    <div className="text-sm font-bold text-gray-800 mb-1">
-                      {state.name}
+                <div className="text-[10px] uppercase font-bold opacity-70">Countries</div>
+              </button>
+
+              {countries.map((country) => (
+                <button
+                  key={country._id}
+                  onClick={() => handleToggleCountry(country._id)}
+                  className={`
+                    flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                    ${selectedCountries.has(country._id)
+                      ? 'border-blue-500 bg-blue-50 shadow-sm'
+                      : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'}
+                  `}
+                >
+                  <div className="text-sm font-bold text-gray-800">
+                    {country.name}
+                  </div>
+                  {selectedCountries.has(country._id) && (
+                    <div className="absolute top-2 right-2">
+                       <CheckSquare size={14} className="text-blue-500" />
                     </div>
-                    <div className="text-xs font-semibold text-gray-500 uppercase">
-                      {state.code || 'IN'}
-                    </div>
-                  </button>
-                ))
-              )}
+                  )}
+                </button>
+              ))}
             </div>
           </div>
         </div>
 
+        {/* State Selection */}
+        {selectedCountries.size > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8 transition-all">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h2 className="text-sm font-bold text-gray-800">Select State</h2>
+              {selectedStates.size > 0 && (
+                <span className="text-[10px] font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">
+                  {selectedStates.size} Selected
+                </span>
+              )}
+            </div>
+            <div className="p-6">
+              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                {/* Select All States */}
+                <button
+                  onClick={handleSelectAllStates}
+                  className={`
+                    flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                    ${selectedStates.size === availableStates.length && availableStates.length > 0
+                      ? 'border-blue-600 bg-blue-600 text-white shadow-md'
+                      : 'border-blue-200 bg-blue-50/50 text-blue-600 hover:bg-blue-100'}
+                  `}
+                >
+                  <div className="text-sm font-bold">
+                    {selectedStates.size === availableStates.length ? 'Deselect All' : 'Select All'}
+                  </div>
+                </button>
+
+                {statesLoading && availableStates.length === 0 ? (
+                  <div className="flex gap-4">
+                    {[1, 2, 3].map(i => <div key={i} className="w-48 h-20 bg-slate-100 animate-pulse rounded-xl"></div>)}
+                  </div>
+                ) : availableStates.length === 0 ? (
+                  <p className="text-gray-500 text-sm italic py-4">No states found.</p>
+                ) : (
+                  availableStates.map((state) => (
+                    <button
+                      key={state._id}
+                      onClick={() => handleToggleState(state._id)}
+                      className={`
+                        flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                        ${selectedStates.has(state._id)
+                          ? 'border-blue-500 bg-blue-50 shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-blue-300 hover:shadow-sm'}
+                      `}
+                    >
+                      <div className="text-sm font-bold text-gray-800">{state.name}</div>
+                      {selectedStates.has(state._id) && (
+                        <div className="absolute top-2 right-2">
+                          <CheckSquare size={14} className="text-blue-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Cluster Selection */}
+        {selectedStates.size > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8 transition-all">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h2 className="text-sm font-bold text-gray-800">Select Cluster</h2>
+              {selectedClusters.size > 0 && (
+                <span className="text-[10px] font-bold text-purple-500 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {selectedClusters.size} Selected
+                </span>
+              )}
+            </div>
+            <div className="p-6">
+              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                {/* Select All Clusters */}
+                <button
+                  onClick={handleSelectAllClusters}
+                  className={`
+                    flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                    ${selectedClusters.size === availableClusters.length && availableClusters.length > 0
+                      ? 'border-purple-600 bg-purple-600 text-white shadow-md'
+                      : 'border-purple-200 bg-purple-50/50 text-purple-600 hover:bg-purple-100'}
+                  `}
+                >
+                  <div className="text-sm font-bold">
+                    {selectedClusters.size === availableClusters.length ? 'Deselect All' : 'Select All'}
+                  </div>
+                </button>
+
+                {clustersLoading && availableClusters.length === 0 ? (
+                   <div className="flex gap-4">
+                    {[1, 2].map(i => <div key={i} className="w-48 h-20 bg-slate-100 animate-pulse rounded-xl"></div>)}
+                  </div>
+                ) : availableClusters.length === 0 ? (
+                  <p className="text-gray-500 text-sm italic py-4">No clusters found.</p>
+                ) : (
+                  availableClusters.map((cluster) => (
+                    <button
+                      key={cluster._id}
+                      onClick={() => handleToggleCluster(cluster._id)}
+                      className={`
+                        flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                        ${selectedClusters.has(cluster._id)
+                          ? 'border-purple-500 bg-purple-50 shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-purple-300 hover:shadow-sm'}
+                      `}
+                    >
+                      <div className="text-sm font-bold text-gray-800">{cluster.name}</div>
+                      {selectedClusters.has(cluster._id) && (
+                        <div className="absolute top-2 right-2">
+                          <CheckSquare size={14} className="text-purple-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* District Selection */}
+        {selectedClusters.size > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-8 transition-all">
+            <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+              <h2 className="text-sm font-bold text-gray-800">Select District</h2>
+              {selectedDistricts.size > 0 && (
+                <span className="text-[10px] font-bold text-emerald-500 bg-emerald-50 px-2 py-0.5 rounded-full">
+                  {selectedDistricts.size} Selected
+                </span>
+              )}
+            </div>
+            <div className="p-6">
+              <div className="flex gap-4 overflow-x-auto pb-4 no-scrollbar">
+                {/* Select All Districts */}
+                <button
+                  onClick={handleSelectAllDistricts}
+                  className={`
+                    flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                    ${selectedDistricts.size === availableDistricts.length && availableDistricts.length > 0
+                      ? 'border-emerald-600 bg-emerald-600 text-white shadow-md'
+                      : 'border-emerald-200 bg-emerald-50/50 text-emerald-600 hover:bg-emerald-100'}
+                  `}
+                >
+                  <div className="text-sm font-bold">
+                    {selectedDistricts.size === availableDistricts.length ? 'Deselect All' : 'Select All'}
+                  </div>
+                </button>
+
+                {districtsLoading && availableDistricts.length === 0 ? (
+                   <div className="flex gap-4">
+                    {[1, 2].map(i => <div key={i} className="w-48 h-20 bg-slate-100 animate-pulse rounded-xl"></div>)}
+                  </div>
+                ) : availableDistricts.length === 0 ? (
+                  <p className="text-gray-500 text-sm italic py-4">No districts found.</p>
+                ) : (
+                  availableDistricts.map((district) => (
+                    <button
+                      key={district._id}
+                      onClick={() => handleToggleDistrict(district._id)}
+                      className={`
+                        flex-shrink-0 w-48 p-4 rounded-xl border-2 transition-all duration-300 text-center relative
+                        ${selectedDistricts.has(district._id)
+                          ? 'border-emerald-500 bg-emerald-50 shadow-sm'
+                          : 'border-gray-200 bg-white hover:border-emerald-300 hover:shadow-sm'}
+                      `}
+                    >
+                      <div className="text-sm font-bold text-gray-800">{district.name}</div>
+                      {selectedDistricts.has(district._id) && (
+                        <div className="absolute top-2 right-2">
+                          <CheckSquare size={14} className="text-emerald-500" />
+                        </div>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Dynamic Header when active */}
-        {selectedState && selectedStateData && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-6 border-l-4 border-l-blue-500 flex items-center justify-between">
+        {selectedStates.size > 0 && (
+          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-l-[6px] border-blue-600">
             <div>
-              <h2 className="text-lg font-bold text-gray-800 tracking-tight flex items-center gap-2">
-                AMC Plans for <span className="text-blue-600 font-bold">{selectedStateData.name}</span>
+              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+                AMC Plans for <span className="text-blue-600">
+                  {selectedStates.size === 1 
+                    ? hookStates.find(s => selectedStates.has(s._id))?.name || 'Selected State'
+                    : `${selectedStates.size} States`
+                  }
+                </span>
               </h2>
-              <p className="text-sm text-gray-500 mt-1">Configure and manage AMC plans for the selected state</p>
+              <p className="text-sm text-gray-500 mt-1">Configure and manage AMC plans for the selected {selectedStates.size > 1 ? 'states' : 'state'}</p>
             </div>
             <button
               onClick={() => openConfigureModal(null)}
-              className="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-sm shadow-blue-200"
+              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md shadow-blue-200"
             >
-              <PlusCircle size={16} />
+              <PlusCircle size={18} />
               Create AMC
             </button>
           </div>
@@ -389,7 +782,7 @@ const CreateAmc = () => {
           </div>
 
           <div className="overflow-x-auto">
-            {!selectedState ? (
+            {selectedStates.size === 0 ? (
               <div className="py-20 text-center">
                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
                   <ChevronRight size={32} className="text-slate-300" />
@@ -402,7 +795,7 @@ const CreateAmc = () => {
                 <Loader className="animate-spin text-cyan-500 mx-auto mb-4" size={32} />
                 <p className="text-slate-500 text-xs font-medium tracking-wide italic">Fetching AMC plans...</p>
               </div>
-            ) : filteredPlans.length === 0 ? (
+            ) : getFilteredPlans().length === 0 ? (
               <div className="py-20 text-center">
                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
                   <Package size={32} className="text-slate-300" />
@@ -413,51 +806,50 @@ const CreateAmc = () => {
             ) : (
               <table className="w-full text-left border-collapse">
                 <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 tracking-wider">Category</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 tracking-wider">Sub Category</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 tracking-wider">Project Type</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 tracking-wider">Sub Project Type</th>
-                    <th className="px-6 py-4 text-xs font-semibold text-gray-500 tracking-wider">View</th>
+                  <tr className="bg-slate-50/50">
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Category</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Sub Category</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project Type</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Sub Project Type</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Configuration</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">View</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {filteredPlans.map((plan, index) => {
+                  {getFilteredPlans().map((plan, index) => {
                     return (
                       <tr key={index} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">{plan.category}</span>
+                          <span className="text-sm font-bold text-slate-700">{plan.category}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">{plan.subCategory}</span>
+                          <span className="text-sm font-bold text-slate-700">{plan.subCategory}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">{plan.projectType}</span>
+                          <span className="text-sm font-bold text-slate-700">{plan.projectType}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm text-gray-600">{plan.subProjectType}</span>
+                          <span className="text-sm font-bold text-slate-600">{plan.subProjectType}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <div className="flex gap-2">
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => openConfigureModal(plan)}
+                              className="px-5 py-2 bg-[#17a2b8] text-white text-xs font-bold rounded flex items-center gap-2 hover:bg-[#138496] transition-all shadow-sm"
+                            >
+                              <Settings size={14} />
+                              Configure
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex justify-center">
                             <button
                               onClick={() => openViewModal(plan)}
-                              className="px-4 py-2 bg-gray-600 text-white text-xs font-semibold rounded-md hover:bg-gray-700 transition-colors flex items-center gap-1.5"
+                              className="px-5 py-2 bg-[#6c757d] text-white text-xs font-bold rounded flex items-center gap-2 hover:bg-[#5a6268] transition-all shadow-sm"
                             >
                               <Eye size={14} />
                               View
-                            </button>
-                            <button
-                              onClick={() => openConfigureModal(plan)}
-                              className="px-4 py-2 bg-blue-50 text-blue-600 text-xs font-semibold rounded-md hover:bg-blue-100 transition-colors flex items-center gap-1.5"
-                            >
-                              <Edit2 size={14} />
-                              Edit
-                            </button>
-                            <button
-                               onClick={() => handleDeletePlan(plan._id)}
-                               className="p-2 text-red-500 hover:bg-red-50 rounded-md transition-colors"
-                             >
-                               <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -468,6 +860,25 @@ const CreateAmc = () => {
               </table>
             )}
           </div>
+        </div>
+
+        {/* Copyright Footer Replicating Image 1 */}
+        <div className="mt-auto py-8 text-center border-t border-slate-100 bg-white shadow-[0_-1px_10px_rgba(0,0,0,0.02)]">
+          <p className="text-sm font-bold text-slate-600">
+            Copyright &copy; 2025 Solarkits. All Rights Reserved.
+          </p>
+        </div>
+
+        {/* Break Time Button Replicating Image 1 */}
+        <div className="fixed bottom-6 right-8 z-[100]">
+          <button className="flex items-center gap-2 bg-[#0c2340] text-white px-5 py-2.5 rounded-full text-xs font-black shadow-xl hover:scale-105 transition-all">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+            Break Time
+          </button>
         </div>
       </div>
 
@@ -480,7 +891,7 @@ const CreateAmc = () => {
                 <div className="text-[10px] font-bold uppercase tracking-widest text-cyan-400 mb-1">Configuration Wizard</div>
                 <h3 className="text-xl font-bold flex items-center gap-2">
                   <Cog className="text-cyan-400" size={20} />
-                  Configure AMC for {selectedStateData?.name}
+                  Bulk Configure AMC ({selectedDistricts.size || selectedClusters.size || selectedStates.size} Locations)
                 </h3>
               </div>
               <button
@@ -508,12 +919,15 @@ const CreateAmc = () => {
                               <div className="relative">
                                 <select
                                   value={planForm.category}
-                                  onChange={(e) => setPlanForm({ ...planForm, category: e.target.value })}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setPlanForm({ ...planForm, category: val, subCategory: '' });
+                                  }}
                                   className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                                 >
                                   <option value="">Select Category</option>
-                                  {uniqueCategories.map((cat, i) => (
-                                    <option key={i} value={cat}>{cat}</option>
+                                  {masterCategories.map((cat, i) => (
+                                    <option key={i} value={cat.name}>{cat.name}</option>
                                   ))}
                                 </select>
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -530,11 +944,19 @@ const CreateAmc = () => {
                                   value={planForm.subCategory}
                                   onChange={(e) => setPlanForm({ ...planForm, subCategory: e.target.value })}
                                   className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
+                                  disabled={!planForm.category}
                                 >
                                   <option value="">Select Sub Category</option>
-                                  {uniqueSubCategories.map((sub, i) => (
-                                    <option key={i} value={sub}>{sub}</option>
-                                  ))}
+                                  {masterSubCategories
+                                    .filter(sub => {
+                                      const selectedCat = masterCategories.find(c => c.name === planForm.category);
+                                      const subCatId = sub.categoryId?._id || sub.categoryId;
+                                      return selectedCat && subCatId === selectedCat._id;
+                                    })
+                                    .map((sub, i) => (
+                                      <option key={i} value={sub.name}>{sub.name}</option>
+                                    ))
+                                  }
                                 </select>
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                                   <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -552,9 +974,11 @@ const CreateAmc = () => {
                                   className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                                 >
                                   <option value="">Select Project Type</option>
-                                  {uniqueProjectTypes.map((pt, i) => (
-                                    <option key={i} value={pt}>{pt}</option>
-                                  ))}
+                                  {Array.from(new Set(projectMappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)))
+                                    .map((range, i) => (
+                                      <option key={i} value={range}>{range}</option>
+                                    ))
+                                  }
                                 </select>
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
                                   <svg width="10" height="6" viewBox="0 0 10 6" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
@@ -572,8 +996,8 @@ const CreateAmc = () => {
                                   className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                                 >
                                   <option value="">Select Sub Project Type</option>
-                                  {uniqueSubProjectTypes.map((spt, i) => (
-                                    <option key={i} value={spt}>{spt}</option>
+                                  {masterSubProjectTypes.map((spt, i) => (
+                                    <option key={i} value={spt.name}>{spt.name}</option>
                                   ))}
                                 </select>
                                 <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
@@ -744,7 +1168,9 @@ const CreateAmc = () => {
                 <div className="flex justify-between items-center">
                   <div className="flex items-center gap-2 text-slate-400">
                     <AlertCircle size={16} />
-                    <span className="text-[10px] font-medium tracking-wide">Configuration for {selectedStateData?.name}</span>
+                    <span className="text-[10px] font-medium tracking-wide">
+                      Bulk Creation targeting {selectedDistricts.size || selectedClusters.size || selectedStates.size} areas.
+                    </span>
                   </div>
                   <div className="flex gap-4">
                     <button

@@ -21,9 +21,6 @@ const AmcServices = () => {
     serviceDescription: '',
     serviceType: 'regular',
     basePrice: '',
-    priceType: 'fixed',
-    visitsPerYear: '',
-    additionalVisitCharge: '',
     includePowerGuarantee: false,
     guaranteeMinKW: '',
     guaranteeMaxKW: '',
@@ -47,9 +44,6 @@ const AmcServices = () => {
     serviceDescription: '',
     serviceType: 'regular',
     basePrice: '',
-    priceType: 'fixed',
-    visitsPerYear: '',
-    additionalVisitCharge: '',
     includePowerGuarantee: false,
     guaranteeMinKW: '',
     guaranteeMaxKW: '',
@@ -107,9 +101,6 @@ const AmcServices = () => {
       description: formData.serviceDescription,
       serviceType: formData.serviceType,
       basePrice: parseInt(formData.basePrice) || 0,
-      priceType: formData.priceType,
-      visitsPerYear: parseInt(formData.visitsPerYear) || 0,
-      additionalVisitCharge: parseInt(formData.additionalVisitCharge) || 0,
       hasPowerGuarantee: formData.includePowerGuarantee,
       guaranteeMinKW: parseFloat(formData.guaranteeMinKW) || 0,
       guaranteeMaxKW: parseFloat(formData.guaranteeMaxKW) || 0,
@@ -135,9 +126,6 @@ const AmcServices = () => {
       serviceDescription: '',
       serviceType: 'regular',
       basePrice: '',
-      priceType: 'fixed',
-      visitsPerYear: '',
-      additionalVisitCharge: '',
       includePowerGuarantee: false,
       guaranteeMinKW: '',
       guaranteeMaxKW: '',
@@ -158,9 +146,6 @@ const AmcServices = () => {
       serviceDescription: service.description || '',
       serviceType: service.serviceType || 'regular',
       basePrice: (service.basePrice || 0).toString(),
-      priceType: service.priceType || 'fixed',
-      visitsPerYear: (service.visitsPerYear || 0).toString(),
-      additionalVisitCharge: (service.additionalVisitCharge || 0).toString(),
       includePowerGuarantee: service.hasPowerGuarantee || false,
       guaranteeMinKW: (service.guaranteeMinKW || 0).toString(),
       guaranteeMaxKW: (service.guaranteeMaxKW || 0).toString(),
@@ -180,9 +165,6 @@ const AmcServices = () => {
       description: editFormData.serviceDescription,
       serviceType: editFormData.serviceType,
       basePrice: parseInt(editFormData.basePrice) || 0,
-      priceType: editFormData.priceType,
-      visitsPerYear: parseInt(editFormData.visitsPerYear) || 0,
-      additionalVisitCharge: parseInt(editFormData.additionalVisitCharge) || 0,
       hasPowerGuarantee: editFormData.includePowerGuarantee,
       guaranteeMinKW: parseFloat(editFormData.guaranteeMinKW) || 0,
       guaranteeMaxKW: parseFloat(editFormData.guaranteeMaxKW) || 0,
@@ -222,16 +204,7 @@ const AmcServices = () => {
 
   // Get price text for display
   const getPriceText = (service) => {
-    switch (service.priceType) {
-      case 'per_visit':
-        return `₹${service.basePrice || 0}/visit`;
-      case 'monthly':
-        return `₹${service.basePrice || 0}/month`;
-      case 'yearly':
-        return `₹${service.basePrice || 0}/year`;
-      default:
-        return `₹${service.basePrice || 0} (fixed)`;
-    }
+    return `₹${service.basePrice || 0}`;
   };
 
   // Scroll to form
@@ -312,7 +285,7 @@ const AmcServices = () => {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       <div>
                         <label className="block text-sm font-bold text-slate-800 mb-2">Base Price (₹)</label>
                         <input
@@ -324,52 +297,8 @@ const AmcServices = () => {
                           className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
                         />
                       </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-800 mb-2">Price Type</label>
-                        <div className="relative">
-                          <select
-                            name="priceType"
-                            value={formData.priceType}
-                            onChange={handleInputChange}
-                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 appearance-none pr-10"
-                          >
-                            <option value="fixed">Fixed</option>
-                            <option value="per_visit">Per Visit</option>
-                            <option value="monthly">Monthly</option>
-                            <option value="yearly">Yearly</option>
-                          </select>
-                          <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                        </div>
-                      </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="block text-sm font-bold text-slate-800 mb-2">Visits Per Year</label>
-                        <input
-                          type="number"
-                          name="visitsPerYear"
-                          min="0"
-                          value={formData.visitsPerYear}
-                          onChange={handleInputChange}
-                          placeholder="0"
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 mb-1"
-                        />
-                        <p className="text-xs text-slate-500">Number of visits include_onced in service</p>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-800 mb-2">Additional Visit Charge (₹)</label>
-                        <input
-                          type="number"
-                          name="additionalVisitCharge"
-                          value={formData.additionalVisitCharge}
-                          onChange={handleInputChange}
-                          placeholder="0"
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 mb-1"
-                        />
-                        <p className="text-xs text-slate-500">Charge for extra visits</p>
-                      </div>
-                    </div>
                   </div>
 
                   {/* Power Generation Guarantee Section */}
@@ -527,9 +456,6 @@ const AmcServices = () => {
                           <span className="bg-[#6c7b8e] text-white text-xs font-bold px-2 py-1 rounded">
                             {service.serviceType}
                           </span>
-                          <span className="bg-[#0c6baf] text-white text-xs font-bold px-2 py-1 rounded">
-                            {service.visitsPerYear} visits/year
-                          </span>
                         </div>
 
                         {service.hasPowerGuarantee && (
@@ -541,12 +467,7 @@ const AmcServices = () => {
                         )}
 
                         <div className="flex items-baseline gap-1 text-slate-800 font-bold">
-                          <span>₹{service.basePrice?.toLocaleString()}/{service.priceType === 'per_visit' ? 'visit' : service.priceType === 'monthly' ? 'month' : service.priceType === 'yearly' ? 'year' : 'fixed'}</span>
-                          {service.additionalVisitCharge > 0 && (
-                            <span className="text-slate-500 ml-1 font-normal text-sm">
-                              + ₹{service.additionalVisitCharge}/extra visit
-                            </span>
-                          )}
+                          <span>₹{service.basePrice?.toLocaleString()}</span>
                         </div>
                       </div>
                     ))}
@@ -583,7 +504,6 @@ const AmcServices = () => {
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Service Name</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Type</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Price</th>
-                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Visits/Year</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Power<br/>Guarantee</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Description</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600 text-center">Actions</th>
@@ -604,10 +524,7 @@ const AmcServices = () => {
                           </span>
                         </td>
                         <td className="px-6 py-4">
-                          <span className="text-sm text-slate-800">₹{service.basePrice?.toLocaleString()}/{service.priceType === 'per_visit' ? 'visit' : service.priceType === 'monthly' ? 'month' : service.priceType === 'yearly' ? 'year' : 'fixed'}</span>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-800">
-                          {service.visitsPerYear}
+                          <span className="text-sm text-slate-800">₹{service.basePrice?.toLocaleString()}</span>
                         </td>
                         <td className="px-6 py-4">
                           {service.hasPowerGuarantee ? (
@@ -693,7 +610,7 @@ const AmcServices = () => {
                     />
                   </div>
 
-                  <div className="grid grid-cols-3 gap-6">
+                  <div className="grid grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Service Classification</label>
                       <div className="relative">
@@ -721,47 +638,8 @@ const AmcServices = () => {
                         className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
                       />
                     </div>
-                    <div>
-                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Price Model</label>
-                      <div className="relative">
-                        <select
-                          name="priceType"
-                          value={editFormData.priceType}
-                          onChange={handleEditInputChange}
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500 appearance-none pr-10"
-                        >
-                          <option value="fixed">Fixed</option>
-                          <option value="per_visit">Per Visit</option>
-                          <option value="monthly">Monthly</option>
-                          <option value="yearly">Yearly</option>
-                        </select>
-                        <ChevronDown size={16} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-                      </div>
-                    </div>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-6">
-                    <div>
-                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Standard Visits</label>
-                      <input
-                        type="number"
-                        name="visitsPerYear"
-                        value={editFormData.visitsPerYear}
-                        onChange={handleEditInputChange}
-                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Extra Visit Premium (₹)</label>
-                      <input
-                        type="number"
-                        name="additionalVisitCharge"
-                        value={editFormData.additionalVisitCharge}
-                        onChange={handleEditInputChange}
-                        className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                      />
-                    </div>
-                  </div>
                 </div>
 
                 {/* Edit Power Generation Guarantee Section */}

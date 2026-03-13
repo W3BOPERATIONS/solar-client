@@ -21,7 +21,6 @@ export const useLocations = () => {
   // Load basic data on mount
   useEffect(() => {
     fetchCountries();
-    fetchStates();
   }, []);
 
   const fetchCountries = async () => {

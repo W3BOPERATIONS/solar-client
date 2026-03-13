@@ -127,3 +127,40 @@ export const getPlansByRole = async (role) => {
     const response = await api.get('/combokit/plans', { params: { role } });
     return response.data;
 };
+
+// Partner Settings API
+export const getPartnerTypes = async () => {
+    const response = await api.get('/partner-settings/types');
+    return response.data;
+};
+
+export const getPartnerPlans = async (partnerType, stateId) => {
+    const response = await api.get('/partner-settings/plans', { params: { partnerType, stateId } });
+    return response.data;
+};
+
+// Masters Fetching (Categories, Types)
+export const getCategories = async () => {
+    const response = await api.get('/masters/categories');
+    return response.data.data;
+};
+
+export const getSubCategories = async () => {
+    const response = await api.get('/masters/sub-categories');
+    return response.data.data;
+};
+
+export const getProjectTypes = async () => {
+    const response = await api.get('/masters/project-types');
+    return response.data.data;
+};
+
+export const getSubProjectTypes = async () => {
+    const response = await api.get('/masters/sub-project-types');
+    return response.data.data;
+};
+
+export const getProjectCategoryMappings = async (params) => {
+    const response = await api.get('/masters/project-category-mappings', { params });
+    return response.data.data;
+};

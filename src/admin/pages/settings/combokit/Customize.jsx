@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import { locationAPI } from '../../../../api/api';
-import { getAssignments, updateAssignment } from '../../../../services/combokit/combokitApi';
+import { getAssignments, updateAssignment, getPartnerTypes } from '../../../../services/combokit/combokitApi';
 import toast from 'react-hot-toast';
 
 const CustomizeCombokit = () => {
@@ -17,13 +17,13 @@ const CustomizeCombokit = () => {
   const inverterOptions = ['Sungrow', 'ABB', 'Fronius'];
   const boskitOptions = ['Boskit A', 'Boskit B', 'Boskit C'];
 
-  // State management
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountryName, setSelectedCountryName] = useState('');
   const [selectedStates, setSelectedStates] = useState(new Set());
   const [selectedClusters, setSelectedClusters] = useState(new Set());
   const [selectedDistricts, setSelectedDistricts] = useState(new Set());
   const [selectedRoles, setSelectedRoles] = useState(new Set());
-
-  const allRoles = ['Dealer', 'Franchisee', 'Channel Partner'];
+  const [partners, setPartners] = useState([]);
 
   // Data Cache (ID -> Data)
   const [availableClusters, setAvailableClusters] = useState({}); // stateId -> [clusters]
@@ -38,16 +38,42 @@ const CustomizeCombokit = () => {
   // Initial Data
   useEffect(() => {
     fetchCountries();
+    fetchPartners();
   }, []);
 
-  // Fetch States for India (default)
+  const fetchPartners = async () => {
+    try {
+      const data = await getPartnerTypes();
+      setPartners(data || []);
+    } catch (err) {
+      console.error("Error fetching partners", err);
+    }
+  };
+
+  // When countries load, auto-select India if available
   useEffect(() => {
-    if (countries.length > 0) {
+    if (countries.length > 0 && !selectedCountry) {
       const india = countries.find(c => c.name === 'India');
-      if (india) fetchStates({ country: india._id });
-      else fetchStates({ country: countries[0]._id });
+      if (india) {
+        handleCountrySelect(india._id, india.name);
+      }
     }
   }, [countries]);
+
+  // Handle country selection
+  const handleCountrySelect = (countryId, countryName) => {
+    setSelectedCountry(countryId);
+    setSelectedCountryName(countryName);
+    fetchStates({ countryId: countryId });
+    
+    // Reset all following
+    setSelectedStates(new Set());
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
+    setAvailableClusters({});
+    setAvailableDistricts({});
+  };
 
   // Fetch Assignments
   useEffect(() => {
@@ -79,7 +105,7 @@ const CustomizeCombokit = () => {
       // Fetch clusters for this state if not available
       if (!availableClusters[stateId]) {
         try {
-          const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
+          const res = await locationAPI.getAllClusters({ stateId: stateId, isActive: 'true' });
           if (res.data && res.data.data) {
             setAvailableClusters(prev => ({ ...prev, [stateId]: res.data.data }));
           }
@@ -100,7 +126,7 @@ const CustomizeCombokit = () => {
     for (const stateId of allIds) {
       if (!availableClusters[stateId]) {
         try {
-          const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
+          const res = await locationAPI.getAllClusters({ stateId: stateId, isActive: 'true' });
           if (res.data && res.data.data) {
             setAvailableClusters(prev => ({ ...prev, [stateId]: res.data.data }));
           }
@@ -145,7 +171,7 @@ const CustomizeCombokit = () => {
       // Fetch districts
       if (!availableDistricts[clusterId]) {
         try {
-          const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
+          const res = await locationAPI.getAllDistricts({ clusterId: clusterId, isActive: 'true' });
           if (res.data && res.data.data) {
             setAvailableDistricts(prev => ({ ...prev, [clusterId]: res.data.data }));
           }
@@ -167,7 +193,7 @@ const CustomizeCombokit = () => {
     for (const clusterId of allIds) {
       if (!availableDistricts[clusterId]) {
         try {
-          const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
+          const res = await locationAPI.getAllDistricts({ clusterId: clusterId, isActive: 'true' });
           if (res.data && res.data.data) {
             setAvailableDistricts(prev => ({ ...prev, [clusterId]: res.data.data }));
           }
@@ -235,7 +261,7 @@ const CustomizeCombokit = () => {
   };
 
   const selectAllRoles = () => {
-    setSelectedRoles(new Set(allRoles));
+    setSelectedRoles(new Set(partners.map(p => p.name)));
   };
 
   const clearAllRoles = () => {
@@ -396,44 +422,67 @@ const CustomizeCombokit = () => {
         </div>
       </div>
 
-      {/* State Selection */}
+      {/* Country Selection */}
       <div className="card mb-6 shadow-lg rounded-lg bg-white">
         <div className="card-body p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select States</h3>
-
-          <div className="mb-4">
-            <button
-              onClick={selectAllStates}
-              className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
-            >
-              <CheckSquare className="inline-block w-4 h-4 mr-1" />
-              Select All States
-            </button>
-            <button
-              onClick={clearAllStates}
-              className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
-            >
-              <XCircle className="inline-block w-4 h-4 mr-1" />
-              Clear All
-            </button>
-          </div>
-
+          <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Country</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {allStates.map((state, index) => (
+            {countries.map((country) => (
               <div
-                key={`${state._id}-${index}`}
-                onClick={() => handleStateClick(state._id)}
-                className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedStates.has(state._id)
-                  ? 'bg-blue-600 text-white border-blue-600'
-                  : 'border-blue-400 hover:border-blue-600'
+                key={country._id}
+                onClick={() => handleCountrySelect(country._id, country.name)}
+                className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedCountry === country._id
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
+                  : 'bg-white border-blue-400 hover:border-blue-600'
                   }`}
               >
-                <p className="font-medium">{state.name}</p>
+                <p className="font-medium">{country.name}</p>
               </div>
             ))}
           </div>
         </div>
       </div>
+
+      {/* State Selection */}
+      {selectedCountry && (
+        <div className="card mb-6 shadow-lg rounded-lg bg-white">
+          <div className="card-body p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select States</h3>
+
+            <div className="mb-4">
+              <button
+                onClick={selectAllStates}
+                className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                <CheckSquare className="inline-block w-4 h-4 mr-1" />
+                Select All States
+              </button>
+              <button
+                onClick={clearAllStates}
+                className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
+              >
+                <XCircle className="inline-block w-4 h-4 mr-1" />
+                Clear All
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {allStates.map((state, index) => (
+                <div
+                  key={`${state._id}-${index}`}
+                  onClick={() => handleStateClick(state._id)}
+                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedStates.has(state._id)
+                    ? 'bg-blue-600 text-white border-blue-600'
+                    : 'border-blue-400 hover:border-blue-600'
+                    }`}
+                >
+                  <p className="font-medium">{state.name}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Cluster Selection */}
       {selectedStates.size > 0 && (
@@ -541,16 +590,16 @@ const CustomizeCombokit = () => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {allRoles.map((role, index) => (
+              {partners.map((p, index) => (
                 <div
-                  key={`${role}-${index}`}
-                  onClick={() => handleRoleClick(role)}
-                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedRoles.has(role)
+                  key={`${p._id}-${index}`}
+                  onClick={() => handleRoleClick(p.name)}
+                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedRoles.has(p.name)
                     ? 'bg-orange-600 text-white border-orange-600'
                     : 'border-gray-300 hover:border-orange-500'
                     }`}
                 >
-                  {role}
+                  {p.name}
                 </div>
               ))}
             </div>
@@ -591,6 +640,12 @@ const CustomizeCombokit = () => {
                   <tbody className="bg-white divide-y divide-gray-200">
                     {assignments
                       .filter(assignment => {
+                        // Global Country Filter
+                        if (selectedCountry && assignment.state?.country !== selectedCountry && assignment.country !== selectedCountry) {
+                           // Check both direct reference and state reference
+                           return false;
+                        }
+
                         // Filter Logic
                         if (selectedStates.size > 0 && !selectedStates.has(assignment.state?._id)) return false;
                         if (selectedClusters.size > 0 && !selectedClusters.has(assignment.cluster?._id)) return false;

@@ -16,6 +16,7 @@ import {
   saveSolarKitBOM as saveSolarkitBOM,
   getSolarKitBOM as getSolarkitBOM
 } from '../../../../services/combokit/combokitApi';
+import { productApi } from '../../../../api/productApi';
 import toast from 'react-hot-toast';
 
 const CreateSolarkit = () => {
@@ -31,14 +32,21 @@ const CreateSolarkit = () => {
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Master Data States
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [productsList, setProductsList] = useState([]);
+
   // Form states
   const [solarkitForm, setSolarkitForm] = useState({
     name: '',
-    products: ['Panel'],
-    category: 'Solar Panel',
-    subCategory: 'Residential',
-    projectType: '1kW - 10kW',
-    subProjectType: 'On Grid'
+    products: [''],
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: ''
   });
 
   // BOM State
@@ -61,7 +69,37 @@ const CreateSolarkit = () => {
   useEffect(() => {
     fetchCountries();
     fetchSolarkits();
+    fetchMasters();
   }, []);
+
+  const fetchMasters = async () => {
+    try {
+      const [catRes, subCatRes, mappingRes, subPTypeRes, prodRes] = await Promise.all([
+        productApi.getCategories(),
+        productApi.getSubCategories(),
+        productApi.getProjectCategoryMappings(),
+        productApi.getSubProjectTypes(),
+        productApi.getAll()
+      ]);
+
+      if (catRes.data.success) setCategories(catRes.data.data);
+      if (subCatRes.data.success) setSubCategories(subCatRes.data.data);
+      
+      if (mappingRes.data.success) {
+        // Extract unique project type strings (e.g., "1 to 10 kW")
+        const uniqueProjectTypes = Array.from(new Set(
+          mappingRes.data.data.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+        )).sort();
+        setProjectTypes(uniqueProjectTypes);
+      }
+
+      if (subPTypeRes.data.success) setSubProjectTypes(subPTypeRes.data.data);
+      if (prodRes.data.success) setProductsList(prodRes.data.data);
+    } catch (error) {
+      console.error('Error fetching masters:', error);
+      toast.error('Failed to load form options');
+    }
+  };
 
   // Update activeCountry when countries load
   useEffect(() => {
@@ -151,11 +189,11 @@ const CreateSolarkit = () => {
       fetchSolarkits();
       setSolarkitForm({
         name: '',
-        products: ['Panel'],
-        category: 'Solar Panel',
-        subCategory: 'Residential',
-        projectType: '1kW - 10kW',
-        subProjectType: 'On Grid'
+        products: [''],
+        category: '',
+        subCategory: '',
+        projectType: '',
+        subProjectType: ''
       });
       setCurrentRow(null);
     } catch (error) {
@@ -346,16 +384,16 @@ const CreateSolarkit = () => {
         <div className="overflow-x-auto">
           <table className="w-full text-left">
             <thead>
-              <tr className="bg-slate-800 text-white">
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Create</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Status</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Name</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Country</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Category</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Sub Category</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Project Type</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider">Sub Project Type</th>
-                <th className="px-4 py-3 font-bold uppercase text-[11px] tracking-wider text-center">View</th>
+              <tr className="bg-[#1e293b] text-white border-b border-gray-700">
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider">Create</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider">Status</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider">Name</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider">Country</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider">Category</th>
+                <th className="px-4 py-4 font-bold uppercase text-[11px] tracking-wider">Sub Category</th>
+                <th className="px-4 py-4 font-bold uppercase text-[11px] tracking-wider">Project Type</th>
+                <th className="px-4 py-4 font-bold uppercase text-[11px] tracking-wider">Sub Project Type</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider text-center">View</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
@@ -379,27 +417,27 @@ const CreateSolarkit = () => {
                 </tr>
               ) : (
                 filteredSolarkits.map((kit) => (
-                  <tr key={kit._id} className="hover:bg-blue-50/20 transition-colors group">
-                    <td className="px-4 py-3 text-sm">
-                      <div className="flex gap-1.5">
+                  <tr key={kit._id} className="hover:bg-blue-50/20 transition-colors group border-b border-gray-50">
+                    <td className="px-6 py-4 text-sm">
+                      <div className="flex gap-2">
                         <button
                           onClick={() => handleEdit(kit)}
-                          className="bg-emerald-500 text-white px-2.5 py-1 rounded text-[10px] font-bold hover:bg-emerald-600 transition-all"
+                          className="bg-[#0ea5e9] text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-[#0284c7] transition-all shadow-sm"
                         >
                           Create
                         </button>
                         <button
                           onClick={() => openBomModal(kit)}
-                          className="bg-sky-500 text-white px-2.5 py-1 rounded text-[10px] font-bold hover:bg-sky-600 transition-all"
+                          className="bg-[#64748b] text-white px-3 py-1.5 rounded text-[11px] font-bold hover:bg-[#475569] transition-all shadow-sm"
                         >
                           Add BOM
                         </button>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-6 py-4">
                       <button
                         onClick={() => toggleStatus(kit._id, kit.status === 'Active')}
-                        className={`px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider transition-all ${kit.status === 'Active'
+                        className={`px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider transition-all ${kit.status === 'Active'
                           ? "bg-emerald-100 text-emerald-700 border border-emerald-200"
                           : "bg-rose-100 text-rose-700 border border-rose-200"
                           }`}
@@ -407,16 +445,16 @@ const CreateSolarkit = () => {
                         {kit.status}
                       </button>
                     </td>
-                    <td className="px-4 py-3 font-bold text-gray-700 text-sm">{kit.name}</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.country?.name}</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.category}</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.subCategory}</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.projectType}</td>
-                    <td className="px-4 py-3 text-gray-600 text-sm">{kit.subProjectType}</td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-6 py-4 font-bold text-gray-700 text-sm">{kit.name}</td>
+                    <td className="px-6 py-4 text-gray-600 text-sm">{kit.country?.name}</td>
+                    <td className="px-6 py-4 text-gray-600 text-sm">{kit.category}</td>
+                    <td className="px-4 py-4 text-gray-600 text-[13px]">{kit.subCategory}</td>
+                    <td className="px-4 py-4 text-gray-600 text-[13px]">{kit.projectType}</td>
+                    <td className="px-4 py-4 text-gray-600 text-[13px]">{kit.subProjectType}</td>
+                    <td className="px-6 py-4 text-center">
                       <button
                         onClick={() => openViewModal(kit)}
-                        className="bg-cyan-500 text-white px-3 py-1 rounded-md text-[10px] font-bold hover:bg-cyan-600 transition-all"
+                        className="bg-[#06b6d4] text-white px-4 py-1.5 rounded text-[11px] font-bold hover:bg-[#0891b2] transition-all shadow-sm"
                       >
                         View
                       </button>
@@ -431,11 +469,11 @@ const CreateSolarkit = () => {
                     onClick={() => {
                       setSolarkitForm({
                         name: '',
-                        products: ['Panel'],
-                        category: 'Solar Panel',
-                        subCategory: 'Residential',
-                        projectType: '1kW - 10kW',
-                        subProjectType: 'On Grid'
+                        products: [''],
+                        category: '',
+                        subCategory: '',
+                        projectType: '',
+                        subProjectType: ''
                       });
                       setCurrentRow(null);
                       setModalOpen(true);
@@ -462,139 +500,149 @@ const CreateSolarkit = () => {
       {/* Internal Modals */}
       {/* Create/Edit Modal */}
       {modalOpen && (
-        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
-          <div className="relative bg-white w-full max-w-xl shadow-2xl rounded-2xl overflow-hidden animate-slideUp">
-            <div className="bg-blue-600 p-6 flex justify-between items-center text-white">
-              <div>
-                <h3 className="text-lg font-bold">{currentRow ? 'Update SolarKit' : 'Create New SolarKit'}</h3>
-                <p className="text-blue-100 text-xs">Define kit properties and product list</p>
-              </div>
-              <button onClick={() => setModalOpen(false)} className="bg-white/10 hover:bg-white/20 p-2 rounded-xl transition-all">
-                <XSquare size={24} />
+        <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-sm overflow-y-auto h-full w-full z-[60] flex items-center justify-center p-4">
+          <div className="relative bg-white w-full max-w-3xl shadow-2xl rounded-md overflow-hidden animate-fadeIn">
+            {/* Modal Header */}
+            <div className="px-8 py-6 flex justify-between items-center bg-white">
+              <h3 className="text-2xl font-bold text-[#1e293b]">
+                {currentRow ? 'Update SolarKit' : 'Create New SolarKit'}
+              </h3>
+              <button 
+                onClick={() => setModalOpen(false)} 
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <XSquare size={28} />
               </button>
             </div>
 
-            <div className="p-6 max-h-[75vh] overflow-y-auto custom-scrollbar">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-                <div className="col-span-full">
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">SolarKit Name</label>
+            <div className="px-8 pb-8">
+              <div className="space-y-6">
+                {/* SolarKit Name */}
+                <div>
+                  <label className="block text-base font-bold text-gray-700 mb-2">SolarKit Name</label>
                   <input
                     type="text"
                     name="name"
                     value={solarkitForm.name}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
-                    placeholder="e.g., 5kW Ultra Series"
+                    className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 text-lg"
+                    placeholder="Enter kit name"
                   />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Category</label>
-                  <select
-                    name="category"
-                    value={solarkitForm.category}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
-                  >
-                    <option>Solar Panel</option>
-                    <option>Inverter</option>
-                    <option>BOS Kit</option>
-                  </select>
+                {/* Additional Fields */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">Category</label>
+                    <select
+                      name="category"
+                      value={solarkitForm.category}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 cursor-pointer"
+                    >
+                      <option value="">Select Category</option>
+                      {categories.map(cat => (
+                        <option key={cat._id} value={cat.name}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">Sub Category</label>
+                    <select
+                      name="subCategory"
+                      value={solarkitForm.subCategory}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 cursor-pointer"
+                    >
+                      <option value="">Select Sub Category</option>
+                      {subCategories
+                        .filter(sub => !solarkitForm.category || sub.categoryId?.name === solarkitForm.category || sub.category?.name === solarkitForm.category)
+                        .map(sub => (
+                          <option key={sub._id} value={sub.name}>{sub.name}</option>
+                        ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">Project Type</label>
+                    <select
+                      name="projectType"
+                      value={solarkitForm.projectType}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 cursor-pointer"
+                    >
+                      <option value="">Select Project Type</option>
+                      {projectTypes.map((type, idx) => (
+                        <option key={idx} value={type}>{type}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">Sub Project Type</label>
+                    <select
+                      name="subProjectType"
+                      value={solarkitForm.subProjectType}
+                      onChange={handleInputChange}
+                      className="w-full px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 cursor-pointer"
+                    >
+                      <option value="">Select Sub Project Type</option>
+                      {subProjectTypes.map(type => (
+                        <option key={type._id} value={type.name}>{type.name}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
 
+                {/* Products Section */}
                 <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Sub Category</label>
-                  <select
-                    name="subCategory"
-                    value={solarkitForm.subCategory}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
-                  >
-                    <option>Residential</option>
-                    <option>Commercial</option>
-                    <option>Industrial</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Project Type</label>
-                  <select
-                    name="projectType"
-                    value={solarkitForm.projectType}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
-                  >
-                    <option>1kW - 10kW</option>
-                    <option>10kW - 50kW</option>
-                    <option>50kW+</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1.5">Sub Project Type</label>
-                  <select
-                    name="subProjectType"
-                    value={solarkitForm.subProjectType}
-                    onChange={handleInputChange}
-                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 focus:border-blue-500 focus:bg-white rounded-xl transition-all font-semibold text-gray-700 text-sm"
-                  >
-                    <option>On Grid</option>
-                    <option>Off Grid</option>
-                    <option>Hybrid</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="mb-6 p-4 bg-blue-50/40 rounded-2xl border border-blue-100/50">
-                <label className="block text-[10px] font-bold text-blue-600 uppercase tracking-widest mb-3 flex items-center gap-2">
-                  <Package size={14} /> Products Included
-                </label>
-                <div className="space-y-2">
-                  {solarkitForm.products.map((product, index) => (
-                    <div key={index} className="flex gap-2 group animate-fadeIn">
-                      <select
-                        value={product}
-                        onChange={(e) => handleProductChange(index, e.target.value)}
-                        className="flex-1 px-3 py-2 bg-white border border-gray-200 focus:border-blue-500 rounded-lg transition-all font-semibold text-gray-700 text-sm shadow-sm"
-                      >
-                        <option>Panel</option>
-                        <option>Inverter</option>
-                        <option>BOS Kit</option>
-                        <option>Battery</option>
-                        <option>Structure</option>
-                      </select>
-                      {index > 0 && (
+                  <label className="block text-base font-bold text-gray-700 mb-2">Products</label>
+                  <div className="space-y-4">
+                    {solarkitForm.products.map((product, index) => (
+                      <div key={index} className="flex items-center gap-3">
+                        <select
+                          value={product}
+                          onChange={(e) => handleProductChange(index, e.target.value)}
+                          className="flex-1 px-4 py-3 bg-white border border-gray-300 rounded focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all text-gray-800 cursor-pointer"
+                        >
+                          <option value="">Select Product</option>
+                          {productsList.map(prod => (
+                            <option key={prod._id} value={prod.name}>{prod.name}</option>
+                          ))}
+                        </select>
                         <button
                           onClick={() => removeProductField(index)}
-                          className="bg-white text-rose-500 hover:bg-rose-500 hover:text-white p-2 rounded-lg transition-all shadow-sm border border-rose-100"
+                          className="text-gray-400 hover:text-gray-900 transition-colors p-1"
                         >
-                          <Trash2 size={16} />
+                          <span className="text-2xl font-light">&times;</span>
                         </button>
-                      )}
-                    </div>
-                  ))}
+                      </div>
+                    ))}
+                  </div>
                   <button
                     onClick={addProductField}
-                    className="w-full py-2 mt-1 border border-dashed border-blue-300 rounded-lg text-blue-600 hover:bg-blue-600 hover:text-white hover:border-blue-600 transition-all font-bold text-xs flex items-center justify-center gap-2"
+                    className="mt-4 text-[#0ea5e9] hover:text-[#0284c7] font-bold text-sm flex items-center gap-1 transition-colors"
                   >
-                    <PlusCircle size={14} /> ADD PRODUCT
+                    + Add Product
                   </button>
                 </div>
               </div>
 
-              <div className="flex gap-3">
+              {/* Modal Actions */}
+              <div className="mt-12 flex justify-end gap-3">
                 <button
                   onClick={() => setModalOpen(false)}
-                  className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-xl font-bold text-sm hover:bg-gray-200 transition-all"
+                  className="px-8 py-2.5 bg-[#6b7280] text-white rounded font-bold text-sm hover:bg-[#4b5563] transition-all shadow-sm"
                 >
-                  DISCARD
+                  Cancel
                 </button>
                 <button
                   onClick={saveSolarkit2}
-                  className="flex-[2] py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 transition-all flex items-center justify-center gap-2"
+                  className="px-8 py-2.5 bg-[#0284c7] text-white rounded font-bold text-sm hover:bg-[#0369a1] transition-all flex items-center gap-2 shadow-sm"
                 >
                   <Save size={18} />
-                  {currentRow ? 'UPDATE KIT' : 'SAVE KIT'}
+                  {currentRow ? 'Save' : 'Save'}
                 </button>
               </div>
             </div>
