@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   PlusCircle, Save, RefreshCw, Cog, List,
   Edit2, Trash2, CheckSquare, XSquare,
@@ -58,6 +58,30 @@ const CreateAmc = () => {
   const [currentPlan, setCurrentPlan] = useState(null);
   const [selectedConfig, setSelectedConfig] = useState(null);
 
+  // Live Counts Calculation
+  const locationCounts = useMemo(() => {
+    const counts = {
+      countries: {},
+      states: {},
+      clusters: {},
+      districts: {}
+    };
+
+    amcPlans.forEach(plan => {
+      const countryId = plan.state?.country?._id || plan.state?.country;
+      const stateId = plan.state?._id || plan.state;
+      const clusterId = plan.cluster?._id || plan.cluster;
+      const districtId = plan.district?._id || plan.district;
+
+      if (countryId) counts.countries[countryId] = (counts.countries[countryId] || 0) + 1;
+      if (stateId) counts.states[stateId] = (counts.states[stateId] || 0) + 1;
+      if (clusterId) counts.clusters[clusterId] = (counts.clusters[clusterId] || 0) + 1;
+      if (districtId) counts.districts[districtId] = (counts.districts[districtId] || 0) + 1;
+    });
+
+    return counts;
+  }, [amcPlans]);
+
   // Available services
   const [availableServices, setAvailableServices] = useState([]);
   const [selectedServices, setSelectedServices] = useState([]);
@@ -90,6 +114,8 @@ const CreateAmc = () => {
     annualVisits: 4,
     basicPricePerKw: 0,
     amcServiceCharges: 0,
+    includeOncePowerGuarantee: false,
+    annual_generation_per_kw_units: 0,
     description: 'Standard residential AMC plan'
   });
 
@@ -314,17 +340,32 @@ const CreateAmc = () => {
 
   // Filter plans based on selected levels
   const getFilteredPlans = () => {
-    if (selectedStates.size === 0) return [];
-    
     return amcPlans.filter(plan => {
-      // Must match state
-      if (!plan.state || !selectedStates.has(plan.state._id)) return false;
+      // 1. Country Filter
+      if (selectedCountries.size > 0) {
+        const countryId = plan.state?.country?._id || plan.state?.country;
+        if (countryId && !selectedCountries.has(countryId)) return false;
+      }
+
+      // 2. State Filter
+      if (selectedStates.size > 0) {
+        const stateId = plan.state?._id || plan.state;
+        if (stateId && !selectedStates.has(stateId)) return false;
+      }
       
-      // If cluster selection is active, must match
-      if (selectedClusters.size > 0 && (!plan.cluster || !selectedClusters.has(plan.cluster._id))) return false;
+      // 3. Cluster Filter
+      if (selectedClusters.size > 0) {
+        const clusterId = plan.cluster?._id || plan.cluster;
+        // If plan has a cluster, it must match. If it's state-wide (no cluster), we keep it.
+        if (clusterId && !selectedClusters.has(clusterId)) return false;
+      }
       
-      // If district selection is active, must match
-      if (selectedDistricts.size > 0 && (!plan.district || !selectedDistricts.has(plan.district._id))) return false;
+      // 4. District Filter
+      if (selectedDistricts.size > 0) {
+        const districtId = plan.district?._id || plan.district;
+        // If plan has a district, it must match. If it's cluster-wide or state-wide, we keep it.
+        if (districtId && !selectedDistricts.has(districtId)) return false;
+      }
       
       return true;
     });
@@ -363,6 +404,8 @@ const CreateAmc = () => {
         annualVisits: plan.annualVisits || 4,
         basicPricePerKw: plan.basicPricePerKw || 0,
         amcServiceCharges: plan.amcServiceCharges || 0,
+        includeOncePowerGuarantee: plan.includeOncePowerGuarantee || false,
+        annual_generation_per_kw_units: plan.annual_generation_per_kw_units || 0,
         description: plan.description || ''
       });
     } else {
@@ -383,6 +426,8 @@ const CreateAmc = () => {
         annualVisits: 4,
         basicPricePerKw: 0,
         amcServiceCharges: 0,
+        includeOncePowerGuarantee: false,
+        annual_generation_per_kw_units: 0,
         description: 'Standard residential AMC plan'
       });
     }
@@ -561,6 +606,13 @@ const CreateAmc = () => {
                   <div className="text-sm font-bold text-gray-800">
                     {country.name}
                   </div>
+                  {locationCounts.countries[country._id] > 0 && (
+                    <div className="mt-1">
+                      <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                        {locationCounts.countries[country._id]} Plans
+                      </span>
+                    </div>
+                  )}
                   {selectedCountries.has(country._id) && (
                     <div className="absolute top-2 right-2">
                        <CheckSquare size={14} className="text-blue-500" />
@@ -619,6 +671,13 @@ const CreateAmc = () => {
                       `}
                     >
                       <div className="text-sm font-bold text-gray-800">{state.name}</div>
+                      {locationCounts.states[state._id] > 0 && (
+                        <div className="mt-1">
+                          <span className="bg-blue-100 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-blue-200">
+                            {locationCounts.states[state._id]} Plans
+                          </span>
+                        </div>
+                      )}
                       {selectedStates.has(state._id) && (
                         <div className="absolute top-2 right-2">
                           <CheckSquare size={14} className="text-blue-500" />
@@ -679,6 +738,13 @@ const CreateAmc = () => {
                       `}
                     >
                       <div className="text-sm font-bold text-gray-800">{cluster.name}</div>
+                      {locationCounts.clusters[cluster._id] > 0 && (
+                        <div className="mt-1">
+                          <span className="bg-purple-100 text-purple-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200">
+                            {locationCounts.clusters[cluster._id]} Plans
+                          </span>
+                        </div>
+                      )}
                       {selectedClusters.has(cluster._id) && (
                         <div className="absolute top-2 right-2">
                           <CheckSquare size={14} className="text-purple-500" />
@@ -739,6 +805,13 @@ const CreateAmc = () => {
                       `}
                     >
                       <div className="text-sm font-bold text-gray-800">{district.name}</div>
+                      {locationCounts.districts[district._id] > 0 && (
+                        <div className="mt-1">
+                          <span className="bg-emerald-100 text-emerald-700 text-[10px] font-bold px-2 py-0.5 rounded-full border border-emerald-200">
+                            {locationCounts.districts[district._id]} Plans
+                          </span>
+                        </div>
+                      )}
                       {selectedDistricts.has(district._id) && (
                         <div className="absolute top-2 right-2">
                           <CheckSquare size={14} className="text-emerald-500" />
@@ -753,28 +826,37 @@ const CreateAmc = () => {
         )}
 
         {/* Dynamic Header when active */}
-        {selectedStates.size > 0 && (
-          <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-l-[6px] border-blue-600">
-            <div>
-              <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
-                AMC Plans for <span className="text-blue-600">
-                  {selectedStates.size === 1 
-                    ? hookStates.find(s => selectedStates.has(s._id))?.name || 'Selected State'
-                    : `${selectedStates.size} States`
-                  }
-                </span>
-              </h2>
-              <p className="text-sm text-gray-500 mt-1">Configure and manage AMC plans for the selected {selectedStates.size > 1 ? 'states' : 'state'}</p>
-            </div>
-            <button
-              onClick={() => openConfigureModal(null)}
-              className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md shadow-blue-200"
-            >
-              <PlusCircle size={18} />
-              Create AMC Plan
-            </button>
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-6 mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-l-[6px] border-blue-600">
+          <div>
+            <h2 className="text-xl font-bold text-gray-800 flex items-center gap-2">
+              {selectedStates.size > 0 ? (
+                <>
+                  AMC Plans for <span className="text-blue-600">
+                    {selectedStates.size === 1 
+                      ? (availableStates.find(s => selectedStates.has(s._id))?.name || 'Selected State')
+                      : `${selectedStates.size} States`
+                    }
+                  </span>
+                </>
+              ) : (
+                "All AMC Plans"
+              )}
+            </h2>
+            <p className="text-sm text-gray-500 mt-1">
+              {selectedStates.size > 0 
+                ? `Configure and manage AMC plans for the selected ${selectedStates.size > 1 ? 'states' : 'state'}`
+                : "Showing all available AMC plans in the system"
+              }
+            </p>
           </div>
-        )}
+          <button
+            onClick={() => openConfigureModal(null)}
+            className="px-5 py-2.5 bg-blue-600 text-white text-sm font-bold rounded-lg hover:bg-blue-700 transition flex items-center gap-2 shadow-md shadow-blue-200"
+          >
+            <PlusCircle size={18} />
+            Create AMC Plan
+          </button>
+        </div>
 
         {/* AMC Configuration Table */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden mb-12">
@@ -785,15 +867,7 @@ const CreateAmc = () => {
           </div>
 
           <div className="overflow-x-auto">
-            {selectedStates.size === 0 ? (
-              <div className="py-20 text-center">
-                <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
-                  <ChevronRight size={32} className="text-slate-300" />
-                </div>
-                <h4 className="text-slate-800 font-bold mb-1">No State Selected</h4>
-                <p className="text-slate-500 text-xs">Please select a state from the cards above to view configurations</p>
-              </div>
-            ) : loading ? (
+            {loading ? (
               <div className="py-20 text-center">
                 <Loader className="animate-spin text-cyan-500 mx-auto mb-4" size={32} />
                 <p className="text-slate-500 text-xs font-medium tracking-wide italic">Fetching AMC plans...</p>
@@ -816,6 +890,7 @@ const CreateAmc = () => {
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Sub Project Type</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Configuration</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">View</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
@@ -853,6 +928,17 @@ const CreateAmc = () => {
                             >
                               <Eye size={14} />
                               View
+                            </button>
+                          </div>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <div className="flex justify-center">
+                            <button
+                              onClick={() => handleDeletePlan(plan._id)}
+                              className="p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
+                              title="Delete Plan"
+                            >
+                              <Trash2 size={16} />
                             </button>
                           </div>
                         </td>
@@ -1020,7 +1106,7 @@ const CreateAmc = () => {
                             placeholder="Basic Plan"
                           />
                         </div>
-                        <div className="grid grid-cols-2 gap-4">
+                        <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
                           <div>
                             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">BASIC PRICE PER KW (₹)</label>
                             <input
@@ -1221,6 +1307,41 @@ const CreateAmc = () => {
                         })}
                       </div>
                     </div>
+
+                    <div className="pt-4 pb-4">
+                      <h4 className="text-[11px] font-bold text-blue-500 uppercase tracking-widest mb-6 flex items-center gap-2 border-l-[3px] border-blue-500 pl-3 leading-none h-4">
+                        POWER GENERATION GUARANTEE (OPTIONAL)
+                      </h4>
+                      
+                      <div className="space-y-4">
+                        <label className="flex items-center gap-3 p-4 bg-slate-50 border-2 border-slate-100 rounded-xl cursor-pointer hover:bg-slate-100 transition-all">
+                          <input
+                            type="checkbox"
+                            checked={planForm.includeOncePowerGuarantee}
+                            onChange={(e) => setPlanForm({ ...planForm, includeOncePowerGuarantee: e.target.checked })}
+                            className="hidden"
+                          />
+                          <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center transition-all ${planForm.includeOncePowerGuarantee ? 'bg-blue-600 border-blue-600 shadow-sm shadow-blue-200' : 'border-slate-300 bg-white'}`}>
+                            {planForm.includeOncePowerGuarantee && <CheckSquare className="text-white w-4 h-4" strokeWidth={4} />}
+                          </div>
+                          <span className="text-sm font-bold text-slate-700 uppercase tracking-tight">Include Once Power Generation Guarantee</span>
+                        </label>
+
+                        {planForm.includeOncePowerGuarantee && (
+                          <div className="animate-in slide-in-from-top-2 duration-300">
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">Annual Generate Per kW Units</label>
+                            <input
+                              type="number"
+                              min="0"
+                              value={planForm.annual_generation_per_kw_units}
+                              onChange={(e) => setPlanForm({ ...planForm, annual_generation_per_kw_units: Math.max(0, parseFloat(e.target.value) || 0) })}
+                              className="w-full bg-white border-2 border-blue-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-blue-500 transition-all hover:border-blue-200 shadow-sm shadow-blue-50"
+                              placeholder="Enter units"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1302,6 +1423,24 @@ const CreateAmc = () => {
                   </div>
                 </div>
               </div>
+
+              {/* Power Generation Guarantee */}
+              {currentPlan.includeOncePowerGuarantee && (
+                <div>
+                  <h4 className="text-[14px] font-bold text-gray-900 mb-3">Power Generation Guarantee</h4>
+                  <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center text-blue-600">
+                        <CheckSquare size={16} strokeWidth={3} />
+                      </div>
+                      <div>
+                        <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Annual Generation Per kW</div>
+                        <div className="text-[14px] font-black text-blue-800">{currentPlan.annual_generation_per_kw_units || 0} Units</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {/* Pricing */}
               <div>

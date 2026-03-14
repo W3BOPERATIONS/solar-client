@@ -71,6 +71,9 @@ const BundlePlans = () => {
     cashback: '',
     timeDuration: []
   });
+  
+  const [availableWattages, setAvailableWattages] = useState(['330W', '440W', '450W', '535W', '540W', '550W']);
+  const [customWattageInput, setCustomWattageInput] = useState('');
 
   // Custom CSS for refined scrollbars and UI
   const scrollbarStyles = `
@@ -481,6 +484,11 @@ const BundlePlans = () => {
 
 
   const enableEditMode = (plan) => {
+    const planWattages = plan.wattage || [];
+    const defaultWattages = ['330W', '440W', '450W', '535W', '540W', '550W'];
+    const combined = Array.from(new Set([...defaultWattages, ...planWattages]));
+    setAvailableWattages(combined);
+    
     setPlanForm({
       bundleName: plan.bundleName || '',
       category: plan.category || '',
@@ -499,6 +507,7 @@ const BundlePlans = () => {
   };
 
   const handleAddNew = () => {
+    setAvailableWattages(['330W', '440W', '450W', '535W', '540W', '550W']);
     setPlanForm({
       bundleName: '',
       category: '',
@@ -1116,23 +1125,75 @@ const BundlePlans = () => {
                      </div>
 
                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Select Wattage</label>
+                        <div className="flex justify-between items-center mb-2">
+                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider">Select Wattage</label>
+                           <div className="flex items-center gap-2">
+                              <input 
+                                 type="text"
+                                 value={customWattageInput}
+                                 onChange={(e) => setCustomWattageInput(e.target.value)}
+                                 onKeyPress={(e) => {
+                                    if (e.key === 'Enter') {
+                                       e.preventDefault();
+                                       if (customWattageInput.trim()) {
+                                          const val = customWattageInput.trim().toUpperCase().endsWith('W') ? customWattageInput.trim().toUpperCase() : `${customWattageInput.trim()}W`;
+                                          if (!availableWattages.includes(val)) {
+                                             setAvailableWattages([...availableWattages, val]);
+                                          }
+                                          setCustomWattageInput('');
+                                       }
+                                    }
+                                 }}
+                                 placeholder="Add (e.g. 520W)"
+                                 className="bg-slate-50 border border-slate-200 rounded-lg px-2 py-1 text-[10px] font-bold text-slate-700 focus:outline-none w-24"
+                              />
+                              <button
+                                 type="button"
+                                 onClick={() => {
+                                    if (customWattageInput.trim()) {
+                                       const val = customWattageInput.trim().toUpperCase().endsWith('W') ? customWattageInput.trim().toUpperCase() : `${customWattageInput.trim()}W`;
+                                       if (!availableWattages.includes(val)) {
+                                          setAvailableWattages([...availableWattages, val]);
+                                       }
+                                       setCustomWattageInput('');
+                                    }
+                                 }}
+                                 className="w-6 h-6 rounded-lg bg-indigo-600 text-white flex items-center justify-center hover:bg-indigo-700 transition"
+                              >
+                                 <Plus size={14} />
+                              </button>
+                           </div>
+                        </div>
                         <div className="flex flex-wrap gap-2">
-                           {['330W', '440W', '450W', '535W', '540W', '550W'].map(w => (
-                             <button
-                               key={w}
-                               onClick={() => {
-                                 const next = new Set(planForm.wattage);
-                                 if (next.has(w)) next.delete(w);
-                                 else next.add(w);
-                                 setPlanForm({...planForm, wattage: Array.from(next)});
-                               }}
-                               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
-                                 planForm.wattage.includes(w) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                               }`}
-                             >
-                               {w}
-                             </button>
+                           {availableWattages.map(w => (
+                              <div key={w} className="relative group">
+                                 <button
+                                    onClick={() => {
+                                       const next = new Set(planForm.wattage);
+                                       if (next.has(w)) next.delete(w);
+                                       else next.add(w);
+                                       setPlanForm({...planForm, wattage: Array.from(next)});
+                                    }}
+                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
+                                       planForm.wattage.includes(w) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                                    }`}
+                                 >
+                                    {w}
+                                 </button>
+                                 {!['330W', '440W', '450W', '535W', '540W', '550W'].includes(w) && (
+                                    <button
+                                       onClick={() => {
+                                          setAvailableWattages(availableWattages.filter(item => item !== w));
+                                          const next = new Set(planForm.wattage);
+                                          next.delete(w);
+                                          setPlanForm({...planForm, wattage: Array.from(next)});
+                                       }}
+                                       className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                                    >
+                                       <X size={10} />
+                                    </button>
+                                 )}
+                              </div>
                            ))}
                         </div>
                      </div>

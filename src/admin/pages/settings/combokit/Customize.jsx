@@ -6,16 +6,16 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import { locationAPI } from '../../../../api/api';
-import { 
-  getAssignments, 
+import {
+  getAssignments,
   createAssignment,
-  updateAssignment, 
+  updateAssignment,
   deleteAssignment,
-  getPartnerTypes, 
-  getSolarKits, 
-  getCategories, 
-  getSubCategories, 
-  getProjectTypes, 
+  getPartnerTypes,
+  getSolarKits,
+  getCategories,
+  getSubCategories,
+  getProjectTypes,
   getSubProjectTypes,
   getProjectCategoryMappings
 } from '../../../../services/combokit/combokitApi';
@@ -61,7 +61,7 @@ const CustomizeCombokit = () => {
   const [masterProjectTypes, setMasterProjectTypes] = useState([]);
   const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
-  
+
   const [lastSavedConfig, setLastSavedConfig] = useState(null);
   const [showSummary, setShowSummary] = useState(false);
 
@@ -125,16 +125,16 @@ const CustomizeCombokit = () => {
       setSolarKitsList(kits || []);
       setMasterCategories(cats || []);
       setMasterSubCategories(subCats || []);
-      
+
       // Derive unique project types from mappings if available, else use generic projs
-      const uniqueProjectTypes = (mappings?.length > 0) 
+      const uniqueProjectTypes = (mappings?.length > 0)
         ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
         : projs?.map(p => p.name) || [];
 
       setMasterProjectTypes(uniqueProjectTypes);
       setMasterSubProjectTypes(subProjs || []);
       setProjectMappings(mappings || []);
-      
+
       const pData = Array.isArray(panels) ? panels : panels?.data || [];
       const iData = Array.isArray(inverters) ? inverters : inverters?.data || [];
       const bData = Array.isArray(bos) ? bos : bos?.data || [];
@@ -171,7 +171,7 @@ const CustomizeCombokit = () => {
     setSelectedCountry(countryId);
     setSelectedCountryName(countryName);
     fetchStates({ countryId: countryId });
-    
+
     // Reset all following
     setSelectedStates(new Set());
     setSelectedClusters(new Set());
@@ -206,9 +206,8 @@ const CustomizeCombokit = () => {
     const newSelectedStates = new Set(selectedStates);
     if (newSelectedStates.has(stateId)) {
       newSelectedStates.delete(stateId);
-      // Logic to remove dependent clusters? 
-      // For now, we just keep the cache `availableClusters` but update logic will filter dependent selections if needed.
     } else {
+      newSelectedStates.clear(); // Enforce single selection hierarchy for clean flow
       newSelectedStates.add(stateId);
       // Fetch clusters for this state if not available
       if (!availableClusters[stateId]) {
@@ -219,11 +218,15 @@ const CustomizeCombokit = () => {
           }
         } catch (error) {
           console.error("Failed to fetch clusters", error);
-          toast.error("Failed to fetch clusters");
         }
       }
     }
+    
+    // Strict Hierarchy Reset
     setSelectedStates(newSelectedStates);
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
   };
 
   const selectAllStates = async () => {
@@ -275,6 +278,7 @@ const CustomizeCombokit = () => {
     if (newSelectedClusters.has(clusterId)) {
       newSelectedClusters.delete(clusterId);
     } else {
+      newSelectedClusters.clear(); // Enforce single selection hierarchy for clean flow
       newSelectedClusters.add(clusterId);
       // Fetch districts
       if (!availableDistricts[clusterId]) {
@@ -285,11 +289,14 @@ const CustomizeCombokit = () => {
           }
         } catch (error) {
           console.error("Failed to fetch districts", error);
-          toast.error("Failed to fetch districts");
         }
       }
     }
+
+    // Strict Hierarchy Reset
     setSelectedClusters(newSelectedClusters);
+    setSelectedDistricts(new Set());
+    setSelectedRoles(new Set());
   };
 
   const selectAllClusters = async () => {
@@ -343,7 +350,10 @@ const CustomizeCombokit = () => {
     } else {
       newSelectedDistricts.add(districtId);
     }
+    
+    // Strict Hierarchy Reset
     setSelectedDistricts(newSelectedDistricts);
+    setSelectedRoles(new Set());
   };
 
   const selectAllDistricts = () => {
@@ -355,6 +365,51 @@ const CustomizeCombokit = () => {
   const clearAllDistricts = () => {
     setSelectedDistricts(new Set());
     setSelectedRoles(new Set());
+  };
+
+  const resolveClusterName = (assignment) => {
+    if (!assignment) return null;
+    
+    // 1. Direct object check
+    const cluster = assignment.cluster || assignment.clusterId;
+    if (typeof cluster === 'object' && (cluster.name || cluster.clusterName)) {
+      return cluster.name || cluster.clusterName;
+    }
+
+    // 2. ID-based cache lookup
+    const nid = (v) => {
+      if (!v) return "";
+      if (typeof v === 'string') return v.trim();
+      return String(v?._id || v?.id || v || "").trim();
+    };
+    const cid = nid(cluster).toLowerCase();
+    if (cid && cid !== 'undefined' && cid !== 'null') {
+      for (const stateId in availableClusters) {
+        const found = availableClusters[stateId]?.find(c => nid(c).toLowerCase() === cid);
+        if (found) return found.name || found.clusterName;
+      }
+    }
+
+    // 3. District-based fallback (ONLY if cluster is missing/invalid)
+    const districtIds = (assignment.districts || assignment.districtIds || [])
+      .map(d => nid(d).toLowerCase())
+      .filter(id => id && id !== 'undefined' && id !== 'null');
+
+    if (districtIds.length > 0) {
+      for (const cId in availableDistricts) {
+        const districtsInCluster = availableDistricts[cId] || [];
+        const overlaps = districtsInCluster.some(d => districtIds.includes(nid(d._id || d).toLowerCase()));
+        if (overlaps) {
+          const cidToFind = cId.toLowerCase().trim();
+          for (const sId in availableClusters) {
+            const found = availableClusters[sId]?.find(c => nid(c._id || c).toLowerCase() === cidToFind);
+            if (found) return found.name || found.clusterName;
+          }
+        }
+      }
+    }
+
+    return null;
   };
 
   // Handle role selection
@@ -428,11 +483,12 @@ const CustomizeCombokit = () => {
       panels: assignment.panels || [],
       inverters: assignment.inverters || [],
       boskits: assignment.boskits || [],
-      role: assignment.role || assignment.cpTypes?.[0] || '',
+      role: assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || '',
       category: assignment.category || '',
       subCategory: assignment.subCategory || '',
       projectType: assignment.projectType || '',
       subProjectType: assignment.subProjectType || '',
+      country: assignment.country || assignment.countryId || null,
       state: assignment.state,
       cluster: assignment.cluster,
       districts: assignment.districts || []
@@ -443,7 +499,7 @@ const CustomizeCombokit = () => {
 
   const deleteAssignmentById = async (id) => {
     if (!window.confirm("Are you sure you want to delete this configuration?")) return;
-    
+
     try {
       await deleteAssignment(id);
       toast.success("Configuration deleted successfully");
@@ -461,6 +517,7 @@ const CustomizeCombokit = () => {
         return;
       }
 
+      setLoading(true);
       const payload = {
         solarkitName: assignmentForm.solarkitName,
         panels: assignmentForm.panels,
@@ -470,6 +527,7 @@ const CustomizeCombokit = () => {
         cluster: assignmentForm.cluster?._id || assignmentForm.cluster,
         districts: assignmentForm.districts?.map(d => d._id || d),
         role: assignmentForm.role,
+        cpTypes: [assignmentForm.role],
         category: assignmentForm.category,
         subCategory: assignmentForm.subCategory,
         projectType: assignmentForm.projectType,
@@ -477,36 +535,86 @@ const CustomizeCombokit = () => {
         country: selectedCountry || assignmentForm.state?.country?._id || assignmentForm.state?.country
       };
 
+      let savedData;
       if (!currentAssignment) {
-        await createAssignment(payload);
+        const res = await createAssignment(payload);
+        savedData = res.data || res;
         toast.success("New configuration created successfully");
       } else {
-        await updateAssignment(currentAssignment._id, payload);
+        const res = await updateAssignment(currentAssignment._id, payload);
+        savedData = res.data || res;
         toast.success("Details updated successfully");
       }
-      
+
+      // Clear forms and close modal early for snappy feel
       setShowConfigureModal(false);
-      fetchAssignments();
+      setCurrentAssignment(null);
+
+      // Force fetch fresh data and wait for it
+      await fetchAssignments();
+
+      // Update last saved with the ACTUAL server data (which has _id)
+      setLastSavedConfig(savedData);
+      setShowSummary(true);
+
     } catch (error) {
       console.error("Failed to save assignment", error);
-      toast.error("Failed to save details");
+      toast.error("Failed to save details: " + (error.response?.data?.message || "Server Error"));
+    } finally {
+      setLoading(false);
     }
   };
 
   const addNewCustomization = () => {
+    if (!selectedCountry) {
+      toast.error("Please select a Country first");
+      return;
+    }
     if (selectedStates.size === 0) {
-      toast.error("Please select at least one State first");
+      toast.error("Please select a State first");
       return;
     }
 
     const stateId = Array.from(selectedStates)[0];
     const clusterId = Array.from(selectedClusters)[0];
     const districtIds = Array.from(selectedDistricts);
-    const role = Array.from(selectedRoles)[0];
+    const selRolesArr = Array.from(selectedRoles);
+    const role = selRolesArr.length === 1 ? selRolesArr[0] : '';
 
+    // Find objects from cache for auto-fill
+    const countryObj = countries.find(c => c._id === selectedCountry);
     const stateObj = allStates.find(s => s._id === stateId);
-    const clusterObj = getDisplayedClusters().find(c => c._id === clusterId);
-    const districtObjs = getDisplayedDistricts().filter(d => districtIds.includes(d._id));
+    
+    // STRICT CLUSTER RESOLUTION: Prioritize selection
+    let clusterObj = null;
+    if (clusterId) {
+      for (const sId in availableClusters) {
+        const found = availableClusters[sId]?.find(c => String(c._id || c) === String(clusterId));
+        if (found) { clusterObj = found; break; }
+      }
+      // If not in cache, create a minimal object so it's not "lost"
+      if (!clusterObj) {
+        clusterObj = { _id: clusterId, name: 'Selected Cluster' };
+      }
+    }
+    
+    const districtObjs = [];
+    if (districtIds.length > 0) {
+      for (const cId in availableDistricts) {
+        const matched = availableDistricts[cId]?.filter(d => districtIds.includes(String(d._id || d)));
+        if (matched?.length) districtObjs.push(...matched);
+      }
+      // If some districts were NOT found in cache, at least keep their IDs
+      if (districtObjs.length < districtIds.length) {
+        const foundIds = new Set(districtObjs.map(d => String(d._id || d)));
+        districtIds.forEach(id => {
+          if (!foundIds.has(String(id))) {
+            districtObjs.push({ _id: id, name: 'Selected District' });
+          }
+        });
+      }
+    }
+    const finalDistricts = Array.from(new Map(districtObjs.map(d => [String(d._id || d), d])).values());
 
     setAssignmentForm({
       solarkitName: '',
@@ -518,9 +626,10 @@ const CustomizeCombokit = () => {
       subCategory: '',
       projectType: '',
       subProjectType: '',
-      state: stateObj,
-      cluster: clusterObj,
-      districts: districtObjs
+      country: countryObj || null,
+      state: stateObj || null,
+      cluster: clusterObj || null,
+      districts: finalDistricts
     });
     setCurrentAssignment(null);
     setShowConfigureModal(true);
@@ -560,9 +669,9 @@ const CustomizeCombokit = () => {
   const handleLocationChange = (assignmentId, field, id) => {
     setAssignments(prev => prev.map(a => {
       if (a._id !== assignmentId) return a;
-      
+
       let update = { [field]: id };
-      
+
       if (field === 'state' || field === 'stateId') {
         const stateObj = allStates.find(s => s._id === id);
         update = { ...update, state: stateObj };
@@ -574,7 +683,7 @@ const CustomizeCombokit = () => {
         const districtObjs = getDisplayedDistricts().filter(d => id.includes(d._id));
         update = { ...update, districts: districtObjs };
       }
-      
+
       return { ...a, ...update };
     }));
   };
@@ -583,7 +692,7 @@ const CustomizeCombokit = () => {
   const showCombokitDetails = (assignment) => {
     const data = assignment;
     const stateName = assignment.state?.name || "Unknown State";
-    const clusterName = assignment.cluster?.name || "Unknown Cluster";
+    const clusterName = resolveClusterName(assignment) || "Unknown Cluster";
     const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
 
     setModalContent({
@@ -812,11 +921,10 @@ const CustomizeCombokit = () => {
                 <button
                   key={`${district._id}-${index}`}
                   onClick={() => handleDistrictClick(district._id)}
-                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${
-                    selectedDistricts.has(district._id)
+                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${selectedDistricts.has(district._id)
                       ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-100'
                       : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
-                  }`}
+                    }`}
                 >
                   {district.name}
                 </button>
@@ -854,11 +962,10 @@ const CustomizeCombokit = () => {
                 <button
                   key={`${p._id}-${index}`}
                   onClick={() => handleRoleClick(p.name)}
-                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${
-                    selectedRoles.has(p.name)
+                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${selectedRoles.has(p.name)
                       ? 'bg-orange-600 text-white border-orange-600 ring-2 ring-orange-100'
                       : 'bg-white text-slate-600 border-slate-200 hover:border-orange-400 hover:bg-orange-50'
-                  }`}
+                    }`}
                 >
                   {p.name}
                 </button>
@@ -872,20 +979,20 @@ const CustomizeCombokit = () => {
       <style>{scrollbarStyles}</style>
       <div className="mt-8 mb-10" id="result-table-container">
         <div className="table-container bg-white overflow-hidden">
-            <div className="p-0">
-              <div className="flex justify-between items-center p-5 bg-slate-50 border-b border-gray-100">
-                <div className="flex items-center space-x-3">
-                  <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
-                  <h3 className="text-lg font-bold text-slate-800">Customize Combokit Details</h3>
-                </div>
-                <button
-                  onClick={addNewCustomization}
-                  className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-md text-sm font-bold active:scale-95"
-                >
-                  <Plus className="w-4 h-4" />
-                  Add New Configuration
-                </button>
+          <div className="p-0">
+            <div className="flex justify-between items-center p-5 bg-slate-50 border-b border-gray-100">
+              <div className="flex items-center space-x-3">
+                <div className="w-1.5 h-6 bg-blue-600 rounded-full"></div>
+                <h3 className="text-lg font-bold text-slate-800">Customize Combokit Details</h3>
               </div>
+              <button
+                onClick={addNewCustomization}
+                className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-md text-sm font-bold active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                Add New Configuration
+              </button>
+            </div>
 
             <div className="overflow-x-auto custom-scrollbar">
               {loading ? (
@@ -912,8 +1019,8 @@ const CustomizeCombokit = () => {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       {[
-                        "Solarkit Name", "Panel", "Inverter", "Boskit", "State", 
-                        "Cluster", "Districts", "Partner", "Category", 
+                        "Solarkit Name", "Panel", "Inverter", "Boskit", "State",
+                        "Cluster", "Districts", "Partner", "Category",
                         "Sub Category", "Project Type", "Sub Project Type", "Action"
                       ].map((header) => (
                         <th key={header} className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">
@@ -927,39 +1034,79 @@ const CustomizeCombokit = () => {
                       const filtered = assignments.filter(assignment => {
                         // Always show temporary rows being edited
                         if (assignment.tempId) return true;
-
-                        // Global Country Filter - Robust ID comparison
-                        const assignmentCountryId = assignment.country?._id || assignment.country;
-                        const stateCountryId = assignment.state?.country?._id || assignment.state?.country;
                         
-                        // Strict country matching for persistent view
-                        if (selectedCountry && 
-                            stateCountryId && stateCountryId !== selectedCountry && 
-                            assignmentCountryId !== selectedCountry) {
-                           return false;
+                        // BYPASS: Always show the record that was just saved or updated
+                        const assignmentId = assignment._id || assignment.id;
+                        if (lastSavedConfig && (assignmentId === lastSavedConfig._id || assignmentId === lastSavedConfig.id)) {
+                          return true;
                         }
 
-                        // Filter Logic
-                        const hasLocationFilters = selectedStates.size > 0 || selectedClusters.size > 0 || selectedDistricts.size > 0;
+                        // Robust Normalization
+                        const nid = (v) => {
+                          if (!v) return "";
+                          if (typeof v === 'string') return v.trim();
+                          return String(v?._id || v?.id || v || "").trim();
+                        };
+                        const ntext = (v) => String(v || "").toLowerCase().trim();
+
+                        // 1. Extract Values
+                        const aCountryId = nid(assignment.country || assignment.countryId);
+                        const aStateId = nid(assignment.state || assignment.stateId);
+                        const aClusterId = nid(assignment.cluster || assignment.clusterId);
+                        const aDistricts = (assignment.districts || assignment.districtIds || []).map(d => nid(d));
+                        const aRole = ntext(assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || "");
+                        const aStateCountryId = nid(assignment.state?.country || assignment.state?.countryId || assignment.state?.country_id);
+
+                        // 2. Extract Filters
+                        const fCountryId = nid(selectedCountry);
+                        const fStates = Array.from(selectedStates).map(nid);
+                        const fClusters = Array.from(selectedClusters).map(nid);
+                        const fDistricts = Array.from(selectedDistricts).map(nid);
+                        const fRoles = Array.from(selectedRoles).map(ntext);
+
+                        const hasStateFilter = fStates.length > 0;
+                        const hasClusterFilter = fClusters.length > 0;
+                        const hasDistrictFilter = fDistricts.length > 0;
+                        const hasRoleFilter = fRoles.length > 0;
+
+                        // 3. Apply Active Filters (STRICT HIERARCHY)
                         
-                        if (hasLocationFilters) {
-                          if (selectedStates.size > 0 && !selectedStates.has(assignment.state?._id)) return false;
-                          if (selectedClusters.size > 0 && !selectedClusters.has(assignment.cluster?._id)) return false;
-                          
-                          if (selectedDistricts.size > 0) {
-                            const assignmentDistricts = assignment.districts || [];
-                            const hasSelectedDistrict = assignmentDistricts.some(d => {
-                              const dId = d?._id || d;
-                              return selectedDistricts.has(dId);
+                        // Level 1: Country
+                        if (fCountryId) {
+                          const matchingCountry = (aCountryId === fCountryId) || (aStateCountryId === fCountryId);
+                          if (!matchingCountry && (aCountryId || aStateCountryId)) return false;
+                        }
+
+                        // Level 2: State
+                        if (hasStateFilter) {
+                          if (!fStates.includes(aStateId)) return false;
+                        }
+
+                        // Level 3: Cluster
+                        if (hasClusterFilter) {
+                          if (aClusterId) {
+                            if (!fClusters.includes(aClusterId)) return false;
+                          } else if (aDistricts.length > 0) {
+                            // Support district-based matching only if explicit cluster ID is missing
+                            const districtMatch = fClusters.some(fCid => {
+                              const clusterDistricts = (availableDistricts[fCid] || []).map(d => nid(d._id || d));
+                              return aDistricts.some(aDid => clusterDistricts.includes(aDid));
                             });
-                            if (!hasSelectedDistrict) return false;
+                            if (!districtMatch) return false;
+                          } else {
+                            return false; 
                           }
                         }
 
-                        const hasRoleFilters = selectedRoles.size > 0;
-                        if (hasRoleFilters) {
-                           const assignmentRole = assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes);
-                           if (!selectedRoles.has(assignmentRole)) return false;
+                        // Level 4: District
+                        if (hasDistrictFilter) {
+                          const districtMatch = aDistricts.some(d => fDistricts.includes(d));
+                          if (!districtMatch) return false;
+                        }
+
+                        // Level 5: Partner (Role)
+                        if (hasRoleFilter) {
+                          if (!fRoles.includes(aRole)) return false;
                         }
 
                         return true;
@@ -973,6 +1120,14 @@ const CustomizeCombokit = () => {
                                 <Filter className="w-8 h-8" />
                               </div>
                               <p className="text-gray-500 font-medium">No configurations found for the selected filters.</p>
+                              {assignments.length > 0 && (
+                                <button
+                                  onClick={() => { clearAllStates(); clearAllRoles(); }}
+                                  className="mt-4 text-blue-600 underline text-sm font-semibold"
+                                >
+                                  Clear all filters to see all configurations
+                                </button>
+                              )}
                             </td>
                           </tr>
                         );
@@ -1016,14 +1171,23 @@ const CustomizeCombokit = () => {
                               <span className="font-medium">{assignment.state?.name}</span>
                             </td>
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
-                              <span>{assignment.cluster?.name}</span>
+                              <span>{resolveClusterName(assignment) || <span className="text-gray-400 italic">Not Assigned</span>}</span>
                             </td>
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[150px]">
                               <span className="truncate block max-w-[140px]" title={districtNames}>{districtsDisplay}</span>
                             </td>
 
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
-                              <span className="px-2 py-0.5 rounded-full bg-orange-100 text-orange-700 font-semibold">{assignment.role || assignment.cpTypes?.[0] || 'Dealer'}</span>
+                              {assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) ? (
+                                <span className={`px-2 py-0.5 rounded-full font-semibold ${(assignment.role || assignment.cpTypes?.[0])?.toLowerCase() === 'dealer'
+                                    ? 'bg-blue-100 text-blue-700'
+                                    : 'bg-orange-100 text-orange-700'
+                                  }`}>
+                                  {assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes)}
+                                </span>
+                              ) : (
+                                <span className="text-gray-400 italic">Not Assigned</span>
+                              )}
                             </td>
 
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[130px]">
@@ -1076,59 +1240,7 @@ const CustomizeCombokit = () => {
           </div>
         </div>
       </div>
-      {/* Summary Card */}
-      {showSummary && lastSavedConfig && (
-        <div className="mt-8 mb-12">
-          <div className="card shadow-lg rounded-lg bg-white overflow-hidden border-t-4 border-blue-600">
-            <div className="card-header px-6 py-4 bg-gray-50 border-b border-gray-200">
-              <h3 className="text-lg font-bold text-gray-800">Customize Combokit Summary</h3>
-            </div>
-            <div className="card-body p-6">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <div className="space-y-3">
-                  <p className="text-sm"><span className="font-bold text-gray-700">Solarkit Name:</span> {lastSavedConfig.solarkitName}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Panel:</span> {lastSavedConfig.panels?.join(", ") || 'None'}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Inverter:</span> {lastSavedConfig.inverters?.join(", ") || 'None'}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Boskit:</span> {lastSavedConfig.boskits?.join(", ") || 'None'}</p>
-                </div>
-                <div className="space-y-3">
-                  <p className="text-sm"><span className="font-bold text-gray-700">State:</span> {lastSavedConfig.state?.name}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Cluster:</span> {lastSavedConfig.cluster?.name}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">District:</span> {lastSavedConfig.districts?.map(d => d.name).join(", ") || 'None'}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Partner:</span> {lastSavedConfig.role || lastSavedConfig.cpTypes?.join(", ") || 'None'}</p>
-                </div>
-                <div className="space-y-3">
-                  <p className="text-sm"><span className="font-bold text-gray-700">Category:</span> {lastSavedConfig.category}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Sub Category:</span> {lastSavedConfig.subCategory}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Project Type:</span> {lastSavedConfig.projectType}</p>
-                  <p className="text-sm"><span className="font-bold text-gray-700">Sub Project Type:</span> {lastSavedConfig.subProjectType}</p>
-                </div>
-              </div>
 
-              <div className="flex gap-4 mt-8 pt-6 border-t border-gray-100">
-                <button
-                  onClick={() => {
-                    handleEditClick(lastSavedConfig._id);
-                    setShowSummary(false);
-                    document.getElementById('result-table-container')?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="px-6 py-2.5 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-colors"
-                >
-                  Edit Configuration
-                </button>
-                <button
-                  onClick={() => {
-                    toast.success("ComboKit Generation Started!");
-                  }}
-                  className="px-6 py-2.5 bg-blue-600 text-white font-bold rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-                >
-                  Confirm & Generate Combokit
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Modal View/Filter */}
       {modalContent && (
@@ -1161,185 +1273,185 @@ const CustomizeCombokit = () => {
       {/* Configuration Modal */}
       {showConfigureModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[150] p-4 animate-in fade-in duration-300">
-           <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
-              {/* Modal Header */}
-              <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-8 py-6 text-white shrink-0">
-                 <div className="flex justify-between items-center">
-                    <div>
-                       <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Configuration Wizard</p>
-                       <h3 className="text-2xl font-black tracking-tight">{currentAssignment ? 'Update Custom Configuration' : 'Create New Configuration'}</h3>
-                    </div>
-                    <button onClick={() => setShowConfigureModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors group">
-                       <X className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
-                    </button>
-                 </div>
+          <div className="bg-white rounded-3xl shadow-2xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col border border-slate-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 px-8 py-6 text-white shrink-0">
+              <div className="flex justify-between items-center">
+                <div>
+                  <p className="text-blue-200 text-[10px] font-bold uppercase tracking-[0.2em] mb-1">Configuration Wizard</p>
+                  <h3 className="text-2xl font-black tracking-tight">{currentAssignment ? 'Update Custom Configuration' : 'Create New Configuration'}</h3>
+                </div>
+                <button onClick={() => setShowConfigureModal(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors group">
+                  <X className="w-6 h-6 text-white group-hover:scale-110 transition-transform" />
+                </button>
               </div>
+            </div>
 
-              {/* Modal Body */}
-              <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  {/* Section 1: Identity */}
-                  <div className="space-y-6">
-                    <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-blue-500 pl-3">
-                      Plan Identity
-                    </h4>
-                    <div className="space-y-4">
+            {/* Modal Body */}
+            <div className="p-8 overflow-y-auto custom-scrollbar flex-1 bg-slate-50/50">
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                {/* Section 1: Identity */}
+                <div className="space-y-6">
+                  <h4 className="text-[11px] font-bold text-blue-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-blue-500 pl-3">
+                    Plan Identity
+                  </h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solarkit Name</label>
+                      <Select
+                        styles={selectStyles}
+                        placeholder="Select Kit Name"
+                        value={assignmentForm.solarkitName ? { label: assignmentForm.solarkitName, value: assignmentForm.solarkitName } : null}
+                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, solarkitName: opt.value })}
+                        options={solarKitsList.map(kit => ({ label: kit.name, value: kit.name }))}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Partner Role</label>
+                      <Select
+                        styles={selectStyles}
+                        placeholder="Select Role"
+                        value={assignmentForm.role ? { label: assignmentForm.role, value: assignmentForm.role } : null}
+                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, role: opt.value })}
+                        options={partners.map(p => ({ label: p.name, value: p.name }))}
+                      />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solarkit Name</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
                         <Select
                           styles={selectStyles}
-                          placeholder="Select Kit Name"
-                          value={assignmentForm.solarkitName ? { label: assignmentForm.solarkitName, value: assignmentForm.solarkitName } : null}
-                          onChange={(opt) => setAssignmentForm({...assignmentForm, solarkitName: opt.value})}
-                          options={solarKitsList.map(kit => ({ label: kit.name, value: kit.name }))}
+                          placeholder="Select"
+                          value={assignmentForm.category ? { label: assignmentForm.category, value: assignmentForm.category } : null}
+                          onChange={(opt) => setAssignmentForm({ ...assignmentForm, category: opt.value, subCategory: '' })}
+                          options={masterCategories.map(cat => ({ label: cat.name, value: cat.name }))}
                         />
                       </div>
-                      
                       <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Partner Role</label>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Category</label>
                         <Select
                           styles={selectStyles}
-                          placeholder="Select Role"
-                          value={assignmentForm.role ? { label: assignmentForm.role, value: assignmentForm.role } : null}
-                          onChange={(opt) => setAssignmentForm({...assignmentForm, role: opt.value})}
-                          options={partners.map(p => ({ label: p.name, value: p.name }))}
+                          placeholder="Select"
+                          value={assignmentForm.subCategory ? { label: assignmentForm.subCategory, value: assignmentForm.subCategory } : null}
+                          onChange={(opt) => setAssignmentForm({ ...assignmentForm, subCategory: opt.value })}
+                          options={masterSubCategories
+                            .filter(sub => {
+                              const selCat = masterCategories.find(c => c.name === assignmentForm.category);
+                              const subCatId = sub.categoryId?._id || sub.categoryId;
+                              return selCat && subCatId === selCat._id;
+                            })
+                            .map(sub => ({ label: sub.name, value: sub.name }))
+                          }
                         />
                       </div>
+                    </div>
 
-                      <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
-                          <Select
-                            styles={selectStyles}
-                            placeholder="Select"
-                            value={assignmentForm.category ? { label: assignmentForm.category, value: assignmentForm.category } : null}
-                            onChange={(opt) => setAssignmentForm({...assignmentForm, category: opt.value, subCategory: ''})}
-                            options={masterCategories.map(cat => ({ label: cat.name, value: cat.name }))}
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Category</label>
-                          <Select
-                            styles={selectStyles}
-                            placeholder="Select"
-                            value={assignmentForm.subCategory ? { label: assignmentForm.subCategory, value: assignmentForm.subCategory } : null}
-                            onChange={(opt) => setAssignmentForm({...assignmentForm, subCategory: opt.value})}
-                            options={masterSubCategories
-                              .filter(sub => {
-                                const selCat = masterCategories.find(c => c.name === assignmentForm.category);
-                                const subCatId = sub.categoryId?._id || sub.categoryId;
-                                return selCat && subCatId === selCat._id;
-                              })
-                              .map(sub => ({ label: sub.name, value: sub.name }))
-                            }
-                          />
-                        </div>
-                      </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Project Type Range</label>
+                      <Select
+                        styles={selectStyles}
+                        placeholder="Select Project Type"
+                        value={assignmentForm.projectType ? { label: assignmentForm.projectType, value: assignmentForm.projectType } : null}
+                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, projectType: opt.value })}
+                        options={projectMappings?.length > 0 ? (
+                          projectMappings
+                            .filter(m => {
+                              const selCat = masterCategories.find(c => c.name === assignmentForm.category);
+                              const selSubCat = masterSubCategories.find(sc => sc.name === assignmentForm.subCategory);
+                              const mCatId = m.categoryId?._id || m.categoryId;
+                              const mSubCatId = m.subCategoryId?._id || m.subCategoryId;
+                              return (!selCat || mCatId === selCat._id) && (!selSubCat || mSubCatId === selSubCat._id);
+                            })
+                            .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                            .filter((v, i, a) => a.indexOf(v) === i)
+                            .map(pt => ({ label: pt, value: pt }))
+                        ) : (
+                          masterProjectTypes.map(pt => ({ label: pt, value: pt }))
+                        )}
+                      />
+                    </div>
 
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Project Type Range</label>
-                        <Select
-                          styles={selectStyles}
-                          placeholder="Select Project Type"
-                          value={assignmentForm.projectType ? { label: assignmentForm.projectType, value: assignmentForm.projectType } : null}
-                          onChange={(opt) => setAssignmentForm({...assignmentForm, projectType: opt.value})}
-                          options={projectMappings?.length > 0 ? (
-                            projectMappings
-                              .filter(m => {
-                                const selCat = masterCategories.find(c => c.name === assignmentForm.category);
-                                const selSubCat = masterSubCategories.find(sc => sc.name === assignmentForm.subCategory);
-                                const mCatId = m.categoryId?._id || m.categoryId;
-                                const mSubCatId = m.subCategoryId?._id || m.subCategoryId;
-                                return (!selCat || mCatId === selCat._id) && (!selSubCat || mSubCatId === selSubCat._id);
-                              })
-                              .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
-                              .filter((v, i, a) => a.indexOf(v) === i)
-                              .map(pt => ({ label: pt, value: pt }))
-                          ) : (
-                            masterProjectTypes.map(pt => ({ label: pt, value: pt }))
-                          )}
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Project Type</label>
-                        <Select
-                          styles={selectStyles}
-                          placeholder="Select Sub Project Type"
-                          value={assignmentForm.subProjectType ? { label: assignmentForm.subProjectType, value: assignmentForm.subProjectType } : null}
-                          onChange={(opt) => setAssignmentForm({...assignmentForm, subProjectType: opt.value})}
-                          options={masterSubProjectTypes.map(spt => ({ label: spt.name, value: spt.name }))}
-                        />
-                      </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Project Type</label>
+                      <Select
+                        styles={selectStyles}
+                        placeholder="Select Sub Project Type"
+                        value={assignmentForm.subProjectType ? { label: assignmentForm.subProjectType, value: assignmentForm.subProjectType } : null}
+                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, subProjectType: opt.value })}
+                        options={masterSubProjectTypes.map(spt => ({ label: spt.name, value: spt.name }))}
+                      />
                     </div>
                   </div>
+                </div>
 
-                  {/* Section 2: Technical Specs */}
-                  <div className="space-y-6">
-                    <h4 className="text-[11px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-cyan-500 pl-3">
-                      Technical Specifications
-                    </h4>
-                    <div className="space-y-4">
-                       <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solar Panel Brands</label>
-                          <textarea 
-                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                            placeholder="e.g. Adani 540W, Tata 550W (Comma separated)"
-                            value={assignmentForm.panels?.join(", ")}
-                            onChange={(e) => setAssignmentForm({...assignmentForm, panels: e.target.value.split(",").map(v => v.trim())})}
-                          />
-                       </div>
-                       <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Inverter Models</label>
-                          <textarea 
-                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                            placeholder="e.g. Growatt 5kW, Havells (Comma separated)"
-                            value={assignmentForm.inverters?.join(", ")}
-                            onChange={(e) => setAssignmentForm({...assignmentForm, inverters: e.target.value.split(",").map(v => v.trim())})}
-                          />
-                       </div>
-                       <div>
-                          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">BOS Kit Components</label>
-                          <textarea 
-                            className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                            placeholder="e.g. ACDB, DCDB, MC4 (Comma separated)"
-                            value={assignmentForm.boskits?.join(", ")}
-                            onChange={(e) => setAssignmentForm({...assignmentForm, boskits: e.target.value.split(",").map(v => v.trim())})}
-                          />
-                       </div>
+                {/* Section 2: Technical Specs */}
+                <div className="space-y-6">
+                  <h4 className="text-[11px] font-bold text-cyan-600 uppercase tracking-widest flex items-center gap-2 border-l-4 border-cyan-500 pl-3">
+                    Technical Specifications
+                  </h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solar Panel Brands</label>
+                      <textarea
+                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                        placeholder="e.g. Adani 540W, Tata 550W (Comma separated)"
+                        value={assignmentForm.panels?.join(", ")}
+                        onChange={(e) => setAssignmentForm({ ...assignmentForm, panels: e.target.value.split(",").map(v => v.trim()) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Inverter Models</label>
+                      <textarea
+                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                        placeholder="e.g. Growatt 5kW, Havells (Comma separated)"
+                        value={assignmentForm.inverters?.join(", ")}
+                        onChange={(e) => setAssignmentForm({ ...assignmentForm, inverters: e.target.value.split(",").map(v => v.trim()) })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">BOS Kit Components</label>
+                      <textarea
+                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
+                        placeholder="e.g. ACDB, DCDB, MC4 (Comma separated)"
+                        value={assignmentForm.boskits?.join(", ")}
+                        onChange={(e) => setAssignmentForm({ ...assignmentForm, boskits: e.target.value.split(",").map(v => v.trim()) })}
+                      />
                     </div>
                   </div>
                 </div>
               </div>
+            </div>
 
-              {/* Modal Footer */}
-              <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 shrink-0">
-                 <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-                    <div className="flex items-center gap-3 text-slate-500">
-                       <div className="p-2 bg-slate-200 rounded-lg">
-                          <Filter className="w-4 h-4" />
-                       </div>
-                       <div className="text-[10px] font-bold uppercase tracking-tight">
-                          Applying to <span className="text-blue-600">{assignmentForm.state?.name || 'Selected'}</span> State context
-                       </div>
-                    </div>
-                    <div className="flex gap-4">
-                       <button 
-                          onClick={() => setShowConfigureModal(false)}
-                          className="px-8 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
-                       >
-                          CANCEL
-                       </button>
-                       <button 
-                          onClick={handleSaveClick}
-                          className="px-10 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-200 active:scale-95 transition-all uppercase tracking-widest"
-                       >
-                          {currentAssignment ? 'UPDATE CONFIG' : 'SAVE CONFIGURATION'}
-                       </button>
-                    </div>
-                 </div>
+            {/* Modal Footer */}
+            <div className="px-8 py-6 bg-slate-50 border-t border-slate-200 shrink-0">
+              <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+                <div className="flex items-center gap-3 text-slate-500">
+                  <div className="p-2 bg-slate-200 rounded-lg">
+                    <Filter className="w-4 h-4" />
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-tight">
+                    Applying to <span className="text-blue-600">{assignmentForm.state?.name || 'Selected'}</span> State context
+                  </div>
+                </div>
+                <div className="flex gap-4">
+                  <button
+                    onClick={() => setShowConfigureModal(false)}
+                    className="px-8 py-3 text-sm font-bold text-slate-500 hover:text-slate-700 transition-colors"
+                  >
+                    CANCEL
+                  </button>
+                  <button
+                    onClick={handleSaveClick}
+                    className="px-10 py-3 bg-gradient-to-r from-blue-600 to-indigo-700 text-white text-sm font-black rounded-xl hover:shadow-lg hover:shadow-blue-200 active:scale-95 transition-all uppercase tracking-widest"
+                  >
+                    {currentAssignment ? 'UPDATE CONFIG' : 'SAVE CONFIGURATION'}
+                  </button>
+                </div>
               </div>
-           </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

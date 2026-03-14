@@ -22,9 +22,6 @@ const AmcServices = () => {
     serviceType: 'regular',
     basePrice: '',
     includePowerGuarantee: false,
-    guaranteeMinKW: '',
-    guaranteeMaxKW: '',
-    guaranteePerUnitPrice: '',
     guaranteeDescription: ''
   });
 
@@ -45,9 +42,6 @@ const AmcServices = () => {
     serviceType: 'regular',
     basePrice: '',
     includePowerGuarantee: false,
-    guaranteeMinKW: '',
-    guaranteeMaxKW: '',
-    guaranteePerUnitPrice: '',
     guaranteeDescription: ''
   });
 
@@ -102,9 +96,6 @@ const AmcServices = () => {
       serviceType: formData.serviceType,
       basePrice: parseInt(formData.basePrice) || 0,
       hasPowerGuarantee: formData.includePowerGuarantee,
-      guaranteeMinKW: parseFloat(formData.guaranteeMinKW) || 0,
-      guaranteeMaxKW: parseFloat(formData.guaranteeMaxKW) || 0,
-      guaranteePerUnitPrice: parseInt(formData.guaranteePerUnitPrice) || 0,
       guaranteeDescription: formData.guaranteeDescription
     };
 
@@ -127,9 +118,6 @@ const AmcServices = () => {
       serviceType: 'regular',
       basePrice: '',
       includePowerGuarantee: false,
-      guaranteeMinKW: '',
-      guaranteeMaxKW: '',
-      guaranteePerUnitPrice: '',
       guaranteeDescription: ''
     });
     setShowPowerGuarantee(false);
@@ -147,9 +135,6 @@ const AmcServices = () => {
       serviceType: service.serviceType || 'regular',
       basePrice: (service.basePrice || 0).toString(),
       includePowerGuarantee: service.hasPowerGuarantee || false,
-      guaranteeMinKW: (service.guaranteeMinKW || 0).toString(),
-      guaranteeMaxKW: (service.guaranteeMaxKW || 0).toString(),
-      guaranteePerUnitPrice: (service.guaranteePerUnitPrice || 0).toString(),
       guaranteeDescription: service.guaranteeDescription || ''
     });
     setShowEditPowerGuarantee(service.hasPowerGuarantee || false);
@@ -166,9 +151,6 @@ const AmcServices = () => {
       serviceType: editFormData.serviceType,
       basePrice: parseInt(editFormData.basePrice) || 0,
       hasPowerGuarantee: editFormData.includePowerGuarantee,
-      guaranteeMinKW: parseFloat(editFormData.guaranteeMinKW) || 0,
-      guaranteeMaxKW: parseFloat(editFormData.guaranteeMaxKW) || 0,
-      guaranteePerUnitPrice: parseInt(editFormData.guaranteePerUnitPrice) || 0,
       guaranteeDescription: editFormData.guaranteeDescription
     };
 
@@ -324,45 +306,6 @@ const AmcServices = () => {
 
                     {showPowerGuarantee && (
                       <div className="p-4 pt-0 space-y-4">
-                        <div className="grid grid-cols-2 gap-4">
-                          <div>
-                            <label className="block text-sm font-bold text-slate-800 mb-2">System Limit (Min kW)</label>
-                            <input
-                              type="number"
-                              name="guaranteeMinKW"
-                              value={formData.guaranteeMinKW}
-                              onChange={handleInputChange}
-                              placeholder="0"
-                              step="0.1"
-                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 pt-1"
-                            />
-                          </div>
-                          <div>
-                            <label className="block text-sm font-bold text-slate-800 mb-2">System Limit (Max kW)</label>
-                            <input
-                              type="number"
-                              name="guaranteeMaxKW"
-                              value={formData.guaranteeMaxKW}
-                              onChange={handleInputChange}
-                              placeholder="0"
-                              step="0.1"
-                              className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 pt-1"
-                            />
-                          </div>
-                        </div>
-
-                        <div>
-                          <label className="block text-sm font-bold text-slate-800 mb-2">Guarantee Price (₹ / kW)</label>
-                          <input
-                            type="number"
-                            name="guaranteePerUnitPrice"
-                            value={formData.guaranteePerUnitPrice}
-                            onChange={handleInputChange}
-                            placeholder="0"
-                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500"
-                          />
-                        </div>
-
                         <div>
                           <label className="block text-sm font-bold text-slate-800 mb-2">Guarantee Policy Details</label>
                           <textarea
@@ -458,13 +401,11 @@ const AmcServices = () => {
                           </span>
                         </div>
 
-                        {service.hasPowerGuarantee && (
                           <div className="mb-3">
                             <span className="bg-[#17a2b8] text-white text-xs font-bold px-3 py-1 rounded">
-                              Power Guarantee: {service.guaranteeMinKW}-{service.guaranteeMaxKW} kW
+                              Power Guarantee Included
                             </span>
                           </div>
-                        )}
 
                         <div className="flex items-baseline gap-1 text-slate-800 font-bold">
                           <span>₹{service.basePrice?.toLocaleString()}</span>
@@ -528,10 +469,7 @@ const AmcServices = () => {
                         </td>
                         <td className="px-6 py-4">
                           {service.hasPowerGuarantee ? (
-                            <div className="text-sm text-slate-800 flex flex-col whitespace-nowrap">
-                              <span>{service.guaranteeMinKW}-{service.guaranteeMaxKW} kW @</span>
-                              <span>₹{service.guaranteePerUnitPrice}/kW</span>
-                            </div>
+                            <span className="text-sm text-slate-800 font-bold">Yes</span>
                           ) : (
                             <span className="text-sm text-slate-800">No</span>
                           )}
@@ -668,37 +606,8 @@ const AmcServices = () => {
 
                   {showEditPowerGuarantee && (
                     <div className="p-6 grid grid-cols-2 gap-6 bg-white animate-in fade-in slide-in-from-top-2">
-                      <div>
-                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Min kW</label>
-                        <input
-                          type="number"
-                          name="guaranteeMinKW"
-                          value={editFormData.guaranteeMinKW}
-                          onChange={handleEditInputChange}
-                          step="0.1"
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Max kW</label>
-                        <input
-                          type="number"
-                          name="guaranteeMaxKW"
-                          value={editFormData.guaranteeMaxKW}
-                          onChange={handleEditInputChange}
-                          step="0.1"
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                        />
-                      </div>
                       <div className="col-span-2">
-                        <label className="block text-sm font-bold text-slate-800 mb-2 uppercase">Guarantee Per Unit Price (₹)</label>
-                        <input
-                          type="number"
-                          name="guaranteePerUnitPrice"
-                          value={editFormData.guaranteePerUnitPrice}
-                          onChange={handleEditInputChange}
-                          className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-amber-500"
-                        />
+                        <p className="text-xs text-slate-500 mt-2 font-medium">Power Generation Security is active for this service.</p>
                       </div>
                     </div>
                   )}

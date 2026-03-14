@@ -394,12 +394,13 @@ const CreateSolarkit = () => {
                 <th className="px-4 py-4 font-bold uppercase text-[11px] tracking-wider">Project Type</th>
                 <th className="px-4 py-4 font-bold uppercase text-[11px] tracking-wider">Sub Project Type</th>
                 <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider text-center">View</th>
+                <th className="px-6 py-4 font-bold uppercase text-[11px] tracking-wider text-center">Action</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
               {loading ? (
                 <tr>
-                  <td colSpan="9" className="py-20">
+                  <td colSpan="11" className="py-20">
                     <div className="flex flex-col items-center justify-center gap-4">
                       <Loader className="animate-spin text-blue-600" size={40} />
                       <p className="text-gray-500 font-bold">Synchronizing Regional Data...</p>
@@ -408,7 +409,7 @@ const CreateSolarkit = () => {
                 </tr>
               ) : filteredSolarkits.length === 0 ? (
                 <tr>
-                  <td colSpan="9" className="py-20 text-center">
+                  <td colSpan="11" className="py-20 text-center">
                     <div className="max-w-xs mx-auto">
                       <Package className="w-16 h-16 text-gray-200 mx-auto mb-4" />
                       <p className="text-gray-400 font-medium">No solar kits found for this region. Initialize your first kit below.</p>
@@ -459,12 +460,30 @@ const CreateSolarkit = () => {
                         View
                       </button>
                     </td>
+                    <td className="px-6 py-4">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          onClick={() => handleEdit(kit)}
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors border border-blue-100"
+                          title="Edit SolarKit"
+                        >
+                          <Edit2 size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(kit._id)}
+                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-rose-100"
+                          title="Delete SolarKit"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </td>
                   </tr>
                 ))
               )}
 
               <tr className="bg-gray-50/30">
-                <td colSpan="9" className="px-6 py-6 text-center">
+                <td colSpan="11" className="px-6 py-6 text-center">
                   <button
                     onClick={() => {
                       setSolarkitForm({

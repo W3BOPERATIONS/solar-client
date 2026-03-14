@@ -78,6 +78,7 @@ export const useLocations = () => {
         ? await locationApi.getStates(params.countryId)
         : await locationApi.getStatesHierarchy();
       setStates(data || []);
+      return data || [];
     } catch (err) {
       setError('Failed to load states');
       console.error(err);
@@ -97,6 +98,7 @@ export const useLocations = () => {
         : (districtId ? await locationApi.getClusters(districtId) : await locationApi.getClustersHierarchy());
 
       setClusters(data || []);
+      return data || [];
     } catch (err) {
       setError('Failed to load clusters');
       console.error(err);
@@ -114,6 +116,7 @@ export const useLocations = () => {
         : await locationApi.getDistricts(params);
 
       setDistricts(data || []);
+      return data || [];
 
       if (data && data.length === 1 && clusterId === selectedCluster) {
         setSelectedDistrict(data[0]._id);

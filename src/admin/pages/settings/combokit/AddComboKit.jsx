@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   Plus, CheckCircle, Camera, ChevronUp, ChevronDown,
-  X, Image as ImageIcon, Search, Edit, Eye, Trash2
+  X, Image as ImageIcon, Search, Edit, Eye, Trash2, Package
 } from 'lucide-react';
 import Select from 'react-select';
 import { useLocations } from '../../../../hooks/useLocations';
-import { getAssignments, createAssignment, updateAssignment, deleteAssignment, getPartnerTypes, getPartnerPlans } from '../../../../services/combokit/combokitApi';
+import { getAssignments, createAssignment, updateAssignment, deleteAssignment, getPartnerTypes, getPartnerPlans, getSolarKits, getSolarKitBOM } from '../../../../services/combokit/combokitApi';
 import { getBrands, getSkus } from '../../../../services/settings/orderProcurementSettingApi';
 import * as locationSvc from '../../../../services/core/locationApi';
 import { locationAPI } from '../../../../api/api';
@@ -71,6 +71,14 @@ export default function AddComboKit() {
   // State for view combo kit
   const [viewingComboKit, setViewingComboKit] = useState(null);
 
+  // Selection viewer modal
+  const [showSelectionModal, setShowSelectionModal] = useState(false);
+  const [selectionContent, setSelectionContent] = useState({ title: '', items: [], type: '', row: null });
+
+  // Centralized Edit Modal
+  const [showEditProjectModal, setShowEditProjectModal] = useState(false);
+  const [editingProjectData, setEditingProjectData] = useState(null);
+
   const [partners, setPartners] = useState([]);
 
   const [allManufacturers, setAllManufacturers] = useState([]);
@@ -79,13 +87,36 @@ export default function AddComboKit() {
   const [loadingBrands, setLoadingBrands] = useState(false);
   const [loadingSkus, setLoadingSkus] = useState(false);
 
+  const [solarKits, setSolarKits] = useState([]);
+  const [loadingSolarKits, setLoadingSolarKits] = useState(false);
+  const [selectedSolarKitId, setSelectedSolarKitId] = useState('');
+
+  // State for populating assignment data from SolarKit
+  const [assignmentCategory, setAssignmentCategory] = useState('Solar Panel');
+  const [assignmentSubCategory, setAssignmentSubCategory] = useState('Residential');
+  const [assignmentProjectType, setAssignmentProjectType] = useState('1kW - 10kW');
+  const [assignmentSubProjectType, setAssignmentSubProjectType] = useState('On Grid');
+
   // Initial Data
   useEffect(() => {
     fetchCountries();
     fetchPartners();
     loadAssignments();
     fetchInitialBrands();
+    fetchSolarKits();
   }, []);
+
+  const fetchSolarKits = async () => {
+    try {
+      setLoadingSolarKits(true);
+      const data = await getSolarKits();
+      setSolarKits(data || []);
+    } catch (err) {
+      console.error("Error fetching solarkits", err);
+    } finally {
+      setLoadingSolarKits(false);
+    }
+  };
 
   const fetchInitialBrands = async () => {
     try {
@@ -150,10 +181,12 @@ export default function AddComboKit() {
         countryId: item.country?._id || item.country,
         stateId: item.state?._id || item.state,
         state: item.state?.name || 'Unknown',
-        clusterId: item.cluster?._id || item.cluster,
-        cluster: item.cluster?.name || 'Unknown',
+        clusterIds: item.clusters ? item.clusters.map(c => typeof c === 'object' ? c._id : c) : (item.cluster?._id || item.cluster ? [item.cluster?._id || item.cluster] : []),
+        clusters: item.clusters ? item.clusters.map(c => typeof c === 'object' ? c.name : c) : (item.cluster?.name ? [item.cluster?.name] : []),
+        roles: item.roles || (item.role ? [item.role] : []),
         districts: item.districts ? item.districts.map(d => typeof d === 'object' ? d.name : d) : [],
         districtIds: item.districts ? item.districts.map(d => typeof d === 'object' ? d._id : d) : [],
+        solarkitName: item.solarkitName || ''
       })));
     } catch (error) {
       console.error("Error loading assignments:", error);
@@ -162,14 +195,14 @@ export default function AddComboKit() {
 
   const filteredProjects = useMemo(() => {
     if (!projectRows || projectRows.length === 0) return [];
-    
+
     // If no selections are made, return everything as requested
-    if (selectedCountries.length === 0 && 
-        selectedStates.length === 0 && 
-        selectedClusters.length === 0 && 
-        selectedDistricts.length === 0 && 
-        selectedRoles.length === 0 && 
-        selectedPlans.length === 0) {
+    if (selectedCountries.length === 0 &&
+      selectedStates.length === 0 &&
+      selectedClusters.length === 0 &&
+      selectedDistricts.length === 0 &&
+      selectedRoles.length === 0 &&
+      selectedPlans.length === 0) {
       return projectRows;
     }
 
@@ -182,18 +215,20 @@ export default function AddComboKit() {
         if (row.stateId && !selectedStates.some(id => String(id) === String(row.stateId))) return false;
       }
       if (selectedClusters.length > 0) {
-        if (row.clusterId && !selectedClusters.some(id => String(id) === String(row.clusterId))) return false;
+        const rowCIds = (row.clusterIds || []).map(c => String(c));
+        if (!selectedClusters.some(id => rowCIds.includes(String(id)))) return false;
       }
       if (selectedDistricts.length > 0) {
         const rowDIds = (row.districtIds || []).map(d => String(d));
         if (!selectedDistricts.some(id => rowDIds.includes(String(id)))) return false;
       }
-      
+
       // Apply partner filters
       if (selectedRoles.length > 0) {
-        if (!selectedRoles.some(role => String(role).toLowerCase() === String(row.role).toLowerCase())) return false;
+        const rowRoles = (row.roles || []).map(r => String(r).toLowerCase());
+        if (!selectedRoles.some(role => rowRoles.includes(String(role).toLowerCase()))) return false;
       }
-      
+
       if (selectedPlans.length > 0) {
         const rowPlans = (row.cpTypes || []).map(p => String(p).toLowerCase());
         const hasSelectedPlan = selectedPlans.some(p => rowPlans.includes(String(p).toLowerCase()));
@@ -204,61 +239,92 @@ export default function AddComboKit() {
     });
   }, [projectRows, selectedCountries, selectedStates, selectedClusters, selectedDistricts, selectedRoles, selectedPlans]);
 
-  const getItemKitCount = (type, value) => {
-    if (!projectRows || projectRows.length === 0) return 0;
+  const renderLiveCount = (configs, kits, type, isSelected) => {
+    if (configs === 0 && kits === 0) return null;
     
+    // Choose color classes based on the card type
+    let colorClass = 'text-blue-600';
+    let selectedColorClass = 'text-blue-100';
+    
+    if (type === 'cluster') { colorClass = 'text-purple-600'; selectedColorClass = 'text-purple-100'; }
+    else if (type === 'district') { colorClass = 'text-cyan-600'; selectedColorClass = 'text-cyan-100'; }
+    else if (type === 'plan') { colorClass = 'text-green-600'; selectedColorClass = 'text-green-100'; }
+    
+    return (
+      <div className={`mt-1 flex flex-col items-center gap-0 leading-tight ${isSelected ? selectedColorClass : colorClass}`}>
+        <p className="text-[10px] font-black uppercase tracking-tighter">
+          {configs} {configs === 1 ? 'Config' : 'Configs'}
+        </p>
+        {kits > 0 && (
+          <p className="text-[9px] font-bold opacity-80 italic">
+            {kits} {kits === 1 ? 'Kit' : 'Kits'}
+          </p>
+        )}
+      </div>
+    );
+  };
+
+  const getItemKitCount = (type, value) => {
+    if (!projectRows || projectRows.length === 0) return { configs: 0, kits: 0 };
+
     // Normalize value for comparison
     const targetValue = value ? String(value).toLowerCase().trim() : '';
-    if (!targetValue) return 0;
+    if (!targetValue) return { configs: 0, kits: 0 };
 
     const matchingRows = projectRows.filter(row => {
       // 1. Level Filter: Match the actual item we are counting
       let isLevelMatch = false;
       if (type === 'country') {
-         isLevelMatch = String(row.countryId) === targetValue;
+        isLevelMatch = String(row.countryId) === targetValue;
       } else if (type === 'state') {
-         isLevelMatch = String(row.stateId) === targetValue || String(row.state).toLowerCase().trim() === targetValue;
+        isLevelMatch = String(row.stateId) === targetValue || String(row.state).toLowerCase().trim() === targetValue;
       } else if (type === 'cluster') {
-         isLevelMatch = String(row.clusterId) === targetValue || String(row.cluster).toLowerCase().trim() === targetValue;
+        const rowC = (row.clusters || []).map(c => String(c).toLowerCase().trim());
+        const rowCIds = (row.clusterIds || []).map(c => String(c).toLowerCase().trim());
+        isLevelMatch = rowC.includes(targetValue) || rowCIds.includes(targetValue);
       } else if (type === 'district') {
-         const rowD = (row.districts || []).map(d => String(d).toLowerCase().trim());
-         const rowDIds = (row.districtIds || []).map(d => String(d).toLowerCase().trim());
-         isLevelMatch = rowD.includes(targetValue) || rowDIds.includes(targetValue);
+        const rowD = (row.districts || []).map(d => String(d).toLowerCase().trim());
+        const rowDIds = (row.districtIds || []).map(d => String(d).toLowerCase().trim());
+        isLevelMatch = rowD.includes(targetValue) || rowDIds.includes(targetValue);
       } else if (type === 'role') {
-         isLevelMatch = String(row.role).toLowerCase().trim() === targetValue;
+        const rowRoles = (row.roles || []).map(r => String(r).toLowerCase().trim());
+        isLevelMatch = rowRoles.includes(targetValue);
       } else if (type === 'plan') {
-         const rowPlans = (row.cpTypes || []).map(p => String(p).toLowerCase().trim());
-         isLevelMatch = rowPlans.includes(targetValue);
+        const rowPlans = (row.cpTypes || []).map(p => String(p).toLowerCase().trim());
+        isLevelMatch = rowPlans.includes(targetValue);
       }
-      
+
       if (!isLevelMatch) return false;
 
       // 2. Hierarchy Filters (ONLY apply if row has the mapping data)
       if (type !== 'country' && selectedCountries.length > 0) {
-         if (row.countryId) {
-            const countryMatch = selectedCountries.some(id => String(id) === String(row.countryId));
-            if (!countryMatch) return false;
-         }
+        if (row.countryId) {
+          const countryMatch = selectedCountries.some(id => String(id) === String(row.countryId));
+          if (!countryMatch) return false;
+        }
       }
 
       if (['cluster', 'district', 'role', 'plan'].includes(type) && selectedStates.length > 0) {
-         if (row.stateId) {
-            const stateMatch = selectedStates.some(id => String(id) === String(row.stateId));
-            if (!stateMatch) return false;
-         }
+        if (row.stateId) {
+          const stateMatch = selectedStates.some(id => String(id) === String(row.stateId));
+          if (!stateMatch) return false;
+        }
       }
 
-      if (['district', 'role', 'plan'].includes(type) && selectedClusters.length > 0) {
-         if (row.clusterId) {
-            const clusterMatch = selectedClusters.some(id => String(id) === String(row.clusterId));
-            if (!clusterMatch) return false;
-         }
+      if (['cluster', 'district', 'role', 'plan'].includes(type) && selectedClusters.length > 0) {
+        if (row.clusterIds && row.clusterIds.length > 0) {
+          const clusterMatch = selectedClusters.some(id => row.clusterIds.includes(String(id)));
+          if (!clusterMatch) return false;
+        }
       }
 
       return true;
     });
 
-    return matchingRows.reduce((sum, row) => sum + (row.comboKits?.length || 0), 0);
+    return {
+      configs: matchingRows.length,
+      kits: matchingRows.reduce((sum, row) => sum + (row.comboKits?.length || 0), 0)
+    };
   };
 
   const handleCountrySelect = (countryId, countryName, isAuto = false) => {
@@ -268,7 +334,7 @@ export default function AddComboKit() {
     } else {
       newSelected = [...selectedCountries, countryId];
     }
-    
+
     setSelectedCountries(newSelected);
     if (newSelected.length === 1) {
       const c = countries.find(x => x._id === newSelected[0]);
@@ -294,17 +360,17 @@ export default function AddComboKit() {
   };
 
   const handleSelectAllCountries = () => {
-     if (selectAllCountry) {
-        setSelectedCountries([]);
-        setSelectedCountryName('');
-        setStateOptions([]);
-     } else {
-        const allIds = countries.map(c => c._id);
-        setSelectedCountries(allIds);
-        setSelectedCountryName('All Countries');
-        fetchStatesForCountries(allIds);
-     }
-     setSelectAllCountry(!selectAllCountry);
+    if (selectAllCountry) {
+      setSelectedCountries([]);
+      setSelectedCountryName('');
+      setStateOptions([]);
+    } else {
+      const allIds = countries.map(c => c._id);
+      setSelectedCountries(allIds);
+      setSelectedCountryName('All Countries');
+      fetchStatesForCountries(allIds);
+    }
+    setSelectAllCountry(!selectAllCountry);
   };
 
   const fetchStatesForCountries = async (countryIds) => {
@@ -416,11 +482,11 @@ export default function AddComboKit() {
   const handleRoleSelect = async (roleName) => {
     let newRoles = [];
     if (selectedRoles.includes(roleName)) {
-       newRoles = selectedRoles.filter(r => r !== roleName);
+      newRoles = selectedRoles.filter(r => r !== roleName);
     } else {
-       newRoles = [...selectedRoles, roleName];
+      newRoles = [...selectedRoles, roleName];
     }
-    
+
     setSelectedRoles(newRoles);
     setSelectedPlans([]);
     setSelectAllPlan(false);
@@ -434,16 +500,16 @@ export default function AddComboKit() {
   };
 
   const handleSelectAllRoles = () => {
-     if (selectAllRole) {
-        setSelectedRoles([]);
-        setAvailablePlans([]);
-        setShowPlanSection(false);
-     } else {
-        const allRoles = partners.map(p => p.name);
-        setSelectedRoles(allRoles);
-        fetchPlansForRoles(allRoles);
-     }
-     setSelectAllRole(!selectAllRole);
+    if (selectAllRole) {
+      setSelectedRoles([]);
+      setAvailablePlans([]);
+      setShowPlanSection(false);
+    } else {
+      const allRoles = partners.map(p => p.name);
+      setSelectedRoles(allRoles);
+      fetchPlansForRoles(allRoles);
+    }
+    setSelectAllRole(!selectAllRole);
   };
 
   const fetchPlansForRoles = async (roleNames) => {
@@ -451,8 +517,8 @@ export default function AddComboKit() {
       const stateId = selectedStates.length > 0 ? selectedStates[0] : null;
       const allPlans = [];
       for (const role of roleNames) {
-         const plans = await getPartnerPlans(role, stateId);
-         allPlans.push(...(plans || []));
+        const plans = await getPartnerPlans(role, stateId);
+        allPlans.push(...(plans || []));
       }
       // Unique plans by name
       const uniquePlans = Array.from(new Map(allPlans.map(p => [p.name || p._id, p])).values());
@@ -506,6 +572,10 @@ export default function AddComboKit() {
   };
 
   const handleAddProject = async () => {
+    if (selectedStates.length === 0) {
+      alert('Please select at least one State');
+      return;
+    }
     if (selectedClusters.length === 0) {
       alert('Please select at least one cluster');
       return;
@@ -523,63 +593,64 @@ export default function AddComboKit() {
       return;
     }
 
-    // Since our backend expects one assignment per cluster usually,
-    // we'll loop through selected clusters that have districts selected in them.
-    // Or just create one project row for now as UI shows state/cluster as strings.
-
     try {
       const results = [];
-      for (const clusterId of selectedClusters) {
-        // Filter districts that belong to THIS cluster
-        const currentClusterDistricts = districtOptions
-          .filter(d => d.clusterId === clusterId)
-          .filter(d => selectedDistricts.includes(d._id));
-
-        if (currentClusterDistricts.length === 0) continue;
-
-        const clusterObj = clusterOptions.find(c => c._id === clusterId);
-        const stateId = clusterObj?.state?._id || clusterObj?.state;
+      // Loop through each selected state to create exactly one card per state
+      for (const stateId of selectedStates) {
         const stateObj = stateOptions.find(s => s._id === stateId);
 
-        // Loop through each selected role to create separate projects
-        for (const roleName of selectedRoles) {
-           // Only add if this role has plans selected that belong to it?
-           // Actually, selectedPlans is global names. We'll just add it.
-           const payload = {
-            state: stateId,
-            cluster: clusterId,
-            cpTypes: [...selectedPlans],
-            role: roleName,
-            districts: currentClusterDistricts.map(d => d._id),
-            status: 'Inactive',
-            comboKits: [],
-            category: 'Solar Panel',
-            subCategory: 'Residential',
-            projectType: '1kw-10kw',
-            subProjectType: 'On Grid'
-          };
+        // Find clusters that belong to this state AND are selected
+        const stateClusters = clusterOptions
+          .filter(c => (c.state?._id === stateId || c.state === stateId))
+          .filter(c => selectedClusters.includes(c._id));
 
-          const newAssignment = await createAssignment(payload);
-          const newRow = {
-            ...newAssignment,
-            id: newAssignment._id,
-            state: stateObj?.name || 'Unknown',
-            stateId: stateId,
-            cluster: clusterObj?.name || 'Unknown',
-            clusterId: clusterId,
-            cpTypes: newAssignment.cpTypes,
-            districts: currentClusterDistricts.map(d => d.name),
-            districtIds: newAssignment.districts
-          };
-          results.push(newRow);
-        }
+        if (stateClusters.length === 0) continue;
+
+        const stateClusterIds = stateClusters.map(c => c._id);
+
+        // Find districts that belong to these clusters AND are selected
+        const stateDistricts = districtOptions
+          .filter(d => stateClusterIds.includes(d.clusterId))
+          .filter(d => selectedDistricts.includes(d._id));
+
+        if (stateDistricts.length === 0) continue;
+
+        const payload = {
+          state: stateId,
+          clusters: stateClusterIds,
+          cpTypes: [...selectedPlans],
+          roles: [...selectedRoles],
+          districts: stateDistricts.map(d => d._id),
+          status: 'Inactive',
+          comboKits: [],
+          solarkitName: solarKits.find(k => k._id === selectedSolarKitId)?.name || '',
+          category: assignmentCategory,
+          subCategory: assignmentSubCategory,
+          projectType: assignmentProjectType,
+          subProjectType: assignmentSubProjectType
+        };
+
+        const newAssignment = await createAssignment(payload);
+        const newRow = {
+          ...newAssignment,
+          id: newAssignment._id,
+          state: stateObj?.name || 'Unknown',
+          stateId: stateId,
+          clusters: stateClusters.map(c => c.name),
+          clusterIds: newAssignment.clusters,
+          roles: newAssignment.roles,
+          cpTypes: newAssignment.cpTypes,
+          districts: stateDistricts.map(d => d.name),
+          districtIds: newAssignment.districts
+        };
+        results.push(newRow);
       }
 
       if (results.length > 0) {
         setProjectRows([...projectRows, ...results]);
-        alert(`${results.length} Project(s) added successfully!`);
+        alert(`${results.length} State-level Project(s) added successfully!`);
       } else {
-        alert('No districts were selected for the chosen clusters.');
+        alert('No combinations found for the selected locations.');
       }
     } catch (error) {
       console.error("Error creating assignment:", error);
@@ -593,6 +664,14 @@ export default function AddComboKit() {
 
     const row = projectRows.find(r => r.id === rowId);
     const existingKits = row ? [...row.comboKits] : [];
+
+    // Initialize assignment-level data from the row
+    if (row) {
+      setAssignmentCategory(row.category || 'Solar Panel');
+      setAssignmentSubCategory(row.subCategory || 'Residential');
+      setAssignmentProjectType(row.projectType || '1kW - 10kW');
+      setAssignmentSubProjectType(row.subProjectType || 'On Grid');
+    }
 
     setModalKits(existingKits);
 
@@ -608,6 +687,29 @@ export default function AddComboKit() {
       } else {
         setIsNewKitTab(true);
         resetComboKitForm();
+        
+        // Fetch and load SolarKit BOM for the new kit
+        if (row && row.solarkitName) {
+          const kitModel = solarKits.find(k => k.name === row.solarkitName);
+          if (kitModel && kitModel._id) {
+            try {
+              const bomData = await getSolarKitBOM(kitModel._id);
+              if (bomData && bomData.bom) {
+                const mappedBom = bomData.bom.map(section => ({
+                  ...section,
+                  items: section.items?.map(item => ({
+                    ...item,
+                    itemType: item.itemType || item.type || ''
+                  })) || []
+                }));
+                setBomSections(mappedBom);
+                setShowBomSection(true);
+              }
+            } catch (err) {
+              console.error("Error loading SolarKit BOM:", err);
+            }
+          }
+        }
       }
     }
 
@@ -664,6 +766,30 @@ export default function AddComboKit() {
       setIsNewKitTab(true);
       setActiveKitIndex(updatedKits.length);
       resetComboKitForm();
+
+      // Fetch and load SolarKit BOM for the new kit tab
+      const currentRow = projectRows.find(r => r.id === currentRowId);
+      if (currentRow && currentRow.solarkitName) {
+        const kitModel = solarKits.find(k => k.name === currentRow.solarkitName);
+        if (kitModel && kitModel._id) {
+          try {
+            const bomData = await getSolarKitBOM(kitModel._id);
+            if (bomData && bomData.bom) {
+              const mappedBom = bomData.bom.map(section => ({
+                ...section,
+                items: section.items?.map(item => ({
+                  ...item,
+                  itemType: item.itemType || item.type || ''
+                })) || []
+              }));
+              setBomSections(mappedBom);
+              setShowBomSection(true);
+            }
+          } catch (err) {
+            console.error("Error loading SolarKit BOM for tab:", err);
+          }
+        }
+      }
     } else {
       setIsNewKitTab(false);
       setActiveKitIndex(newIdx);
@@ -699,11 +825,24 @@ export default function AddComboKit() {
     }
 
     try {
-      const updatedAssignment = await updateAssignment(currentRowId, { comboKits: updatedComboKits });
+      const updatedAssignment = await updateAssignment(currentRowId, {
+        comboKits: updatedComboKits,
+        category: assignmentCategory,
+        subCategory: assignmentSubCategory,
+        projectType: assignmentProjectType,
+        subProjectType: assignmentSubProjectType
+      });
 
       const updatedRows = projectRows.map(row => {
         if (row.id === currentRowId) {
-          return { ...row, comboKits: updatedAssignment.comboKits };
+          return {
+            ...row,
+            comboKits: updatedAssignment.comboKits,
+            category: updatedAssignment.category,
+            subCategory: updatedAssignment.subCategory,
+            projectType: updatedAssignment.projectType,
+            subProjectType: updatedAssignment.subProjectType
+          };
         }
         return row;
       });
@@ -821,6 +960,124 @@ export default function AddComboKit() {
     setShowViewCombokitModal(true);
   };
 
+  const openSelectionModal = (title, items, type, row) => {
+    setSelectionContent({ title, items: items || [], type, row });
+    setShowSelectionModal(true);
+  };
+
+  const handleEditAssignment = async (row) => {
+    // Fetch dependencies so the lists are populated in the modal
+    if (row.stateId) {
+      try {
+        const clusters = await fetchClusters(row.stateId);
+        if (clusters && Array.isArray(clusters)) {
+          setClusterOptions(prev => {
+            const existingIds = prev.map(c => c._id);
+            const newOnes = clusters.filter(c => !existingIds.includes(c._id));
+            return [...prev, ...newOnes];
+          });
+        }
+
+        if (row.clusterIds && row.clusterIds.length > 0) {
+          // Fetch districts for ALL selected clusters and ensure they have clusterId attached
+          const districtPromises = row.clusterIds.map(id =>
+            fetchDistricts({ clusterId: id }).then(ds =>
+              (ds || []).map(d => ({ ...d, clusterId: id }))
+            )
+          );
+          const districtResults = await Promise.all(districtPromises);
+          const allDistricts = districtResults.flat();
+
+          if (allDistricts && Array.isArray(allDistricts)) {
+            setDistrictOptions(prev => {
+              const existingIds = prev.map(d => d._id);
+              const newOnes = allDistricts.filter(d => !existingIds.includes(d._id));
+              return [...prev, ...newOnes];
+            });
+          }
+        }
+        if (row.roles && row.roles.length > 0) {
+          try {
+            const plans = await getPartnerPlans(row.roles[0], row.stateId);
+            setAvailablePlans(plans || []);
+          } catch (err) {
+            console.error("Error fetching plans for edit:", err);
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching dependencies for edit:", e);
+      }
+    }
+
+    setEditingProjectData({
+      id: row.id,
+      stateId: row.stateId,
+      clusterIds: row.clusterIds || [],
+      clusterNames: row.clusters || [],
+      districtIds: row.districtIds || [],
+      districtNames: row.districts || [],
+      roles: row.roles || [],
+      cpTypes: row.cpTypes || [],
+      status: row.status,
+      category: row.category,
+      subCategory: row.subCategory,
+      projectType: row.projectType,
+      subProjectType: row.subProjectType,
+      solarkitName: row.solarkitName || ''
+    });
+    setShowEditProjectModal(true);
+  };
+
+  const handleUpdateAssignment = async (updatedData) => {
+    try {
+      const payload = {
+        state: updatedData.stateId,
+        clusters: updatedData.clusterIds,
+        districts: updatedData.districtIds,
+        roles: updatedData.roles,
+        cpTypes: updatedData.cpTypes,
+        status: updatedData.status,
+        category: updatedData.category,
+        subCategory: updatedData.subCategory,
+        projectType: updatedData.projectType,
+        subProjectType: updatedData.subProjectType,
+        solarkitName: updatedData.solarkitName
+      };
+
+      const updated = await updateAssignment(updatedData.id, payload);
+
+      // Update local state
+      setProjectRows(prev => prev.map(row => {
+        if (row.id === updatedData.id) {
+          const stateObj = stateOptions.find(s => s._id === updatedData.stateId);
+          const clustersObj = clusterOptions.filter(c => updatedData.clusterIds.includes(c._id));
+          const districtsObj = districtOptions.filter(d => updatedData.districtIds.includes(d._id));
+
+          return {
+            ...row,
+            ...updated,
+            state: stateObj?.name || row.state,
+            stateId: updatedData.stateId,
+            clusters: clustersObj.map(c => c.name),
+            clusterIds: updatedData.clusterIds,
+            districts: districtsObj.map(d => d.name),
+            districtIds: updatedData.districtIds,
+            roles: updated.roles,
+            cpTypes: updated.cpTypes,
+            solarkitName: updated.solarkitName
+          };
+        }
+        return row;
+      }));
+
+      setShowEditProjectModal(false);
+      alert('Assignment updated successfully!');
+    } catch (error) {
+      console.error("Error updating assignment:", error);
+      alert('Failed to update assignment');
+    }
+  };
+
   const resetComboKitForm = () => {
     setComboKitName('');
     setComboKitImage(null);
@@ -832,6 +1089,45 @@ export default function AddComboKit() {
     setIsEditMode(false);
     setEditingRowId(null);
     setActiveTab('create');
+  };
+
+  // BOM Helper Functions
+  const addBomSection = () => {
+    setBomSections([...bomSections, {
+      bosKitName: '',
+      kitType: 'Combokit',
+      kitCategory: '',
+      items: [{ name: '', itemType: '', qty: '', unit: '', price: 0 }]
+    }]);
+  };
+
+  const removeBomSection = (index) => {
+    const newData = bomSections.filter((_, i) => i !== index);
+    setBomSections(newData);
+  };
+
+  const updateBomSection = (index, field, value) => {
+    const newData = [...bomSections];
+    newData[index][field] = value;
+    setBomSections(newData);
+  };
+
+  const addBomItem = (sectionIndex) => {
+    const newData = [...bomSections];
+    newData[sectionIndex].items.push({ name: '', itemType: '', qty: '', unit: '', price: 0 });
+    setBomSections(newData);
+  };
+
+  const removeBomItem = (sectionIndex, itemIndex) => {
+    const newData = [...bomSections];
+    newData[sectionIndex].items = newData[sectionIndex].items.filter((_, i) => i !== itemIndex);
+    setBomSections(newData);
+  };
+
+  const updateBomItem = (sectionIndex, itemIndex, field, value) => {
+    const newData = [...bomSections];
+    newData[sectionIndex].items[itemIndex][field] = value;
+    setBomSections(newData);
   };
 
   // Render cluster cards
@@ -850,22 +1146,19 @@ export default function AddComboKit() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-2">
           {clusterOptions.length === 0 ? <p className="text-gray-500 col-span-4">No clusters found for selected states.</p> :
             clusterOptions.map(cluster => {
-              const count = getItemKitCount('cluster', cluster._id);
+              const { configs, kits } = getItemKitCount('cluster', cluster._id);
+              const isSelected = selectedClusters.includes(cluster._id);
               return (
                 <div
                   key={cluster._id}
-                  className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedClusters.includes(cluster._id)
+                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all hover:scale-[1.02] min-h-[5rem] flex flex-col justify-center items-center h-20 ${isSelected
                     ? 'bg-purple-700 text-white border-purple-800 shadow-md'
-                    : 'bg-white border-gray-300 hover:border-blue-500'
+                    : 'bg-white border-gray-300 hover:border-blue-500 hover:shadow-sm'
                     }`}
                   onClick={() => handleClusterSelect(cluster._id)}
                 >
-                  <div className="font-medium">{cluster.name}</div>
-                  {count > 0 && (
-                    <p className={`text-[10px] mt-1 font-bold ${selectedClusters.includes(cluster._id) ? 'text-purple-100' : 'text-purple-600'}`}>
-                      {count} ComboKit{count !== 1 ? 's' : ''}
-                    </p>
-                  )}
+                  <div className="font-bold text-sm tracking-tight">{cluster.name}</div>
+                  {renderLiveCount(configs, kits, 'cluster', isSelected)}
                 </div>
               );
             })}
@@ -892,23 +1185,19 @@ export default function AddComboKit() {
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {partners.map(p => {
-            const count = getItemKitCount('role', p.name);
+            const { configs, kits } = getItemKitCount('role', p.name);
             const isSelected = selectedRoles.includes(p.name);
             return (
               <div
                 key={p._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${isSelected
+                className={`border rounded-lg p-3 text-center cursor-pointer transition-all min-h-[5rem] flex flex-col justify-center items-center h-20 ${isSelected
                   ? 'bg-blue-600 text-white border-blue-700 shadow-md'
-                  : 'bg-white border-gray-300 hover:border-blue-500'
+                  : 'bg-white border-gray-300 hover:border-blue-500 hover:shadow-sm'
                   }`}
                 onClick={() => handleRoleSelect(p.name)}
               >
-                <div className="font-medium">{p.name}</div>
-                {count > 0 && (
-                  <p className={`text-[10px] mt-1 font-bold ${isSelected ? 'text-blue-100' : 'text-blue-600'}`}>
-                    {count} ComboKit{count !== 1 ? 's' : ''}
-                  </p>
-                )}
+                <div className="font-bold text-sm tracking-tight">{p.name}</div>
+                {renderLiveCount(configs, kits, 'role', isSelected)}
               </div>
             );
           })}
@@ -921,7 +1210,7 @@ export default function AddComboKit() {
     return (
       <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6">
         <h5 className="text-lg font-semibold text-gray-700 mb-4">
-           Select Plans {selectedRoles.length > 0 ? `for ${selectedRoles.join(', ')}` : ''}
+          Select Plans {selectedRoles.length > 0 ? `for ${selectedRoles.join(', ')}` : ''}
         </h5>
 
         <div className="mb-4">
@@ -939,22 +1228,19 @@ export default function AddComboKit() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {availablePlans.length === 0 ? <p className="text-gray-500 col-span-4">No active plans found.</p> :
             availablePlans.map(plan => {
-              const count = getItemKitCount('plan', plan.name);
+              const { configs, kits } = getItemKitCount('plan', plan.name);
+              const isSelected = selectedPlans.includes(plan.name);
               return (
                 <div
                   key={plan._id}
-                  className={`border rounded-lg p-4 text-center cursor-pointer transition-all h-24 flex flex-col justify-center items-center ${selectedPlans.includes(plan.name)
-                    ? 'bg-green-600 text-white border-green-700'
-                    : 'border-gray-300 hover:border-green-500'
+                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all min-h-[5.5rem] flex flex-col justify-center items-center h-22 ${isSelected
+                    ? 'bg-green-600 text-white border-green-700 shadow-md'
+                    : 'bg-white border-gray-300 hover:border-green-500 hover:shadow-sm'
                     }`}
                   onClick={() => handlePlanSelect(plan.name)}
                 >
-                  <div className="font-medium">{plan.name}</div>
-                  {count > 0 && (
-                    <p className={`text-[10px] mt-1 font-bold ${selectedPlans.includes(plan.name) ? 'text-green-100' : 'text-green-600'}`}>
-                      {count} ComboKit{count !== 1 ? 's' : ''}
-                    </p>
-                  )}
+                  <div className="font-bold text-sm tracking-tight">{plan.name}</div>
+                  {renderLiveCount(configs, kits, 'plan', isSelected)}
                 </div>
               );
             })}
@@ -984,25 +1270,76 @@ export default function AddComboKit() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {districtOptions.length === 0 ? <p className="text-gray-500 col-span-4">No districts found for this cluster.</p> :
             districtOptions.map(district => {
-              const count = getItemKitCount('district', district.name);
+              const { configs, kits } = getItemKitCount('district', district.name);
+              const isSelected = selectedDistricts.includes(district._id);
               return (
                 <div
                   key={district._id}
-                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all h-16 flex flex-col justify-center items-center ${selectedDistricts.includes(district._id)
-                    ? 'bg-cyan-600 text-white border-cyan-700'
-                    : 'border-gray-300 hover:border-cyan-500'
+                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all min-h-[5rem] flex flex-col justify-center items-center h-20 ${isSelected
+                    ? 'bg-cyan-600 text-white border-cyan-700 shadow-md'
+                    : 'bg-white border-gray-300 hover:border-cyan-500 hover:shadow-sm'
                     }`}
                   onClick={() => handleDistrictSelect(district._id)}
                 >
-                  <div className="font-medium text-sm">{district.name}</div>
-                  {count > 0 && (
-                    <p className={`text-[10px] mt-1 font-bold ${selectedDistricts.includes(district._id) ? 'text-cyan-100' : 'text-cyan-600'}`}>
-                      {count} ComboKit{count !== 1 ? 's' : ''}
-                    </p>
-                  )}
+                  <div className="font-bold text-sm tracking-tight">{district.name}</div>
+                  {renderLiveCount(configs, kits, 'district', isSelected)}
                 </div>
               );
             })}
+        </div>
+      </div>
+    );
+  };
+
+  // Render SolarKit Selection for main creation flow
+  const renderSolarKitSelection = () => {
+    return (
+      <div className="bg-gray-50 border border-indigo-200 rounded-lg p-6 mb-8 shadow-sm">
+        <h5 className="text-lg font-bold text-indigo-700 mb-4 flex items-center gap-2">
+          <div className="w-2 h-2 bg-indigo-500 rounded-full animate-pulse"></div>
+          Select Project Type (SolarKit)
+        </h5>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="space-y-2">
+            <label className="text-xs font-black text-indigo-400 uppercase tracking-widest ml-1">SolarKit Base</label>
+            <Select
+              options={solarKits.map(kit => ({ value: kit._id, label: kit.name, data: kit }))}
+              value={solarKits.find(k => k._id === selectedSolarKitId) ? { value: selectedSolarKitId, label: solarKits.find(k => k._id === selectedSolarKitId).name } : null}
+              onChange={(selected) => {
+                setSelectedSolarKitId(selected?.value || '');
+                if (selected?.data) {
+                  const kitData = selected.data;
+                  setAssignmentCategory(kitData.category || 'Solar Panel');
+                  setAssignmentSubCategory(kitData.subCategory || 'Residential');
+                  setAssignmentProjectType(kitData.projectType || '1kW - 10kW');
+                  setAssignmentSubProjectType(kitData.subProjectType || 'On Grid');
+                }
+              }}
+              placeholder="Select SolarKit..."
+              isLoading={loadingSolarKits}
+              classNamePrefix="react-select"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-4 bg-white/50 p-4 rounded-xl border border-indigo-100">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest block">Category</label>
+              <p className="font-bold text-indigo-900 text-sm">{assignmentCategory}</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest block">Sub Category</label>
+              <p className="font-bold text-indigo-900 text-sm">{assignmentSubCategory}</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest block">Project Type</label>
+              <p className="font-bold text-indigo-900 text-sm">{assignmentProjectType}</p>
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-indigo-300 uppercase tracking-widest block">Sub Project Type</label>
+              <p className="font-bold text-indigo-900 text-sm">{assignmentSubProjectType}</p>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -1017,11 +1354,12 @@ export default function AddComboKit() {
           <table className="min-w-full divide-y divide-gray-200 border border-gray-200">
             <thead className="bg-blue-50">
               <tr>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">SolarKit Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">ComboKit</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Status</th>
-                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">ComboKit Name</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">State</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Partner</th>
+                <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Plans</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Districts</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Category</th>
                 <th className="px-4 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">Sub Category</th>
@@ -1040,90 +1378,122 @@ export default function AddComboKit() {
                 </tr>
               ) : (
                 filteredProjects.map(row => (
-                <tr key={row.id} className="hover:bg-gray-50">
-                  <td className="px-4 py-3">
-                    <div className="flex gap-1">
-                      <button
-                        className="px-3 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600"
-                        onClick={() => handleAddComboKit(row.id, false)}
-                      >
-                        Add
-                      </button>
-                      <button
-                        className="px-3 py-1 bg-yellow-500 text-white text-xs rounded hover:bg-yellow-600"
-                        onClick={() => handleAddComboKit(row.id, true)}
-                      >
-                        Edit
-                      </button>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      className={`px-3 py-1 text-xs rounded ${row.status === 'Active'
-                        ? 'bg-green-100 text-green-800 border border-green-300'
-                        : 'bg-gray-100 text-gray-800 border border-gray-300'
-                        }`}
-                      onClick={() => handleStatusToggle(row.id)}
-                    >
-                      {row.status}
-                    </button>
-                  </td>
-                  <td className="px-4 py-3">
-                    {row.comboKits.length === 0 ? (
-                      <span className="text-gray-400 italic text-sm">No ComboKits</span>
-                    ) : (
-                      <div className="space-y-2">
-                        {row.comboKits.map((kit, idx) => (
-                          <div key={idx} className="flex justify-between items-center group bg-gray-50 hover:bg-white border hover:border-blue-300 p-2 rounded transition-all shadow-sm">
-                            <span className="text-sm font-medium text-gray-700 truncate mr-2" title={kit.name}>
-                              {kit.name}
-                            </span>
-                            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button
-                                onClick={() => handleAddComboKit(row.id, true, idx)}
-                                className="p-1 text-blue-500 hover:bg-blue-50 rounded"
-                                title="Edit this ComboKit"
-                              >
-                                <Edit size={14} />
-                              </button>
-                              <button
-                                onClick={() => handleViewCombokitDetails(kit)}
-                                className="p-1 text-green-500 hover:bg-green-50 rounded"
-                                title="View Details"
-                              >
-                                <Eye size={14} />
-                              </button>
-                            </div>
+                  <tr key={row.id} className="hover:bg-gray-50">
+                    <td className="px-4 py-3">
+                      <span className="text-blue-600 font-bold text-sm tracking-tight">{row.solarkitName || 'No SolarKit'}</span>
+                    </td>
+                    <td className="px-4 py-3 min-w-[180px]">
+                      <div className="space-y-3">
+                        {/* Action Buttons */}
+                        <div className="flex gap-1 border-b pb-2 mb-2">
+                          <button
+                            className="flex-1 px-3 py-1.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest rounded-lg hover:bg-blue-700 shadow-sm transition-all flex items-center justify-center gap-1"
+                            onClick={() => handleAddComboKit(row.id, false)}
+                          >
+                            <Plus size={12} strokeWidth={3} /> Add
+                          </button>
+                        </div>
+
+                        {/* Created Kits List */}
+                        {row.comboKits.length > 0 ? (
+                          <div className="space-y-1.5">
+                            {row.comboKits.map((kit, idx) => (
+                              <div key={idx} className="flex justify-between items-center group bg-blue-50/50 hover:bg-white border border-blue-100 hover:border-blue-300 p-2 rounded-xl transition-all shadow-sm">
+                                <span className="text-[11px] font-bold text-slate-700 truncate mr-2" title={kit.name}>
+                                  {kit.name}
+                                </span>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => handleAddComboKit(row.id, true, idx)}
+                                    className="p-1.5 text-blue-600 hover:bg-blue-100/50 rounded-lg transition-all"
+                                    title="Edit this ComboKit"
+                                  >
+                                    <Edit size={12} strokeWidth={2.5} />
+                                  </button>
+                                  <button
+                                    onClick={() => handleViewCombokitDetails(kit)}
+                                    className="p-1.5 text-green-600 hover:bg-green-100/50 rounded-lg transition-all"
+                                    title="View Details"
+                                  >
+                                    <Eye size={12} strokeWidth={2.5} />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
                           </div>
-                        ))}
+                        ) : (
+                          <div className="text-[10px] text-slate-400 italic text-center py-2 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
+                             No kits created yet
+                          </div>
+                        )}
                       </div>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-sm">{row.state}</td>
-                  <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={row.cpTypes.join(', ')}>
-                    {row.cpTypes.join(', ') || 'None'}
-                  </td>
-                  <td className="px-4 py-3 text-sm max-w-[200px] truncate" title={row.districts.join(', ')}>
-                    {row.districts.join(', ') || 'None'}
-                  </td>
-                  <td className="px-4 py-3 text-sm">{row.category}</td>
-                  <td className="px-4 py-3 text-sm">{row.subCategory}</td>
-                  <td className="px-4 py-3 text-sm">{row.projectType}</td>
-                  <td className="px-4 py-3 text-sm">{row.subProjectType}</td>
-                  <td className="px-4 py-3 text-sm">{row.cluster}</td>
-                  <td className="px-4 py-3 text-center">
-                    <button
-                      className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
-                      onClick={() => handleDeleteAssignment(row.id)}
-                      title="Delete Assignment"
+                    </td>
+                    <td className="px-4 py-3">
+                      <button
+                        className={`px-3 py-1 text-xs rounded ${row.status === 'Active'
+                          ? 'bg-green-100 text-green-800 border border-green-300'
+                          : 'bg-gray-100 text-gray-800 border border-gray-300'
+                          }`}
+                        onClick={() => handleStatusToggle(row.id)}
+                      >
+                        {row.status}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-sm">{row.state}</td>
+                    <td
+                      className="px-4 py-3 text-sm max-w-[150px] truncate cursor-pointer hover:text-blue-600 hover:font-bold transition-all"
+                      title="Click to view all"
+                      onClick={() => openSelectionModal('Selected Partners', row.roles, 'partner', row)}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
+                      {row.roles?.join(', ') || 'None'}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-sm max-w-[150px] truncate cursor-pointer hover:text-blue-600 hover:font-bold transition-all"
+                      title="Click to view all"
+                      onClick={() => openSelectionModal('Selected Plans', row.cpTypes, 'plan', row)}
+                    >
+                      {row.cpTypes?.join(', ') || 'None'}
+                    </td>
+                    <td
+                      className="px-4 py-3 text-sm max-w-[150px] truncate cursor-pointer hover:text-blue-600 hover:font-bold transition-all"
+                      title="Click to view all"
+                      onClick={() => openSelectionModal('Selected Districts', row.districts, 'district', row)}
+                    >
+                      {row.districts?.join(', ') || 'None'}
+                    </td>
+                    <td className="px-4 py-3 text-sm">{row.category}</td>
+                    <td className="px-4 py-3 text-sm">{row.subCategory}</td>
+                    <td className="px-4 py-3 text-sm">{row.projectType}</td>
+                    <td className="px-4 py-3 text-sm">{row.subProjectType}</td>
+                    <td
+                      className="px-4 py-3 text-sm max-w-[150px] truncate cursor-pointer hover:text-blue-600 hover:font-bold transition-all"
+                      title="Click to view all"
+                      onClick={() => openSelectionModal('Selected Clusters', row.clusters, 'cluster', row)}
+                    >
+                      {row.clusters?.join(', ') || 'None'}
+                    </td>
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex justify-center gap-2">
+                        <button
+                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                          onClick={() => handleEditAssignment(row)}
+                          title="Edit Assignment"
+                        >
+                          <Edit size={16} />
+                        </button>
+                        <button
+                          className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors"
+                          onClick={() => handleDeleteAssignment(row.id)}
+                          title="Delete Assignment"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
           </table>
         </div>
       </div>
@@ -1198,7 +1568,7 @@ export default function AddComboKit() {
                     <label className="block text-sm font-bold text-gray-700 mb-2">ComboKit Name (Product Name)</label>
                     <input
                       type="text"
-                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors text-lg font-semibold"
+                      className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-blue-500 transition-colors text-lg font-semibold shadow-sm"
                       value={comboKitName}
                       onChange={(e) => setComboKitName(e.target.value)}
                       placeholder="Enter ComboKit name"
@@ -1345,8 +1715,179 @@ export default function AddComboKit() {
                       {showBomSection ? "Hide BOM Editor" : "Configure Custom BOM"}
                     </button>
                     {showBomSection && (
-                      <div className="mt-4 p-6 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl text-center">
-                        <p className="text-gray-500 font-medium italic">BOM Editor features are active for this kit.</p>
+                      <div className="mt-8 space-y-6">
+                        <div className="flex items-center justify-between mb-2">
+                           <h5 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                             <Package size={20} className="text-blue-600" />
+                             Bill of Materials (BOM)
+                           </h5>
+                           <button 
+                             type="button"
+                             onClick={addBomSection}
+                             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2"
+                           >
+                             <Plus size={14} /> Add BOM Section
+                           </button>
+                        </div>
+
+                        {bomSections.map((section, idx) => (
+                          <div key={idx} className="bg-white rounded-xl border-2 border-slate-100 p-6 relative shadow-sm hover:border-blue-100 transition-all">
+                            <div className="flex justify-between items-center mb-6 pb-3 border-b border-slate-50">
+                              <h4 className="text-[11px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-3">
+                                <span className="bg-blue-600 text-white w-6 h-6 rounded-lg flex items-center justify-center text-[11px] font-black shadow-md shadow-blue-100">0{idx + 1}</span>
+                                BOS KIT CONFIGURATION
+                              </h4>
+                              <button
+                                type="button"
+                                onClick={() => removeBomSection(idx)}
+                                className="text-rose-500 hover:text-rose-700 px-3 py-1.5 rounded-lg font-bold text-[10px] flex items-center gap-2 transition-all bg-rose-50 hover:bg-rose-100 border border-rose-100"
+                              >
+                                <Trash2 size={12} /> REMOVE SECTION
+                              </button>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">BOS KIT NAME</label>
+                                <input
+                                  type="text"
+                                  value={section.bosKitName}
+                                  onChange={(e) => updateBomSection(idx, 'bosKitName', e.target.value)}
+                                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-700 font-bold text-xs"
+                                  placeholder="e.g. Mounting Rails"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">KIT TYPE</label>
+                                <div className="flex gap-1 p-1 bg-slate-100 border border-slate-200 rounded-xl h-11 items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => updateBomSection(idx, 'kitType', 'CP')}
+                                    className={`flex-1 h-full rounded-lg text-[10px] font-black transition-all ${section.kitType === 'CP' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                  >
+                                    CP
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => updateBomSection(idx, 'kitType', 'Combokit')}
+                                    className={`flex-1 h-full rounded-lg text-[10px] font-black transition-all ${section.kitType === 'Combokit' ? 'bg-white shadow-sm text-blue-600' : 'text-slate-400 hover:text-slate-600'}`}
+                                  >
+                                    COMBOKIT
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="space-y-2">
+                                <label className="block text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">KIT CATEGORY</label>
+                                <input
+                                  type="text"
+                                  value={section.kitCategory}
+                                  onChange={(e) => updateBomSection(idx, 'kitCategory', e.target.value)}
+                                  className="w-full h-11 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-slate-700 font-bold text-xs"
+                                  placeholder="e.g. Structure"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="overflow-hidden rounded-xl border border-slate-100 bg-white shadow-sm mb-5">
+                              <table className="w-full text-left">
+                                <thead className="bg-[#1e293b] text-white">
+                                  <tr>
+                                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest border-r border-slate-700/50">Item Name</th>
+                                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest border-r border-slate-700/50">Type</th>
+                                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest border-r border-slate-700/50">Qty</th>
+                                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest border-r border-slate-700/50">Unit</th>
+                                    <th className="px-5 py-3 text-[10px] font-black uppercase tracking-widest border-r border-slate-700/50">Price</th>
+                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-center"></th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                  {section.items.map((item, itemIdx) => (
+                                    <tr key={itemIdx} className="group hover:bg-blue-50/30 transition-colors">
+                                      <td className="p-3">
+                                        <select
+                                          value={item.name}
+                                          onChange={(e) => updateBomItem(idx, itemIdx, 'name', e.target.value)}
+                                          className="w-full h-9 border border-slate-200 rounded-lg px-2 font-bold text-slate-700 group-hover:bg-white transition-all text-[11px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                        >
+                                          <option value="">Select Item</option>
+                                          <option>Panel</option>
+                                          <option>Inverter</option>
+                                          <option>Rail</option>
+                                          <option>Clamp</option>
+                                          <option>Cable DC</option>
+                                          <option>Cable AC</option>
+                                          <option>Earthing Rod</option>
+                                          <option>MC4 Connector</option>
+                                        </select>
+                                      </td>
+                                      <td className="p-3">
+                                        <select
+                                          value={item.itemType}
+                                          onChange={(e) => updateBomItem(idx, itemIdx, 'itemType', e.target.value)}
+                                          className="w-full h-9 border border-slate-200 rounded-lg px-2 font-bold text-slate-700 group-hover:bg-white transition-all text-[11px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                        >
+                                          <option value="">Select Type</option>
+                                          <option>Hardware</option>
+                                          <option>Electronics</option>
+                                          <option>Electrical</option>
+                                          <option>Consumables</option>
+                                        </select>
+                                      </td>
+                                      <td className="p-3">
+                                        <input
+                                          type="text"
+                                          value={item.qty}
+                                          onChange={(e) => updateBomItem(idx, itemIdx, 'qty', e.target.value)}
+                                          className="w-full h-9 border border-slate-200 rounded-lg px-2 font-bold text-slate-700 group-hover:bg-white transition-all text-[11px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                          placeholder="0"
+                                        />
+                                      </td>
+                                      <td className="p-3">
+                                        <select
+                                          value={item.unit}
+                                          onChange={(e) => updateBomItem(idx, itemIdx, 'unit', e.target.value)}
+                                          className="w-full h-9 border border-slate-200 rounded-lg px-2 font-bold text-slate-700 group-hover:bg-white transition-all text-[11px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                        >
+                                          <option value="">Unit</option>
+                                          <option>Nos</option>
+                                          <option>Kgs</option>
+                                          <option>Mtrs</option>
+                                          <option>Sets</option>
+                                          <option>Box</option>
+                                        </select>
+                                      </td>
+                                      <td className="p-3">
+                                        <input
+                                          type="number"
+                                          value={item.price}
+                                          onChange={(e) => updateBomItem(idx, itemIdx, 'price', e.target.value)}
+                                          className="w-full h-9 border border-slate-200 rounded-lg px-2 font-bold text-slate-700 group-hover:bg-white transition-all text-[11px] focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                          placeholder="0.00"
+                                        />
+                                      </td>
+                                      <td className="p-3 text-center">
+                                        <button
+                                          type="button"
+                                          onClick={() => removeBomItem(idx, itemIdx)}
+                                          className="text-slate-300 hover:text-rose-500 p-1.5 rounded-lg hover:bg-rose-50 transition-all"
+                                        >
+                                          <Trash2 size={16} />
+                                        </button>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => addBomItem(idx)}
+                              className="w-full py-3 border-2 border-dashed border-slate-100 rounded-xl text-slate-400 font-bold text-[10px] hover:border-blue-200 hover:text-blue-600 hover:bg-blue-50/50 transition-all flex items-center justify-center gap-2 uppercase tracking-widest"
+                            >
+                              <Plus size={14} /> Add New Item to This Section
+                            </button>
+                          </div>
+                        ))}
                       </div>
                     )}
                   </div>
@@ -1567,23 +2108,19 @@ export default function AddComboKit() {
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           {countries.map(country => {
-            const count = getItemKitCount('country', country._id);
+            const { configs, kits } = getItemKitCount('country', country._id);
             const isSelected = selectedCountries.includes(country._id);
             return (
               <div
                 key={country._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${isSelected
+                className={`border rounded-lg p-3 text-center cursor-pointer transition-all min-h-[5rem] flex flex-col justify-center items-center h-20 ${isSelected
                   ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                  : 'bg-white border-blue-400 text-gray-700 hover:border-blue-600'
+                  : 'bg-white border-blue-400 text-gray-700 hover:border-blue-600 hover:shadow-sm'
                   }`}
                 onClick={() => handleCountrySelect(country._id, country.name)}
               >
-                <p className="font-bold uppercase tracking-wider text-sm">{country.name}</p>
-                {count > 0 && (
-                  <p className={`text-[10px] mt-1 font-bold ${isSelected ? 'text-blue-100' : 'text-blue-600'}`}>
-                    {count} ComboKit{count !== 1 ? 's' : ''}
-                  </p>
-                )}
+                <p className="font-black uppercase tracking-widest text-xs mb-1">{country.name}</p>
+                {renderLiveCount(configs, kits, 'country', isSelected)}
               </div>
             );
           })}
@@ -1605,22 +2142,19 @@ export default function AddComboKit() {
           </label>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             {stateOptions.map(state => {
-              const count = getItemKitCount('state', state._id);
+              const { configs, kits } = getItemKitCount('state', state._id);
+              const isSelected = selectedStates.includes(state._id);
               return (
                 <div
                   key={state._id}
-                  className={`border rounded-lg p-4 text-center cursor-pointer transition-transform hover:scale-105 ${selectedStates.includes(state._id)
+                  className={`border rounded-lg p-3 text-center cursor-pointer transition-all min-h-[5rem] flex flex-col justify-center items-center h-20 ${isSelected
                     ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                    : 'bg-white border-blue-500 hover:border-blue-700'
+                    : 'bg-white border-blue-500 hover:border-blue-700 hover:shadow-sm'
                     }`}
                   onClick={() => handleStateSelect(state._id)}
                 >
-                  <p className="font-medium text-sm">{state.name}</p>
-                  {count > 0 && (
-                    <p className={`text-[10px] mt-1 font-bold ${selectedStates.includes(state._id) ? 'text-blue-100' : 'text-blue-600'}`}>
-                      {count} ComboKit{count !== 1 ? 's' : ''}
-                    </p>
-                  )}
+                  <p className="font-bold text-sm tracking-tight">{state.name}</p>
+                  {renderLiveCount(configs, kits, 'state', isSelected)}
                 </div>
               );
             })}
@@ -1643,6 +2177,9 @@ export default function AddComboKit() {
 
           {/* Plan Selection THIRD */}
           {showPlanSection && renderPlanCards()}
+
+          {/* SolarKit Selection for the Assignment */}
+          {selectedPlans.length > 0 && renderSolarKitSelection()}
 
           {/* Action Buttons */}
           <div className="flex gap-3 mb-8">
@@ -1678,8 +2215,382 @@ export default function AddComboKit() {
       {renderComboKitModal()}
       {renderProjectCombokitsModal()}
       {renderViewCombokitModal()}
+      {renderSelectionModal()}
+      {renderEditProjectModal()}
     </div>
   );
+
+  // Selection Viewer Modal
+  function renderSelectionModal() {
+    if (!showSelectionModal) return null;
+
+    return (
+      <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setShowSelectionModal(false)}></div>
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200">
+          <div className="px-6 py-4 bg-indigo-600 text-white flex justify-between items-center">
+            <h3 className="text-lg font-bold tracking-tight">{selectionContent.title}</h3>
+            <button
+              onClick={() => setShowSelectionModal(false)}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
+            >
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
+            <div className="flex flex-wrap gap-2">
+              {selectionContent.items.length > 0 ? (
+                selectionContent.items.map((item, index) => (
+                  <span key={index} className="px-3 py-1.5 bg-indigo-50 text-indigo-700 text-xs font-bold rounded-lg border border-indigo-100 italic transition-all hover:bg-indigo-100 shadow-sm">
+                    {item}
+                  </span>
+                ))
+              ) : (
+                <p className="text-gray-400 italic text-sm text-center w-full py-4">No items selected.</p>
+              )}
+            </div>
+          </div>
+
+          <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex justify-between items-center">
+            <button
+              onClick={() => {
+                setShowSelectionModal(false);
+                handleEditAssignment(selectionContent.row);
+              }}
+              className="px-6 py-2 bg-indigo-600 text-white font-bold rounded-xl hover:bg-indigo-700 transition-colors shadow-md flex items-center gap-2"
+            >
+              <Edit size={16} />
+              Edit Selection
+            </button>
+            <button
+              onClick={() => setShowSelectionModal(false)}
+              className="px-6 py-2 bg-white border border-slate-200 text-slate-600 font-bold rounded-xl hover:bg-slate-100 transition-colors shadow-sm"
+            >
+              Close
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Central Edit Project Modal
+  function renderEditProjectModal() {
+    if (!showEditProjectModal || !editingProjectData) return null;
+
+    // Filter clusters by state
+    const filteredClusters = clusterOptions.filter(c =>
+      (c.state?._id === editingProjectData.stateId || c.state === editingProjectData.stateId)
+    );
+
+    // Filter districts by all selected clusters
+    const filteredDistricts = districtOptions.filter(d =>
+      editingProjectData.clusterIds.includes(d.clusterId)
+    );
+
+    const customSelectStyles = {
+      control: (base, state) => ({
+        ...base,
+        minHeight: '48px',
+        borderRadius: '12px',
+        border: state.isFocused ? '2px solid #4f46e5' : '1px solid #e2e8f0',
+        boxShadow: 'none',
+        '&:hover': {
+          borderColor: state.isFocused ? '#4f46e5' : '#cbd5e1',
+        },
+        backgroundColor: '#f8fafc',
+      }),
+      multiValue: (base) => ({
+        ...base,
+        backgroundColor: '#eef2ff',
+        borderRadius: '8px',
+        padding: '2px 4px',
+      }),
+      multiValueLabel: (base) => ({
+        ...base,
+        color: '#4338ca',
+        fontWeight: '600',
+        fontSize: '0.85rem',
+      }),
+      multiValueRemove: (base) => ({
+        ...base,
+        color: '#6366f1',
+        '&:hover': {
+          backgroundColor: '#4338ca',
+          color: 'white',
+        },
+        borderRadius: '0 6px 6px 0',
+      }),
+    };
+
+    return (
+      <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md" onClick={() => setShowEditProjectModal(false)}></div>
+        <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-200 max-h-[90vh]">
+          {/* Header */}
+          <div className="px-8 py-7 bg-gradient-to-r from-indigo-600 to-violet-700 text-white flex justify-between items-center shadow-lg">
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/10 backdrop-blur-md rounded-2xl border border-white/20">
+                <Edit size={24} className="text-white" />
+              </div>
+              <div>
+                <h2 className="text-2xl font-black tracking-tight uppercase">Update Project</h2>
+                <p className="text-indigo-100 text-xs font-bold tracking-widest uppercase mt-0.5 opacity-80">Assignment Management</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setShowEditProjectModal(false)}
+              className="w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/20 transition-all hover:rotate-90 group"
+            >
+              <X size={24} className="group-hover:scale-110" />
+            </button>
+          </div>
+
+          <div className="p-8 overflow-y-auto space-y-8 custom-scrollbar bg-white">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              {/* State */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-indigo-500 rounded-full"></div>
+                  State
+                </label>
+                <select
+                  className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 transition-all text-slate-700 font-bold shadow-sm"
+                  value={editingProjectData.stateId}
+                  onChange={(e) => {
+                    setEditingProjectData({
+                      ...editingProjectData,
+                      stateId: e.target.value,
+                      clusterIds: [],
+                      clusterNames: [],
+                      districtIds: [],
+                      districtNames: []
+                    });
+                  }}
+                >
+                  <option value="">Select State</option>
+                  {stateOptions.map(s => (
+                    <option key={s._id} value={s._id}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Cluster */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-violet-500 rounded-full"></div>
+                  Clusters
+                </label>
+                <Select
+                  isMulti
+                  styles={customSelectStyles}
+                  options={filteredClusters.map(c => ({ value: c._id, label: c.name }))}
+                  value={editingProjectData.clusterIds.map((id, idx) => {
+                    const obj = clusterOptions.find(c => c._id === id);
+                    return { value: id, label: obj?.name || (editingProjectData.clusterNames && editingProjectData.clusterNames[idx]) || id };
+                  })}
+                  onChange={(selected) => {
+                    const ids = selected ? selected.map(s => s.value) : [];
+                    const names = selected ? selected.map(s => s.label) : [];
+
+                    setEditingProjectData({
+                      ...editingProjectData,
+                      clusterIds: ids,
+                      clusterNames: names,
+                      districtIds: editingProjectData.districtIds.filter(dId => {
+                        const distObj = districtOptions.find(d => d._id === dId);
+                        return ids.includes(distObj?.clusterId);
+                      })
+                    });
+
+                    // Fetch districts for ALL selected clusters
+                    if (ids.length > 0) {
+                      Promise.all(ids.map(id =>
+                        fetchDistricts({ clusterId: id }).then(ds =>
+                          (ds || []).map(d => ({ ...d, clusterId: id }))
+                        )
+                      )).then(results => {
+                        const allDistricts = results.flat();
+                        if (allDistricts && Array.isArray(allDistricts)) {
+                          setDistrictOptions(prev => {
+                            const eIds = prev.map(d => d._id);
+                            const nOnes = allDistricts.filter(d => !eIds.includes(d._id));
+                            return [...prev, ...nOnes];
+                          });
+                        }
+                      });
+                    }
+                  }}
+                  placeholder="Select Clusters..."
+                />
+              </div>
+
+              {/* District */}
+              <div className="space-y-2.5 col-span-full">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                  Districts
+                </label>
+                <Select
+                  isMulti
+                  styles={customSelectStyles}
+                  options={filteredDistricts.map(d => ({ value: d._id, label: d.name }))}
+                  value={editingProjectData.districtIds.map((id, idx) => {
+                    const obj = districtOptions.find(d => d._id === id);
+                    return { value: id, label: obj?.name || (editingProjectData.districtNames && editingProjectData.districtNames[idx]) || id };
+                  })}
+                  onChange={(selected) => {
+                    const ids = selected ? selected.map(s => s.value) : [];
+                    const names = selected ? selected.map(s => s.label) : [];
+                    setEditingProjectData({
+                      ...editingProjectData,
+                      districtIds: ids,
+                      districtNames: names
+                    });
+                  }}
+                  placeholder="Select Districts..."
+                />
+              </div>
+
+              {/* Partners */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
+                  Partner Roles
+                </label>
+                <Select
+                  isMulti
+                  styles={customSelectStyles}
+                  options={partners.map(p => ({ value: p.name, label: p.name }))}
+                  value={editingProjectData.roles.map(r => ({ value: r, label: r }))}
+                  onChange={async (selected) => {
+                    const names = selected ? selected.map(s => s.value) : [];
+                    setEditingProjectData({ ...editingProjectData, roles: names });
+
+                    // Fetch plans for the selected roles
+                    if (names.length > 0 && editingProjectData.stateId) {
+                      try {
+                        const plans = await getPartnerPlans(names[0], editingProjectData.stateId);
+                        setAvailablePlans(plans || []);
+                      } catch (err) {
+                        console.error("Error updating plans for edit:", err);
+                      }
+                    } else {
+                      setAvailablePlans([]);
+                    }
+                  }}
+                  placeholder="Select Roles..."
+                />
+              </div>
+
+              {/* Plans */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
+                  AMC Plans
+                </label>
+                <Select
+                  isMulti
+                  styles={customSelectStyles}
+                  options={availablePlans.map(p => ({ value: p.name, label: p.name }))}
+                  value={editingProjectData.cpTypes.map(p => ({ value: p, label: p }))}
+                  onChange={(selected) => {
+                    const names = selected ? selected.map(s => s.value) : [];
+                    setEditingProjectData({ ...editingProjectData, cpTypes: names });
+                  }}
+                  placeholder="Select Plans..."
+                />
+              </div>
+
+              {/* Status */}
+              <div className="space-y-2.5">
+                <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 bg-rose-500 rounded-full"></div>
+                  Assignment Status
+                </label>
+                <select
+                  className="w-full h-12 px-4 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-rose-500 transition-all text-slate-700 font-bold shadow-sm"
+                  value={editingProjectData.status}
+                  onChange={(e) => setEditingProjectData({ ...editingProjectData, status: e.target.value })}
+                >
+                  <option value="Active">Operational / Active</option>
+                  <option value="Inactive">Paused / Inactive</option>
+                </select>
+              </div>
+
+              {/* SolarKit Dropdown and Auto-fill in Edit Modal */}
+              <div className="space-y-2.5 col-span-full border-t border-slate-100 pt-8 mt-4">
+                <label className="text-sm font-black text-slate-700 uppercase tracking-widest ml-1 flex items-center gap-3">
+                  <div className="w-2 h-2 bg-indigo-600 rounded-full shadow-sm"></div>
+                  Change Project Type (SolarKit)
+                </label>
+                <Select
+                  options={solarKits.map(kit => ({ value: kit._id, label: kit.name, data: kit }))}
+                  value={solarKits.find(k => k.name === editingProjectData.solarkitName) ? {
+                    value: solarKits.find(k => k.name === editingProjectData.solarkitName)._id,
+                    label: editingProjectData.solarkitName
+                  } : null}
+                  styles={customSelectStyles}
+                  onChange={(selected) => {
+                    if (selected?.data) {
+                      const kitData = selected.data;
+                      setEditingProjectData({
+                        ...editingProjectData,
+                        solarkitName: kitData.name,
+                        category: kitData.category,
+                        subCategory: kitData.subCategory,
+                        projectType: kitData.projectType,
+                        subProjectType: kitData.subProjectType
+                      });
+                    }
+                  }}
+                  placeholder="Search or Select SolarKit..."
+                  isLoading={loadingSolarKits}
+                />
+
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 bg-indigo-50/30 p-5 rounded-2xl border border-indigo-100/50 mt-4 shadow-sm">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter ml-0.5">Category</label>
+                    <div className="px-3 py-2 bg-white/80 rounded-lg border border-indigo-50 font-bold text-indigo-900 text-[11px] shadow-xs">{editingProjectData.category}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter ml-0.5">Sub Category</label>
+                    <div className="px-3 py-2 bg-white/80 rounded-lg border border-indigo-50 font-bold text-indigo-900 text-[11px] shadow-xs">{editingProjectData.subCategory}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter ml-0.5">Project Type</label>
+                    <div className="px-3 py-2 bg-white/80 rounded-lg border border-indigo-50 font-bold text-indigo-900 text-[11px] shadow-xs">{editingProjectData.projectType}</div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-indigo-400 uppercase tracking-tighter ml-0.5">Sub Project Type</label>
+                    <div className="px-3 py-2 bg-white/80 rounded-lg border border-indigo-50 font-bold text-indigo-900 text-[11px] shadow-xs">{editingProjectData.subProjectType}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Footer */}
+          <div className="px-8 py-8 bg-slate-50 border-t border-slate-100 flex justify-end gap-5">
+            <button
+              onClick={() => setShowEditProjectModal(false)}
+              className="px-8 py-3.5 bg-white border-2 border-slate-200 text-slate-500 font-extrabold uppercase tracking-widest rounded-2xl hover:bg-slate-100 hover:border-slate-300 hover:text-slate-700 transition-all shadow-sm text-xs"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => handleUpdateAssignment(editingProjectData)}
+              className="px-12 py-3.5 bg-gradient-to-r from-indigo-600 to-violet-700 text-white font-extrabold uppercase tracking-widest rounded-2xl hover:from-indigo-700 hover:to-violet-800 transition-all shadow-xl shadow-indigo-200 flex items-center gap-3 active:scale-95 group"
+            >
+              <CheckCircle size={20} className="group-hover:scale-110 transition-transform" />
+              Update Assignment
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 }
 
 // State Card Component
