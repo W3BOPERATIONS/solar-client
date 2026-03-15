@@ -104,6 +104,7 @@ const CustomizeCombokit = () => {
     subCategory: '',
     projectType: '',
     subProjectType: '',
+    role: '',
     country: null,
     state: null,
     cluster: null,
@@ -518,7 +519,82 @@ const CustomizeCombokit = () => {
     menuPortal: base => ({ ...base, zIndex: 9999 })
   };
 
-  const handleEditClick = (assignment) => {
+  const handleEditClick = async (assignment) => {
+    const stateId = getCleanId(assignment.state);
+    const clusterId = getCleanId(assignment.cluster);
+
+    // 1. Ensure clusters are loaded for the selected state if not already in cache
+    if (stateId && !availableClusters[stateId]) {
+      try {
+        const res = await locationAPI.getAllClusters({ stateId, isActive: 'true' });
+        if (res.data?.data) {
+          setAvailableClusters(prev => ({ ...prev, [stateId]: res.data.data }));
+        }
+      } catch (err) { console.error("Error fetching clusters for edit", err); }
+    }
+
+    // 2. Ensure districts are loaded for the selected cluster if not already in cache
+    if (clusterId && !availableDistricts[clusterId]) {
+      try {
+        const res = await locationAPI.getAllDistricts({ clusterId, isActive: 'true' });
+        if (res.data?.data) {
+          setAvailableDistricts(prev => ({ ...prev, [clusterId]: res.data.data }));
+        }
+      } catch (err) { console.error("Error fetching districts for edit", err); }
+    }
+
+    // 3. Resolve Country Object
+    let aCountryId = getCleanId(assignment.country) || getCleanId(assignment.state?.countryId) || getCleanId(assignment.state?.country);
+    if (!aCountryId && stateId && allStates?.length > 0) {
+      const stateObj = allStates.find(s => getCleanId(s) === stateId);
+      if (stateObj) {
+        aCountryId = getCleanId(stateObj.countryId || stateObj.country);
+      }
+    }
+    
+    let countryObj = countries.find(c => getCleanId(c) === aCountryId);
+    if (!countryObj && assignment.country?.name) {
+      countryObj = assignment.country;
+    } else if (!countryObj && aCountryId) {
+      // Try finding by name if ID match failed (sometimes data is inconsistent)
+      const cName = assignment.country?.name || (typeof assignment.country === 'string' && !/^[0-9a-fA-F]{24}$/.test(assignment.country) ? assignment.country : '');
+      if (cName) {
+        countryObj = countries.find(c => ntext(c.name) === ntext(cName));
+      }
+    }
+    // Final fallback to India if common
+    if (!countryObj && countries.length > 0) {
+      countryObj = countries.find(c => ntext(c.name) === 'india');
+    }
+
+    // 4. Resolve State Object
+    let stateObj = allStates.find(s => getCleanId(s) === stateId);
+    if (!stateObj && assignment.state?.name) {
+      stateObj = assignment.state;
+    } else if (!stateObj && stateId) {
+      // If we don't have allStates, we might need a placeholder
+      stateObj = { _id: stateId, name: assignment.state?.name || 'Selected State' };
+    }
+
+    // 5. Resolve Cluster Object
+    let clusterObj = null;
+    if (clusterId) {
+      // Look in all possible cached states
+      for (const sId in availableClusters) {
+        const found = availableClusters[sId]?.find(c => getCleanId(c) === clusterId);
+        if (found) { clusterObj = found; break; }
+      }
+      
+      if (!clusterObj) {
+        // Fallback: use help from row data/resolve helper
+        const cName = resolveClusterName(assignment);
+        clusterObj = { 
+          _id: clusterId, 
+          name: cName || (typeof assignment.cluster === 'string' ? assignment.cluster : 'Unknown Cluster')
+        };
+      }
+    }
+
     setAssignmentForm({
       panels: assignment.panels || [],
       inverters: assignment.inverters || [],
@@ -527,9 +603,10 @@ const CustomizeCombokit = () => {
       subCategory: assignment.subCategory || '',
       projectType: assignment.projectType || '',
       subProjectType: assignment.subProjectType || '',
-      country: assignment.country || assignment.countryId || null,
-      state: assignment.state,
-      cluster: assignment.cluster,
+      role: assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || '',
+      country: countryObj,
+      state: stateObj,
+      cluster: clusterObj,
       districts: assignment.districts || []
     });
     setCurrentAssignment(assignment);
@@ -553,16 +630,13 @@ const CustomizeCombokit = () => {
     try {
       setLoading(true);
 
-      // Determine role from filters
-      const selRolesArr = Array.from(selectedRoles);
-      const roleToUse = currentAssignment
-        ? (currentAssignment.role || (Array.isArray(currentAssignment.cpTypes) ? currentAssignment.cpTypes[0] : currentAssignment.cpTypes))
-        : (selRolesArr.length === 1 ? selRolesArr[0] : '');
+      // Determine role from form or current assignment
+      const roleToUse = assignmentForm.role || (currentAssignment?.role || (Array.isArray(currentAssignment?.cpTypes) ? currentAssignment?.cpTypes[0] : currentAssignment?.cpTypes)) || '';
 
       // Normalize IDs to plain strings — never send nested objects
-      const stateId = assignmentForm.state?._id || (typeof assignmentForm.state === 'string' ? assignmentForm.state : null);
-      const clusterId = assignmentForm.cluster?._id || (typeof assignmentForm.cluster === 'string' ? assignmentForm.cluster : null);
-      const countryId = selectedCountry || assignmentForm.country?._id || (typeof assignmentForm.country === 'string' ? assignmentForm.country : null);
+      const stateId = getCleanId(assignmentForm.state);
+      const clusterId = getCleanId(assignmentForm.cluster);
+      const countryId = getCleanId(assignmentForm.country) || selectedCountry;
 
       const payload = {
         solarkitName: 'Custom Config',
@@ -1393,6 +1467,100 @@ const CustomizeCombokit = () => {
                           }
                         />
                       </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Country</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Country"
+                          value={assignmentForm.country ? { 
+                            label: assignmentForm.country.name || (typeof assignmentForm.country === 'string' ? assignmentForm.country : 'Country'), 
+                            value: getCleanId(assignmentForm.country) 
+                          } : null}
+                          onChange={(opt) => {
+                            const countryObj = countries.find(c => c._id === opt.value);
+                            setAssignmentForm({ ...assignmentForm, country: countryObj, state: null, cluster: null, districts: [] });
+                            fetchStates({ countryId: opt.value });
+                          }}
+                          options={countries.map(c => ({ label: c.name, value: c._id }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">State</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select State"
+                          value={assignmentForm.state ? { 
+                            label: assignmentForm.state.name || (typeof assignmentForm.state === 'string' ? assignmentForm.state : 'State'), 
+                            value: getCleanId(assignmentForm.state) 
+                          } : null}
+                          onChange={async (opt) => {
+                            const stateObj = allStates.find(s => s._id === opt.value);
+                            setAssignmentForm({ ...assignmentForm, state: stateObj, cluster: null, districts: [] });
+                            if (!availableClusters[opt.value]) {
+                              const res = await locationAPI.getAllClusters({ stateId: opt.value, isActive: 'true' });
+                              if (res.data?.data) {
+                                setAvailableClusters(prev => ({ ...prev, [opt.value]: res.data.data }));
+                              }
+                            }
+                          }}
+                          options={allStates.map(s => ({ label: s.name, value: s._id }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Cluster</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Cluster"
+                          value={assignmentForm.cluster ? { 
+                            label: assignmentForm.cluster.name || assignmentForm.cluster.clusterName || (typeof assignmentForm.cluster === 'string' ? assignmentForm.cluster : 'Cluster'), 
+                            value: getCleanId(assignmentForm.cluster) 
+                          } : null}
+                          onChange={async (opt) => {
+                            const clusters = availableClusters[getCleanId(assignmentForm.state)] || [];
+                            const clusterObj = clusters.find(c => c._id === opt.value) || { _id: opt.value, name: opt.label };
+                            setAssignmentForm({ ...assignmentForm, cluster: clusterObj, districts: [] });
+                            if (!availableDistricts[opt.value]) {
+                              const res = await locationAPI.getAllDistricts({ clusterId: opt.value, isActive: 'true' });
+                              if (res.data?.data) {
+                                setAvailableDistricts(prev => ({ ...prev, [opt.value]: res.data.data }));
+                              }
+                            }
+                          }}
+                          options={(availableClusters[getCleanId(assignmentForm.state)] || []).map(c => ({ label: c.name, value: c._id }))}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Partner Type</label>
+                        <Select
+                          styles={selectStyles}
+                          placeholder="Select Partner"
+                          value={assignmentForm.role ? { label: assignmentForm.role, value: assignmentForm.role } : null}
+                          onChange={(opt) => setAssignmentForm({ ...assignmentForm, role: opt.value })}
+                          options={partners.map(p => ({ label: p.name, value: p.name }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Districts (Multi-select)</label>
+                      <Select
+                        isMulti
+                        styles={selectStyles}
+                        placeholder="Select Districts"
+                        value={assignmentForm.districts?.map(d => ({ label: d.name || 'Unknown', value: getCleanId(d) })) || []}
+                        onChange={(selected) => {
+                          const districts = availableDistricts[getCleanId(assignmentForm.cluster)] || [];
+                          const selectedObjs = selected ? selected.map(s => districts.find(d => d._id === s.value) || { _id: s.value, name: s.label }) : [];
+                          setAssignmentForm({ ...assignmentForm, districts: selectedObjs });
+                        }}
+                        options={(availableDistricts[getCleanId(assignmentForm.cluster)] || []).map(d => ({ label: d.name, value: d._id }))}
+                      />
                     </div>
 
                     <div>
