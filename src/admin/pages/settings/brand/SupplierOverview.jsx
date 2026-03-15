@@ -21,6 +21,14 @@ import {
   deleteSupplier,
   getAllManufacturers
 } from '../../../../services/brand/brandApi';
+import {
+  getCategories,
+  getSubCategories,
+  getProjectTypes,
+  getSubProjectTypes,
+  getProducts,
+  getProjectCategoryMappings
+} from '../../../../services/settings/orderProcurementSettingApi';
 
 const BrandSupplierOverview = () => {
   // --- Data State ---
@@ -50,6 +58,14 @@ const BrandSupplierOverview = () => {
   const [allCities, setAllCities] = useState([]);
   const [allDistricts, setAllDistricts] = useState([]);
 
+  // --- Master Data for Dropdowns ---
+  const [masterProducts, setMasterProducts] = useState([]);
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [masterSubCategories, setMasterSubCategories] = useState([]);
+  const [masterProjectTypes, setMasterProjectTypes] = useState([]);
+  const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
+  const [masterProjectMappings, setMasterProjectMappings] = useState([]);
+
   // --- Modal State ---
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState(null);
@@ -70,9 +86,12 @@ const BrandSupplierOverview = () => {
     email: ''
   });
 
-  // --- Modal Location Options ---
+  // --- Modal Specific Options ---
   const [modalCities, setModalCities] = useState([]);
   const [modalDistricts, setModalDistricts] = useState([]);
+  const [modalSubCategories, setModalSubCategories] = useState([]);
+  const [modalProjectTypes, setModalProjectTypes] = useState([]);
+  const [modalSubProjectTypes, setModalSubProjectTypes] = useState([]);
 
   // --- Dropdown States ---
   const [openDropdown, setOpenDropdown] = useState(null);
@@ -125,16 +144,41 @@ const BrandSupplierOverview = () => {
   const fetchInitialData = async () => {
     setIsLoading(true);
     try {
-      const [suppliersData, manuData, statesResp] = await Promise.all([
+      const [
+        suppliersData, 
+        manuData, 
+        statesResp,
+        prodResp,
+        catResp,
+        subCatResp,
+        ptResp,
+        subPtResp,
+        mappingResp
+      ] = await Promise.all([
         getAllSuppliers(),
         getAllManufacturers(),
-        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`)
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`),
+        getProducts(),
+        getCategories(),
+        getSubCategories(),
+        getProjectTypes(),
+        getSubProjectTypes(),
+        getProjectCategoryMappings()
       ]);
+
       setSuppliers(suppliersData);
       setManufacturers(manuData);
       if (statesResp.data.success) {
         setAllStates(statesResp.data.data);
       }
+
+      setMasterProducts(prodResp?.data || []);
+      setMasterCategories(catResp?.data || []);
+      setMasterSubCategories(subCatResp?.data || []);
+      setMasterProjectTypes(ptResp?.data || []);
+      setMasterSubProjectTypes(subPtResp?.data || []);
+      setMasterProjectMappings(mappingResp?.data || []);
+
     } catch (error) {
       console.error('Error fetching initial data:', error);
     } finally {
@@ -277,6 +321,11 @@ const BrandSupplierOverview = () => {
       contact: '',
       email: ''
     });
+    setModalCities([]);
+    setModalDistricts([]);
+    setModalSubCategories([]);
+    setModalProjectTypes([]);
+    setModalSubProjectTypes([]);
     setShowModal(true);
   };
 
@@ -305,6 +354,35 @@ const BrandSupplierOverview = () => {
     // Fetch lists for modal
     if (stateId) fetchModalCities(stateId);
     if (cityId) fetchModalDistricts(cityId);
+
+    // Load dependent categories/types for edit
+    if (supplier.category) {
+      const selCat = masterCategories.find(c => c.name === supplier.category);
+      if (selCat) {
+        getSubCategories(selCat._id).then(res => {
+          setModalSubCategories(res.data || []);
+          if (supplier.subCategory) {
+            const selSub = (res.data || []).find(sc => sc.name === supplier.subCategory);
+            if (selSub) {
+              const ranges = masterProjectMappings
+                .filter(m => (m.categoryId?._id || m.categoryId) === selCat._id && (m.subCategoryId?._id || m.subCategoryId) === selSub._id)
+                .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                .filter((v, i, a) => a.indexOf(v) === i);
+              setModalProjectTypes(ranges);
+            }
+          }
+        });
+      }
+    }
+
+    if (supplier.projectType) {
+      const selPt = masterProjectTypes.find(p => p.name === supplier.projectType);
+      if (selPt) {
+        getSubProjectTypes(selPt._id).then(res => setModalSubProjectTypes(res.data || []));
+      } else {
+        getSubProjectTypes().then(res => setModalSubProjectTypes(res.data || []));
+      }
+    }
 
     setShowModal(true);
   };
@@ -371,6 +449,54 @@ const BrandSupplierOverview = () => {
     setModalForm({ ...modalForm, cluster: val, district: '' }); // cluster = City ID
     setModalDistricts([]);
     fetchModalDistricts(val);
+  };
+
+  const handleModalCategoryChange = async (e) => {
+    const catName = e.target.value;
+    setModalForm({ ...modalForm, category: catName, subCategory: '', projectType: '', subProjectType: '' });
+    setModalSubCategories([]);
+    setModalProjectTypes([]);
+    
+    if (catName) {
+      const selCat = masterCategories.find(c => c.name === catName);
+      if (selCat) {
+        try {
+          const res = await getSubCategories(selCat._id);
+          setModalSubCategories(res.data || []);
+        } catch (err) { console.error(err); }
+      }
+    }
+  };
+
+  const handleModalSubCategoryChange = (e) => {
+    const subCatName = e.target.value;
+    setModalForm({ ...modalForm, subCategory: subCatName, projectType: '', subProjectType: '' });
+    setModalProjectTypes([]);
+
+    const selCat = masterCategories.find(c => c.name === modalForm.category);
+    const selSub = masterSubCategories.find(sc => sc.name === subCatName);
+
+    if (selCat && selSub) {
+      const ranges = masterProjectMappings
+        .filter(m => (m.categoryId?._id || m.categoryId) === selCat._id && (m.subCategoryId?._id || m.subCategoryId) === selSub._id)
+        .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+        .filter((v, i, a) => a.indexOf(v) === i);
+      setModalProjectTypes(ranges);
+    }
+  };
+
+  const handleModalProjectTypeChange = async (e) => {
+    const ptName = e.target.value;
+    setModalForm({ ...modalForm, projectType: ptName, subProjectType: '' });
+    setModalSubProjectTypes([]);
+
+    if (ptName) {
+      const selPt = masterProjectTypes.find(p => p.name === ptName);
+      try {
+        const res = await getSubProjectTypes(selPt?._id);
+        setModalSubProjectTypes(res.data || []);
+      } catch (err) { console.error(err); }
+    }
   };
 
   return (
@@ -749,12 +875,53 @@ const BrandSupplierOverview = () => {
 
               {/* Details */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 border-t pt-4">
-                <div><label className="block text-sm font-medium">Product</label><input className="w-full border p-2 rounded" value={modalForm.product} onChange={e => setModalForm({ ...modalForm, product: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium">Category</label><input className="w-full border p-2 rounded" value={modalForm.category} onChange={e => setModalForm({ ...modalForm, category: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium">Sub Category</label><input className="w-full border p-2 rounded" value={modalForm.subCategory} onChange={e => setModalForm({ ...modalForm, subCategory: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium">Project Type</label><input className="w-full border p-2 rounded" value={modalForm.projectType} onChange={e => setModalForm({ ...modalForm, projectType: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium">Sub Project Type</label><input className="w-full border p-2 rounded" value={modalForm.subProjectType} onChange={e => setModalForm({ ...modalForm, subProjectType: e.target.value })} /></div>
-                <div><label className="block text-sm font-medium">Procurement Type</label><input className="w-full border p-2 rounded" value={modalForm.procurementType} onChange={e => setModalForm({ ...modalForm, procurementType: e.target.value })} /></div>
+                <div>
+                  <label className="block text-sm font-medium">Product</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.product} onChange={e => setModalForm({ ...modalForm, product: e.target.value })}>
+                    <option value="">Select Product</option>
+                    {masterProducts.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Category</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.category} onChange={handleModalCategoryChange}>
+                    <option value="">Select Category</option>
+                    {masterCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Sub Category</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.subCategory} onChange={handleModalSubCategoryChange} disabled={!modalForm.category}>
+                    <option value="">Select Sub Category</option>
+                    {modalSubCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Project Type</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.projectType} onChange={handleModalProjectTypeChange} disabled={!modalForm.subCategory}>
+                    <option value="">Select Project Type</option>
+                    {modalProjectTypes.length > 0 ? (
+                      modalProjectTypes.map((r, i) => <option key={i} value={r}>{r}</option>)
+                    ) : (
+                      masterProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)
+                    )}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Sub Project Type</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.subProjectType} onChange={e => setModalForm({ ...modalForm, subProjectType: e.target.value })} disabled={!modalForm.projectType}>
+                    <option value="">Select Sub Project Type</option>
+                    {modalSubProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium">Procurement Type</label>
+                  <select className="w-full border p-2 rounded" value={modalForm.procurementType} onChange={e => setModalForm({ ...modalForm, procurementType: e.target.value })}>
+                    <option value="">Select Type</option>
+                    <option value="Direct">Direct</option>
+                    <option value="Indirect">Indirect</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-4">

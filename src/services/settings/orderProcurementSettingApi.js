@@ -121,29 +121,70 @@ export const getSkus = async (params) => {
 export const getComboKits = async () => {
     try {
         const res = await api.get('/combokit/assignments');
-        if (Array.isArray(res.data)) {
-            return res.data.map(item => {
-                let name = '0 ComboKits';
-                if (item.comboKits && item.comboKits.length === 1) {
-                    name = item.comboKits[0].name || 'Unnamed ComboKit';
-                } else if (item.comboKits && item.comboKits.length > 1) {
-                    name = `${item.comboKits[0].name || 'Unnamed'} and ${item.comboKits.length - 1} more`;
+        // Handle both raw array and { success: true, data: [] } formats
+        const assignments = Array.isArray(res.data) ? res.data : (res.data.data || []);
+        
+        return assignments.map(item => {
+            // Priority: solarkitName -> First Kit Name -> Unnamed
+            let name = item.solarkitName;
+            if (!name || name === "Solarkit Name" || name === "0 ComboKits") {
+                if (item.comboKits && item.comboKits.length > 0) {
+                    name = item.comboKits[0].name || item.solarkitName;
                 }
-                return {
-                    ...item,
-                    name: name
-                };
-            });
-        }
-        return res.data;
+            }
+            if (!name || name === "Solarkit Name" || name === "0 ComboKits") {
+                name = 'Custom Assignment';
+            }
+            
+            // Add location and project type info to name for better identification
+            const stateName = item.state?.name || (item.state && typeof item.state === 'object' ? item.state.name : '');
+            const pt = item.projectType || '';
+            const displayName = `${name}${pt ? ` [${pt}]` : ''}${stateName ? ` (${stateName})` : ''}`;
+            
+            return {
+                ...item,
+                name: displayName
+            };
+        });
     } catch (err) {
+        console.error("Error in getComboKits API:", err);
         throw err.response?.data || err.message;
     }
 };
 
 export const getSupplierTypes = async () => {
     try {
-        const res = await api.get('/vendors/supplier-types');
+        // Fetch from actual Brand Suppliers since that's what the user manages
+        const res = await api.get('/brand/supplier');
+        const suppliers = Array.isArray(res.data) ? res.data : (res.data.data || []);
+        
+        // Extract unique types (Dealer, Distributor, etc.)
+        const types = Array.from(new Set(suppliers.map(s => s.type)))
+            .filter(t => t)
+            .map(t => ({ _id: t, loginTypeName: t }));
+            
+        // If no suppliers exist yet, provide defaults so the dropdown isn't empty
+        if (types.length === 0) {
+            return { data: [
+                { _id: 'Dealer', loginTypeName: 'Dealer' },
+                { _id: 'Distributor', loginTypeName: 'Distributor' }
+            ]};
+        }
+        
+        return { data: types };
+    } catch (err) {
+        console.error("Error in getSupplierTypes API:", err);
+        // Fallback to defaults on error
+        return { data: [
+            { _id: 'Dealer', loginTypeName: 'Dealer' },
+            { _id: 'Distributor', loginTypeName: 'Distributor' }
+        ]};
+    }
+};
+
+export const getProjectCategoryMappings = async (params) => {
+    try {
+        const res = await api.get('/masters/project-category-mappings', { params });
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;

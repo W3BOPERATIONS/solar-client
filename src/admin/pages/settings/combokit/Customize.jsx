@@ -31,6 +31,19 @@ const getCleanId = (v) => {
   return String(v?._id || v?.id || v || "").trim();
 };
 
+const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
+  <div
+    onClick={onClick}
+    className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+      ? 'border-[#007bff] bg-blue-50 shadow-blue-100 shadow-lg -translate-y-1'
+      : 'border-transparent bg-white hover:border-blue-200'
+      }`}
+  >
+    <div className="font-bold text-base text-[#333] mb-1">{title}</div>
+    <div className="text-xs text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
+  </div>
+);
+
 function ntext(v) {
   return String(v || '').toLowerCase().trim();
 }
@@ -108,7 +121,11 @@ const CustomizeCombokit = () => {
     country: null,
     state: null,
     cluster: null,
-    districts: []
+    districts: [],
+    filterCategory: '',
+    filterSubCategory: '',
+    filterProjectType: '',
+    filterSubProjectType: ''
   });
   const [currentAssignment, setCurrentAssignment] = useState(null);
 
@@ -755,7 +772,11 @@ const CustomizeCombokit = () => {
       state: stateObj || null,
       cluster: clusterObj || null,
       districts: districtObjs,
-      role: role // Auto-assign the selected role from filter
+      role: role, // Auto-assign the selected role from filter
+      filterCategory: '',
+      filterSubCategory: '',
+      filterProjectType: '',
+      filterSubProjectType: ''
     });
     setCurrentAssignment(null);
     setShowConfigureModal(true);
@@ -917,145 +938,152 @@ const CustomizeCombokit = () => {
       </div>
 
       {/* Country Selection */}
-      <div className="card mb-6 shadow-lg rounded-lg bg-white">
-        <div className="card-body p-6">
-          <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Country</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-            {countries.map((country) => (
-              <div
-                key={country._id}
-                onClick={() => handleCountrySelect(country._id, country.name)}
-                className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedCountry === country._id
-                  ? 'bg-blue-600 text-white border-blue-600 shadow-md'
-                  : 'bg-white border-blue-400 hover:border-blue-600'
-                  }`}
-              >
-                <p className="font-medium">{country.name}</p>
-              </div>
-            ))}
-          </div>
+      <div className="mb-8">
+        <div className="flex justify-between items-center mb-6">
+          <h3 className="text-xl font-bold text-[#333]">Select Country</h3>
+          <button
+            onClick={() => handleCountrySelect('all', 'All Countries')}
+            className="text-sm font-medium text-blue-600 hover:text-blue-800"
+          >
+            Select All
+          </button>
         </div>
-      </div>
-
-      {/* State Selection */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+          <LocationCard
+             title="All Countries"
+             subtitle="ALL"
+             isSelected={selectedCountry === 'all'}
+             onClick={() => handleCountrySelect('all', 'All Countries')}
+          />
+          {countries.map((country) => (
+            <LocationCard
+              key={country._id}
+              title={country.name}
+              subtitle={country.code || country.name.substring(0, 2).toUpperCase()}
+              isSelected={selectedCountry === country._id}
+              onClick={() => handleCountrySelect(country._id, country.name)}
+            />
+          ))}
+        </div>
+      </div>      {/* State Selection */}
       {selectedCountry && (
-        <div className="card mb-6 shadow-lg rounded-lg bg-white">
-          <div className="card-body p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select States</h3>
-
-            <div className="mb-4">
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-[#333]">Select States</h3>
+            <div className="space-x-4">
               <button
                 onClick={selectAllStates}
-                className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
               >
-                <CheckSquare className="inline-block w-4 h-4 mr-1" />
-                Select All States
+                Select All
               </button>
               <button
                 onClick={clearAllStates}
-                className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
+                className="text-sm font-medium text-gray-500 hover:text-gray-700"
               >
-                <XCircle className="inline-block w-4 h-4 mr-1" />
                 Clear All
               </button>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {allStates.map((state, index) => (
-                <div
-                  key={`${state._id}-${index}`}
-                  onClick={() => handleStateClick(state._id)}
-                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedStates.has(state._id)
-                    ? 'bg-blue-600 text-white border-blue-600'
-                    : 'border-blue-400 hover:border-blue-600'
-                    }`}
-                >
-                  <p className="font-medium">{state.name}</p>
-                </div>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <LocationCard
+              title="All States"
+              subtitle="ALL"
+              isSelected={selectedStates.has('all') || (selectedStates.size === allStates.length && allStates.length > 0)}
+              onClick={selectAllStates}
+            />
+            {allStates.map((state) => (
+              <LocationCard
+                key={state._id}
+                title={state.name}
+                subtitle={state.code || state.name.substring(0, 2).toUpperCase()}
+                isSelected={selectedStates.has(state._id)}
+                onClick={() => handleStateClick(state._id)}
+              />
+            ))}
           </div>
         </div>
-      )}
-
-      {/* Cluster Selection */}
+      )}      {/* Cluster Selection */}
       {selectedStates.size > 0 && (
-        <div className="card mb-6 shadow-lg rounded-lg bg-white">
-          <div className="card-body p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Clusters</h3>
-
-            <div className="mb-4">
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-[#333]">Select Clusters</h3>
+            <div className="space-x-4">
               <button
                 onClick={selectAllClusters}
-                className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
               >
-                <CheckSquare className="inline-block w-4 h-4 mr-1" />
-                Select All Clusters
+                Select All
               </button>
               <button
                 onClick={clearAllClusters}
-                className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
+                className="text-sm font-medium text-gray-500 hover:text-gray-700"
               >
-                <XCircle className="inline-block w-4 h-4 mr-1" />
                 Clear All
               </button>
             </div>
+          </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {getDisplayedClusters().map((cluster, index) => (
-                <div
-                  key={`${cluster._id}-${index}`}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <LocationCard
+              title="All Clusters"
+              subtitle="ALL"
+              isSelected={selectedClusters.has('all') || (selectedClusters.size === getDisplayedClusters().length && getDisplayedClusters().length > 0)}
+              onClick={selectAllClusters}
+            />
+            {getDisplayedClusters().map((cluster) => {
+               const stateId = getCleanId(cluster.stateId || cluster.state);
+               const stateObj = allStates.find(s => getCleanId(s) === stateId);
+               return (
+                <LocationCard
+                  key={cluster._id}
+                  title={cluster.name}
+                  subtitle={stateObj ? (stateObj.code || stateObj.name.substring(0, 2).toUpperCase()) : 'CL'}
+                  isSelected={selectedClusters.has(cluster._id)}
                   onClick={() => handleClusterClick(cluster._id)}
-                  className={`card border rounded-lg p-4 text-center cursor-pointer transition-transform duration-200 hover:scale-105 ${selectedClusters.has(cluster._id)
-                    ? 'bg-purple-700 text-white border-purple-700'
-                    : 'border-gray-300 hover:border-purple-500'
-                    }`}
-                >
-                  {cluster.name}
-                </div>
-              ))}
-            </div>
+                />
+              );
+            })}
           </div>
         </div>
-      )}
-
-      {/* District Selection */}
+      )}      {/* District Selection */}
       {selectedClusters.size > 0 && (
-        <div className="card mb-6 shadow-lg rounded-lg bg-white">
-          <div className="card-body p-6">
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Districts</h3>
-
-            <div className="mb-4">
+        <div className="mb-8">
+          <div className="flex justify-between items-center mb-6">
+            <h3 className="text-xl font-bold text-[#333]">Select Districts</h3>
+            <div className="space-x-4">
               <button
                 onClick={selectAllDistricts}
-                className="btn btn-sm btn-outline-primary mr-2 px-3 py-1.5 text-sm rounded border border-blue-600 text-blue-600 hover:bg-blue-50 transition-colors"
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
               >
-                <CheckSquare className="inline-block w-4 h-4 mr-1" />
-                Select All Districts
+                Select All
               </button>
               <button
                 onClick={clearAllDistricts}
-                className="btn btn-sm btn-outline-secondary px-3 py-1.5 text-sm rounded border border-gray-400 text-gray-600 hover:bg-gray-50 transition-colors"
+                className="text-sm font-medium text-gray-500 hover:text-gray-700"
               >
-                <XCircle className="inline-block w-4 h-4 mr-1" />
                 Clear All
               </button>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
-              {getDisplayedDistricts().map((district, index) => (
-                <button
-                  key={`${district._id}-${index}`}
-                  onClick={() => handleDistrictClick(district._id)}
-                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${selectedDistricts.has(district._id)
-                    ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-100'
-                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
-                    }`}
-                >
-                  {district.name}
-                </button>
-              ))}
-            </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            <LocationCard
+              title="All Districts"
+              subtitle="ALL"
+              isSelected={selectedDistricts.has('all') || (selectedDistricts.size === getDisplayedDistricts().length && getDisplayedDistricts().length > 0)}
+              onClick={selectAllDistricts}
+            />
+            {getDisplayedDistricts().map((district) => (
+              <LocationCard
+                key={district._id}
+                title={district.name}
+                subtitle="DISTRICT"
+                isSelected={selectedDistricts.has(district._id)}
+                onClick={() => handleDistrictClick(district._id)}
+              />
+            ))}
           </div>
         </div>
       )}
@@ -1099,6 +1127,108 @@ const CustomizeCombokit = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Advanced Filters */}
+      {selectedStates.size > 0 && (
+        <div className="card mb-6 shadow-lg rounded-lg bg-white">
+          <div className="card-body p-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Advanced Filters</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Category</label>
+                <Select
+                  styles={selectStyles}
+                  placeholder="Filter by Category"
+                  isClearable
+                  value={assignmentForm.filterCategory ? { label: assignmentForm.filterCategory, value: assignmentForm.filterCategory } : null}
+                  onChange={(opt) => setAssignmentForm({ ...assignmentForm, filterCategory: opt?.value || '', filterSubCategory: '' })}
+                  options={masterCategories.map(c => ({ label: c.name, value: c.name }))}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Category</label>
+                <Select
+                  styles={selectStyles}
+                  placeholder="Filter by Sub-Category"
+                  isClearable
+                  disabled={!assignmentForm.filterCategory}
+                  value={assignmentForm.filterSubCategory ? { label: assignmentForm.filterSubCategory, value: assignmentForm.filterSubCategory } : null}
+                  onChange={(opt) => setAssignmentForm({ ...assignmentForm, filterSubCategory: opt?.value || '' })}
+                  options={masterSubCategories
+                    .filter(sub => {
+                      if (!assignmentForm.filterCategory) return true;
+                      const selCat = masterCategories.find(c => c.name === assignmentForm.filterCategory);
+                      const subCatId = sub.categoryId?._id || sub.categoryId;
+                      return selCat && subCatId === selCat._id;
+                    })
+                    .map(s => ({ label: s.name, value: s.name }))}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Project Type</label>
+                <Select
+                  styles={selectStyles}
+                  placeholder="Filter by Project Type"
+                  isClearable
+                  disabled={!assignmentForm.filterSubCategory}
+                  value={assignmentForm.filterProjectType ? { label: assignmentForm.filterProjectType, value: assignmentForm.filterProjectType } : null}
+                  onChange={(opt) => setAssignmentForm({ ...assignmentForm, filterProjectType: opt?.value || '', filterSubProjectType: '' })}
+                  options={projectMappings?.length > 0 ? (
+                    projectMappings
+                      .filter(m => {
+                        const selCat = masterCategories.find(c => c.name === assignmentForm.filterCategory);
+                        const selSubCat = masterSubCategories.find(sc => sc.name === assignmentForm.filterSubCategory);
+                        const mCatId = m.categoryId?._id || m.categoryId;
+                        const mSubCatId = m.subCategoryId?._id || m.subCategoryId;
+                        return (!selCat || mCatId === selCat._id) && (!selSubCat || mSubCatId === selSubCat._id);
+                      })
+                      .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                      .filter((v, i, a) => a.indexOf(v) === i)
+                      .map(pt => ({ label: pt, value: pt }))
+                  ) : (
+                    masterProjectTypes.map(p => ({ label: p, value: p }))
+                  )}
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sub Project Type</label>
+                <Select
+                  styles={selectStyles}
+                  placeholder="Filter by Sub Project Type"
+                  isClearable
+                  disabled={!assignmentForm.filterProjectType}
+                  value={assignmentForm.filterSubProjectType ? { label: assignmentForm.filterSubProjectType, value: assignmentForm.filterSubProjectType } : null}
+                  onChange={(opt) => setAssignmentForm({ ...assignmentForm, filterSubProjectType: opt?.value || '' })}
+                  options={masterSubProjectTypes
+                    .filter(sub => {
+                      if (!assignmentForm.filterProjectType) return true;
+                      
+                      // Check mapping for subProjectTypeId if available
+                      if (projectMappings?.length > 0) {
+                        const activeMapping = projectMappings.find(m => 
+                          `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === assignmentForm.filterProjectType
+                        );
+                        if (activeMapping && activeMapping.subProjectTypeId) {
+                          return (sub._id || sub) === (activeMapping.subProjectTypeId._id || activeMapping.subProjectTypeId);
+                        }
+                      }
+                      return true; 
+                    })
+                    .map(s => ({ label: s.name, value: s.name }))}
+                />
+              </div>
+            </div>
+            { (assignmentForm.filterCategory || assignmentForm.filterSubCategory || assignmentForm.filterProjectType || assignmentForm.filterSubProjectType) && (
+              <button 
+                onClick={() => setAssignmentForm({ ...assignmentForm, filterCategory: '', filterSubCategory: '', filterProjectType: '', filterSubProjectType: '' })}
+                className="mt-4 text-sm text-blue-600 hover:text-blue-800 font-medium underline"
+              >
+                Clear Advanced Filters
+              </button>
+            )}
           </div>
         </div>
       )}
@@ -1232,6 +1362,18 @@ const CustomizeCombokit = () => {
                         if (fRoles.length > 0) {
                           if (aRole && !fRoles.includes(aRole)) return false;
                         }
+
+                        // Category filter
+                        if (assignmentForm.filterCategory && assignment.category !== assignmentForm.filterCategory) return false;
+                        
+                        // Sub Category filter
+                        if (assignmentForm.filterSubCategory && assignment.subCategory !== assignmentForm.filterSubCategory) return false;
+
+                        // Project Type filter
+                        if (assignmentForm.filterProjectType && assignment.projectType !== assignmentForm.filterProjectType) return false;
+
+                        // Sub Project Type filter
+                        if (assignmentForm.filterSubProjectType && assignment.subProjectType !== assignmentForm.filterSubProjectType) return false;
 
                         return true;
                       });
@@ -1595,7 +1737,14 @@ const CustomizeCombokit = () => {
                         placeholder="Select Sub Project Type"
                         value={assignmentForm.subProjectType ? { label: assignmentForm.subProjectType, value: assignmentForm.subProjectType } : null}
                         onChange={(opt) => setAssignmentForm({ ...assignmentForm, subProjectType: opt.value })}
-                        options={masterSubProjectTypes.map(spt => ({ label: spt.name, value: spt.name }))}
+                        options={masterSubProjectTypes
+                          .filter(spt => {
+                            if (!assignmentForm.projectType) return true;
+                            // Add logic if Sub Project Type depends on Project Type in the DB
+                            // For now, if project type is selected, we might want to filter, but SubProjectType usually linked via ID
+                            return true; 
+                          })
+                          .map(spt => ({ label: spt.name, value: spt.name }))}
                       />
                     </div>
                   </div>

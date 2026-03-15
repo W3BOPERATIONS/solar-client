@@ -15,7 +15,8 @@ import {
   getBrands,
   getComboKits,
   getSupplierTypes,
-  getSkus
+  getSkus,
+  getProjectCategoryMappings
 } from '../../../../services/settings/orderProcurementSettingApi';
 
 export default function OrderProcurement() {
@@ -31,6 +32,8 @@ export default function OrderProcurement() {
   const [skusList, setSkusList] = useState([]);
   const [comboKits, setComboKits] = useState([]);
   const [supplierTypes, setSupplierTypes] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
+  const [formProjectRanges, setFormProjectRanges] = useState([]);
 
   // Form Dep Dropdowns
   const [formSubCategories, setFormSubCategories] = useState([]);
@@ -48,6 +51,10 @@ export default function OrderProcurement() {
     projectType: '',
     subProjectType: ''
   });
+
+  // Filter Dropdowns
+  const [filterSubCategories, setFilterSubCategories] = useState([]);
+  const [filterSubProjectTypes, setFilterSubProjectTypes] = useState([]);
 
   // Current Setting Form Data
   const initialFormState = {
@@ -81,7 +88,8 @@ export default function OrderProcurement() {
         comboData,
         suppTypeData,
         allSubCatData,
-        allSubPTypeData
+        allSubPTypeData,
+        mappingData
       ] = await Promise.all([
         getAllOrderProcurementSettings(),
         getCategories(),
@@ -92,7 +100,8 @@ export default function OrderProcurement() {
         getComboKits(),
         getSupplierTypes(),
         getSubCategories(), // fetch all for list filters
-        getSubProjectTypes() // fetch all for list filters
+        getSubProjectTypes(), // fetch all for list filters
+        getProjectCategoryMappings()
       ]);
 
       setSettings(settingsData?.data || []);
@@ -107,6 +116,7 @@ export default function OrderProcurement() {
       
       setSubCategories(allSubCatData?.data || []);
       setSubProjectTypes(allSubPTypeData?.data || []);
+      setProjectMappings(mappingData?.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load initial data");
@@ -120,44 +130,116 @@ export default function OrderProcurement() {
     let result = settings;
 
     if (filters.category) {
-      result = result.filter(s => s.category?.name === filters.category || s.category?._id === filters.category || s.category === filters.category);
+      result = result.filter(s => (s.category?.name || s.category) === filters.category);
     }
     if (filters.subCategory) {
-      result = result.filter(s => s.subCategory?.name === filters.subCategory || s.subCategory?._id === filters.subCategory || s.subCategory === filters.subCategory);
+      result = result.filter(s => (s.subCategory?.name || s.subCategory) === filters.subCategory);
     }
     if (filters.projectType) {
-      result = result.filter(s => s.projectType?.name === filters.projectType || s.projectType?._id === filters.projectType || s.projectType === filters.projectType);
+      result = result.filter(s => (s.projectType?.name || s.projectType) === filters.projectType);
     }
     if (filters.subProjectType) {
-      result = result.filter(s => s.subProjectType?.name === filters.subProjectType || s.subProjectType?._id === filters.subProjectType || s.subProjectType === filters.subProjectType);
+      result = result.filter(s => (s.subProjectType?.name || s.subProjectType) === filters.subProjectType);
     }
 
     setFilteredSettings(result);
   }, [filters, settings]);
 
+  // Handle Filter Changes (Hierarchical)
+  const handleFilterCategoryChange = async (e) => {
+    const catName = e.target.value;
+    setFilters(prev => ({ ...prev, category: catName, subCategory: '' }));
+    setFilterSubCategories([]);
+    if (catName) {
+      try {
+        const selCat = categories.find(c => c.name === catName);
+        if (selCat) {
+          const res = await getSubCategories(selCat._id);
+          setFilterSubCategories(res.data || []);
+        }
+      } catch (err) {
+        console.error("Failed to load sub categories for filter", err);
+      }
+    }
+  };
+
+  const handleFilterSubCategoryChange = (e) => {
+    const subCatName = e.target.value;
+    setFilters(prev => ({ ...prev, subCategory: subCatName, projectType: '', subProjectType: '' }));
+  };
+
+  const handleFilterProjectTypeChange = async (e) => {
+    const ptName = e.target.value;
+    setFilters(prev => ({ ...prev, projectType: ptName, subProjectType: '' }));
+    setFilterSubProjectTypes([]);
+    if (ptName) {
+      try {
+        const selPt = projectTypes.find(p => p.name === ptName);
+        if (selPt) {
+          const res = await getSubProjectTypes(selPt._id);
+          setFilterSubProjectTypes(res.data || []);
+        } else {
+          const res = await getSubProjectTypes();
+          setFilterSubProjectTypes(res.data || []);
+        }
+      } catch (err) {
+        console.error("Failed to load sub project types for filter", err);
+      }
+    }
+  };
+
   // Form Handlers
   const handleCategoryChange = async (e) => {
-    const catId = e.target.value;
-    setFormData(prev => ({ ...prev, category: catId, subCategory: '' }));
+    const catName = e.target.value;
+    setFormData(prev => ({ ...prev, category: catName, subCategory: '', projectType: '', subProjectType: '' }));
     setFormSubCategories([]);
-    if (catId) {
+    setFormProjectRanges([]);
+    if (catName) {
       try {
-        const res = await getSubCategories(catId);
-        setFormSubCategories(res.data || []);
+        const selCat = categories.find(c => c.name === catName);
+        if (selCat) {
+          const res = await getSubCategories(selCat._id);
+          setFormSubCategories(res.data || []);
+        }
       } catch (err) {
         toast.error("Failed to load sub categories");
       }
     }
   };
 
+  const handleSubCategoryChange = async (e) => {
+    const subCatName = e.target.value;
+    setFormData(prev => ({ ...prev, subCategory: subCatName, projectType: '', subProjectType: '' }));
+    
+    // Filter mappings for ranges
+    const selCat = categories.find(c => c.name === formData.category);
+    const selSubCat = subCategories.find(sc => sc.name === subCatName);
+    
+    if (selCat && selSubCat) {
+      const ranges = projectMappings
+        .filter(m => (m.categoryId?._id || m.categoryId) === selCat._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id)
+        .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+        .filter((v, i, a) => a.indexOf(v) === i);
+      setFormProjectRanges(ranges);
+    }
+  };
+
   const handleProjectTypeChange = async (e) => {
-    const ptId = e.target.value;
-    setFormData(prev => ({ ...prev, projectType: ptId, subProjectType: '' }));
+    const ptName = e.target.value;
+    setFormData(prev => ({ ...prev, projectType: ptName, subProjectType: '' }));
     setFormSubProjectTypes([]);
-    if (ptId) {
+    if (ptName) {
       try {
-        const res = await getSubProjectTypes(ptId);
-        setFormSubProjectTypes(res.data || []);
+        // Try to find if this ptName corresponds to a master ProjectType ID for sub-type filtering
+        const selPt = projectTypes.find(p => p.name === ptName);
+        if (selPt) {
+          const res = await getSubProjectTypes(selPt._id);
+          setFormSubProjectTypes(res.data || []);
+        } else {
+          // If it's a range, just show all sub-project types or those defined in mappings
+          const res = await getSubProjectTypes();
+          setFormSubProjectTypes(res.data || []);
+        }
       } catch (err) {
         toast.error("Failed to load sub project types");
       }
@@ -186,11 +268,17 @@ export default function OrderProcurement() {
   // CRUD Actions
   const handleEdit = async (setting) => {
     setIsEdit(true);
+
+    const catName = setting.category?.name || setting.category;
+    const subCatName = setting.subCategory?.name || setting.subCategory;
+    const ptName = setting.projectType?.name || setting.projectType;
+    const sptName = setting.subProjectType?.name || setting.subProjectType;
+
     setFormData({
-      category: setting.category?._id || setting.category,
-      subCategory: setting.subCategory?._id || setting.subCategory,
-      projectType: setting.projectType?._id || setting.projectType,
-      subProjectType: setting.subProjectType?._id || setting.subProjectType,
+      category: catName,
+      subCategory: subCatName,
+      projectType: ptName,
+      subProjectType: sptName,
       product: setting.product?._id || setting.product,
       brand: setting.brand?._id || setting.brand,
       skus: setting.skus?.map(s => s._id || s) || [],
@@ -206,12 +294,28 @@ export default function OrderProcurement() {
     });
 
     // Load dependent dropdowns for form
-    if (setting.category?._id || setting.category) {
-      const res = await getSubCategories(setting.category?._id || setting.category);
-      setFormSubCategories(res.data || []);
+    const selCat = categories.find(c => c.name === catName);
+    if (selCat) {
+      const res = await getSubCategories(selCat._id);
+      const subCats = res.data || [];
+      setFormSubCategories(subCats);
+      
+      const selSubCat = subCats.find(sc => sc.name === subCatName);
+      if (selSubCat) {
+        const ranges = projectMappings
+          .filter(m => (m.categoryId?._id || m.categoryId) === selCat._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id)
+          .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+          .filter((v, i, a) => a.indexOf(v) === i);
+        setFormProjectRanges(ranges);
+      }
     }
-    if (setting.projectType?._id || setting.projectType) {
-      const res = await getSubProjectTypes(setting.projectType?._id || setting.projectType);
+
+    const selPt = projectTypes.find(p => p.name === ptName);
+    if (selPt) {
+      const res = await getSubProjectTypes(selPt._id);
+      setFormSubProjectTypes(res.data || []);
+    } else {
+      const res = await getSubProjectTypes();
       setFormSubProjectTypes(res.data || []);
     }
 
@@ -262,6 +366,7 @@ export default function OrderProcurement() {
     setFormData(initialFormState);
     setFormSubCategories([]);
     setFormSubProjectTypes([]);
+    setFormProjectRanges([]);
     setIsEdit(false);
   };
 
@@ -276,37 +381,52 @@ export default function OrderProcurement() {
           <select
             className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             value={filters.category}
-            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+            onChange={handleFilterCategoryChange}
           >
             <option value="">Filter by Category</option>
-            {Array.from(new Set(categories.map(c => c.name))).map(name => <option key={name} value={name}>{name}</option>)}
+            {categories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
           </select>
 
           <select
             className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             value={filters.subCategory}
-            onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
+            onChange={handleFilterSubCategoryChange}
+            disabled={!filters.category}
           >
             <option value="">Filter by Sub-Category</option>
-            {Array.from(new Set(subCategories.map(c => c.name))).map(name => <option key={name} value={name}>{name}</option>)}
+            {filterSubCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
           </select>
 
           <select
             className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             value={filters.projectType}
-            onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
+            onChange={handleFilterProjectTypeChange}
+            disabled={!filters.subCategory}
           >
             <option value="">Filter by Project type</option>
-            {Array.from(new Set(projectTypes.map(p => p.name))).map(name => <option key={name} value={name}>{name}</option>)}
+            {filters.category && filters.subCategory && projectMappings?.length > 0 ? (
+              projectMappings
+                .filter(m => {
+                    const selCat = categories.find(c => c.name === filters.category);
+                    const selSubCat = subCategories.find(sc => sc.name === filters.subCategory);
+                    return (m.categoryId?._id || m.categoryId) === selCat?._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat?._id;
+                })
+                .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                .filter((v, i, a) => a.indexOf(v) === i)
+                .map((range, i) => <option key={i} value={range}>{range}</option>)
+            ) : (
+              projectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)
+            )}
           </select>
 
           <select
             className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
             value={filters.subProjectType}
             onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
+            disabled={!filters.projectType}
           >
-            <option value="">Filter by Sub Project type</option>
-            {Array.from(new Set(subProjectTypes.map(p => p.name))).map(name => <option key={name} value={name}>{name}</option>)}
+            <option value="">Filter by Sub-Project type</option>
+            {filterSubProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
           </select>
         </div>
         
@@ -351,10 +471,10 @@ export default function OrderProcurement() {
               {filteredSettings.map((setting, idx) => (
                 <tr key={setting._id} className="border-b hover:bg-blue-50/30 transition">
                   <td className="px-4 py-3 text-gray-600">{idx + 1}</td>
-                  <td className="px-4 py-3 font-medium text-gray-800">{setting.category?.name || 'N/A'}</td>
-                  <td className="px-4 py-3 text-gray-600">{setting.subCategory?.name || 'N/A'}</td>
-                  <td className="px-4 py-3 text-gray-600">{setting.projectType?.name || 'N/A'}</td>
-                  <td className="px-4 py-3 text-gray-600">{setting.subProjectType?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 font-medium text-gray-800">{setting.category?.name || setting.category || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.subCategory?.name || setting.subCategory || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.projectType?.name || setting.projectType || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.subProjectType?.name || setting.subProjectType || 'N/A'}</td>
                   <td className="px-4 py-3 text-center flex justify-center gap-3">
                     <button
                       onClick={() => handleEdit(setting)}
@@ -405,54 +525,62 @@ export default function OrderProcurement() {
                 
                 {/* Row 1: Category, Sub Category, Project Type, Sub Project Type */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Category</label>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">Category</label>
                     <select
-                      required
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      className="p-2 border border-gray-300 rounded-md"
+                      name="category"
                       value={formData.category}
                       onChange={handleCategoryChange}
                     >
                       <option value="">Select Category</option>
-                      {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {categories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Sub Category</label>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Category</label>
                     <select
-                      required
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      className="p-2 border border-gray-300 rounded-md"
+                      name="subCategory"
                       value={formData.subCategory}
-                      onChange={e => setFormData({ ...formData, subCategory: e.target.value })}
+                      onChange={handleSubCategoryChange}
                       disabled={!formData.category}
                     >
                       <option value="">Select Sub Category</option>
-                      {formSubCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                      {formSubCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Project Type</label>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">Project Type</label>
                     <select
-                      required
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      className="p-2 border border-gray-300 rounded-md"
+                      name="projectType"
                       value={formData.projectType}
                       onChange={handleProjectTypeChange}
+                      disabled={!formData.subCategory}
                     >
                       <option value="">Select Project Type</option>
-                      {projectTypes.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                      {formProjectRanges.length > 0 ? (
+                        formProjectRanges.map((r, i) => <option key={i} value={r}>{r}</option>)
+                      ) : (
+                        projectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)
+                      )}
                     </select>
                   </div>
-                  <div>
-                    <label className="block text-[13px] font-medium text-gray-600 mb-1.5">Sub Project Type</label>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase">Sub Project Type</label>
                     <select
-                      required
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      className="p-2 border border-gray-300 rounded-md"
+                      name="subProjectType"
                       value={formData.subProjectType}
                       onChange={e => setFormData({ ...formData, subProjectType: e.target.value })}
                       disabled={!formData.projectType}
                     >
-                      <option value="">Select Sub Project</option>
-                      {formSubProjectTypes.map(p => <option key={p._id} value={p._id}>{p.name}</option>)}
+                      <option value="">Select Sub Project Type</option>
+                      {formSubProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
                     </select>
                   </div>
                 </div>
@@ -570,7 +698,11 @@ export default function OrderProcurement() {
                                     onChange={(e) => handleSkuItemChange(index, 'comboKit', e.target.value)}
                                 >
                                     <option value="">Select ComboKit</option>
-                                    {comboKits.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                                    {comboKits.map(c => (
+                                      <option key={c._id} value={c._id}>
+                                        {c.name || c.solarkitName || 'Unnamed ComboKit'}
+                                      </option>
+                                    ))}
                                 </select>
                             ) : (
                                 <div className="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-md text-sm text-gray-500 text-center">
@@ -587,7 +719,7 @@ export default function OrderProcurement() {
                                 onChange={(e) => handleSkuItemChange(index, 'supplierType', e.target.value)}
                             >
                                 <option value="">Select Supplier Type</option>
-                                {supplierTypes.map(s => <option key={s._id} value={s._id}>{s.name || s.type_name || s._id}</option>)}
+                                {supplierTypes.map(s => <option key={s._id} value={s._id}>{s.loginTypeName || s.name || s._id}</option>)}
                             </select>
                         </div>
                         

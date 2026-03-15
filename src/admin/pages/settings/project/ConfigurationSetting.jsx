@@ -17,21 +17,25 @@ import {
 } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
 import { getProjectTypes } from '../../../../services/core/masterApi';
-import { getStates, getCities, getDistricts } from '../../../../services/core/locationApi';
+import { getCountries, getStates, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 
 const ConfigurationSetting = () => {
   // State for location selection
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedCity, setSelectedCity] = useState(''); // Was selectedCluster
-  const [selectedDistrict, setSelectedDistrict] = useState('');
-  const [selectedDiscom, setSelectedDiscom] = useState('');
+  // State for location selection
+  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [selectedStates, setSelectedStates] = useState([]);
+  const [selectedClusters, setSelectedClusters] = useState([]);
+  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [selectedDiscoms, setSelectedDiscoms] = useState([]);
 
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
-  const [cities, setCities] = useState([]);
+  const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
 
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
-  const [citySectionVisible, setCitySectionVisible] = useState(false); // Was clusterSectionVisible
+  const [stateSectionVisible, setStateSectionVisible] = useState(false);
+  const [clusterSectionVisible, setClusterSectionVisible] = useState(false);
   const [districtSectionVisible, setDistrictSectionVisible] = useState(false);
   const [discomSectionVisible, setDiscomSectionVisible] = useState(false);
 
@@ -60,13 +64,13 @@ const ConfigurationSetting = () => {
 
   const loadInitialData = async () => {
     try {
-      const [fetchedStates, fetchedProjectTypes, fetchedStages] = await Promise.all([
-        getStates(),
+      const [fetchedCountries, fetchedProjectTypes, fetchedStages] = await Promise.all([
+        getCountries(),
         getProjectTypes(),
         projectApi.getJourneyStages()
       ]);
 
-      setStates(fetchedStates || []);
+      setCountries(fetchedCountries || []);
       setProjectTypes(Array.isArray(fetchedProjectTypes) ? fetchedProjectTypes : []);
       setAllSteps(fetchedStages.map(s => s.name) || []);
 
@@ -105,49 +109,186 @@ const ConfigurationSetting = () => {
     }
   };
 
-  // Handle state selection
-  const handleStateSelect = async (state) => {
-    // state is likely the state object or ID now
-    const stateId = state._id || state;
-    setSelectedState(state.name || state);
-    setSelectedCity('');
-    setSelectedDistrict('');
-    setSelectedDiscom('');
-    setCitySectionVisible(true);
+  // Handle country selection
+  const handleCountrySelect = async (country) => {
+    const name = country.name || country;
+    const countryId = country._id || country;
+
+    let newSelected = [];
+    if (selectedCountries.includes(name)) {
+      newSelected = selectedCountries.filter(c => c !== name);
+    } else {
+      newSelected = [...selectedCountries, name];
+    }
+
+    setSelectedCountries(newSelected);
+    setSelectedStates([]);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
+    setSelectedDiscoms([]);
+    
+    if (newSelected.length > 0) {
+      setStateSectionVisible(true);
+      // Fetch states for all selected countries
+      try {
+        const countryIds = countries.filter(c => newSelected.includes(c.name)).map(c => c._id);
+        const statesData = await Promise.all(countryIds.map(id => getStates(id)));
+        setStates(statesData.flat());
+      } catch (e) { console.error(e); }
+    } else {
+      setStateSectionVisible(false);
+    }
+    setClusterSectionVisible(false);
     setDistrictSectionVisible(false);
     setDiscomSectionVisible(false);
-
-    try {
-      const fetchedCities = await getCities(stateId);
-      setCities(fetchedCities);
-    } catch (e) { console.error(e); }
   };
 
-  // Handle city selection (formerly cluster)
-  const handleCitySelect = async (city) => {
-    const cityId = city._id || city;
-    setSelectedCity(city.name || city);
-    setSelectedDistrict('');
-    setSelectedDiscom('');
-    setDistrictSectionVisible(true);
-    setDiscomSectionVisible(false);
+  const toggleAllCountries = async () => {
+    if (selectedCountries.length === countries.length) {
+      setSelectedCountries([]);
+      setStateSectionVisible(false);
+    } else {
+      const allNames = countries.map(c => c.name);
+      setSelectedCountries(allNames);
+      setStateSectionVisible(true);
+      try {
+        const statesData = await Promise.all(countries.map(c => getStates(c._id)));
+        setStates(statesData.flat());
+      } catch (e) { console.error(e); }
+    }
+  };
 
-    try {
-      const fetchedDistricts = await getDistricts(cityId);
-      setDistricts(fetchedDistricts);
-    } catch (e) { console.error(e); }
+  // Handle state selection
+  const handleStateSelect = async (state) => {
+    const name = state.name || state;
+    const stateId = state._id || state;
+
+    let newSelected = [];
+    if (selectedStates.includes(name)) {
+      newSelected = selectedStates.filter(s => s !== name);
+    } else {
+      newSelected = [...selectedStates, name];
+    }
+
+    setSelectedStates(newSelected);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
+    setSelectedDiscoms([]);
+
+    if (newSelected.length > 0) {
+      setClusterSectionVisible(true);
+      try {
+        const stateIds = states.filter(s => newSelected.includes(s.name)).map(s => s._id);
+        const clustersData = await Promise.all(stateIds.map(id => getClustersHierarchy(id)));
+        setClusters(clustersData.flat());
+      } catch (e) { console.error(e); }
+    } else {
+      setClusterSectionVisible(false);
+    }
+    setDistrictSectionVisible(false);
+    setDiscomSectionVisible(false);
+  };
+
+  const toggleAllStates = async () => {
+    if (selectedStates.length === states.length) {
+      setSelectedStates([]);
+      setClusterSectionVisible(false);
+    } else {
+      const allNames = states.map(s => s.name);
+      setSelectedStates(allNames);
+      setClusterSectionVisible(true);
+      try {
+        const clustersData = await Promise.all(states.map(s => getClustersHierarchy(s._id)));
+        setClusters(clustersData.flat());
+      } catch (e) { console.error(e); }
+    }
+  };
+
+  // Handle cluster selection
+  const handleClusterSelect = async (cluster) => {
+    const name = cluster.name || cluster;
+    const clusterId = cluster._id || cluster;
+
+    let newSelected = [];
+    if (selectedClusters.includes(name)) {
+      newSelected = selectedClusters.filter(c => c !== name);
+    } else {
+      newSelected = [...selectedClusters, name];
+    }
+
+    setSelectedClusters(newSelected);
+    setSelectedDistricts([]);
+    setSelectedDiscoms([]);
+
+    if (newSelected.length > 0) {
+      setDistrictSectionVisible(true);
+      try {
+        const clusterIds = clusters.filter(c => newSelected.includes(c.name)).map(c => c._id);
+        const districtsData = await Promise.all(clusterIds.map(id => getDistrictsHierarchy(id)));
+        setDistricts(districtsData.flat());
+      } catch (e) { console.error(e); }
+    } else {
+      setDistrictSectionVisible(false);
+    }
+    setDiscomSectionVisible(false);
+  };
+
+  const toggleAllClusters = async () => {
+    if (selectedClusters.length === clusters.length) {
+      setSelectedClusters([]);
+      setDistrictSectionVisible(false);
+    } else {
+      const allNames = clusters.map(c => c.name);
+      setSelectedClusters(allNames);
+      setDistrictSectionVisible(true);
+      try {
+        const districtsData = await Promise.all(clusters.map(c => getDistrictsHierarchy(c._id)));
+        setDistricts(districtsData.flat());
+      } catch (e) { console.error(e); }
+    }
   };
 
   // Handle district selection
   const handleDistrictSelect = (district) => {
-    setSelectedDistrict(district.name || district);
-    setDiscomSectionVisible(true);
-    onLocationSelected(selectedState, selectedCity, district.name || district);
+    const name = district.name || district;
+    let newSelected = [];
+    if (selectedDistricts.includes(name)) {
+      newSelected = selectedDistricts.filter(d => d !== name);
+    } else {
+      newSelected = [...selectedDistricts, name];
+    }
+    setSelectedDistricts(newSelected);
+    setDiscomSectionVisible(newSelected.length > 0);
+    onLocationSelected(selectedStates, selectedClusters, newSelected);
+  };
+
+  const toggleAllDistricts = () => {
+    if (selectedDistricts.length === districts.length) {
+      setSelectedDistricts([]);
+      setDiscomSectionVisible(false);
+    } else {
+      const allNames = districts.map(d => d.name);
+      setSelectedDistricts(allNames);
+      setDiscomSectionVisible(true);
+      onLocationSelected(selectedStates, selectedClusters, allNames);
+    }
   };
 
   // Handle DISCOM selection
   const handleDiscomSelect = (discom) => {
-    setSelectedDiscom(discom);
+    if (selectedDiscoms.includes(discom)) {
+      setSelectedDiscoms(selectedDiscoms.filter(d => d !== discom));
+    } else {
+      setSelectedDiscoms([...selectedDiscoms, discom]);
+    }
+  };
+
+  const toggleAllDiscoms = () => {
+    if (selectedDiscoms.length === discoms.length) {
+      setSelectedDiscoms([]);
+    } else {
+      setSelectedDiscoms(discoms.map(d => d.code));
+    }
   };
 
   // Toggle step selection
@@ -180,10 +321,11 @@ const ConfigurationSetting = () => {
     }
 
     const configuration = {
-      currentState: selectedState,
-      currentCity: selectedCity,
-      currentDistrict: selectedDistrict,
-      currentDiscom: selectedDiscom,
+      currentCountry: selectedCountries,
+      currentState: selectedStates,
+      currentCluster: selectedClusters,
+      currentDistrict: selectedDistricts,
+      currentDiscom: selectedDiscoms,
       currentProjectType: selectedProjectType,
       selectedSteps,
       allSteps
@@ -242,8 +384,8 @@ const ConfigurationSetting = () => {
   };
 
   // When location is selected
-  const onLocationSelected = (state, city, district) => {
-    console.log('Location selected:', { state, city, district });
+  const onLocationSelected = (state, cluster, district) => {
+    console.log('Location selected:', { state, cluster, district });
     saveConfiguration();
   };
 
@@ -261,12 +403,27 @@ const ConfigurationSetting = () => {
 
   // Get location summary text
   const getLocationSummary = () => {
-    if (!selectedState) return 'Not selected';
+    if (selectedCountries.length === 0) return 'Not selected';
 
-    let summary = selectedState;
-    if (selectedCity) summary += ` > ${selectedCity}`;
-    if (selectedDistrict) summary += ` > ${selectedDistrict}`;
-    if (selectedDiscom) summary += ` > ${selectedDiscom}`;
+    let summary = '';
+    if (selectedCountries.length === countries.length && countries.length > 1) {
+      summary = 'All Countries';
+    } else {
+      summary = selectedCountries.join(', ');
+    }
+
+    if (selectedStates.length > 0) {
+      summary += ' > ' + (selectedStates.length === states.length && states.length > 1 ? 'All States' : `${selectedStates.length} States`);
+    }
+    if (selectedClusters.length > 0) {
+      summary += ' > ' + (selectedClusters.length === clusters.length && clusters.length > 1 ? 'All Clusters' : `${selectedClusters.length} Clusters`);
+    }
+    if (selectedDistricts.length > 0) {
+      summary += ' > ' + (selectedDistricts.length === districts.length && districts.length > 1 ? 'All Districts' : `${selectedDistricts.length} Districts`);
+    }
+    if (selectedDiscoms.length > 0) {
+      summary += ' > ' + (selectedDiscoms.length === discoms.length && discoms.length > 1 ? 'All DISCOMs' : `${selectedDiscoms.length} DISCOMs`);
+    }
     return summary;
   };
 
@@ -319,53 +476,113 @@ const ConfigurationSetting = () => {
         className={`transition-all duration-500 ease-in-out overflow-hidden ${locationCardsVisible ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
           }`}
       >
-        {/* State Selection */}
+        {/* Country Selection */}
         <div className="bg-white rounded-xl shadow-sm mb-6">
-          <div className="p-4 border-b">
-            <h3 className="text-lg font-semibold">Select State</h3>
+          <div className="p-4 border-b flex justify-between items-center">
+            <h3 className="text-lg font-semibold">Select Country</h3>
+            <button
+              onClick={toggleAllCountries}
+              className="text-sm font-medium text-blue-600 hover:text-blue-800"
+            >
+              {selectedCountries.length === countries.length ? 'Deselect All' : 'Select All'}
+            </button>
           </div>
           <div className="p-4 md:p-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-              {states.map((state) => (
-                <div
-                  key={state._id || state}
-                  onClick={() => handleStateSelect(state)}
-                  className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedState === (state.name || state)
-                    ? 'border-blue-500 border-2'
-                    : 'border-gray-200 hover:border-blue-300'
-                    }`}
-                >
-                  <h4 className="font-bold text-gray-800">{state.name || state}</h4>
-                </div>
-              ))}
+              {countries.map((country) => {
+                const name = country.name || country;
+                return (
+                  <div
+                    key={country._id || country}
+                    onClick={() => handleCountrySelect(country)}
+                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedCountries.includes(name)
+                      ? 'border-blue-500 border-2 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                  >
+                    <h4 className={`font-bold ${selectedCountries.includes(name) ? 'text-blue-700' : 'text-gray-800'}`}>{name}</h4>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
 
-        {/* City Selection */}
+        {/* State Selection */}
         <div
-          className={`transition-all duration-500 ease-in-out overflow-hidden ${citySectionVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+          className={`transition-all duration-500 ease-in-out overflow-hidden ${stateSectionVisible ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
             }`}
         >
           <div className="bg-white rounded-xl shadow-sm mb-6">
-            <div className="p-4 border-b">
-              <h3 className="text-lg font-semibold">Select City</h3>
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Select State</h3>
+              <button
+                onClick={toggleAllStates}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                {selectedStates.length === states.length ? 'Deselect All' : 'Select All'}
+              </button>
             </div>
             <div className="p-4 md:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {cities.map((city) => (
-                  <div
-                    key={city._id || city}
-                    onClick={() => handleCitySelect(city)}
-                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedCity === (city.name || city)
-                      ? 'border-blue-500 border-2'
-                      : 'border-gray-200 hover:border-blue-300'
-                      }`}
-                  >
-                    <h4 className="font-bold text-gray-800">{city.name || city}</h4>
-                    <p className="text-gray-500 text-sm mt-1">{selectedState}</p>
-                  </div>
-                ))}
+                {states.map((state) => {
+                  const name = state.name || state;
+                  return (
+                    <div
+                      key={state._id || state}
+                      onClick={() => handleStateSelect(state)}
+                      className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedStates.includes(name)
+                        ? 'border-blue-500 border-2 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                        }`}
+                    >
+                      <h4 className={`font-bold ${selectedStates.includes(name) ? 'text-blue-700' : 'text-gray-800'}`}>{name}</h4>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {selectedCountries.length > 2 ? `${selectedCountries.length} Countries` : selectedCountries.join(', ')}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Cluster Selection */}
+        <div
+          className={`transition-all duration-500 ease-in-out overflow-hidden ${clusterSectionVisible ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
+            }`}
+        >
+          <div className="bg-white rounded-xl shadow-sm mb-6">
+            <div className="p-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-semibold">Select Cluster</h3>
+              <button
+                onClick={toggleAllClusters}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                {selectedClusters.length === clusters.length ? 'Deselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="p-4 md:p-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                {clusters.map((cluster) => {
+                  const name = cluster.name || cluster;
+                  return (
+                    <div
+                      key={cluster._id || cluster}
+                      onClick={() => handleClusterSelect(cluster)}
+                      className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedClusters.includes(name)
+                        ? 'border-blue-500 border-2 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                        }`}
+                    >
+                      <h4 className={`font-bold ${selectedClusters.includes(name) ? 'text-blue-700' : 'text-gray-800'}`}>{name}</h4>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {selectedStates.length > 2 ? `${selectedStates.length} States` : selectedStates.join(', ')}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
@@ -373,41 +590,58 @@ const ConfigurationSetting = () => {
 
         {/* District Selection */}
         <div
-          className={`transition-all duration-500 ease-in-out overflow-hidden ${districtSectionVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+          className={`transition-all duration-500 ease-in-out overflow-hidden ${districtSectionVisible ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
             }`}
         >
           <div className="bg-white rounded-xl shadow-sm mb-6">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-lg font-semibold">Select District</h3>
+              <button
+                onClick={toggleAllDistricts}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                {selectedDistricts.length === districts.length ? 'Deselect All' : 'Select All'}
+              </button>
             </div>
             <div className="p-4 md:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {districts.map((district) => (
-                  <div
-                    key={district._id || district}
-                    onClick={() => handleDistrictSelect(district)}
-                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDistrict === (district.name || district)
-                      ? 'border-blue-500 border-2'
-                      : 'border-gray-200 hover:border-blue-300'
-                      }`}
-                  >
-                    <h4 className="font-bold text-gray-800">{district.name || district}</h4>
-                    <p className="text-gray-500 text-sm mt-1">{selectedCity}</p>
-                  </div>
-                ))}
+                {districts.map((district) => {
+                  const name = district.name || district;
+                  return (
+                    <div
+                      key={district._id || district}
+                      onClick={() => handleDistrictSelect(district)}
+                      className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDistricts.includes(name)
+                        ? 'border-blue-500 border-2 bg-blue-50'
+                        : 'border-gray-200 hover:border-blue-300'
+                        }`}
+                    >
+                      <h4 className={`font-bold ${selectedDistricts.includes(name) ? 'text-blue-700' : 'text-gray-800'}`}>{name}</h4>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {selectedClusters.length > 2 ? `${selectedClusters.length} Clusters` : selectedClusters.join(', ')}
+                      </p>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>
         </div>
 
-        {/* DISCOM Selection - Keep as is but update visibility check */}
+        {/* DISCOM Selection */}
         <div
-          className={`transition-all duration-500 ease-in-out overflow-hidden ${discomSectionVisible ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+          className={`transition-all duration-500 ease-in-out overflow-hidden ${discomSectionVisible ? 'max-h-[2000px] opacity-100' : 'max-h-0 opacity-0'
             }`}
         >
           <div className="bg-white rounded-xl shadow-sm mb-6">
-            <div className="p-4 border-b">
+            <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-lg font-semibold">Select DISCOM</h3>
+              <button
+                onClick={toggleAllDiscoms}
+                className="text-sm font-medium text-blue-600 hover:text-blue-800"
+              >
+                {selectedDiscoms.length === discoms.length ? 'Deselect All' : 'Select All'}
+              </button>
             </div>
             <div className="p-4 md:p-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -415,12 +649,12 @@ const ConfigurationSetting = () => {
                   <div
                     key={discom.code}
                     onClick={() => handleDiscomSelect(discom.code)}
-                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDiscom === discom.code
-                      ? 'border-blue-500 border-2'
+                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDiscoms.includes(discom.code)
+                      ? 'border-blue-500 border-2 bg-blue-50'
                       : 'border-gray-200 hover:border-blue-300'
                       }`}
                   >
-                    <h4 className="font-bold text-gray-800">{discom.code}</h4>
+                    <h4 className={`font-bold ${selectedDiscoms.includes(discom.code) ? 'text-blue-700' : 'text-gray-800'}`}>{discom.code}</h4>
                     <p className="text-gray-500 text-sm mt-1">{discom.name}</p>
                   </div>
                 ))}

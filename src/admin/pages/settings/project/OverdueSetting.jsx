@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Building, Filter, Save } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
+import { 
+  getCategories, 
+  getSubCategories, 
+  getProjectCategoryMappings, 
+  getSubProjectTypes 
+} from '../../../../services/settings/orderProcurementSettingApi';
+import { toast } from 'react-hot-toast';
 
 export default function OverdueSetting() {
   const [category, setCategory] = useState('');
@@ -11,6 +18,17 @@ export default function OverdueSetting() {
   // Process configuration state
   // Store all fetched settings to derive summary and form data without re-fetching
   const [allSettings, setAllSettings] = useState([]);
+  
+  // Master Data State
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [allSubCategories, setAllSubCategories] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
+  const [allSubProjectTypes, setAllSubProjectTypes] = useState([]);
+  
+  // Filter Dropdown Options
+  const [availableSubCategories, setAvailableSubCategories] = useState([]);
+  const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
+  const [availableSubProjectTypes, setAvailableSubProjectTypes] = useState([]);
 
   // Process configuration state (Form Data)
   const [processConfig, setProcessConfig] = useState({
@@ -35,7 +53,7 @@ export default function OverdueSetting() {
     // Find setting for the current filters but specific subCategory (Residential/Commercial)
     const setting = allSettings.find(s =>
       s.category === category &&
-      s.subCategory === subCat &&
+      s.subCategory?.toLowerCase() === subCat?.toLowerCase() &&
       s.projectType === projectType &&
       s.subProjectType === subProjectType
     );
@@ -67,14 +85,38 @@ export default function OverdueSetting() {
     };
   };
 
-  const residentialSummary = getSummaryData('residential');
-  const commercialSummary = getSummaryData('commercial');
+  const residentialSummary = getSummaryData('Residential');
+  const commercialSummary = getSummaryData('Commercial');
 
-  // Fetch all existing settings on mount or simple refresh
+  // Fetch all master data and existing settings
+  const fetchInitialData = async () => {
+    try {
+      const [settings, cats, mappings, subPTs] = await Promise.all([
+        projectApi.getOverdueSettings(),
+        getCategories(),
+        getProjectCategoryMappings(),
+        getSubProjectTypes()
+      ]);
+      
+      setAllSettings(settings || []);
+      setMasterCategories(cats?.data || []);
+      setProjectMappings(mappings?.data || []);
+      setAllSubProjectTypes(subPTs?.data || []);
+      
+      // Also fetch all sub-categories for mapping
+      const subCats = await getSubCategories();
+      setAllSubCategories(subCats?.data || []);
+    } catch (error) {
+      console.error('Error fetching initial data:', error);
+      toast.error('Failed to load configuration data');
+    }
+  };
+
+  // Fetch only settings when needed
   const fetchSettings = async () => {
     try {
       const settings = await projectApi.getOverdueSettings();
-      setAllSettings(settings);
+      setAllSettings(settings || []);
     } catch (error) {
       console.error('Error fetching overdue settings:', error);
     }
@@ -100,8 +142,64 @@ export default function OverdueSetting() {
 
   // Initial fetch
   useEffect(() => {
-    fetchSettings();
+    fetchInitialData();
   }, []);
+
+  // Hierarchical Filter Handlers
+  const handleCategoryChange = async (catName) => {
+    setCategory(catName);
+    setSubCategory('');
+    setProjectType('');
+    setSubProjectType('');
+    setAvailableSubCategories([]);
+    setAvailableProjectTypes([]);
+    
+    if (catName) {
+      const selCat = masterCategories.find(c => c.name === catName);
+      if (selCat) {
+        try {
+          const res = await getSubCategories(selCat._id);
+          setAvailableSubCategories(res.data || []);
+        } catch (err) {
+          console.error("Error loading sub categories:", err);
+        }
+      }
+    }
+  };
+
+  const handleSubCategoryChange = (subCatName) => {
+    setSubCategory(subCatName);
+    setProjectType('');
+    setSubProjectType('');
+    setAvailableProjectTypes([]);
+    
+    if (category && subCatName) {
+      const selCat = masterCategories.find(c => c.name === category);
+      const selSubCat = allSubCategories.find(sc => sc.name === subCatName);
+      
+      if (selCat && selSubCat) {
+        const ranges = projectMappings
+          .filter(m => 
+            (m.categoryId?._id || m.categoryId) === selCat._id && 
+            (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id
+          )
+          .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+          .filter((v, i, a) => a.indexOf(v) === i);
+        setAvailableProjectTypes(ranges);
+      }
+    }
+  };
+
+  const handleProjectTypeChange = async (ptName) => {
+    setProjectType(ptName);
+    setSubProjectType('');
+    setAvailableSubProjectTypes([]);
+    
+    if (ptName) {
+      // Find if this is a master range or just show all sub-project types
+      setAvailableSubProjectTypes(allSubProjectTypes);
+    }
+  };
 
   const handleSaveProcess = async (processKey) => {
     if (!category || !subCategory || !projectType || !subProjectType) {
@@ -171,12 +269,10 @@ export default function OverdueSetting() {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={category}
-                  onChange={(e) => setCategory(e.target.value)}
+                  onChange={(e) => handleCategoryChange(e.target.value)}
                 >
-                  <option value="" disabled>All Categories</option>
-                  <option value="solar-panel">Solar Panel</option>
-                  <option value="solar-rooftop">Solar Rooftop</option>
-                  <option value="solar-pump">Solar Pump</option>
+                  <option value="">Select Category</option>
+                  {masterCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                 </select>
               </div>
 
@@ -188,11 +284,11 @@ export default function OverdueSetting() {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={subCategory}
-                  onChange={(e) => setSubCategory(e.target.value)}
+                  onChange={(e) => handleSubCategoryChange(e.target.value)}
+                  disabled={!category}
                 >
-                  <option value="" disabled>Select Sub Category Type</option>
-                  <option value="residential">Residential</option>
-                  <option value="commercial">Commercial</option>
+                  <option value="">Select Sub Category</option>
+                  {availableSubCategories.map(sc => <option key={sc._id} value={sc.name}>{sc.name}</option>)}
                 </select>
               </div>
 
@@ -204,12 +300,11 @@ export default function OverdueSetting() {
                 <select
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={projectType}
-                  onChange={(e) => setProjectType(e.target.value)}
+                  onChange={(e) => handleProjectTypeChange(e.target.value)}
+                  disabled={!subCategory}
                 >
-                  <option value="" disabled>Select Project Type</option>
-                  <option value="3kw-5kw">3Kw-5Kw</option>
-                  <option value="5kw-10kw">5Kw-10Kw</option>
-                  <option value="10kw-20kw">10Kw-20Kw</option>
+                  <option value="">Select Project Type</option>
+                  {availableProjectTypes.map((range, idx) => <option key={idx} value={range}>{range}</option>)}
                 </select>
               </div>
 
@@ -222,11 +317,10 @@ export default function OverdueSetting() {
                   className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                   value={subProjectType}
                   onChange={(e) => setSubProjectType(e.target.value)}
+                  disabled={!projectType}
                 >
-                  <option value="" disabled>Select Sub Project Type</option>
-                  <option value="on-grid">On-Grid</option>
-                  <option value="off-grid">Off-grid</option>
-                  <option value="hybrid">Hybrid</option>
+                  <option value="">Select Sub Project Type</option>
+                  {availableSubProjectTypes.map(st => <option key={st._id} value={st.name}>{st.name}</option>)}
                 </select>
               </div>
             </div>
@@ -247,19 +341,41 @@ export default function OverdueSetting() {
         {/* Project Type Selection */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           {/* Residential Card */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
+          <div 
+            onClick={() => handleSubCategoryChange('Residential')}
+            className={`rounded-lg shadow-sm border transition-all cursor-pointer ${
+              subCategory?.toLowerCase() === 'residential' 
+                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' 
+                : 'bg-white border-gray-200 hover:shadow-md hover:border-blue-300'
+            }`}
+          >
             <div className="p-8 text-center">
-              <Home className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-              <h4 className="text-xl font-semibold text-gray-800 mb-2">Residential</h4>
+              <Home className={`w-16 h-16 mx-auto mb-4 transition-colors ${
+                subCategory?.toLowerCase() === 'residential' ? 'text-blue-600' : 'text-gray-400'
+              }`} />
+              <h4 className={`text-xl font-semibold mb-2 transition-colors ${
+                subCategory?.toLowerCase() === 'residential' ? 'text-blue-700' : 'text-gray-800'
+              }`}>Residential</h4>
               <p className="text-gray-500">Manage residential solar projects</p>
             </div>
           </div>
 
           {/* Commercial Card */}
-          <div className="bg-white rounded-lg shadow-sm border border-gray-200 hover:shadow-md transition-shadow cursor-pointer">
+          <div 
+            onClick={() => handleSubCategoryChange('Commercial')}
+            className={`rounded-lg shadow-sm border transition-all cursor-pointer ${
+              subCategory?.toLowerCase() === 'commercial' 
+                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' 
+                : 'bg-white border-gray-200 hover:shadow-md hover:border-blue-300'
+            }`}
+          >
             <div className="p-8 text-center">
-              <Building className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-              <h4 className="text-xl font-semibold text-gray-800 mb-2">Commercial</h4>
+              <Building className={`w-16 h-16 mx-auto mb-4 transition-colors ${
+                subCategory?.toLowerCase() === 'commercial' ? 'text-blue-600' : 'text-gray-400'
+              }`} />
+              <h4 className={`text-xl font-semibold mb-2 transition-colors ${
+                subCategory?.toLowerCase() === 'commercial' ? 'text-blue-700' : 'text-gray-800'
+              }`}>Commercial</h4>
               <p className="text-gray-500">Manage commercial solar projects</p>
             </div>
           </div>

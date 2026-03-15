@@ -11,9 +11,9 @@ import toast from 'react-hot-toast';
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
   <div
     onClick={onClick}
-    className={`p-6 rounded-md border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
-      ? 'border-[#007bff] bg-white'
-      : 'border-transparent bg-white'
+    className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+      ? 'border-[#007bff] bg-blue-50 shadow-blue-100 shadow-lg -translate-y-1'
+      : 'border-transparent bg-white hover:border-blue-200'
       }`}
   >
     <div className="font-bold text-base text-[#333] mb-1">{title}</div>
@@ -65,18 +65,32 @@ export default function SupplierVendors() {
   ];
 
   // Location Hierarchy State
-  const [locationData, setLocationData] = useState({ states: [], clusters: [], districts: [] });
-  const [selectedLocation, setSelectedLocation] = useState({ state: '', cluster: '', district: '' });
+  const [locationData, setLocationData] = useState({ countries: [], states: [], clusters: [], districts: [] });
+  const [selectedLocation, setSelectedLocation] = useState({ country: '', state: '', cluster: '', district: '' });
+  
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const res = await locationAPI.getAllCountries({ isActive: true });
+        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, countries: res.data.data }));
+      } catch (error) { console.error(error); }
+    };
+    fetchCountries();
+  }, []);
 
   useEffect(() => {
     const fetchStates = async () => {
-      try {
-        const res = await locationAPI.getAllStates({ isActive: true });
-        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
-      } catch (error) { console.error(error); }
+      if (selectedLocation.country) {
+        try {
+          const params = { isActive: true };
+          if (selectedLocation.country !== 'all') params.countryId = selectedLocation.country;
+          const res = await locationAPI.getAllStates(params);
+          if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
+        } catch (error) { console.error(error); }
+      } else setLocationData(prev => ({ ...prev, states: [] }));
     };
     fetchStates();
-  }, []);
+  }, [selectedLocation.country]);
 
   useEffect(() => {
     const fetchClusters = async () => {
@@ -115,7 +129,7 @@ export default function SupplierVendors() {
   useEffect(() => {
     if (selectedLocation.district) fetchPlans();
     else resetToDefaults();
-  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, globalPlanNames]);
+  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, selectedLocation.country, globalPlanNames]);
 
   const resetToDefaults = () => {
       const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
@@ -135,6 +149,7 @@ export default function SupplierVendors() {
       if (selectedLocation.district && selectedLocation.district !== 'all') params.districtId = selectedLocation.district;
       else if (selectedLocation.cluster && selectedLocation.cluster !== 'all') params.clusterId = selectedLocation.cluster;
       else if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+      else if (selectedLocation.country && selectedLocation.country !== 'all') params.countryId = selectedLocation.country;
 
       const res = await getSupplierVendorPlans(params);
       if (res.success && res.data.length > 0) {
@@ -184,6 +199,7 @@ export default function SupplierVendors() {
           const payload = {
               ...formSettings[activeTab],
               name: activeTab,
+              countryId: selectedLocation.country === 'all' ? null : selectedLocation.country,
               stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
               clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
           };
@@ -283,18 +299,54 @@ export default function SupplierVendors() {
         {showLocationCards && (
           <div className="space-y-10 mb-10">
             <div>
-              <h2 className="text-xl font-bold text-[#333] mb-6">Select State</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-[#333]">Select Country</h2>
+                <button
+                  onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', district: '' })}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  Select All
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation({ state: 'all', cluster: '', district: '' })} />
-                {locationData.states.map(s => (
-                  <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation({ state: s._id, cluster: '', district: '' })} />
+                <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedLocation.country === 'all'} onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', district: '' })} />
+                {locationData.countries.map(c => (
+                  <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.country === c._id} onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', district: '' })} />
                 ))}
               </div>
             </div>
 
+            {selectedLocation.country && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select State</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', district: '' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', district: '' }))} />
+                  {locationData.states.map(s => (
+                    <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', district: '' }))} />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {selectedLocation.state && (
               <div>
-                <h2 className="text-xl font-bold text-[#333] mb-6">Select Cluster</h2>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select Cluster</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedLocation.cluster === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))} />
                   {locationData.clusters.map(c => {
@@ -307,7 +359,15 @@ export default function SupplierVendors() {
 
             {selectedLocation.cluster && (
               <div>
-                <h2 className="text-xl font-bold text-[#333] mb-6">Select District</h2>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select District</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <LocationCard title="All Districts" subtitle="ALL" isSelected={selectedLocation.district === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))} />
                   {locationData.districts.map(d => {

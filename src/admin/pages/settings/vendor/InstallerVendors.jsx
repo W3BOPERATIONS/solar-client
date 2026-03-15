@@ -11,9 +11,9 @@ import {
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
   <div
     onClick={onClick}
-    className={`p-6 rounded-md border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
-      ? 'border-[#007bff] bg-white'
-      : 'border-transparent bg-white'
+    className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+      ? 'border-[#007bff] bg-blue-50 shadow-blue-100 shadow-lg -translate-y-1'
+      : 'border-transparent bg-white hover:border-blue-200'
       }`}
   >
     <div className="font-bold text-base text-[#333] mb-1">{title}</div>
@@ -33,12 +33,14 @@ export default function InstallerVendors() {
 
   // Location Hierarchy State
   const [locationData, setLocationData] = useState({
+    countries: [],
     states: [],
     clusters: [],
     districts: []
   });
 
   const [selectedLocation, setSelectedLocation] = useState({
+    country: '',
     state: '',
     cluster: '',
     district: ''
@@ -76,18 +78,37 @@ export default function InstallerVendors() {
     }
   };
 
-  // Location Fetching Logic (similar to RoleSettings)
+  // Location Fetching Logic
+  useEffect(() => {
+    const fetchCountries = async () => {
+      try {
+        const res = await locationAPI.getAllCountries({ isActive: true });
+        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, countries: res.data.data }));
+      } catch (error) {
+        console.error('Failed to fetch countries', error);
+      }
+    };
+    fetchCountries();
+  }, []);
+
   useEffect(() => {
     const fetchStates = async () => {
-      try {
-        const res = await locationAPI.getAllStates({ isActive: true });
-        if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
-      } catch (error) {
-        console.error('Failed to fetch states', error);
+      if (selectedLocation.country) {
+        try {
+          const params = { isActive: true };
+          if (selectedLocation.country !== 'all') params.countryId = selectedLocation.country;
+          const res = await locationAPI.getAllStates(params);
+          if (res.data && res.data.data) setLocationData(prev => ({ ...prev, states: res.data.data }));
+        } catch (error) {
+          console.error('Failed to fetch states', error);
+          setLocationData(prev => ({ ...prev, states: [] }));
+        }
+      } else {
+        setLocationData(prev => ({ ...prev, states: [] }));
       }
     };
     fetchStates();
-  }, []);
+  }, [selectedLocation.country]);
 
   useEffect(() => {
     const fetchClusters = async () => {
@@ -141,7 +162,7 @@ export default function InstallerVendors() {
       setActivePlan(sortedNames[0] || 'Starter Plan');
       setAllFetchedPlans([]);
     }
-  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, globalPlanNames]);
+  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, selectedLocation.country, globalPlanNames]);
 
   const fetchPlans = async () => {
     try {
@@ -153,6 +174,8 @@ export default function InstallerVendors() {
         params.clusterId = selectedLocation.cluster;
       } else if (selectedLocation.state && selectedLocation.state !== 'all') {
         params.stateId = selectedLocation.state;
+      } else if (selectedLocation.country && selectedLocation.country !== 'all') {
+        params.countryId = selectedLocation.country;
       }
 
       const response = await getInstallerVendorPlans(params);
@@ -222,6 +245,7 @@ export default function InstallerVendors() {
       const payload = {
         ...currentPlanData,
         name: activePlan,
+        countryId: selectedLocation.country === 'all' ? null : selectedLocation.country,
         stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
         clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
       };
@@ -324,32 +348,80 @@ export default function InstallerVendors() {
         {/* Location Selection Section */}
         {showLocationCards && (
           <div className="space-y-10 mb-16">
-            {/* States */}
+            {/* Countries */}
             <div>
-              <h2 className="text-xl font-bold text-[#333] mb-6">Select State</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-xl font-bold text-[#333]">Select Country</h2>
+                <button
+                  onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', district: '' })}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  Select All
+                </button>
+              </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <LocationCard
-                  title="All States"
+                  title="All Countries"
                   subtitle="ALL"
-                  isSelected={selectedLocation.state === 'all'}
-                  onClick={() => setSelectedLocation({ state: 'all', cluster: '', district: '' })}
+                  isSelected={selectedLocation.country === 'all'}
+                  onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', district: '' })}
                 />
-                {locationData.states.map(s => (
+                {locationData.countries.map(c => (
                   <LocationCard
-                    key={s._id}
-                    title={s.name}
-                    subtitle={s.code || s.name.substring(0, 2).toUpperCase()}
-                    isSelected={selectedLocation.state === s._id}
-                    onClick={() => setSelectedLocation({ state: s._id, cluster: '', district: '' })}
+                    key={c._id}
+                    title={c.name}
+                    subtitle={c.code || c.name.substring(0, 2).toUpperCase()}
+                    isSelected={selectedLocation.country === c._id}
+                    onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', district: '' })}
                   />
                 ))}
               </div>
             </div>
 
+            {/* States */}
+            {selectedLocation.country && (
+              <div>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select State</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', district: '' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                  <LocationCard
+                    title="All States"
+                    subtitle="ALL"
+                    isSelected={selectedLocation.state === 'all'}
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', district: '' }))}
+                  />
+                  {locationData.states.map(s => (
+                    <LocationCard
+                      key={s._id}
+                      title={s.name}
+                      subtitle={s.code || s.name.substring(0, 2).toUpperCase()}
+                      isSelected={selectedLocation.state === s._id}
+                      onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', district: '' }))}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Clusters */}
             {selectedLocation.state && (
               <div>
-                <h2 className="text-xl font-bold text-[#333] mb-6">Select Cluster</h2>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select Cluster</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <LocationCard
                     title="All Clusters"
@@ -363,7 +435,7 @@ export default function InstallerVendors() {
                       <LocationCard
                         key={c._id}
                         title={c.name}
-                        subtitle={parentState ? (parentState.code || parentState.name.substring(0,2).toUpperCase()) : 'CL'}
+                        subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'}
                         isSelected={selectedLocation.cluster === c._id}
                         onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, district: '' }))}
                       />
@@ -376,7 +448,15 @@ export default function InstallerVendors() {
             {/* Districts */}
             {selectedLocation.cluster && (
               <div>
-                <h2 className="text-xl font-bold text-[#333] mb-6">Select District</h2>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-xl font-bold text-[#333]">Select District</h2>
+                  <button
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))}
+                    className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                  >
+                    Select All
+                  </button>
+                </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <LocationCard
                     title="All Districts"
