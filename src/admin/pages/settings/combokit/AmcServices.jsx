@@ -20,9 +20,7 @@ const AmcServices = () => {
     serviceName: '',
     serviceDescription: '',
     serviceType: 'regular',
-    basePrice: '',
-    includePowerGuarantee: false,
-    guaranteeDescription: ''
+    basePrice: ''
   });
 
   // Services data
@@ -32,17 +30,13 @@ const AmcServices = () => {
   // Modal states
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentEditId, setCurrentEditId] = useState(null);
-  const [showPowerGuarantee, setShowPowerGuarantee] = useState(false);
-  const [showEditPowerGuarantee, setShowEditPowerGuarantee] = useState(false);
 
   // State for edit form
   const [editFormData, setEditFormData] = useState({
     serviceName: '',
     serviceDescription: '',
     serviceType: 'regular',
-    basePrice: '',
-    includePowerGuarantee: false,
-    guaranteeDescription: ''
+    basePrice: ''
   });
 
   // Fetch Services
@@ -94,9 +88,7 @@ const AmcServices = () => {
       serviceName: formData.serviceName,
       description: formData.serviceDescription,
       serviceType: formData.serviceType,
-      basePrice: parseInt(formData.basePrice) || 0,
-      hasPowerGuarantee: formData.includePowerGuarantee,
-      guaranteeDescription: formData.guaranteeDescription
+      basePrice: parseInt(formData.basePrice) || 0
     };
 
     try {
@@ -116,11 +108,8 @@ const AmcServices = () => {
       serviceName: '',
       serviceDescription: '',
       serviceType: 'regular',
-      basePrice: '',
-      includePowerGuarantee: false,
-      guaranteeDescription: ''
+      basePrice: ''
     });
-    setShowPowerGuarantee(false);
   };
 
   // Edit service
@@ -133,11 +122,8 @@ const AmcServices = () => {
       serviceName: service.serviceName,
       serviceDescription: service.description || '',
       serviceType: service.serviceType || 'regular',
-      basePrice: (service.basePrice || 0).toString(),
-      includePowerGuarantee: service.hasPowerGuarantee || false,
-      guaranteeDescription: service.guaranteeDescription || ''
+      basePrice: (service.basePrice || 0).toString()
     });
-    setShowEditPowerGuarantee(service.hasPowerGuarantee || false);
     setIsEditModalOpen(true);
   };
 
@@ -149,9 +135,7 @@ const AmcServices = () => {
       serviceName: editFormData.serviceName,
       description: editFormData.serviceDescription,
       serviceType: editFormData.serviceType,
-      basePrice: parseInt(editFormData.basePrice) || 0,
-      hasPowerGuarantee: editFormData.includePowerGuarantee,
-      guaranteeDescription: editFormData.guaranteeDescription
+      basePrice: parseInt(editFormData.basePrice) || 0
     };
 
     try {
@@ -206,7 +190,7 @@ const AmcServices = () => {
           <Cog className="text-blue-600" size={28} />
           <div>
             <h1 className="text-2xl font-bold text-[#1e3a8a] tracking-tight">AMC Services Management</h1>
-            <p className="text-sm text-slate-500 font-medium font-inter mt-1">Add and manage AMC services, visits, and power generation guarantee</p>
+            <p className="text-sm text-slate-500 font-medium font-inter mt-1">Add and manage AMC services and visits</p>
           </div>
         </div>
       </div>
@@ -283,43 +267,7 @@ const AmcServices = () => {
 
                   </div>
 
-                  {/* Power Generation Guarantee Section */}
-                  <div className="mb-6 rounded border border-slate-200 bg-slate-50/50">
-                    <div className="p-3 border-b border-slate-200 bg-slate-100/50">
-                      <h6 className="text-sm font-bold text-slate-800">Power Generation Guarantee (Optional)</h6>
-                    </div>
-                    <div className="p-4">
-                      <label className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          name="includePowerGuarantee"
-                          checked={formData.includePowerGuarantee}
-                          onChange={(e) => {
-                            handleInputChange(e);
-                            setShowPowerGuarantee(e.target.checked);
-                          }}
-                          className="w-4 h-4 text-blue-600 rounded border-slate-300 focus:ring-blue-500"
-                        />
-                        <span className="text-sm text-slate-700">include_once Power Generation Guarantee</span>
-                      </label>
-                    </div>
 
-                    {showPowerGuarantee && (
-                      <div className="p-4 pt-0 space-y-4">
-                        <div>
-                          <label className="block text-sm font-bold text-slate-800 mb-2">Guarantee Policy Details</label>
-                          <textarea
-                            name="guaranteeDescription"
-                            value={formData.guaranteeDescription}
-                            onChange={handleInputChange}
-                            rows="2"
-                            placeholder="Describe the generation security terms..."
-                            className="w-full bg-white border border-slate-200 rounded px-3 py-2 text-sm focus:outline-none focus:border-blue-500 resize-none"
-                          />
-                        </div>
-                      </div>
-                    )}
-                  </div>
 
                   <div className="flex items-center justify-between pt-2">
                     <button
@@ -401,11 +349,7 @@ const AmcServices = () => {
                           </span>
                         </div>
 
-                          <div className="mb-3">
-                            <span className="bg-[#17a2b8] text-white text-xs font-bold px-3 py-1 rounded">
-                              Power Guarantee Included
-                            </span>
-                          </div>
+
 
                         <div className="flex items-baseline gap-1 text-slate-800 font-bold">
                           <span>₹{service.basePrice?.toLocaleString()}</span>
@@ -445,7 +389,6 @@ const AmcServices = () => {
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Service Name</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Type</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Price</th>
-                      <th className="px-6 py-4 text-sm font-bold text-slate-600">Power<br/>Guarantee</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600">Description</th>
                       <th className="px-6 py-4 text-sm font-bold text-slate-600 text-center">Actions</th>
                     </tr>
@@ -467,13 +410,7 @@ const AmcServices = () => {
                         <td className="px-6 py-4">
                           <span className="text-sm text-slate-800">₹{service.basePrice?.toLocaleString()}</span>
                         </td>
-                        <td className="px-6 py-4">
-                          {service.hasPowerGuarantee ? (
-                            <span className="text-sm text-slate-800 font-bold">Yes</span>
-                          ) : (
-                            <span className="text-sm text-slate-800">No</span>
-                          )}
-                        </td>
+
                         <td className="px-6 py-4 text-sm text-slate-600 max-w-[200px]">
                           {service.description}
                         </td>
@@ -580,38 +517,7 @@ const AmcServices = () => {
 
                 </div>
 
-                {/* Edit Power Generation Guarantee Section */}
-                <div className="mb-6 rounded border border-slate-200 bg-slate-50/50">
-                  <div className="p-4 flex items-center justify-between border-b border-slate-200 bg-white">
-                    <label className="flex items-center gap-3 cursor-pointer">
-                      <div className="w-6 h-6 rounded bg-slate-100 border border-slate-300 flex items-center justify-center">
-                         <span className="text-slate-400 font-bold">&#10003;</span>
-                      </div>
-                      <span className="text-sm font-bold text-slate-800 uppercase tracking-wide">POWER GENERATION SECURITY</span>
-                    </label>
-                    <label className="relative inline-flex items-center cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="includePowerGuarantee"
-                        checked={editFormData.includePowerGuarantee}
-                        onChange={(e) => {
-                          handleEditInputChange(e);
-                          setShowEditPowerGuarantee(e.target.checked);
-                        }}
-                        className="sr-only peer"
-                      />
-                      <div className="w-11 h-6 bg-slate-200 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#0c6baf]"></div>
-                    </label>
-                  </div>
 
-                  {showEditPowerGuarantee && (
-                    <div className="p-6 grid grid-cols-2 gap-6 bg-white animate-in fade-in slide-in-from-top-2">
-                      <div className="col-span-2">
-                        <p className="text-xs text-slate-500 mt-2 font-medium">Power Generation Security is active for this service.</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
 
                 <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 shrink-0">
                   <button

@@ -17,6 +17,10 @@ import {
   getSubProjectTypes,
   getProjectCategoryMappings
 } from '../../../../services/combokit/combokitApi';
+import { 
+  getBrands,
+  getSkus 
+} from '../../../../services/settings/orderProcurementSettingApi';
 import { locationAPI } from '../../../../api/api';
 import toast from 'react-hot-toast';
 
@@ -56,6 +60,8 @@ const BundlePlans = () => {
   const [masterProjectTypes, setMasterProjectTypes] = useState([]);
   const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
+  const [availablePanelBrands, setAvailablePanelBrands] = useState([]);
+  const [isWattageLoading, setIsWattageLoading] = useState(false);
 
   // Plan Form
   const [planForm, setPlanForm] = useState({
@@ -128,6 +134,21 @@ const BundlePlans = () => {
       setMasterProjectTypes(projs || []);
       setMasterSubProjectTypes(subProjs || []);
       setProjectMappings(mappings || []);
+
+      // Fetch dynamic brands
+      const brandsRes = await getBrands();
+      // Handle both array and { data: [] } formats
+      const brandsData = Array.isArray(brandsRes) ? brandsRes : (brandsRes?.data || []);
+      
+      // Filter for Product = PANEL and Combo Kit = Enabled (true)
+      const filteredPanelBrands = brandsData
+        .filter(m => 
+          (m.product?.toUpperCase() === 'PANEL' || (m.brand || '').toLowerCase().includes('panel')) && 
+          m.comboKit === true &&
+          m.isActive !== false
+        );
+      
+      setAvailablePanelBrands(filteredPanelBrands);
     } catch (error) {
       console.error("Error fetching project settings masters", error);
     }
@@ -286,6 +307,87 @@ const BundlePlans = () => {
       setLoading(false);
     }
   };
+
+  // Fetch Wattages dynamically when Panel Brands change
+  useEffect(() => {
+    const fetchWattagesForBrands = async () => {
+      if (planForm.panelBrands.length === 0) {
+        setAvailableWattages(['330W', '440W', '450W', '535W', '540W', '550W']);
+        return;
+      }
+
+      setIsWattageLoading(true);
+      try {
+        // Fetch SKUs for each selected brand
+        const allWattages = new Set();
+        
+        // Map names to IDs
+        const brandIds = planForm.panelBrands.map(name => {
+          const m = availablePanelBrands.find(item => 
+            (item.brand || item.companyName || item.name || '').toLowerCase() === name.toLowerCase()
+          );
+          return m?._id;
+        }).filter(Boolean);
+
+        if (brandIds.length === 0) {
+          setIsWattageLoading(false);
+          return;
+        }
+
+        // Use Promise.all to fetch in parallel
+        const responses = await Promise.all(
+          brandIds.map(brandId => 
+            getSkus({ brand: brandId })
+          )
+        );
+
+        responses.forEach(res => {
+          // Handle both direct array or { data: [] } response
+          const skus = Array.isArray(res) ? res : (res?.data || []);
+          
+          skus.forEach(sku => {
+            // Check both wattage and capacity fields
+            const wattageVal = sku.wattage || (sku.capacity ? parseFloat(sku.capacity) : null);
+            
+            if (wattageVal) {
+              const w = wattageVal.toString().toUpperCase().endsWith('W') 
+                ? wattageVal.toString().toUpperCase() 
+                : `${wattageVal}W`;
+              allWattages.add(w);
+            } else if (sku.capacity && typeof sku.capacity === 'string') {
+              // Extract numerical part if it's like "225 kW"
+              const match = sku.capacity.match(/(\d+(\.\d+)?)/);
+              if (match) {
+                const w = `${match[1]}W`;
+                allWattages.add(w);
+              }
+            }
+          });
+        });
+
+        // Combine with currently selected wattages to avoid losing them
+        planForm.wattage.forEach(w => allWattages.add(w));
+
+        if (allWattages.size > 0) {
+          setAvailableWattages(Array.from(allWattages).sort((a,b) => {
+            const numA = parseFloat(a);
+            const numB = parseFloat(b);
+            if (!isNaN(numA) && !isNaN(numB)) return numA - numB;
+            return a.localeCompare(b);
+          }));
+        } else {
+          setAvailableWattages([]);
+        }
+      } catch (error) {
+        console.error("Error fetching wattages:", error);
+        toast.error("Failed to fetch dynamic wattages");
+      } finally {
+        setIsWattageLoading(false);
+      }
+    };
+
+    fetchWattagesForBrands();
+  }, [planForm.panelBrands]);
 
   // Filtered Plans Logic
   const filteredPlans = useMemo(() => {
@@ -484,11 +586,7 @@ const BundlePlans = () => {
 
 
   const enableEditMode = (plan) => {
-    const planWattages = plan.wattage || [];
-    const defaultWattages = ['330W', '440W', '450W', '535W', '540W', '550W'];
-    const combined = Array.from(new Set([...defaultWattages, ...planWattages]));
-    setAvailableWattages(combined);
-    
+    // availableWattages will be updated by the useEffect when planForm is set
     setPlanForm({
       bundleName: plan.bundleName || '',
       category: plan.category || '',
@@ -507,7 +605,8 @@ const BundlePlans = () => {
   };
 
   const handleAddNew = () => {
-    setAvailableWattages(['330W', '440W', '450W', '535W', '540W', '550W']);
+    // Start with empty wattages until a brand is selected
+    setAvailableWattages([]);
     setPlanForm({
       bundleName: '',
       category: '',
@@ -1105,22 +1204,27 @@ const BundlePlans = () => {
                      <div>
                         <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Select Panel Brands</label>
                         <div className="flex flex-wrap gap-2">
-                           {['Tata', 'Waree', 'Adani', 'Vikram', 'Renew'].map(b => (
-                             <button
-                               key={b}
-                               onClick={() => {
-                                 const next = new Set(planForm.panelBrands);
-                                 if (next.has(b)) next.delete(b);
-                                 else next.add(b);
-                                 setPlanForm({...planForm, panelBrands: Array.from(next)});
-                               }}
-                               className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
-                                 planForm.panelBrands.includes(b) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                               }`}
-                             >
-                               {b}
-                             </button>
-                           ))}
+                           {availablePanelBrands.length > 0 ? availablePanelBrands.map(m => {
+                             const b = m.brand || m.companyName || m.name;
+                             return (
+                               <button
+                                 key={m._id}
+                                 onClick={() => {
+                                   const next = new Set(planForm.panelBrands);
+                                   if (next.has(b)) next.delete(b);
+                                   else next.add(b);
+                                   setPlanForm({...planForm, panelBrands: Array.from(next)});
+                                 }}
+                                 className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
+                                   planForm.panelBrands.includes(b) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                                 }`}
+                               >
+                                 {b}
+                               </button>
+                             );
+                           }) : (
+                             <div className="text-[10px] text-slate-400 italic">No brands found. Enable "Combo Kit" in Brand Manufacturer settings.</div>
+                           )}
                         </div>
                      </div>
 
@@ -1164,37 +1268,44 @@ const BundlePlans = () => {
                               </button>
                            </div>
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                           {availableWattages.map(w => (
-                              <div key={w} className="relative group">
-                                 <button
-                                    onClick={() => {
-                                       const next = new Set(planForm.wattage);
-                                       if (next.has(w)) next.delete(w);
-                                       else next.add(w);
-                                       setPlanForm({...planForm, wattage: Array.from(next)});
-                                    }}
-                                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
-                                       planForm.wattage.includes(w) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
-                                    }`}
-                                 >
-                                    {w}
-                                 </button>
-                                 {!['330W', '440W', '450W', '535W', '540W', '550W'].includes(w) && (
-                                    <button
-                                       onClick={() => {
-                                          setAvailableWattages(availableWattages.filter(item => item !== w));
-                                          const next = new Set(planForm.wattage);
-                                          next.delete(w);
-                                          setPlanForm({...planForm, wattage: Array.from(next)});
-                                       }}
-                                       className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
-                                    >
-                                       <X size={10} />
-                                    </button>
-                                 )}
-                              </div>
-                           ))}
+                        <div className="flex flex-wrap gap-2 min-h-[40px] items-center">
+                           {isWattageLoading ? (
+                             <div className="flex items-center gap-2 text-[10px] font-bold text-slate-400">
+                               <Loader size={14} className="animate-spin text-indigo-500" />
+                               Fetching available wattages...
+                             </div>
+                           ) : availableWattages.length > 0 ? (
+                             availableWattages.map(w => (
+                                <div key={w} className="relative group">
+                                   <button
+                                      onClick={() => {
+                                         const next = new Set(planForm.wattage);
+                                         if (next.has(w)) next.delete(w);
+                                         else next.add(w);
+                                         setPlanForm({...planForm, wattage: Array.from(next)});
+                                      }}
+                                      className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all border-2 ${
+                                         planForm.wattage.includes(w) ? 'bg-indigo-600 border-indigo-600 text-white' : 'bg-white border-slate-100 text-slate-400 hover:border-slate-200'
+                                      }`}
+                                   >
+                                      {w}
+                                   </button>
+                                   <button
+                                      onClick={() => {
+                                         setAvailableWattages(availableWattages.filter(item => item !== w));
+                                         const next = new Set(planForm.wattage);
+                                         next.delete(w);
+                                         setPlanForm({...planForm, wattage: Array.from(next)});
+                                      }}
+                                      className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-red-500 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all shadow-sm"
+                                   >
+                                      <X size={10} />
+                                   </button>
+                                </div>
+                             ))
+                           ) : (
+                             <div className="text-[10px] text-slate-400 italic">Select a brand to see available wattages.</div>
+                           )}
                         </div>
                      </div>
 
@@ -1212,11 +1323,11 @@ const BundlePlans = () => {
                              <option value="Topcon">Topcon</option>
                            </select>
                            <select 
-                             multiple 
-                             className="bg-slate-50 border-2 border-slate-100 rounded-xl px-3 py-2 text-[10px] font-bold h-24"
-                             value={planForm.timeDuration}
-                             onChange={(e) => setPlanForm({...planForm, timeDuration: Array.from(e.target.selectedOptions, o => o.value)})}
+                             className="w-full bg-slate-50 border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none"
+                             value={planForm.timeDuration[0] || ""}
+                             onChange={(e) => setPlanForm({...planForm, timeDuration: e.target.value ? [Number(e.target.value)] : []})}
                            >
+                             <option value="">Select Duration</option>
                              <option value="30">30 Days</option>
                              <option value="60">60 Days</option>
                              <option value="90">90 Days</option>

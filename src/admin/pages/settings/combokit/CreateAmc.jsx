@@ -1145,40 +1145,75 @@ const CreateAmc = () => {
                             </div>
                           </div>
                           
-                          <div className="space-y-4">
-                            <div>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">SELECTED SERVICES</p>
-                              <div className="space-y-2">
-                                {selectedServices.length > 0 ? (
-                                  availableServices.filter(s => selectedServices.includes(s._id)).map(s => (
-                                    <div key={s._id} className="flex justify-between items-center text-[11px] font-bold">
-                                      <div className="flex items-center gap-2">
-                                        <div className="w-1.5 h-1.5 bg-cyan-500 rounded-full"></div>
-                                        <span className="text-slate-600">{s.serviceName}</span>
-                                      </div>
-                                      <span className="text-slate-800">₹{s.basePrice || 0}</span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <p className="text-[11px] text-slate-400 italic font-medium">No services selected</p>
-                                )}
-                                <div className="pt-2.5 border-t border-dashed border-slate-200 flex justify-between items-center text-[12px] font-black">
-                                  <span className="text-slate-700 uppercase tracking-tight">AMC Service Charges</span>
-                                  <span className="text-cyan-600 bg-cyan-50 px-2 py-1 rounded">₹{planForm.amcServiceCharges}</span>
+                          <div className="space-y-6">
+                            {/* Basic Price per KW Section */}
+                            <div className="space-y-2">
+                              <h6 className="text-[11px] font-bold text-slate-700 flex items-center gap-2">
+                                <div className="w-1 h-3 bg-cyan-500 rounded-full"></div>
+                                Basic Price per KW
+                              </h6>
+                              <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm">
+                                <ul className="text-[10px] text-slate-500 space-y-1 ml-3">
+                                  <li className="list-disc">This is a <span className="font-bold text-slate-700">one-time AMC base price</span> calculated per kilowatt (kW) of the system.</li>
+                                  <li className="list-disc">The system capacity (kW) is multiplied by this base price.</li>
+                                  <li className="list-disc">This charge is applied <span className="font-bold text-slate-700">once for the entire AMC plan duration</span>.</li>
+                                </ul>
+                                <div className="mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100 flex justify-between items-center">
+                                  <span className="text-[10px] font-bold text-slate-400 italic">Example: Basic Price (₹{planForm.basicPricePerKw || 1000}) × 3 kW =</span>
+                                  <span className="text-[11px] font-bold text-slate-700">₹{(planForm.basicPricePerKw || 1000) * 3}</span>
                                 </div>
                               </div>
                             </div>
 
-                            <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm relative overflow-hidden">
-                              <div className="absolute top-0 right-0 w-16 h-16 bg-emerald-50 rounded-full -mr-8 -mt-8 opacity-50"></div>
-                              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">FINAL PRICE FORMULA</p>
-                              <div className="text-[11px] font-bold text-slate-600 mb-3 leading-relaxed">
-                                (Basic Price per kW × System KW) + AMC Service Charges
+                            {/* AMC Service Charges Section */}
+                            <div className="space-y-2">
+                              <h6 className="text-[11px] font-bold text-slate-700 flex items-center gap-2">
+                                <div className="w-1 h-3 bg-cyan-500 rounded-full"></div>
+                                AMC Service Charges
+                              </h6>
+                              <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-sm">
+                                <ul className="text-[10px] text-slate-500 space-y-1 ml-3">
+                                  <li className="list-disc">These are <span className="font-bold text-slate-700">service visit charges</span> applied per visit.</li>
+                                  <li className="list-disc">Charges apply <span className="font-bold text-slate-700">per visit</span> depending on scheduled maintenance visits.</li>
+                                  <li className="list-disc">Each visit adds an additional service cost.</li>
+                                </ul>
+
+                                {selectedServices.length > 0 ? (
+                                  <div className="mt-2 pt-2 border-t border-dashed border-slate-200">
+                                    <p className="text-[9px] font-bold text-slate-400 mb-1 uppercase tracking-tight">Included Services:</p>
+                                    {availableServices.filter(s => selectedServices.includes(s._id)).map(s => (
+                                      <div key={s._id} className="flex justify-between text-[10px] font-bold text-slate-600">
+                                        <span>• {s.serviceName}</span>
+                                        <span>₹{s.basePrice || 0} / per visit</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                ) : (
+                                   <div className="mt-2 pt-2 border-t border-dashed border-slate-200">
+                                      <p className="text-[10px] text-slate-400 italic font-medium">No services selected</p>
+                                   </div>
+                                )}
+
+                                <div className="mt-2 bg-slate-50 p-2 rounded-lg border border-slate-100 flex items-center">
+                                  <span className="text-[10px] font-bold text-slate-400 italic">Example: Service Charge (₹{planForm.amcServiceCharges || 500} / per visit)</span>
+                                </div>
                               </div>
-                              <div className="flex items-center gap-2 text-[12px] font-black text-slate-800 bg-slate-50/80 p-3 rounded-lg border border-slate-100">
-                                <span className="text-slate-400 font-bold">( {planForm.basicPricePerKw} × <span className="text-slate-600">3 kW</span> ) + {planForm.amcServiceCharges} = </span>
-                                <div className="ml-auto text-emerald-500 flex items-center gap-1.5">
-                                  <span className="text-[14px]">₹{(planForm.basicPricePerKw * 3) + planForm.amcServiceCharges}</span>
+                            </div>
+
+                            {/* Final Price Box */}
+                            <div className="bg-[#0c2340] text-white rounded-xl p-4 border border-slate-800 shadow-xl relative overflow-hidden">
+                              <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-full -mr-8 -mt-8"></div>
+                              <p className="text-[9px] font-bold text-cyan-400 uppercase tracking-widest mb-2">Final Price Formula</p>
+                              <div className="text-[10px] font-bold text-slate-300 italic mb-4 leading-relaxed">
+                                (Basic Price per KW × System KW) + (Service Charge per Visit × Number of Visits)
+                              </div>
+                              <div className="bg-white/5 p-3 rounded-lg border border-white/5">
+                                <div className="text-[9px] text-slate-400 font-bold mb-2 uppercase tracking-tighter">Calculation for 3 kW system with {planForm.annualVisits || 4} visits:</div>
+                                <div className="flex items-center gap-2 text-[11px] font-black">
+                                  <span className="text-slate-300">( ₹{planForm.basicPricePerKw} × 3 ) + ( ₹{planForm.amcServiceCharges} × {planForm.annualVisits} ) = </span>
+                                  <div className="ml-auto text-cyan-400 flex items-center gap-1.5">
+                                    <span className="text-[15px]">₹{(planForm.basicPricePerKw * 3) + (planForm.amcServiceCharges * (planForm.annualVisits || 4))}</span>
+                                  </div>
                                 </div>
                               </div>
                             </div>

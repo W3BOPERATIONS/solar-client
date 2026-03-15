@@ -23,6 +23,17 @@ import { getSkus } from '../../../../services/settings/orderProcurementSettingAp
 import Select from 'react-select';
 import toast from 'react-hot-toast';
 
+// Helper to normalize/extract ID
+const getCleanId = (v) => {
+  if (!v) return "";
+  if (typeof v === 'string') return v.trim();
+  return String(v?._id || v?.id || v || "").trim();
+};
+
+function ntext(v) {
+  return String(v || '').toLowerCase().trim();
+}
+
 const CustomizeCombokit = () => {
   const { countries, states: allStates, fetchCountries, fetchStates } = useLocations();
 
@@ -85,15 +96,14 @@ const CustomizeCombokit = () => {
 
   const [showConfigureModal, setShowConfigureModal] = useState(false);
   const [assignmentForm, setAssignmentForm] = useState({
-    solarkitName: '',
     panels: [],
     inverters: [],
     boskits: [],
-    role: '',
     category: '',
     subCategory: '',
     projectType: '',
     subProjectType: '',
+    country: null,
     state: null,
     cluster: null,
     districts: []
@@ -156,15 +166,7 @@ const CustomizeCombokit = () => {
     }
   };
 
-  // When countries load, auto-select India if available
-  useEffect(() => {
-    if (countries.length > 0 && !selectedCountry) {
-      const india = countries.find(c => c.name === 'India');
-      if (india) {
-        handleCountrySelect(india._id, india.name);
-      }
-    }
-  }, [countries]);
+  // No auto-selection on load — admin must choose manually
 
   // Handle country selection
   const handleCountrySelect = (countryId, countryName) => {
@@ -190,9 +192,22 @@ const CustomizeCombokit = () => {
     try {
       setLoading(true);
       const res = await getAssignments();
-      // Handle both direct array or wrapped {success, data} responses
       const data = res?.data || (Array.isArray(res) ? res : []);
       setAssignments(data);
+
+      const stateIdsFound = [...new Set(data.map(a => getCleanId(a.state)).filter(Boolean))];
+      for (const stateId of stateIdsFound) {
+        if (!availableClusters[stateId]) {
+          try {
+            const clusterRes = await locationAPI.getAllClusters({ stateId: stateId, isActive: 'true' });
+            if (clusterRes.data && clusterRes.data.data) {
+              setAvailableClusters(prev => ({ ...prev, [stateId]: clusterRes.data.data }));
+            }
+          } catch (err) {
+            console.error(`Failed to fetch clusters for state ${stateId}`, err);
+          }
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch assignments", error);
       toast.error("Failed to fetch assignments");
@@ -221,7 +236,7 @@ const CustomizeCombokit = () => {
         }
       }
     }
-    
+
     // Strict Hierarchy Reset
     setSelectedStates(newSelectedStates);
     setSelectedClusters(new Set());
@@ -350,7 +365,7 @@ const CustomizeCombokit = () => {
     } else {
       newSelectedDistricts.add(districtId);
     }
-    
+
     // Strict Hierarchy Reset
     setSelectedDistricts(newSelectedDistricts);
     setSelectedRoles(new Set());
@@ -369,40 +384,55 @@ const CustomizeCombokit = () => {
 
   const resolveClusterName = (assignment) => {
     if (!assignment) return null;
-    
+
     // 1. Direct object check
-    const cluster = assignment.cluster || assignment.clusterId;
-    if (typeof cluster === 'object' && (cluster.name || cluster.clusterName)) {
-      return cluster.name || cluster.clusterName;
+    const clusterVal = assignment.cluster || assignment.clusterId;
+    if (clusterVal && typeof clusterVal === 'object') {
+      const name = clusterVal.name || clusterVal.clusterName || clusterVal.cluster_name;
+      if (name) return name;
     }
 
-    // 2. ID-based cache lookup
-    const nid = (v) => {
-      if (!v) return "";
-      if (typeof v === 'string') return v.trim();
-      return String(v?._id || v?.id || v || "").trim();
-    };
-    const cid = nid(cluster).toLowerCase();
-    if (cid && cid !== 'undefined' && cid !== 'null') {
-      for (const stateId in availableClusters) {
-        const found = availableClusters[stateId]?.find(c => nid(c).toLowerCase() === cid);
+    // 2. ID-based lookup in cache or assignment
+    const cid = getCleanId(clusterVal);
+    if (cid) {
+      for (const sId in availableClusters) {
+        const found = availableClusters[sId]?.find(c => getCleanId(c) === cid);
         if (found) return found.name || found.clusterName;
+      }
+      const peerWithObj = assignments.find(a => {
+        const cVal = a.cluster || a.clusterId;
+        return getCleanId(cVal) === cid && typeof cVal === 'object' && (cVal.name || cVal.clusterName);
+      });
+      if (peerWithObj) {
+        const pObj = peerWithObj.cluster || peerWithObj.clusterId;
+        return pObj.name || pObj.clusterName;
       }
     }
 
-    // 3. District-based fallback (ONLY if cluster is missing/invalid)
+    // 3. Last fallback: districts often contain cluster info in some versions of the schema
+    if (assignment.districts?.length > 0) {
+      const firstDist = assignment.districts[0];
+      if (firstDist.clusterId?.name) return firstDist.clusterId.name;
+    }
+
+    // 3. Fallback: Search by name directly if stored as string name
+    if (typeof clusterVal === 'string' && clusterVal.length > 5 && !/^[0-9a-fA-F]{24}$/.test(clusterVal)) {
+      return clusterVal;
+    }
+
+    // 4. District-based fallback (search which cluster contains these districts)
     const districtIds = (assignment.districts || assignment.districtIds || [])
-      .map(d => nid(d).toLowerCase())
+      .map(d => getCleanId(d))
       .filter(id => id && id !== 'undefined' && id !== 'null');
 
     if (districtIds.length > 0) {
       for (const cId in availableDistricts) {
         const districtsInCluster = availableDistricts[cId] || [];
-        const overlaps = districtsInCluster.some(d => districtIds.includes(nid(d._id || d).toLowerCase()));
+        const overlaps = districtsInCluster.some(d => districtIds.includes(getCleanId(d._id || d)));
         if (overlaps) {
-          const cidToFind = cId.toLowerCase().trim();
+          const cidToFind = cId.trim();
           for (const sId in availableClusters) {
-            const found = availableClusters[sId]?.find(c => nid(c._id || c).toLowerCase() === cidToFind);
+            const found = availableClusters[sId]?.find(c => getCleanId(c._id || c) === cidToFind);
             if (found) return found.name || found.clusterName;
           }
         }
@@ -479,11 +509,9 @@ const CustomizeCombokit = () => {
 
   const handleEditClick = (assignment) => {
     setAssignmentForm({
-      solarkitName: assignment.solarkitName || '',
       panels: assignment.panels || [],
       inverters: assignment.inverters || [],
       boskits: assignment.boskits || [],
-      role: assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || '',
       category: assignment.category || '',
       subCategory: assignment.subCategory || '',
       projectType: assignment.projectType || '',
@@ -512,27 +540,34 @@ const CustomizeCombokit = () => {
 
   const handleSaveClick = async () => {
     try {
-      if (!assignmentForm.solarkitName) {
-        toast.error("Please select a Solarkit name");
-        return;
-      }
-
       setLoading(true);
+
+      // Determine role from filters
+      const selRolesArr = Array.from(selectedRoles);
+      const roleToUse = currentAssignment
+        ? (currentAssignment.role || (Array.isArray(currentAssignment.cpTypes) ? currentAssignment.cpTypes[0] : currentAssignment.cpTypes))
+        : (selRolesArr.length === 1 ? selRolesArr[0] : '');
+
+      // Normalize IDs to plain strings — never send nested objects
+      const stateId = assignmentForm.state?._id || (typeof assignmentForm.state === 'string' ? assignmentForm.state : null);
+      const clusterId = assignmentForm.cluster?._id || (typeof assignmentForm.cluster === 'string' ? assignmentForm.cluster : null);
+      const countryId = selectedCountry || assignmentForm.country?._id || (typeof assignmentForm.country === 'string' ? assignmentForm.country : null);
+
       const payload = {
-        solarkitName: assignmentForm.solarkitName,
+        solarkitName: 'Custom Config',
         panels: assignmentForm.panels,
         inverters: assignmentForm.inverters,
         boskits: assignmentForm.boskits,
-        state: assignmentForm.state?._id || assignmentForm.state,
-        cluster: assignmentForm.cluster?._id || assignmentForm.cluster,
-        districts: assignmentForm.districts?.map(d => d._id || d),
-        role: assignmentForm.role,
-        cpTypes: [assignmentForm.role],
+        state: stateId,
+        cluster: clusterId || null,
+        districts: (assignmentForm.districts || []).map(d => d._id || d),
+        role: roleToUse,
+        cpTypes: [roleToUse],
         category: assignmentForm.category,
         subCategory: assignmentForm.subCategory,
         projectType: assignmentForm.projectType,
         subProjectType: assignmentForm.subProjectType,
-        country: selectedCountry || assignmentForm.state?.country?._id || assignmentForm.state?.country
+        country: countryId
       };
 
       let savedData;
@@ -575,53 +610,58 @@ const CustomizeCombokit = () => {
       return;
     }
 
+    if (selectedRoles.size === 0) {
+      toast.error("Please select a Partner type (Dealer, Franchise, or Channel Partner) from the filter above");
+      return;
+    }
+
+    // Capture EXACT values from top filters to ensure data integrity
     const stateId = Array.from(selectedStates)[0];
     const clusterId = Array.from(selectedClusters)[0];
     const districtIds = Array.from(selectedDistricts);
-    const selRolesArr = Array.from(selectedRoles);
-    const role = selRolesArr.length === 1 ? selRolesArr[0] : '';
+    const role = Array.from(selectedRoles)[0];
 
-    // Find objects from cache for auto-fill
+    // Find objects from cache for UI display inside the modal
     const countryObj = countries.find(c => c._id === selectedCountry);
     const stateObj = allStates.find(s => s._id === stateId);
-    
-    // STRICT CLUSTER RESOLUTION: Prioritize selection
+
     let clusterObj = null;
     if (clusterId) {
-      for (const sId in availableClusters) {
-        const found = availableClusters[sId]?.find(c => String(c._id || c) === String(clusterId));
-        if (found) { clusterObj = found; break; }
+      // 1. Check current state's cache
+      if (availableClusters[stateId]) {
+        clusterObj = availableClusters[stateId].find(c => String(c._id || c) === String(clusterId));
       }
-      // If not in cache, create a minimal object so it's not "lost"
+
+      // 2. Fallback: Search all cached states
       if (!clusterObj) {
-        clusterObj = { _id: clusterId, name: 'Selected Cluster' };
+        for (const sId in availableClusters) {
+          const found = availableClusters[sId]?.find(c => String(c._id || c) === String(clusterId));
+          if (found) { clusterObj = found; break; }
+        }
       }
     }
-    
+
+    // Resolve district objects
     const districtObjs = [];
-    if (districtIds.length > 0) {
-      for (const cId in availableDistricts) {
-        const matched = availableDistricts[cId]?.filter(d => districtIds.includes(String(d._id || d)));
-        if (matched?.length) districtObjs.push(...matched);
+    districtIds.forEach(id => {
+      let found = null;
+      if (clusterId && availableDistricts[clusterId]) {
+        found = availableDistricts[clusterId].find(d => String(d._id || d) === String(id));
       }
-      // If some districts were NOT found in cache, at least keep their IDs
-      if (districtObjs.length < districtIds.length) {
-        const foundIds = new Set(districtObjs.map(d => String(d._id || d)));
-        districtIds.forEach(id => {
-          if (!foundIds.has(String(id))) {
-            districtObjs.push({ _id: id, name: 'Selected District' });
-          }
-        });
+      if (!found) {
+        // Fallback search
+        for (const cId in availableDistricts) {
+          found = availableDistricts[cId]?.find(d => String(d._id || d) === String(id));
+          if (found) break;
+        }
       }
-    }
-    const finalDistricts = Array.from(new Map(districtObjs.map(d => [String(d._id || d), d])).values());
+      districtObjs.push(found || { _id: id, name: 'Selected District' });
+    });
 
     setAssignmentForm({
-      solarkitName: '',
       panels: [],
       inverters: [],
       boskits: [],
-      role: role || '',
       category: '',
       subCategory: '',
       projectType: '',
@@ -629,7 +669,8 @@ const CustomizeCombokit = () => {
       country: countryObj || null,
       state: stateObj || null,
       cluster: clusterObj || null,
-      districts: finalDistricts
+      districts: districtObjs,
+      role: role // Auto-assign the selected role from filter
     });
     setCurrentAssignment(null);
     setShowConfigureModal(true);
@@ -922,8 +963,8 @@ const CustomizeCombokit = () => {
                   key={`${district._id}-${index}`}
                   onClick={() => handleDistrictClick(district._id)}
                   className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${selectedDistricts.has(district._id)
-                      ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-100'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
+                    ? 'bg-emerald-600 text-white border-emerald-600 ring-2 ring-emerald-100'
+                    : 'bg-white text-slate-600 border-slate-200 hover:border-emerald-400 hover:bg-emerald-50'
                     }`}
                 >
                   {district.name}
@@ -935,7 +976,7 @@ const CustomizeCombokit = () => {
       )}
 
       {/* Role Selection */}
-      {selectedDistricts.size > 0 && (
+      {selectedStates.size > 0 && (
         <div className="card mb-6 shadow-lg rounded-lg bg-white">
           <div className="card-body p-6">
             <h3 className="text-lg font-semibold text-gray-800 mb-4 pl-3 border-l-4 border-blue-600">Select Partner</h3>
@@ -957,18 +998,20 @@ const CustomizeCombokit = () => {
               </button>
             </div>
 
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 pt-2">
-              {partners.map((p, index) => (
-                <button
-                  key={`${p._id}-${index}`}
-                  onClick={() => handleRoleClick(p.name)}
-                  className={`px-4 py-2.5 rounded-lg border text-xs font-semibold transition-all duration-200 shadow-sm ${selectedRoles.has(p.name)
-                      ? 'bg-orange-600 text-white border-orange-600 ring-2 ring-orange-100'
-                      : 'bg-white text-slate-600 border-slate-200 hover:border-orange-400 hover:bg-orange-50'
+            <div className="flex flex-wrap gap-4">
+              {partners.map((partner, index) => (
+                <div
+                  key={`${partner._id}-${index}`}
+                  onClick={() => handleRoleClick(partner.name)}
+                  className={`card border rounded-lg px-8 py-4 text-center cursor-pointer transition-all duration-200 hover:shadow-md ${selectedRoles.has(partner.name)
+                    ? partner.name.toLowerCase() === 'dealer' ? 'bg-orange-600 text-white border-orange-600' :
+                      partner.name.toLowerCase() === 'franchise' ? 'bg-blue-600 text-white border-blue-600' :
+                        'bg-indigo-600 text-white border-indigo-600'
+                    : 'border-slate-200 text-slate-600 hover:border-blue-400 hover:bg-blue-50'
                     }`}
                 >
-                  {p.name}
-                </button>
+                  <p className="font-bold tracking-wide">{partner.name}</p>
+                </div>
               ))}
             </div>
           </div>
@@ -987,7 +1030,11 @@ const CustomizeCombokit = () => {
               </div>
               <button
                 onClick={addNewCustomization}
-                className="flex items-center gap-2 bg-indigo-600 text-white px-5 py-2.5 rounded-lg hover:bg-indigo-700 transition-all shadow-md text-sm font-bold active:scale-95"
+                disabled={!selectedCountry || !selectedStates.size || !selectedRoles.size}
+                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all shadow-md text-sm font-bold active:scale-95 ${(!selectedCountry || !selectedStates.size || !selectedRoles.size)
+                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
+                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                  }`}
               >
                 <Plus className="w-4 h-4" />
                 Add New Configuration
@@ -1019,11 +1066,11 @@ const CustomizeCombokit = () => {
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
                       {[
-                        "Solarkit Name", "Panel", "Inverter", "Boskit", "State",
+                        "Panel", "Inverter", "Boskit", "Country", "State",
                         "Cluster", "Districts", "Partner", "Category",
                         "Sub Category", "Project Type", "Sub Project Type", "Action"
                       ].map((header) => (
-                        <th key={header} className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest">
+                        <th key={header} className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-widest whitespace-nowrap">
                           {header}
                         </th>
                       ))}
@@ -1034,79 +1081,71 @@ const CustomizeCombokit = () => {
                       const filtered = assignments.filter(assignment => {
                         // Always show temporary rows being edited
                         if (assignment.tempId) return true;
-                        
+
                         // BYPASS: Always show the record that was just saved or updated
                         const assignmentId = assignment._id || assignment.id;
                         if (lastSavedConfig && (assignmentId === lastSavedConfig._id || assignmentId === lastSavedConfig.id)) {
                           return true;
                         }
 
-                        // Robust Normalization
-                        const nid = (v) => {
-                          if (!v) return "";
-                          if (typeof v === 'string') return v.trim();
-                          return String(v?._id || v?.id || v || "").trim();
-                        };
-                        const ntext = (v) => String(v || "").toLowerCase().trim();
-
-                        // 1. Extract Values
-                        const aCountryId = nid(assignment.country || assignment.countryId);
-                        const aStateId = nid(assignment.state || assignment.stateId);
-                        const aClusterId = nid(assignment.cluster || assignment.clusterId);
-                        const aDistricts = (assignment.districts || assignment.districtIds || []).map(d => nid(d));
-                        const aRole = ntext(assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || "");
-                        const aStateCountryId = nid(assignment.state?.country || assignment.state?.countryId || assignment.state?.country_id);
-
-                        // 2. Extract Filters
-                        const fCountryId = nid(selectedCountry);
-                        const fStates = Array.from(selectedStates).map(nid);
-                        const fClusters = Array.from(selectedClusters).map(nid);
-                        const fDistricts = Array.from(selectedDistricts).map(nid);
-                        const fRoles = Array.from(selectedRoles).map(ntext);
-
-                        const hasStateFilter = fStates.length > 0;
-                        const hasClusterFilter = fClusters.length > 0;
-                        const hasDistrictFilter = fDistricts.length > 0;
-                        const hasRoleFilter = fRoles.length > 0;
-
-                        // 3. Apply Active Filters (STRICT HIERARCHY)
+                        // --- Extract values from the assignment record ---
                         
-                        // Level 1: Country
-                        if (fCountryId) {
-                          const matchingCountry = (aCountryId === fCountryId) || (aStateCountryId === fCountryId);
-                          if (!matchingCountry && (aCountryId || aStateCountryId)) return false;
-                        }
+                        // State: may be a plain string ID or a populated object
+                        const aStateId = getCleanId(assignment.state);
 
-                        // Level 2: State
-                        if (hasStateFilter) {
-                          if (!fStates.includes(aStateId)) return false;
-                        }
-
-                        // Level 3: Cluster
-                        if (hasClusterFilter) {
-                          if (aClusterId) {
-                            if (!fClusters.includes(aClusterId)) return false;
-                          } else if (aDistricts.length > 0) {
-                            // Support district-based matching only if explicit cluster ID is missing
-                            const districtMatch = fClusters.some(fCid => {
-                              const clusterDistricts = (availableDistricts[fCid] || []).map(d => nid(d._id || d));
-                              return aDistricts.some(aDid => clusterDistricts.includes(aDid));
-                            });
-                            if (!districtMatch) return false;
-                          } else {
-                            return false; 
+                        // Country: may be at top-level, nested inside populated state object,
+                        // OR we find it from the master state list using its ID
+                        let aCountryId = getCleanId(assignment.country) || getCleanId(assignment.state?.country);
+                        if (!aCountryId && aStateId && allStates?.length > 0) {
+                          const stateObj = allStates.find(s => getCleanId(s) === aStateId);
+                          if (stateObj) {
+                            aCountryId = getCleanId(stateObj.countryId || stateObj.country);
                           }
                         }
 
-                        // Level 4: District
-                        if (hasDistrictFilter) {
-                          const districtMatch = aDistricts.some(d => fDistricts.includes(d));
-                          if (!districtMatch) return false;
+                        // Cluster: may be plain string ID or populated object
+                        const aClusterId = getCleanId(assignment.cluster);
+
+                        // Districts: array of IDs or objects
+                        const aDistricts = (assignment.districts || []).map(getCleanId).filter(Boolean);
+
+                        // Role
+                        const aRole = ntext(assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes));
+
+                        // --- Extract active filter values ---
+                        const fCountryId = getCleanId(selectedCountry);
+                        const fStates    = Array.from(selectedStates).map(getCleanId);
+                        const fClusters  = Array.from(selectedClusters).map(getCleanId);
+                        const fDistricts = Array.from(selectedDistricts).map(getCleanId);
+                        const fRoles     = Array.from(selectedRoles).map(ntext);
+
+                        // --- Apply filters (only active levels filter records) ---
+
+                        // Country filter
+                        if (fCountryId) {
+                          if (aCountryId !== fCountryId) return false;
                         }
 
-                        // Level 5: Partner (Role)
-                        if (hasRoleFilter) {
-                          if (!fRoles.includes(aRole)) return false;
+                        // State filter
+                        if (fStates.length > 0) {
+                          if (!aStateId || !fStates.includes(aStateId)) return false;
+                        }
+
+                        // Cluster filter
+                        if (fClusters.length > 0) {
+                          // If the record has no cluster saved, still show it (cluster not required)
+                          if (aClusterId && !fClusters.includes(aClusterId)) return false;
+                        }
+
+                        // District filter
+                        if (fDistricts.length > 0) {
+                          // Show if record has ANY of the selected districts, or no districts saved
+                          if (aDistricts.length > 0 && !aDistricts.some(d => fDistricts.includes(d))) return false;
+                        }
+
+                        // Role filter
+                        if (fRoles.length > 0) {
+                          if (aRole && !fRoles.includes(aRole)) return false;
                         }
 
                         return true;
@@ -1115,33 +1154,47 @@ const CustomizeCombokit = () => {
                       if (filtered.length === 0) {
                         return (
                           <tr>
-                            <td colSpan="13" className="text-center py-20 bg-gray-50/30">
+                            <td colSpan="12" className="text-center py-20 bg-gray-50/30">
                               <div className="w-16 h-16 bg-blue-50 text-blue-400 rounded-full flex items-center justify-center mx-auto mb-4">
                                 <Filter className="w-8 h-8" />
                               </div>
                               <p className="text-gray-500 font-medium">No configurations found for the selected filters.</p>
-                              {assignments.length > 0 && (
+                              <div className="flex flex-col items-center gap-3 mt-4">
                                 <button
-                                  onClick={() => { clearAllStates(); clearAllRoles(); }}
-                                  className="mt-4 text-blue-600 underline text-sm font-semibold"
+                                  onClick={() => { setSelectedCountry(''); clearAllStates(); clearAllRoles(); }}
+                                  className="text-blue-600 underline text-sm font-semibold hover:text-blue-800"
                                 >
-                                  Clear all filters to see all configurations
+                                  Clear All Filters
                                 </button>
-                              )}
+                                <button
+                                  onClick={fetchAssignments}
+                                  className="text-indigo-600 underline text-sm font-semibold hover:text-indigo-800"
+                                >
+                                  Try Refreshing Data
+                                </button>
+                                <p className="mt-4 text-[10px] text-gray-400">Total records stored: {assignments.length}</p>
+                              </div>
                             </td>
                           </tr>
                         );
                       }
 
                       return filtered.map((assignment, index) => {
+                        const aStateId = getCleanId(assignment.state);
+                        let aCountryId = getCleanId(assignment.country) || getCleanId(assignment.state?.country);
+                        if (!aCountryId && aStateId && allStates?.length > 0) {
+                          const stateObj = allStates.find(s => getCleanId(s) === aStateId);
+                          if (stateObj) {
+                            aCountryId = getCleanId(stateObj.countryId || stateObj.country);
+                          }
+                        }
+
                         const districtNames = assignment.districts?.map(d => d.name).join(", ") || "None";
                         const districtsDisplay = districtNames.length > 50 ? districtNames.substring(0, 50) + "..." : districtNames;
 
                         return (
                           <tr key={`${assignment._id}-${index}`} className="hover:bg-gray-50 transition-colors">
-                            <td className="px-4 py-4 text-xs font-medium text-gray-900 min-w-[150px]">
-                              <div className="font-semibold text-blue-700">{assignment.solarkitName || '-'}</div>
-                            </td>
+
 
                             <td className="px-2 py-4 min-w-[180px]">
                               <div className="flex flex-wrap gap-1">
@@ -1168,7 +1221,10 @@ const CustomizeCombokit = () => {
                             </td>
 
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[100px]">
-                              <span className="font-medium">{assignment.state?.name}</span>
+                               <span className="font-medium">{assignment.country?.name || (countries.find(c => getCleanId(c) === aCountryId)?.name) || <span className="text-gray-400 italic">India</span>}</span>
+                            </td>
+                            <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[100px]">
+                              <span className="font-medium">{assignment.state?.name || (allStates.find(s => getCleanId(s) === aStateId)?.name) || <span className="text-gray-400 italic">Not Found</span>}</span>
                             </td>
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
                               <span>{resolveClusterName(assignment) || <span className="text-gray-400 italic">Not Assigned</span>}</span>
@@ -1180,8 +1236,8 @@ const CustomizeCombokit = () => {
                             <td className="px-4 py-4 text-[11px] text-gray-600 min-w-[120px]">
                               {assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) ? (
                                 <span className={`px-2 py-0.5 rounded-full font-semibold ${(assignment.role || assignment.cpTypes?.[0])?.toLowerCase() === 'dealer'
-                                    ? 'bg-blue-100 text-blue-700'
-                                    : 'bg-orange-100 text-orange-700'
+                                  ? 'bg-blue-100 text-blue-700'
+                                  : 'bg-orange-100 text-orange-700'
                                   }`}>
                                   {assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes)}
                                 </span>
@@ -1296,27 +1352,7 @@ const CustomizeCombokit = () => {
                     Plan Identity
                   </h4>
                   <div className="space-y-4">
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solarkit Name</label>
-                      <Select
-                        styles={selectStyles}
-                        placeholder="Select Kit Name"
-                        value={assignmentForm.solarkitName ? { label: assignmentForm.solarkitName, value: assignmentForm.solarkitName } : null}
-                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, solarkitName: opt.value })}
-                        options={solarKitsList.map(kit => ({ label: kit.name, value: kit.name }))}
-                      />
-                    </div>
 
-                    <div>
-                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Partner Role</label>
-                      <Select
-                        styles={selectStyles}
-                        placeholder="Select Role"
-                        value={assignmentForm.role ? { label: assignmentForm.role, value: assignmentForm.role } : null}
-                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, role: opt.value })}
-                        options={partners.map(p => ({ label: p.name, value: p.name }))}
-                      />
-                    </div>
 
                     <div className="grid grid-cols-2 gap-4">
                       <div>
@@ -1432,7 +1468,7 @@ const CustomizeCombokit = () => {
                     <Filter className="w-4 h-4" />
                   </div>
                   <div className="text-[10px] font-bold uppercase tracking-tight">
-                    Applying to <span className="text-blue-600">{assignmentForm.state?.name || 'Selected'}</span> State context
+                    Applying to <span className="text-blue-600">{(assignmentForm.cluster?.name || assignmentForm.state?.name) || 'Selected'}</span> context
                   </div>
                 </div>
                 <div className="flex gap-4">
