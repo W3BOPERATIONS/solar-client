@@ -20,6 +20,7 @@ import {
   getProjectCategoryMappings
 } from '../../../../services/combokit/combokitApi';
 import { getSkus } from '../../../../services/settings/orderProcurementSettingApi';
+import { getAllManufacturers } from '../../../../services/brand/brandApi';
 import Select from 'react-select';
 import toast from 'react-hot-toast';
 
@@ -120,7 +121,7 @@ const CustomizeCombokit = () => {
 
   const fetchMasterData = async () => {
     try {
-      const [kits, cats, subCats, projs, subProjs, panels, inverters, bos, mappings] = await Promise.all([
+      const [kits, cats, subCats, projs, subProjs, panels, inverters, bos, mappings, manufacturers] = await Promise.all([
         getSolarKits(),
         getCategories(),
         getSubCategories(),
@@ -129,7 +130,8 @@ const CustomizeCombokit = () => {
         getSkus({ category: 'Solar Panel' }),
         getSkus({ category: 'Inverter' }),
         getSkus({ category: 'BOS' }),
-        getProjectCategoryMappings()
+        getProjectCategoryMappings(),
+        getAllManufacturers()
       ]);
 
       setSolarKitsList(kits || []);
@@ -145,12 +147,21 @@ const CustomizeCombokit = () => {
       setMasterSubProjectTypes(subProjs || []);
       setProjectMappings(mappings || []);
 
-      const pData = Array.isArray(panels) ? panels : panels?.data || [];
-      const iData = Array.isArray(inverters) ? inverters : inverters?.data || [];
-      const bData = Array.isArray(bos) ? bos : bos?.data || [];
+      const mData = Array.isArray(manufacturers) ? manufacturers : manufacturers?.data || [];
+      
+      // Filter brands for Panels and Inverters
+      const panelBrands = mData
+        .filter(m => m.product?.toLowerCase() === 'panel' && m.comboKit)
+        .map(m => m.brand || m.companyName);
+      
+      const inverterBrands = mData
+        .filter(m => m.product?.toLowerCase() === 'inverter' && m.comboKit)
+        .map(m => m.brand || m.companyName);
 
-      setPanelOptions(pData.map(p => p.skuName || p.name));
-      setInverterOptions(iData.map(i => i.skuName || i.name));
+      setPanelOptions([...new Set(panelBrands)].sort());
+      setInverterOptions([...new Set(inverterBrands)].sort());
+
+      const bData = Array.isArray(bos) ? bos : bos?.data || [];
       setBoskitOptions(bData.map(b => b.skuName || b.name));
     } catch (err) {
       console.error("Error fetching master data", err);
@@ -1430,29 +1441,41 @@ const CustomizeCombokit = () => {
                   <div className="space-y-4">
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Solar Panel Brands</label>
-                      <textarea
-                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                        placeholder="e.g. Adani 540W, Tata 550W (Comma separated)"
-                        value={assignmentForm.panels?.join(", ")}
-                        onChange={(e) => setAssignmentForm({ ...assignmentForm, panels: e.target.value.split(",").map(v => v.trim()) })}
+                      <Select
+                        isMulti
+                        styles={selectStyles}
+                        placeholder="Select Brands"
+                        value={assignmentForm.panels?.map(p => ({ label: p, value: p })) || []}
+                        onChange={(selected) => setAssignmentForm({ ...assignmentForm, panels: selected ? selected.map(s => s.value) : [] })}
+                        options={panelOptions.map(p => ({ label: p, value: p }))}
+                        className="react-select-container"
+                        classNamePrefix="react-select"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Inverter Models</label>
-                      <textarea
-                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                        placeholder="e.g. Growatt 5kW, Havells (Comma separated)"
-                        value={assignmentForm.inverters?.join(", ")}
-                        onChange={(e) => setAssignmentForm({ ...assignmentForm, inverters: e.target.value.split(",").map(v => v.trim()) })}
+                      <Select
+                        isMulti
+                        styles={selectStyles}
+                        placeholder="Select Models"
+                        value={assignmentForm.inverters?.map(i => ({ label: i, value: i })) || []}
+                        onChange={(selected) => setAssignmentForm({ ...assignmentForm, inverters: selected ? selected.map(s => s.value) : [] })}
+                        options={inverterOptions.map(i => ({ label: i, value: i }))}
+                        className="react-select-container"
+                        classNamePrefix="react-select"
                       />
                     </div>
                     <div>
                       <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">BOS Kit Components</label>
-                      <textarea
-                        className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-semibold text-slate-700 focus:border-cyan-500 focus:outline-none transition-all h-24 no-scrollbar"
-                        placeholder="e.g. ACDB, DCDB, MC4 (Comma separated)"
-                        value={assignmentForm.boskits?.join(", ")}
-                        onChange={(e) => setAssignmentForm({ ...assignmentForm, boskits: e.target.value.split(",").map(v => v.trim()) })}
+                      <Select
+                        isMulti
+                        styles={selectStyles}
+                        placeholder="Select Components"
+                        value={assignmentForm.boskits?.map(b => ({ label: b, value: b })) || []}
+                        onChange={(selected) => setAssignmentForm({ ...assignmentForm, boskits: selected ? selected.map(s => s.value) : [] })}
+                        options={boskitOptions.map(b => ({ label: b, value: b }))}
+                        className="react-select-container"
+                        classNamePrefix="react-select"
                       />
                     </div>
                   </div>

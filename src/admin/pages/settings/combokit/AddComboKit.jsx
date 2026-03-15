@@ -241,15 +241,15 @@ export default function AddComboKit() {
 
   const renderLiveCount = (configs, kits, type, isSelected) => {
     if (configs === 0 && kits === 0) return null;
-    
+
     // Choose color classes based on the card type
     let colorClass = 'text-blue-600';
     let selectedColorClass = 'text-blue-100';
-    
+
     if (type === 'cluster') { colorClass = 'text-purple-600'; selectedColorClass = 'text-purple-100'; }
     else if (type === 'district') { colorClass = 'text-cyan-600'; selectedColorClass = 'text-cyan-100'; }
     else if (type === 'plan') { colorClass = 'text-green-600'; selectedColorClass = 'text-green-100'; }
-    
+
     return (
       <div className={`mt-1 flex flex-col items-center gap-0 leading-tight ${isSelected ? selectedColorClass : colorClass}`}>
         <p className="text-[10px] font-black uppercase tracking-tighter">
@@ -687,7 +687,7 @@ export default function AddComboKit() {
       } else {
         setIsNewKitTab(true);
         resetComboKitForm();
-        
+
         // Fetch and load SolarKit BOM for the new kit
         if (row && row.solarkitName) {
           const kitModel = solarKits.find(k => k.name === row.solarkitName);
@@ -1423,7 +1423,7 @@ export default function AddComboKit() {
                           </div>
                         ) : (
                           <div className="text-[10px] text-slate-400 italic text-center py-2 bg-slate-50/50 rounded-lg border border-dashed border-slate-200">
-                             No kits created yet
+                            No kits created yet
                           </div>
                         )}
                       </div>
@@ -1717,17 +1717,17 @@ export default function AddComboKit() {
                     {showBomSection && (
                       <div className="mt-8 space-y-6">
                         <div className="flex items-center justify-between mb-2">
-                           <h5 className="text-lg font-bold text-gray-800 flex items-center gap-2">
-                             <Package size={20} className="text-blue-600" />
-                             Bill of Materials (BOM)
-                           </h5>
-                           <button 
-                             type="button"
-                             onClick={addBomSection}
-                             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2"
-                           >
-                             <Plus size={14} /> Add BOM Section
-                           </button>
+                          <h5 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                            <Package size={20} className="text-blue-600" />
+                            Bill of Materials (BOM)
+                          </h5>
+                          <button
+                            type="button"
+                            onClick={addBomSection}
+                            className="px-4 py-2 bg-blue-600 text-white rounded-lg text-xs font-bold hover:bg-blue-700 transition-all flex items-center gap-2"
+                          >
+                            <Plus size={14} /> Add BOM Section
+                          </button>
                         </div>
 
                         {bomSections.map((section, idx) => (
@@ -2488,7 +2488,7 @@ export default function AddComboKit() {
               <div className="space-y-2.5">
                 <label className="text-xs font-black text-slate-500 uppercase tracking-widest ml-1 flex items-center gap-2">
                   <div className="w-1.5 h-1.5 bg-orange-500 rounded-full"></div>
-                  AMC Plans
+                  Partner Plans
                 </label>
                 <Select
                   isMulti

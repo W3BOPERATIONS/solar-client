@@ -1200,25 +1200,8 @@ const CreateAmc = () => {
                               </div>
                             </div>
 
-                            {/* Final Price Box */}
-                            <div className="bg-[#0c2340] text-white rounded-xl p-4 border border-slate-800 shadow-xl relative overflow-hidden">
-                              <div className="absolute top-0 right-0 w-16 h-16 bg-cyan-500/10 rounded-full -mr-8 -mt-8"></div>
-                              <p className="text-[9px] font-bold text-cyan-400 uppercase tracking-widest mb-2">Final Price Formula</p>
-                              <div className="text-[10px] font-bold text-slate-300 italic mb-4 leading-relaxed">
-                                (Basic Price per KW × System KW) + (Service Charge per Visit × Number of Visits)
-                              </div>
-                              <div className="bg-white/5 p-3 rounded-lg border border-white/5">
-                                <div className="text-[9px] text-slate-400 font-bold mb-2 uppercase tracking-tighter">Calculation for 3 kW system with {planForm.annualVisits || 4} visits:</div>
-                                <div className="flex items-center gap-2 text-[11px] font-black">
-                                  <span className="text-slate-300">( ₹{planForm.basicPricePerKw} × 3 ) + ( ₹{planForm.amcServiceCharges} × {planForm.annualVisits} ) = </span>
-                                  <div className="ml-auto text-cyan-400 flex items-center gap-1.5">
-                                    <span className="text-[15px]">₹{(planForm.basicPricePerKw * 3) + (planForm.amcServiceCharges * (planForm.annualVisits || 4))}</span>
-                                  </div>
-                                </div>
-                              </div>
                             </div>
                           </div>
-                        </div>
 
                         <div>
                           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2 ml-1">PLAN DESCRIPTION</label>
