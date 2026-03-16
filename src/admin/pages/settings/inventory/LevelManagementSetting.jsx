@@ -1,18 +1,24 @@
 // InventoryLevelManagementSetting.jsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { Eye, EyeOff, Filter, RefreshCw, Settings, Search, X, Loader } from 'lucide-react';
+import { Eye, EyeOff, Filter, RefreshCw, Settings, Search, X, Loader, MapPin, Globe, Factory, Package } from 'lucide-react';
 import { locationAPI } from '../../../../api/api';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
 import { productApi } from '../../../../api/productApi';
+import { getAllManufacturers } from '../../../../services/brand/brandApi';
 import toast from 'react-hot-toast';
 
 const InventoryLevelManagementSetting = () => {
-  // --- State Management ---
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedCluster, setSelectedCluster] = useState('');
-
-  const [states, setStates] = useState([]);
-  const [clusters, setClusters] = useState([]);
+  // --- Independent Location State (avoids cascading hook effects and CastErrors) ---
+  const [locationData, setLocationData] = useState({
+    countries: [],
+    states: [],
+    clusters: [],
+    districts: []
+  });
+  const [selCountry, setSelCountry] = useState('');
+  const [selState, setSelState] = useState('');
+  const [selCluster, setSelCluster] = useState('');
+  const [selDistrict, setSelDistrict] = useState('');
 
   // Dynamic Master API States
   const [dynamicCategories, setDynamicCategories] = useState([]);
@@ -38,17 +44,120 @@ const InventoryLevelManagementSetting = () => {
     sku: ''
   });
 
-  // Load Initial Data
+  // Load Initial Data on mount
   useEffect(() => {
-    loadStates();
     loadBrands();
     loadFiltersData();
+    fetchCountries();
   }, []);
+
+  // Fetch states when country changes
+  useEffect(() => {
+    if (selCountry) {
+      fetchStatesLocal(selCountry);
+    } else {
+      setLocationData(prev => ({ ...prev, states: [], clusters: [], districts: [] }));
+    }
+    setSelState('');
+    setSelCluster('');
+    setSelDistrict('');
+  }, [selCountry]);
+
+  // Fetch clusters when state changes
+  useEffect(() => {
+    if (selState) {
+      fetchClustersLocal(selState);
+    } else {
+      setLocationData(prev => ({ ...prev, clusters: [], districts: [] }));
+    }
+    setSelCluster('');
+    setSelDistrict('');
+  }, [selState]);
+
+  // Fetch districts when cluster changes
+  useEffect(() => {
+    if (selCluster) {
+      fetchDistrictsLocal(selCluster);
+    } else {
+      setLocationData(prev => ({ ...prev, districts: [] }));
+    }
+    setSelDistrict('');
+  }, [selCluster]);
+
+  // Fetch inventory whenever selections or filters change
+  useEffect(() => {
+    if (selCountry) {
+      fetchInventory();
+    } else {
+      setInventoryData([]);
+    }
+  }, [selCountry, selState, selCluster, selDistrict, activeFilters]);
+
+  // --- Location Fetchers (direct API — avoids [object Object] CastError from hook internals) ---
+  const fetchCountries = async () => {
+    try {
+      const res = await locationAPI.getAllCountries({ isActive: true });
+      setLocationData(prev => ({ ...prev, countries: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch countries', err);
+    }
+  };
+
+  const fetchStatesLocal = async (countryId) => {
+    try {
+      const params = { isActive: true };
+      if (countryId !== 'all') params.countryId = countryId;
+      const res = await locationAPI.getAllStates(params);
+      setLocationData(prev => ({ ...prev, states: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch states', err);
+      setLocationData(prev => ({ ...prev, states: [] }));
+    }
+  };
+
+  const fetchClustersLocal = async (stateId) => {
+    try {
+      const params = { isActive: true };
+      if (stateId !== 'all') params.stateId = stateId;
+      const res = await locationAPI.getAllClusters(params);
+      setLocationData(prev => ({ ...prev, clusters: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch clusters', err);
+      setLocationData(prev => ({ ...prev, clusters: [] }));
+    }
+  };
+
+  const fetchDistrictsLocal = async (clusterId) => {
+    try {
+      if (clusterId === 'all') {
+        const params = { isActive: true };
+        if (selState && selState !== 'all') params.stateId = selState;
+        const res = await locationAPI.getAllDistricts(params);
+        setLocationData(prev => ({ ...prev, districts: res.data?.data || [] }));
+      } else {
+        const res = await locationAPI.getClusterById(clusterId);
+        setLocationData(prev => ({ ...prev, districts: res.data?.data?.districts || [] }));
+      }
+    } catch (err) {
+      console.error('Failed to fetch districts', err);
+      setLocationData(prev => ({ ...prev, districts: [] }));
+    }
+  };
 
   const loadBrands = async () => {
     try {
-      const res = await inventoryApi.getBrands();
-      setBrands(res.data || []);
+      const res = await getAllManufacturers();
+      // res is response.data from brandApi (already unwrapped)
+      const manufacturers = Array.isArray(res) ? res : (res?.data || res?.manufacturers || []);
+      // Deduplicate by brandName
+      const seen = new Set();
+      const unique = manufacturers.filter(m => {
+        const name = m.brandName || m.companyName || m.company || '';
+        if (!name || seen.has(name)) return false;
+        seen.add(name);
+        return true;
+      });
+      setBrands(unique);
     } catch (error) {
       console.error("Failed to load brands", error);
     }
@@ -56,62 +165,68 @@ const InventoryLevelManagementSetting = () => {
 
   const loadFiltersData = async () => {
     try {
-      const [catRes, subCatRes, pTypeRes, subPTypeRes] = await Promise.all([
+      const [catRes, subCatRes, subPTypeRes, mappingsRes] = await Promise.all([
         productApi.getCategories(),
         productApi.getSubCategories(),
-        productApi.getProjectTypes(),
-        productApi.getSubProjectTypes()
+        productApi.getSubProjectTypes(),
+        productApi.getProjectCategoryMappings()   // Real source for project type ranges
       ]);
-      setDynamicCategories(catRes.data?.data || []);
-      setDynamicSubCategories(subCatRes.data?.data || []);
-      setDynamicProjectTypes(pTypeRes.data?.data || []);
-      setDynamicSubProjectTypes(subPTypeRes.data?.data || []);
+
+      // Handle different possible response shapes from the API
+      const extract = (res) => {
+        const d = res?.data;
+        if (!d) return [];
+        if (Array.isArray(d)) return d;
+        if (Array.isArray(d.data)) return d.data;
+        return [];
+      };
+
+      setDynamicCategories(extract(catRes));
+      setDynamicSubCategories(extract(subCatRes));
+      setDynamicSubProjectTypes(extract(subPTypeRes));
+
+      // Build unique project type ranges from mappings (e.g. "3 to 30 kW")
+      const mappings = extract(mappingsRes);
+      const seen = new Set();
+      const uniqueRanges = [];
+      mappings.forEach(m => {
+        if (m.projectTypeFrom !== undefined && m.projectTypeTo !== undefined) {
+          const key = `${m.projectTypeFrom}-${m.projectTypeTo}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueRanges.push({
+              _id: key,
+              name: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`,
+              from: m.projectTypeFrom,
+              to: m.projectTypeTo
+            });
+          }
+        }
+      });
+      // Sort by projectTypeFrom ascending
+      uniqueRanges.sort((a, b) => a.from - b.from);
+      setDynamicProjectTypes(uniqueRanges);
     } catch (error) {
       console.error("Failed to load master filter data:", error);
     }
   };
 
-  // Fetch Inventory when filters changed
-  useEffect(() => {
-    if (selectedCluster) {
-      fetchInventory();
-    } else {
-      setInventoryData([]);
-    }
-  }, [selectedCluster, activeFilters]);
-
-
-  const loadStates = async () => {
-    try {
-      const response = await locationAPI.getAllStates({ isActive: true });
-      setStates(response.data.data || []);
-    } catch (error) {
-      console.error("Failed to load states", error);
-    }
-  };
-
-  const loadClusters = async (stateId) => {
-    try {
-      const response = await locationAPI.getAllClusters({ stateId: stateId, isActive: true });
-      setClusters(response.data.data || []);
-    } catch (error) {
-      console.error("Failed to load clusters", error);
-    }
-  };
 
   const fetchInventory = async () => {
     try {
       setLoading(true);
       const params = {
-        state: selectedState,
-        cluster: selectedCluster,
+        country: selCountry === 'all' ? undefined : selCountry,
+        state: selState === 'all' ? undefined : selState,
+        cluster: selCluster === 'all' ? undefined : selCluster,
+        district: selDistrict === 'all' ? undefined : selDistrict,
         ...activeFilters
       };
-      // Remove empty params
-      Object.keys(params).forEach(key => !params[key] && delete params[key]);
+      // Remove empty/undefined params
+      Object.keys(params).forEach(key => (params[key] === undefined || params[key] === '') && delete params[key]);
 
       const response = await inventoryApi.getItems(params);
-      setInventoryData(response.data.items || []);
+      setInventoryData(response.data?.items || []);
     } catch (error) {
       console.error("Failed to fetch inventory", error);
     } finally {
@@ -120,20 +235,50 @@ const InventoryLevelManagementSetting = () => {
   };
 
   // --- Helper Functions ---
-  const handleStateSelect = (stateId) => {
-    if (selectedState === stateId) {
-      setSelectedState('');
-      setClusters([]);
+  const handleCountrySelect = (countryId) => {
+    if (countryId === 'all') {
+      setSelCountry(selCountry === 'all' ? '' : 'all');
     } else {
-      setSelectedState(stateId);
-      loadClusters(stateId);
+      setSelCountry(prev => prev === countryId ? '' : countryId);
     }
-    setSelectedCluster('');
+  };
+
+  const handleStateSelect = (stateId) => {
+    if (stateId === 'all') {
+      setSelState(selState === 'all' ? '' : 'all');
+    } else {
+      setSelState(prev => prev === stateId ? '' : stateId);
+    }
   };
 
   const handleClusterSelect = (clusterId) => {
-    setSelectedCluster(prev => prev === clusterId ? '' : clusterId);
+    if (clusterId === 'all') {
+      setSelCluster(selCluster === 'all' ? '' : 'all');
+    } else {
+      setSelCluster(prev => prev === clusterId ? '' : clusterId);
+    }
   };
+
+  const handleDistrictSelect = (districtId) => {
+    if (districtId === 'all') {
+      setSelDistrict(selDistrict === 'all' ? '' : 'all');
+    } else {
+      setSelDistrict(prev => prev === districtId ? '' : districtId);
+    }
+  };
+
+  const LocationCard = ({ title, subtitle, isSelected, onClick, colorClass = 'border-blue-500 bg-blue-50' }) => (
+    <div
+      onClick={onClick}
+      className={`p-4 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-24 shadow-sm hover:shadow-md ${isSelected
+        ? `${colorClass} shadow-lg -translate-y-1 text-white border-transparent`
+        : 'border-transparent bg-white hover:border-gray-200'
+        }`}
+    >
+      <div className={`font-bold text-sm ${isSelected ? 'text-white' : 'text-gray-800'} mb-1`}>{title}</div>
+      {subtitle && <div className={`text-[10px] uppercase font-bold tracking-wider ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>{subtitle}</div>}
+    </div>
+  );
 
   // --- Filter Handlers ---
   const handleResetFilters = () => {
@@ -197,30 +342,7 @@ const InventoryLevelManagementSetting = () => {
   };
 
   // --- Render Clusters ---
-  const renderClusters = () => {
-    if (!selectedState) return null;
-
-    return (
-      <div className="mt-8">
-        <h5 className="text-lg font-bold text-gray-800 mb-4">Select Clusters</h5>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {clusters.map(cluster => (
-            <div
-              key={cluster._id}
-              className={`cursor-pointer border border-gray-300 rounded p-4 text-center transition-all ${selectedCluster === cluster._id
-                ? 'bg-[#17a2b8] text-white border-[#17a2b8]'
-                : 'bg-white text-gray-800 hover:border-gray-400'
-                }`}
-              onClick={() => handleClusterSelect(cluster._id)}
-            >
-              <div className="font-bold text-sm tracking-wide">{cluster.name}</div>
-            </div>
-          ))}
-          {clusters.length === 0 && <div className="col-span-4 text-gray-500">No clusters found for this state.</div>}
-        </div>
-      </div>
-    );
-  };
+  // Removed old renderClusters as it is integrated into the main flow
 
   // --- Component ---
   return (
@@ -256,34 +378,155 @@ const InventoryLevelManagementSetting = () => {
 
       {/* Selection Panel */}
       {showSelectionPanel && (
-        <div className="mb-6">
-          {/* State Selection */}
-          <div className="mb-6">
-            <h5 className="text-lg font-bold text-gray-800 mb-4">Select States</h5>
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-              {states.map(state => (
-                <div
-                  key={state._id}
-                  className={`cursor-pointer border border-gray-300 rounded p-4 text-center transition-all ${selectedState === state._id
-                    ? 'bg-[#1d64b2] text-white border-[#1d64b2]'
-                    : 'bg-white text-gray-800 hover:border-gray-400'
-                    }`}
-                  onClick={() => handleStateSelect(state._id)}
-                >
-                  <div className="font-bold text-sm tracking-wide">{state.name}</div>
-                  {state.code && <div className={`text-xs mt-1 ${selectedState === state._id ? 'text-gray-200' : 'text-gray-500'}`}>{state.code}</div>}
-                </div>
-              ))}
+        <div className="space-y-8 animate-in fade-in slide-in-from-top-4 duration-500">
+          {/* Country Selection */}
+          <section>
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <Globe size={14} /> 1. Select Country
+              </h5>
+              <button 
+                onClick={() => handleCountrySelect('all')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+              >
+                {selCountry === 'all' ? 'Unselect All' : 'Select All'}
+              </button>
             </div>
-          </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <LocationCard
+                title="All Countries"
+                subtitle="ALL"
+                isSelected={selCountry === 'all'}
+                onClick={() => handleCountrySelect('all')}
+                colorClass="bg-[#6c5ce7] border-[#6c5ce7] shadow-purple-100"
+              />
+              {locationData.countries.map(country => (
+                <LocationCard
+                  key={country._id}
+                  title={country.name}
+                  subtitle={country.code}
+                  isSelected={selCountry === country._id}
+                  onClick={() => handleCountrySelect(country._id)}
+                  colorClass="bg-[#6c5ce7] border-[#6c5ce7] shadow-purple-100"
+                />
+              ))}
+              {locationData.countries.length === 0 && <div className="col-span-full py-8 text-center text-gray-400 italic">No Countries found.</div>}
+            </div>
+          </section>
 
-          {/* Clusters Section */}
-          {renderClusters()}
+          {/* State Selection */}
+          {selCountry && (
+            <section className="animate-in fade-in slide-in-from-top-2">
+              <div className="flex justify-between items-center mb-4">
+                <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <MapPin size={14} /> 2. Select State
+                </h5>
+                <button 
+                  onClick={() => handleStateSelect('all')}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+                >
+                  {selState === 'all' ? 'Unselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <LocationCard
+                  title="All States"
+                  subtitle="ALL"
+                  isSelected={selState === 'all'}
+                  onClick={() => handleStateSelect('all')}
+                  colorClass="bg-[#1d64b2] border-[#1d64b2] shadow-blue-100"
+                />
+                {locationData.states.map(state => (
+                  <LocationCard
+                    key={state._id}
+                    title={state.name}
+                    subtitle={state.code}
+                    isSelected={selState === state._id}
+                    onClick={() => handleStateSelect(state._id)}
+                    colorClass="bg-[#1d64b2] border-[#1d64b2] shadow-blue-100"
+                  />
+                ))}
+                {locationData.states.length === 0 && <div className="col-span-full py-8 text-center text-gray-400 italic">No States found for this country.</div>}
+              </div>
+            </section>
+          )}
+
+          {/* Cluster Selection */}
+          {selState && (
+            <section className="animate-in fade-in slide-in-from-top-2">
+              <div className="flex justify-between items-center mb-4">
+                <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <Factory size={14} /> 3. Select Cluster
+                </h5>
+                <button 
+                  onClick={() => handleClusterSelect('all')}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+                >
+                  {selCluster === 'all' ? 'Unselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <LocationCard
+                  title="All Clusters"
+                  subtitle="ALL"
+                  isSelected={selCluster === 'all'}
+                  onClick={() => handleClusterSelect('all')}
+                  colorClass="bg-[#17a2b8] border-[#17a2b8] shadow-teal-100"
+                />
+                {locationData.clusters.map(cluster => (
+                  <LocationCard
+                    key={cluster._id}
+                    title={cluster.name}
+                    isSelected={selCluster === cluster._id}
+                    onClick={() => handleClusterSelect(cluster._id)}
+                    colorClass="bg-[#17a2b8] border-[#17a2b8] shadow-teal-100"
+                  />
+                ))}
+                {locationData.clusters.length === 0 && <div className="col-span-full py-8 text-center text-gray-400 italic">No Clusters found for this state.</div>}
+              </div>
+            </section>
+          )}
+
+          {/* District Selection */}
+          {selCluster && (
+            <section className="animate-in fade-in slide-in-from-top-2">
+              <div className="flex justify-between items-center mb-4">
+                <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <MapPin size={14} /> 4. Select District
+                </h5>
+                <button 
+                  onClick={() => handleDistrictSelect('all')}
+                  className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+                >
+                  {selDistrict === 'all' ? 'Unselect All' : 'Select All'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+                <LocationCard
+                  title="All Districts"
+                  subtitle="ALL"
+                  isSelected={selDistrict === 'all'}
+                  onClick={() => handleDistrictSelect('all')}
+                  colorClass="bg-[#28a745] border-[#28a745] shadow-green-100"
+                />
+                {locationData.districts.map(district => (
+                  <LocationCard
+                    key={district._id}
+                    title={district.name}
+                    isSelected={selDistrict === district._id}
+                    onClick={() => handleDistrictSelect(district._id)}
+                    colorClass="bg-[#28a745] border-[#28a745] shadow-green-100"
+                  />
+                ))}
+                {locationData.districts.length === 0 && <div className="col-span-full py-8 text-center text-gray-400 italic">No Districts found for this cluster.</div>}
+              </div>
+            </section>
+          )}
         </div>
       )}
 
       {/* Inventory Table */}
-      {selectedCluster && (
+      {selCountry && (
         <div className="mt-8">
           {/* FILTER SECTION */}
           <div className="bg-white rounded border border-gray-200 mb-6 p-6">
@@ -298,7 +541,9 @@ const InventoryLevelManagementSetting = () => {
                 >
                   <option value="">Select Brand</option>
                   {brands.map(b => (
-                    <option key={b._id} value={b._id}>{b.brandName}</option>
+                    <option key={b._id} value={b._id}>
+                      {b.brandName || b.companyName || b.company || 'Unknown'}
+                    </option>
                   ))}
                 </select>
               </div>

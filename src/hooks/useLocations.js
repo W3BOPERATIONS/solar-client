@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import * as locationApi from '../services/core/locationApi';
 
 export const useLocations = () => {
@@ -23,10 +23,10 @@ export const useLocations = () => {
     fetchCountries();
   }, []);
 
-  const fetchCountries = async () => {
+  const fetchCountries = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await locationApi.getCountries();
+      const data = await locationApi.getCountries({ silent: true });
       setCountries(data || []);
     } catch (err) {
       setError('Failed to load countries');
@@ -34,7 +34,7 @@ export const useLocations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   // Update Clusters when State changes
   useEffect(() => {
@@ -70,13 +70,14 @@ export const useLocations = () => {
     setSelectedCity('');
   }, [selectedDistrict]);
 
-  const fetchStates = async (params = {}) => {
+  const fetchStates = useCallback(async (params = {}) => {
     try {
       setLoading(true);
+      const countryId = (params && params.countryId && params.countryId !== 'all') ? params.countryId : undefined;
       // Support both hierarchy and flat fetch based on presence of params
-      const data = Object.keys(params).length > 0
-        ? await locationApi.getStates(params.countryId)
-        : await locationApi.getStatesHierarchy();
+      const data = countryId
+        ? await locationApi.getStates(countryId, { silent: true })
+        : await locationApi.getStatesHierarchy({ silent: true });  // getStatesHierarchy takes only (config)
       setStates(data || []);
       return data || [];
     } catch (err) {
@@ -85,17 +86,26 @@ export const useLocations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchClusters = async (params = {}) => {
+  const fetchClusters = useCallback(async (params = {}) => {
     try {
       setLoading(true);
-      const stateId = typeof params === 'string' ? params : params.stateId;
-      const districtId = typeof params === 'object' ? params.districtId : null;
+      const stateId = (typeof params === 'string' ? params : params.stateId);
+      const sanitizedStateId = (stateId && stateId !== 'all') ? stateId : undefined;
+      const districtId = (typeof params === 'object' && params.districtId && params.districtId !== 'all') ? params.districtId : null;
 
-      const data = stateId
-        ? await locationApi.getClustersHierarchy(stateId)
-        : (districtId ? await locationApi.getClusters(districtId) : await locationApi.getClustersHierarchy());
+      let data;
+      if (sanitizedStateId) {
+        // Fetch clusters for a specific state
+        data = await locationApi.getClustersHierarchy(sanitizedStateId, { silent: true });
+      } else if (districtId) {
+        // Fetch clusters for a specific district
+        data = await locationApi.getClusters(districtId, { silent: true });
+      } else {
+        // Fetch ALL clusters — must pass undefined as first arg, not the config object!
+        data = await locationApi.getClustersHierarchy(undefined, { silent: true });
+      }
 
       setClusters(data || []);
       return data || [];
@@ -105,37 +115,40 @@ export const useLocations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchDistricts = async (params = {}) => {
+  const fetchDistricts = useCallback(async (params = {}) => {
     try {
       setLoading(true);
-      const clusterId = typeof params === 'string' ? params : params.clusterId;
-      const data = clusterId
-        ? await locationApi.getDistrictsHierarchy(clusterId)
-        : await locationApi.getDistricts(params);
+      const clusterId = (typeof params === 'string' ? params : params.clusterId);
+      const sanitizedClusterId = (clusterId && clusterId !== 'all') ? clusterId : undefined;
+
+      let data;
+      if (sanitizedClusterId) {
+        // Fetch districts for a specific cluster
+        data = await locationApi.getDistrictsHierarchy(sanitizedClusterId, { silent: true });
+      } else {
+        // Fetch ALL districts — must pass undefined as first arg, not the config object!
+        data = await locationApi.getDistrictsHierarchy(undefined, { silent: true });
+      }
 
       setDistricts(data || []);
       return data || [];
-
-      if (data && data.length === 1 && clusterId === selectedCluster) {
-        setSelectedDistrict(data[0]._id);
-      }
     } catch (err) {
       setError('Failed to load districts');
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
-  const fetchCities = async (params = {}) => {
+  const fetchCities = useCallback(async (params = {}) => {
     try {
       setLoading(true);
       const districtId = typeof params === 'string' ? params : params.districtId;
       const data = districtId
-        ? await locationApi.getCitiesHierarchy(districtId)
-        : await locationApi.getCities(districtId); // locationApi.getCities takes stateId or districtId? actually it takes stateId in some cases but let's check locationApi
+        ? await locationApi.getCitiesHierarchy(districtId, { silent: true })
+        : await locationApi.getCities(districtId, { silent: true });
 
       setCities(data || []);
 
@@ -148,7 +161,7 @@ export const useLocations = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedDistrict]);
 
   return {
     countries,

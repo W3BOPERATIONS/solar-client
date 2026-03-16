@@ -1,64 +1,166 @@
 // CombokitBrandOverview.jsx
 import React, { useState, useEffect } from 'react';
-import { MapPin, Loader, AlertCircle, Check } from 'lucide-react';
+import { Globe, MapPin, Factory, Loader } from 'lucide-react';
 import { locationAPI } from '../../../../api/api';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
-import toast from 'react-hot-toast';
+import { getPartners, getPartnerPlans } from '../../../../services/partner/partnerApi';
+
+const LocationCard = ({ title, subtitle, isSelected, onClick, colorClass = 'bg-[#3c50e0]' }) => (
+  <div
+    onClick={onClick}
+    className={`cursor-pointer rounded-xl border-2 py-5 px-4 flex flex-col items-center justify-center text-center h-24 transition-all shadow-sm hover:shadow-md ${isSelected
+        ? `${colorClass} border-transparent shadow-lg -translate-y-1`
+        : 'border-transparent bg-white hover:border-gray-200'
+      }`}
+  >
+    <div className={`font-bold text-sm mb-1 ${isSelected ? 'text-white' : 'text-gray-800'}`}>{title}</div>
+    {subtitle && (
+      <div className={`text-[10px] uppercase font-bold tracking-wider ${isSelected ? 'text-blue-100' : 'text-gray-400'}`}>
+        {subtitle}
+      </div>
+    )}
+  </div>
+);
 
 const CombokitBrandOverview = () => {
-  // --- State Management ---
-  const [selectedState, setSelectedState] = useState('');
-  const [selectedCluster, setSelectedCluster] = useState('');
-  const [selectedDistricts, setSelectedDistricts] = useState([]);
-  const [selectedCpTypes, setSelectedCpTypes] = useState([]);
+  // --- Independent Location State ---
+  const [locData, setLocData] = useState({ countries: [], states: [], clusters: [], districts: [] });
+  const [selCountry, setSelCountry] = useState('');
+  const [selState, setSelState] = useState('');
+  const [selCluster, setSelCluster] = useState('');
+  const [selDistrict, setSelDistrict] = useState('');
 
-  const [states, setStates] = useState([]);
-  const [clusters, setClusters] = useState([]);
-  const [districts, setDistricts] = useState([]);
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [selectedPartnerTypes, setSelectedPartnerTypes] = useState([]);
+  const [plans, setPlans] = useState([]);
+  const [selectedPlans, setSelectedPlans] = useState([]);
 
-  const cpTypesList = ['Startup', 'Basic', 'Enterprise', 'Solar Business'];
-
-  const [data, setData] = useState([]); // Brand Overview Data
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  // Load Initial States
+  // ── On mount: countries ────────────────────────────────────────────────────
+  useEffect(() => { fetchCountries(); }, []);
+
+  // ── country → states ───────────────────────────────────────────────────────
   useEffect(() => {
-    loadStates();
+    if (selCountry) fetchStatesLocal(selCountry);
+    else setLocData(p => ({ ...p, states: [], clusters: [], districts: [] }));
+    setSelState(''); setSelCluster(''); setSelDistrict('');
+  }, [selCountry]);
+
+  // ── state → clusters ───────────────────────────────────────────────────────
+  useEffect(() => {
+    if (selState) fetchClustersLocal(selState);
+    else setLocData(p => ({ ...p, clusters: [], districts: [] }));
+    setSelCluster(''); setSelDistrict('');
+  }, [selState]);
+
+  // ── cluster → districts ────────────────────────────────────────────────────
+  useEffect(() => {
+    if (selCluster) fetchDistrictsLocal(selCluster);
+    else setLocData(p => ({ ...p, districts: [] }));
+    setSelDistrict('');
+  }, [selCluster]);
+
+  // ── Fetch brand overview when plans selected ───────────────────────────
+  useEffect(() => {
+    if (selectedPlans.length > 0 && selCountry) fetchOverview();
+    else setData([]);
+  }, [selCountry, selState, selCluster, selDistrict, selectedPlans]);
+
+  // ── Fetch Partner Types ──────────────────────────────────────────────────
+  useEffect(() => {
+    const loadPartners = async () => {
+      try {
+        const res = await getPartners();
+        setPartnerTypes(res || []);
+      } catch (err) {
+        console.error('Failed to fetch partner types', err);
+      }
+    };
+    loadPartners();
   }, []);
 
-  // Fetch Overview when location/CP type selected
+  // ── Fetch Plans based on Partner Type & State ───────────────────────────
   useEffect(() => {
-    if (selectedDistricts.length > 0 && selectedCpTypes.length > 0) {
-      fetchOverview();
-    } else {
-      setData([]);
-    }
-  }, [selectedDistricts, selectedCpTypes]);
+    const loadPlans = async () => {
+      if (selectedPartnerTypes.length === 0) {
+        setPlans([]);
+        setSelectedPlans([]);
+        return;
+      }
 
-  const loadStates = async () => {
+      try {
+        // Since getPartnerPlans takes a single partnerType, and we might have multiple
+        // We'll fetch plans for all selected partner types and merge them uniquely
+        const allPlansPromises = selectedPartnerTypes.map(pt =>
+          getPartnerPlans(pt, selState && selState !== 'all' ? selState : null)
+        );
+        const responses = await Promise.all(allPlansPromises);
+        const mergedPlans = [];
+        const planNames = new Set();
+
+        responses.forEach(res => {
+          if (Array.isArray(res)) {
+            res.forEach(plan => {
+              if (!planNames.has(plan.name)) {
+                planNames.add(plan.name);
+                mergedPlans.push(plan);
+              }
+            });
+          }
+        });
+
+        setPlans(mergedPlans);
+      } catch (err) {
+        console.error('Failed to fetch plans', err);
+      }
+    };
+    loadPlans();
+  }, [selectedPartnerTypes, selState]);
+
+  // ── Location Fetchers ─────────────────────────────────────────────────────
+  const fetchCountries = async () => {
     try {
-      const response = await locationAPI.getAllStates({ isActive: true });
-      setStates(response.data.data || []);
-    } catch (error) {
-      console.error("Failed to load states", error);
+      const res = await locationAPI.getAllCountries({ isActive: true });
+      setLocData(p => ({ ...p, countries: res.data?.data || [] }));
+    } catch (err) { console.error('Failed to fetch countries', err); }
+  };
+
+  const fetchStatesLocal = async (countryId) => {
+    try {
+      const params = { isActive: true };
+      if (countryId !== 'all') params.countryId = countryId;
+      const res = await locationAPI.getAllStates(params);
+      setLocData(p => ({ ...p, states: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch states', err);
+      setLocData(p => ({ ...p, states: [] }));
     }
   };
 
-  const loadClusters = async (stateId) => {
+  const fetchClustersLocal = async (stateId) => {
     try {
-      const response = await locationAPI.getAllClusters({ stateId: stateId, isActive: true });
-      setClusters(response.data.data || []);
-    } catch (error) {
-      console.error("Failed to load clusters", error);
+      const params = { isActive: true };
+      if (stateId !== 'all') params.stateId = stateId;
+      const res = await locationAPI.getAllClusters(params);
+      setLocData(p => ({ ...p, clusters: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch clusters', err);
+      setLocData(p => ({ ...p, clusters: [] }));
     }
   };
 
-  const loadDistricts = async (clusterId) => {
+  const fetchDistrictsLocal = async (clusterId) => {
     try {
-      const response = await locationAPI.getAllDistricts({ cityId: clusterId, isActive: true });
-      setDistricts(response.data.data || []);
-    } catch (error) {
-      console.error("Failed to load districts", error);
+      const params = { isActive: true };
+      if (clusterId !== 'all') params.clusterId = clusterId;
+      else if (selState && selState !== 'all') params.stateId = selState;
+      const res = await locationAPI.getAllDistricts(params);
+      setLocData(p => ({ ...p, districts: res.data?.data || [] }));
+    } catch (err) {
+      console.error('Failed to fetch districts', err);
+      setLocData(p => ({ ...p, districts: [] }));
     }
   };
 
@@ -66,237 +168,277 @@ const CombokitBrandOverview = () => {
     try {
       setLoading(true);
       const params = {
-        state: selectedState,
-        cluster: selectedCluster,
-        districts: selectedDistricts,
-        cpTypes: selectedCpTypes
+        cpTypes: selectedPlans,
+        ...(selCountry && selCountry !== 'all' && { country: selCountry }),
+        ...(selState && selState !== 'all' && { state: selState }),
+        ...(selCluster && selCluster !== 'all' && { cluster: selCluster }),
+        ...(selDistrict && selDistrict !== 'all' && { district: selDistrict }),
       };
-      // Note: Assuming the API supports these multi-select parameters
       const response = await inventoryApi.getBrandOverview(params);
       setData(response.data || []);
     } catch (error) {
-      console.error("Failed to fetch brand overview", error);
+      console.error('Failed to fetch brand overview', error);
     } finally {
       setLoading(false);
     }
   };
 
-  // --- Event Handlers ---
-  const handleStateSelect = (stateId) => {
-    if (selectedState === stateId) {
-      setSelectedState('');
-      setClusters([]);
-    } else {
-      setSelectedState(stateId);
-      loadClusters(stateId);
-    }
-    setSelectedCluster('');
-    setSelectedDistricts([]);
-    setSelectedCpTypes([]);
-    setDistricts([]);
-  };
+  // ── Selection helpers ─────────────────────────────────────────────────────
+  const handleCountrySelect = (id) => setSelCountry(p => p === id ? '' : id);
+  const handleStateSelect = (id) => setSelState(p => p === id ? '' : id);
+  const handleClusterSelect = (id) => setSelCluster(p => p === id ? '' : id);
+  const handleDistrictSelect = (id) => setSelDistrict(p => p === id ? '' : id);
+  const togglePartnerType = (type) => setSelectedPartnerTypes(p =>
+    p.includes(type) ? p.filter(t => t !== type) : [...p, type]
+  );
+  const togglePlan = (name) => setSelectedPlans(p =>
+    p.includes(name) ? p.filter(t => t !== name) : [...p, name]
+  );
 
-  const handleClusterSelect = (clusterId) => {
-    if (selectedCluster === clusterId) {
-      setSelectedCluster('');
-      setDistricts([]);
-    } else {
-      setSelectedCluster(clusterId);
-      loadDistricts(clusterId);
-    }
-    setSelectedDistricts([]);
-  };
-
-  const toggleDistrict = (districtId) => {
-    setSelectedDistricts(prev =>
-      prev.includes(districtId)
-        ? prev.filter(id => id !== districtId)
-        : [...prev, districtId]
-    );
-  };
-
-  const toggleCpType = (type) => {
-    setSelectedCpTypes(prev =>
-      prev.includes(type)
-        ? prev.filter(t => t !== type)
-        : [...prev, type]
-    );
-  };
-
-  const selectAllDistricts = () => {
-    setSelectedDistricts(districts.map(d => d._id));
-  };
-
-  const clearAllDistricts = () => {
-    setSelectedDistricts([]);
-  };
-
-  const selectAllCpTypes = () => {
-    setSelectedCpTypes([...cpTypesList]);
-  };
-
-  const clearAllCpTypes = () => {
-    setSelectedCpTypes([]);
-  };
-
-  const getDistrictNames = () => {
-    return districts
-      .filter(d => selectedDistricts.includes(d._id))
-      .map(d => d.name)
-      .join(', ');
-  };
-
-  const getCpTypeNames = () => {
-    return selectedCpTypes.join(', ');
-  };
-
-  const getSummaryHeader = () => {
-    const state = states.find(s => s._id === selectedState)?.name || '';
-    const cluster = clusters.find(c => c._id === selectedCluster)?.name || '';
-    const districtCount = selectedDistricts.length;
-    const districtNames = districts.filter(d => selectedDistricts.includes(d._id)).slice(0, 2).map(d => d.name).join(', ');
-    const cpCount = selectedCpTypes.length;
-    const cpNames = selectedCpTypes.slice(0, 2).join(', ');
-
-    let summary = `${state} > ${cluster}`;
-    if (districtCount > 0) {
-      summary += ` > ${districtNames}${districtCount > 2 ? ` +${districtCount - 2} more` : ''}`;
-    }
-    if (cpCount > 0) {
-      summary += ` > ${cpNames}${cpCount > 2 ? ` +${cpCount - 2} more` : ''}`;
-    }
-    return summary;
-  };
-
-  // --- Component ---
+  // ── Render ─────────────────────────────────────────────────────────────────
   return (
-    <div className="container mx-auto px-4 py-8 bg-[#f4f6fa] min-h-screen font-sans">
-      {/* Top Header */}
-      <div className="bg-white rounded border border-[#3c50e0] mb-8 p-6">
-        <h2 className="text-[#1c2434] text-xl font-bold">Combokit Brand SKU Overview</h2>
+    <div className="container mx-auto px-4 py-6 bg-[#f4f6fa] min-h-screen font-sans">
+
+      {/* Header */}
+      <div className="bg-white rounded border border-gray-200 mb-6 overflow-hidden">
+        <h4 className="text-[#206bc4] text-xl font-bold py-4 px-6 border-l-4 border-l-blue-500">
+          Combokit Brand SKU Overview
+        </h4>
       </div>
 
-      {/* State Selection */}
-      <div className="mb-8">
-        <h3 className="text-[#1c2434] text-[15px] font-semibold mb-4">Select a State</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-          {states.map(state => (
-            <div
-              key={state._id}
-              onClick={() => handleStateSelect(state._id)}
-              className={`cursor-pointer rounded border p-6 flex flex-col items-center justify-center transition-all ${selectedState === state._id
-                  ? 'bg-[#3c50e0] text-white border-[#3c50e0] shadow-lg scale-[1.02]'
-                  : 'bg-white text-[#1c2434] border-gray-200 hover:shadow-md'
-                }`}
+      <div className="space-y-8 mb-8">
+
+        {/* 1. Country */}
+        <section>
+          <div className="flex justify-between items-center mb-4">
+            <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+              <Globe size={14} /> 1. Select Country
+            </h5>
+            <button
+              onClick={() => handleCountrySelect('all')}
+              className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
             >
-              <span className="text-[17px] font-bold mb-1 uppercase tracking-wide">{state.name}</span>
-              <span className={`text-[13px] font-semibold ${selectedState === state._id ? 'text-blue-100' : 'text-gray-500'}`}>
-                {state.code || 'N/A'}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Cluster Selection */}
-      {selectedState && (
-        <div className="mb-8 animate-fadeIn">
-          <h3 className="text-[#1c2434] text-[15px] font-semibold mb-4">
-            Select a Cluster - {states.find(s => s._id === selectedState)?.name} ({states.find(s => s._id === selectedState)?.code})
-          </h3>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {clusters.map(cluster => (
-              <div
-                key={cluster._id}
-                onClick={() => handleClusterSelect(cluster._id)}
-                className={`cursor-pointer rounded border py-4 px-6 flex items-center justify-center transition-all ${selectedCluster === cluster._id
-                    ? 'bg-[#6a5cb8] text-white border-[#6a5cb8] shadow-md'
-                    : 'bg-[#eff2f7] text-[#1c2434] border-gray-100 hover:bg-gray-200'
-                  }`}
-              >
-                <span className="text-[15px] font-bold">{cluster.name}</span>
-              </div>
+              {selCountry === 'all' ? 'Unselect All' : 'Select All'}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+            <LocationCard
+              title="All Countries" subtitle="ALL"
+              isSelected={selCountry === 'all'}
+              onClick={() => handleCountrySelect('all')}
+              colorClass="bg-[#6c5ce7]"
+            />
+            {locData.countries.map(c => (
+              <LocationCard
+                key={c._id} title={c.name} subtitle={c.code || c.shortName}
+                isSelected={selCountry === c._id}
+                onClick={() => handleCountrySelect(c._id)}
+                colorClass="bg-[#6c5ce7]"
+              />
             ))}
-          </div>
-        </div>
-      )}
-
-      {/* Districts Selection */}
-      {selectedCluster && (
-        <div className="mb-8 animate-fadeIn">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-[#1c2434] text-[15px] font-semibold">Select Districts</h3>
-            <div className="flex items-center space-x-3 text-[13px]">
-              <span className="text-gray-400">{selectedDistricts.length} selected</span>
-              <button onClick={selectAllDistricts} className="text-[#3c50e0] font-bold hover:underline">Select All</button>
-              <button onClick={clearAllDistricts} className="text-gray-500 font-bold hover:underline">Clear All</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
-            {districts.map(district => (
-              <div
-                key={district._id}
-                onClick={() => toggleDistrict(district._id)}
-                className={`cursor-pointer rounded border py-4 px-6 flex items-center justify-center transition-all ${selectedDistricts.includes(district._id)
-                    ? 'bg-[#6a5cb8] text-white border-[#6a5cb8] shadow-md'
-                    : 'bg-[#eff2f7] text-[#1c2434] border-gray-100 hover:bg-gray-200'
-                  }`}
-              >
-                <span className="text-[15px] font-bold">{district.name}</span>
-              </div>
-            ))}
-          </div>
-          <div className="bg-white border border-gray-200 rounded p-3 mb-6">
-            <span className="text-gray-500 font-medium text-[14px]">Selected: </span>
-            <span className="text-[#1c2434] font-bold text-[14px]">{getDistrictNames() || 'None'}</span>
-          </div>
-        </div>
-      )}
-
-      {/* CP Types Selection */}
-      {selectedDistricts.length > 0 && (
-        <div className="mb-8 animate-fadeIn">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-[#1c2434] text-[15px] font-semibold">Select CP Types</h3>
-            <div className="flex items-center space-x-3 text-[13px]">
-              <span className="text-gray-400">{selectedCpTypes.length} selected</span>
-              <button onClick={selectAllCpTypes} className="text-[#3c50e0] font-bold hover:underline">Select All</button>
-              <button onClick={clearAllCpTypes} className="text-gray-500 font-bold hover:underline">Clear All</button>
-            </div>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-4">
-            {cpTypesList.map(type => (
-              <div
-                key={type}
-                onClick={() => toggleCpType(type)}
-                className={`cursor-pointer rounded border py-4 px-6 flex items-center justify-center transition-all ${selectedCpTypes.includes(type)
-                    ? 'bg-[#6a5cb8] text-white border-[#6a5cb8] shadow-md'
-                    : 'bg-[#eff2f7] text-[#1c2434] border-gray-100 hover:bg-gray-200'
-                  }`}
-              >
-                <span className="text-[15px] font-bold">{type}</span>
-              </div>
-            ))}
-          </div>
-          <div className="bg-white border border-gray-200 rounded p-3 mb-6">
-            <span className="text-gray-500 font-medium text-[14px]">Selected: </span>
-            <span className="text-[#1c2434] font-bold text-[14px]">{getCpTypeNames() || 'None'}</span>
-          </div>
-        </div>
-      )}
-
-      {/* Brand Overview Card */}
-      <div className="bg-white rounded shadow-sm border border-gray-100 mb-8 overflow-hidden">
-        <div className="p-6">
-          <div className="flex justify-between items-center mb-6">
-            <h3 className="text-[#1c2434] text-[20px] font-bold">Brand Overview</h3>
-            {selectedState && selectedCluster && (
-              <div className="bg-[#007fb1] text-white px-4 py-2 rounded text-[13px] font-bold uppercase tracking-wider">
-                {getSummaryHeader()}
-              </div>
+            {locData.countries.length === 0 && (
+              <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">Loading countries…</div>
             )}
           </div>
+        </section>
 
+        {/* 2. State */}
+        {selCountry && (
+          <section className="animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <MapPin size={14} /> 2. Select State
+              </h5>
+              <button
+                onClick={() => handleStateSelect('all')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+              >
+                {selState === 'all' ? 'Unselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <LocationCard
+                title="All States" subtitle="ALL"
+                isSelected={selState === 'all'}
+                onClick={() => handleStateSelect('all')}
+                colorClass="bg-[#3c50e0]"
+              />
+              {locData.states.map(s => (
+                <LocationCard
+                  key={s._id} title={s.name} subtitle={s.code}
+                  isSelected={selState === s._id}
+                  onClick={() => handleStateSelect(s._id)}
+                  colorClass="bg-[#3c50e0]"
+                />
+              ))}
+              {locData.states.length === 0 && (
+                <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">No states found for this country.</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* 3. Cluster */}
+        {selState && (
+          <section className="animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <Factory size={14} /> 3. Select Cluster
+              </h5>
+              <button
+                onClick={() => handleClusterSelect('all')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+              >
+                {selCluster === 'all' ? 'Unselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <LocationCard
+                title="All Clusters" subtitle="ALL"
+                isSelected={selCluster === 'all'}
+                onClick={() => handleClusterSelect('all')}
+                colorClass="bg-[#6a5cb8]"
+              />
+              {locData.clusters.map(cl => (
+                <LocationCard
+                  key={cl._id} title={cl.name}
+                  isSelected={selCluster === cl._id}
+                  onClick={() => handleClusterSelect(cl._id)}
+                  colorClass="bg-[#6a5cb8]"
+                />
+              ))}
+              {locData.clusters.length === 0 && (
+                <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">No clusters found for this state.</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* 4. District */}
+        {selCluster && (
+          <section className="animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <MapPin size={14} /> 4. Select District
+              </h5>
+              <button
+                onClick={() => handleDistrictSelect('all')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
+              >
+                {selDistrict === 'all' ? 'Unselect All' : 'Select All'}
+              </button>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+              <LocationCard
+                title="All Districts" subtitle="ALL"
+                isSelected={selDistrict === 'all'}
+                onClick={() => handleDistrictSelect('all')}
+                colorClass="bg-[#28a745]"
+              />
+              {locData.districts.map(d => (
+                <LocationCard
+                  key={d._id} title={d.name}
+                  isSelected={selDistrict === d._id}
+                  onClick={() => handleDistrictSelect(d._id)}
+                  colorClass="bg-[#28a745]"
+                />
+              ))}
+              {locData.districts.length === 0 && (
+                <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">No districts found for this cluster.</div>
+              )}
+            </div>
+          </section>
+        )}
+
+        {/* 5. Partner Types */}
+        {selCountry && (
+          <section className="animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest">Select Partner Types</h5>
+              <div className="flex gap-3 text-xs font-bold">
+                <button
+                  onClick={() => setSelectedPartnerTypes(partnerTypes.map(p => p.name))}
+                  className="text-blue-600 hover:text-blue-800 uppercase tracking-wider"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => {
+                    setSelectedPartnerTypes([]);
+                    setPlans([]);
+                    setSelectedPlans([]);
+                  }}
+                  className="text-gray-500 hover:text-gray-700 uppercase tracking-wider"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {partnerTypes.map(p => (
+                <div
+                  key={p._id}
+                  onClick={() => togglePartnerType(p.name)}
+                  className={`cursor-pointer rounded-xl border-2 py-4 px-4 flex items-center justify-center text-center h-16 transition-all shadow-sm hover:shadow-md ${selectedPartnerTypes.includes(p.name)
+                      ? 'bg-[#6c5ce7] border-transparent text-white shadow-lg -translate-y-1'
+                      : 'border-transparent bg-white hover:border-gray-200 text-gray-800'
+                    }`}
+                >
+                  <span className="font-bold text-sm">{p.name}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        {/* 6. Plans */}
+        {selectedPartnerTypes.length > 0 && (
+          <section className="animate-in fade-in slide-in-from-top-2">
+            <div className="flex justify-between items-center mb-4">
+              <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest">Select Plans</h5>
+              <div className="flex gap-3 text-xs font-bold">
+                <button
+                  onClick={() => setSelectedPlans(plans.map(p => p.name))}
+                  className="text-blue-600 hover:text-blue-800 uppercase tracking-wider"
+                >
+                  Select All
+                </button>
+                <button
+                  onClick={() => setSelectedPlans([])}
+                  className="text-gray-500 hover:text-gray-700 uppercase tracking-wider"
+                >
+                  Clear All
+                </button>
+              </div>
+            </div>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {plans.map(p => (
+                <div
+                  key={p._id}
+                  onClick={() => togglePlan(p.name)}
+                  className={`cursor-pointer rounded-xl border-2 py-4 px-4 flex items-center justify-center text-center h-16 transition-all shadow-sm hover:shadow-md ${selectedPlans.includes(p.name)
+                      ? 'bg-[#007fb1] border-transparent text-white shadow-lg -translate-y-1'
+                      : 'border-transparent bg-white hover:border-gray-200 text-gray-800'
+                    }`}
+                >
+                  <span className="font-bold text-sm">{p.name}</span>
+                </div>
+              ))}
+            </div>
+            {selectedPlans.length > 0 && (
+              <div className="mt-3 bg-white border border-gray-200 rounded px-4 py-2 text-sm">
+                <span className="text-gray-500 font-medium">Selected Plans: </span>
+                <span className="text-[#1c2434] font-bold">{selectedPlans.join(', ')}</span>
+              </div>
+            )}
+          </section>
+        )}
+      </div>
+
+      {/* Brand Overview Table */}
+      <div className="bg-white rounded shadow-sm border border-gray-100 mb-8 overflow-hidden">
+        <div className="p-6">
+          <h3 className="text-[#1c2434] text-[20px] font-bold mb-6">Brand Overview</h3>
           <div className="overflow-x-auto rounded border border-gray-200">
             <table className="w-full text-left align-middle border-collapse">
               <thead className="bg-gradient-to-r from-sky-400 to-blue-400 text-white">
@@ -325,11 +467,11 @@ const CombokitBrandOverview = () => {
                     <tr key={index} className="hover:bg-gray-50 transition-colors">
                       <td className="py-5 px-6 font-bold text-[#1c2434] border-r border-gray-200">{item._id}</td>
                       <td className="py-5 px-6 text-[#1c2434] border-r border-gray-200">
-                        {item.brands.map(b => b.brandName).join(', ')}
+                        {item.brands?.map(b => b.brandName).join(', ')}
                       </td>
                       <td className="py-5 px-6">
                         <div className="flex flex-wrap gap-4">
-                          {item.brands.map((brand, bIndex) => (
+                          {item.brands?.map((brand, bIndex) => (
                             <div key={bIndex} className="flex items-center bg-gray-50 rounded px-3 py-1.5 border border-gray-100">
                               {brand.logo && <img src={brand.logo} alt={brand.brandName} className="w-8 h-8 object-contain mr-2" />}
                               <span className="font-bold text-[#1c2434] text-[14px]">{brand.skus} SKUs</span>
@@ -347,22 +489,11 @@ const CombokitBrandOverview = () => {
       </div>
 
       {/* Footer */}
-      <div className="mt-12 text-center py-6 border-t border-gray-200">
-        <p className="text-[#1c2434] text-[14px] font-medium">
+      <div className="mt-8 bg-white py-4 rounded shadow-sm border border-gray-100 flex justify-center items-center">
+        <span className="text-[14px] text-[#1c2434] font-medium">
           Copyright © {new Date().getFullYear()} Solarkits. All Rights Reserved.
-        </p>
+        </span>
       </div>
-
-      <style dangerouslySetInnerHTML={{
-        __html: `
-        .animate-fadeIn {
-          animation: fadeIn 0.4s ease-out forwards;
-        }
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(10px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}} />
     </div>
   );
 };

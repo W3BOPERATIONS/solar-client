@@ -7,11 +7,16 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
+import * as partnerApi from '../../../../services/partner/partnerApi';
+import { getCategories, getSubCategories, getProjectTypes, getSubProjectTypes, getProjectCategoryMappings } from '../../../../services/combokit/combokitApi';
+import { getAllManufacturers } from '../../../../services/brand/brandApi';
+import { productApi } from '../../../../api/productApi';
 import toast from 'react-hot-toast';
 
 const InventoryManagement = () => {
   // --- Location Hook ---
   const {
+    countries,
     states,
     clusters,
     districts,
@@ -21,10 +26,15 @@ const InventoryManagement = () => {
     setSelectedCluster,
     selectedDistrict,
     setSelectedDistrict,
-    loading: locationsLoading
+    loading: locationsLoading,
+    fetchStates
   } = useLocations();
 
-  const [selectedCpType, setSelectedCpType] = useState('');
+  const [selectedCountry, setSelectedCountry] = useState('');
+
+  const [selectedPartner, setSelectedPartner] = useState('');
+  const [partnerPlans, setPartnerPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState('');
 
   // Inventory Data
   const [inventoryData, setInventoryData] = useState([]);
@@ -43,10 +53,55 @@ const InventoryManagement = () => {
     productThresholds: []
   });
   const [settingsLoading, setSettingsLoading] = useState(true);
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [masterSubCategories, setMasterSubCategories] = useState([]);
+  const [masterProjectTypes, setMasterProjectTypes] = useState([]);
+  const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
 
   useEffect(() => {
     fetchSettings();
+    fetchPartnerTypes();
+    fetchMasterData();
   }, []);
+
+  const fetchMasterData = async () => {
+    try {
+      const [cats, subCats, projs, subProjs, mappings] = await Promise.all([
+        getCategories(),
+        getSubCategories(),
+        getProjectTypes(),
+        getSubProjectTypes(),
+        getProjectCategoryMappings()
+      ]);
+
+      setMasterCategories(cats || []);
+      setMasterSubCategories(subCats || []);
+      
+      const uniqueProjectTypes = (mappings?.length > 0)
+        ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
+        : projs?.map(p => p.name) || [];
+
+      setMasterProjectTypes(uniqueProjectTypes);
+      setMasterSubProjectTypes(subProjs || []);
+      setProjectMappings(mappings || []);
+    } catch (err) {
+      console.error("Failed to fetch master data", err);
+    }
+  };
+
+  const fetchPartnerTypes = async () => {
+    try {
+      const res = await partnerApi.getPartners();
+      // res could be the array directly or a wrapper object
+      const data = Array.isArray(res) ? res : (res.data || []);
+      setPartnerTypes(data);
+    } catch (err) {
+      console.error("Failed to fetch partner types", err);
+      setPartnerTypes([]);
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -92,17 +147,29 @@ const InventoryManagement = () => {
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
 
   useEffect(() => {
-    fetchInventory();
-  }, [selectedState, selectedCluster, selectedDistrict, selectedCpType, activeFilters, searchQuery, showOnlyLowStock, currentSortField, currentSortOrder]);
+    if (selectedCountry) {
+      fetchStates({ countryId: selectedCountry });
+    }
+  }, [selectedCountry, fetchStates]);
 
-  const fetchInventory = async () => {
+  const fetchInventory = useCallback(async () => {
+    // Only fetch if minimum location criteria met (state and cluster, or district)
+    if (!selectedDistrict && !(selectedState && selectedCluster)) {
+      setInventoryData([]);
+      return;
+    }
+    
+    // Don't fetch while locations are still loading
+    if (locationsLoading) return;
+
     try {
       setLoading(true);
       const params = {
+        country: selectedCountry,
         state: selectedState,
         cluster: selectedCluster,
         district: selectedDistrict,
-        cpType: selectedCpType,
+        cpType: selectedPlan,
         search: searchQuery,
         ...activeFilters,
         lowStock: showOnlyLowStock,
@@ -114,8 +181,8 @@ const InventoryManagement = () => {
       Object.keys(params).forEach(key => !params[key] && delete params[key]);
 
       const [itemsResponse, summaryResponse] = await Promise.all([
-        inventoryApi.getItems(params),
-        inventoryApi.getSummary(params)
+        inventoryApi.getItems({ ...params, silent: true }),
+        inventoryApi.getSummary({ ...params, silent: true })
       ]);
 
       setInventoryData(itemsResponse.data.items || itemsResponse.data || []);
@@ -126,6 +193,36 @@ const InventoryManagement = () => {
     } finally {
       setLoading(false);
     }
+  }, [selectedCountry, selectedState, selectedCluster, selectedDistrict, selectedPartner, selectedPlan, activeFilters, searchQuery, showOnlyLowStock, currentSortField, currentSortOrder, locationsLoading]);
+
+  useEffect(() => {
+    fetchInventory();
+  }, [selectedCountry, selectedState, selectedCluster, selectedDistrict, selectedPartner, selectedPlan, activeFilters, searchQuery, showOnlyLowStock, currentSortField, currentSortOrder, fetchInventory]);
+
+  useEffect(() => {
+    if (selectedPartner) {
+      fetchPartnerPlans();
+    } else {
+      setPartnerPlans([]);
+      setSelectedPlan('');
+    }
+  }, [selectedPartner, selectedState, partnerTypes]); // Added selectedState and partnerTypes to dependencies
+
+  const fetchPartnerPlans = async () => {
+    try {
+      // Ensure partnerTypes is an array before calling find
+      if (!Array.isArray(partnerTypes)) return;
+
+      const partnerObj = partnerTypes.find(p => p._id === selectedPartner);
+      const partnerName = partnerObj ? (partnerObj.name || partnerObj.label) : '';
+      
+      const res = await partnerApi.getPartnerPlans(partnerName, selectedState);
+      const plans = Array.isArray(res) ? res : (res.data || []);
+      setPartnerPlans(plans);
+    } catch (err) {
+      console.error("Failed to fetch partner plans", err);
+      setPartnerPlans([]);
+    }
   };
 
   // --- Helper Functions ---
@@ -134,20 +231,44 @@ const InventoryManagement = () => {
   };
 
   // --- Selection Handlers ---
+  const handleCountrySelect = (countryId) => {
+    setSelectedCountry(prev => prev === countryId ? '' : countryId);
+    setSelectedState('');
+    setSelectedCluster('');
+    setSelectedDistrict('');
+    setSelectedPartner('');
+    setSelectedPlan('');
+    if (countryId) fetchStates({ countryId });
+  };
+
   const handleStateSelect = (stateId) => {
     setSelectedState(prev => prev === stateId ? '' : stateId);
+    setSelectedCluster('');
+    setSelectedDistrict('');
+    setSelectedPartner('');
+    setSelectedPlan('');
   };
 
   const handleClusterSelect = (clusterId) => {
     setSelectedCluster(prev => prev === clusterId ? '' : clusterId);
+    setSelectedDistrict('');
+    setSelectedPartner('');
+    setSelectedPlan('');
   };
 
   const handleDistrictSelect = (districtId) => {
     setSelectedDistrict(prev => prev === districtId ? '' : districtId);
+    setSelectedPartner('');
+    setSelectedPlan('');
   };
 
-  const handleCpTypeSelect = (typeId) => {
-    setSelectedCpType(prev => prev === typeId ? '' : typeId);
+  const handlePartnerSelect = (partnerId) => {
+    setSelectedPartner(prev => prev === partnerId ? '' : partnerId);
+    setSelectedPlan('');
+  };
+
+  const handlePlanSelect = (planName) => {
+    setSelectedPlan(prev => prev === planName ? '' : planName);
   };
 
 
@@ -202,33 +323,65 @@ const InventoryManagement = () => {
     );
   };
 
-  const renderCpTypes = () => {
+  const LocationCard = ({ title, subtitle, isSelected, onClick, colorClass = 'border-[#007bff] bg-blue-50 shadow-blue-100' }) => (
+    <div
+      onClick={onClick}
+      className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+        ? `${colorClass} shadow-lg -translate-y-1`
+        : 'border-transparent bg-white hover:border-blue-200'
+        }`}
+    >
+      <div className="font-bold text-base text-[#333] mb-1">{title}</div>
+      <div className="text-xs text-gray-500 font-medium uppercase tracking-tight">{subtitle || ''}</div>
+    </div>
+  );
+
+  const renderPartnerSection = () => {
     if (!selectedDistrict) return null;
 
-    const cpTypes = [
-      { id: 'Startup', label: 'Startup' },
-      { id: 'Basic', label: 'Basic' },
-      { id: 'Enterprise', label: 'Enterprise' },
-      { id: 'Solar Business', label: 'Solar Business' },
-    ];
-
     return (
-      <div className="mt-6 mb-6">
-        <h5 className="text-lg font-bold text-gray-700 mb-4">Select CP Types</h5>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {cpTypes.map(cpType => (
-            <div
-              key={cpType.id}
-              className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 flex items-center justify-center ${selectedCpType === cpType.id
-                ? 'bg-gray-800 text-white border-gray-800' // Assuming dark for 'Break Time' style or primary. Will use slate.
-                : 'bg-white border-gray-300 text-gray-800 hover:border-gray-400'
-                }`}
-              onClick={() => handleCpTypeSelect(cpType.id)}
-            >
-              <div className="font-bold text-sm tracking-wide">{cpType.label}</div>
-            </div>
+      <div className="mt-8 mb-8">
+        <h5 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+          <Users size={20} className="text-blue-500" />
+          Select Partner
+        </h5>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {partnerTypes.map(partner => (
+            <LocationCard
+              key={partner._id}
+              title={partner.name || partner.label}
+              isSelected={selectedPartner === partner._id}
+              onClick={() => handlePartnerSelect(partner._id)}
+              colorClass="border-blue-600 bg-blue-600 text-white shadow-blue-200"
+            />
           ))}
+          {partnerTypes.length === 0 && <div className="col-span-4 text-center text-gray-500 py-4 border-2 border-dashed rounded-xl">No Partner Types found.</div>}
         </div>
+
+        {selectedPartner && (
+          <div className="mt-10 animate-fade-in-down">
+            <h5 className="text-lg font-bold text-gray-800 mb-6 flex items-center gap-2">
+              <Package size={20} className="text-green-500" />
+              Select Plans for {Array.isArray(partnerTypes) ? partnerTypes.find(p => p._id === selectedPartner)?.name : ''}
+            </h5>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {partnerPlans.map(plan => (
+                <LocationCard
+                  key={plan._id}
+                  title={plan.name}
+                  isSelected={selectedPlan === plan.name}
+                  onClick={() => handlePlanSelect(plan.name)}
+                  colorClass="border-green-600 bg-green-600 text-white shadow-green-200"
+                />
+              ))}
+              {partnerPlans.length === 0 && (
+                <div className="col-span-4 text-center text-gray-500 py-8 border-2 border-dashed rounded-xl bg-gray-50">
+                  No plans found for this partner in {states.find(s => s._id === selectedState)?.name}.
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     );
   };
@@ -238,12 +391,50 @@ const InventoryManagement = () => {
     const [localSettings, setLocalSettings] = useState(settings);
     const [activeTab, setActiveTab] = useState('global');
     const [brands, setBrands] = useState([]);
+    const [allProducts, setAllProducts] = useState([]);
     const [saving, setSaving] = useState(false);
 
     useEffect(() => {
       // Fetch Brands for Brand-wise settings
-      inventoryApi.getBrands().then(res => setBrands(res.data || [])).catch(console.error);
+      fetchBrands();
+      // Fetch all products (masters) for Product-wise settings
+      fetchMasterProducts();
     }, []);
+
+    const fetchBrands = async () => {
+      try {
+        const res = await getAllManufacturers();
+        // The API might return an array directly or a wrapped object
+        const data = Array.isArray(res) ? res : (res.data || res.data?.data || []);
+        
+        // Map manufacturers to unique brand objects for the settings list
+        // and ensure we handle cases where multiple manufacturers might have the same brand name
+        const uniqueBrandMap = new Map();
+        data.forEach(m => {
+          if (m.brand && !uniqueBrandMap.has(m.brand)) {
+            uniqueBrandMap.set(m.brand, {
+              _id: m._id, // Using manufacturer ID as brand identifier for thresholds
+              brandName: m.brand,
+              logo: m.brandLogo
+            });
+          }
+        });
+        
+        setBrands(Array.from(uniqueBrandMap.values()));
+      } catch (err) {
+        console.error("Failed to fetch brands", err);
+      }
+    };
+
+    const fetchMasterProducts = async () => {
+      try {
+        const res = await productApi.getAll();
+        const data = res.data?.data || res.data || [];
+        setAllProducts(data);
+      } catch (err) {
+        console.error("Failed to fetch master products", err);
+      }
+    };
 
     const handleSaveSettings = async () => {
       try {
@@ -377,11 +568,11 @@ const InventoryManagement = () => {
               <div>
                 <p className="text-sm text-gray-600 mb-6">Set low stock thresholds for specific products</p>
                 <div className="space-y-0 max-h-[500px]">
-                  {inventoryData.map((item, index) => (
-                    <div key={item._id} className={`flex justify-between items-start py-4 ${index !== inventoryData.length - 1 ? 'border-b border-gray-100' : ''}`}>
+                  {allProducts.map((item, index) => (
+                    <div key={item._id} className={`flex justify-between items-start py-4 ${index !== allProducts.length - 1 ? 'border-b border-gray-100' : ''}`}>
                       <div className="flex flex-col w-1/3 pt-2">
-                        <span className="font-semibold text-sm text-gray-800">{item.itemName}</span>
-                        <span className="text-[11px] text-gray-500">{item.brand?.brandName || 'Unknown'}</span>
+                        <span className="font-semibold text-sm text-gray-800">{item.name || item.itemName}</span>
+                        <span className="text-[11px] text-gray-500">{(item.brandId?.name || item.brandId?.companyName) || item.brand?.brandName || 'Unknown'}</span>
                       </div>
                       <div className="w-2/3">
                         <input
@@ -395,7 +586,7 @@ const InventoryManagement = () => {
                       </div>
                     </div>
                   ))}
-                  {inventoryData.length === 0 && <span className="text-sm text-gray-500">No products in current view. Search or filter to find products.</span>}
+                  {allProducts.length === 0 && <span className="text-sm text-gray-500">No products found.</span>}
                 </div>
               </div>
             )}
@@ -422,26 +613,49 @@ const InventoryManagement = () => {
         <h4 className="text-[#206bc4] text-xl font-bold border border-gray-200 border-l-4 border-l-blue-500 bg-white p-4">Inventory Overview</h4>
       </div>
 
-      {/* State Selection */}
+      {/* Country Selection */}
       <div className="mb-6">
-        <h5 className="text-lg font-bold text-gray-700 mb-4">Select States</h5>
+        <h5 className="text-lg font-bold text-gray-700 mb-4">Select Country</h5>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {states.map(state => (
+          {countries.map(country => (
             <div
-              key={state._id}
-              className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedState === state._id
-                ? 'bg-[#1d64b2] text-white border-[#1d64b2]'
-                : 'bg-white border-gray-300 text-gray-800 hover:border-blue-400'
+              key={country._id}
+              className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedCountry === country._id
+                ? 'bg-[#6c5ce7] text-white border-[#6c5ce7]'
+                : 'bg-white border-gray-300 text-gray-800 hover:border-purple-400'
                 }`}
-              onClick={() => handleStateSelect(state._id)}
+              onClick={() => handleCountrySelect(country._id)}
             >
-              <h6 className="font-bold text-sm tracking-wide">{state.name}</h6>
-              <div className="font-bold text-xs mt-1">{state.code || 'N/A'}</div>
+              <h6 className="font-bold text-sm tracking-wide">{country.name}</h6>
+              <div className="font-bold text-xs mt-1">{country.code || 'N/A'}</div>
             </div>
           ))}
-          {states.length === 0 && <div className="col-span-4 text-center text-gray-500">Loading states...</div>}
+          {countries.length === 0 && <div className="col-span-4 text-center text-gray-500">Loading countries...</div>}
         </div>
       </div>
+
+      {/* State Selection */}
+      {selectedCountry && (
+        <div className="mb-6">
+          <h5 className="text-lg font-bold text-gray-700 mb-4">Select States</h5>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {states.map(state => (
+              <div
+                key={state._id}
+                className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedState === state._id
+                  ? 'bg-[#1d64b2] text-white border-[#1d64b2]'
+                  : 'bg-white border-gray-300 text-gray-800 hover:border-blue-400'
+                  }`}
+                onClick={() => handleStateSelect(state._id)}
+              >
+                <h6 className="font-bold text-sm tracking-wide">{state.name}</h6>
+                <div className="font-bold text-xs mt-1">{state.code || 'N/A'}</div>
+              </div>
+            ))}
+            {states.length === 0 && <div className="col-span-4 text-center text-gray-500">Loading states...</div>}
+          </div>
+        </div>
+      )}
 
       {/* Cluster Section */}
       {renderClusters()}
@@ -449,102 +663,127 @@ const InventoryManagement = () => {
       {/* District Section */}
       {renderDistricts()}
 
-      {/* CP Types Section */}
-      {renderCpTypes()}
+      {/* Partner Section */}
+      {renderPartnerSection()}
 
-      {/* Inventory Summary */}
-      {(selectedDistrict || (selectedState && selectedCluster)) && (
-        <>
-          <div className="mt-6">
-            <div className="bg-white border border-gray-200 p-6 mb-6 rounded-md">
-              <h5 className="text-sm font-bold text-gray-800 mb-6 text-left">Inventory Summary</h5>
+      {/* Inventory Content (Summary + Table) */}
+      {selectedPlan && (
+        <div className="animate-fade-in">
+          {/* Inventory Summary */}
+          <div className="mt-8">
+            <div className="bg-white border border-gray-200 p-6 mb-8 rounded-xl shadow-sm">
+              <h5 className="text-sm font-bold text-gray-800 mb-6 text-left uppercase tracking-wider">Inventory Summary</h5>
               {loading ? (
-                <div className="flex justify-center p-4"><Loader className="animate-spin" /></div>
+                <div className="flex justify-center p-8"><Loader className="animate-spin text-blue-500" /></div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 text-center">
-                  <div>
-                    <h6 className="text-sm font-bold text-gray-800 mb-2">Total Products</h6>
-                    <h4 className="text-2xl font-bold text-black">{summary.totalProducts}</h4>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
+                  <div className="bg-blue-50 p-4 rounded-lg">
+                    <h6 className="text-[10px] font-bold text-blue-600 mb-2 uppercase">Total Products</h6>
+                    <h4 className="text-2xl font-bold text-gray-900">{summary.totalProducts}</h4>
                   </div>
-                  <div>
-                    <h6 className="text-sm font-bold text-gray-800 mb-2">Total Quantity</h6>
-                    <h4 className="text-2xl font-bold text-black">{summary.totalQuantity}</h4>
+                  <div className="bg-purple-50 p-4 rounded-lg">
+                    <h6 className="text-[10px] font-bold text-purple-600 mb-2 uppercase">Total Quantity</h6>
+                    <h4 className="text-2xl font-bold text-gray-900">{summary.totalQuantity}</h4>
                   </div>
-                  <div>
-                    <h6 className="text-sm font-bold text-gray-800 mb-2">Total Value</h6>
-                    <h4 className="text-2xl font-bold text-black">₹{summary.totalValue.toLocaleString()}</h4>
+                  <div className="bg-emerald-50 p-4 rounded-lg">
+                    <h6 className="text-[10px] font-bold text-emerald-600 mb-2 uppercase">Total Value</h6>
+                    <h4 className="text-2xl font-bold text-gray-900">₹{summary.totalValue.toLocaleString()}</h4>
                   </div>
-                  <div>
-                    <h6 className="text-sm font-bold text-gray-800 mb-2">
-                      {selectedCpType ? 'Selected CP Types' : selectedDistrict ? 'Selected Districts' : 'Selected Clusters'}
-                    </h6>
-                    <h4 className="text-2xl font-bold text-black">{selectedCpType ? 1 : selectedDistrict ? 1 : 1}</h4>
+                  <div className="bg-orange-50 p-4 rounded-lg">
+                    <h6 className="text-[10px] font-bold text-orange-600 mb-2 uppercase">Status</h6>
+                    <h4 className="text-2xl font-bold text-gray-900">{summary.lowStockCount > 0 ? 'Action Reqd' : 'Optimal'}</h4>
                   </div>
                 </div>
               )}
             </div>
 
             {/* Filter Section */}
-            <div className="bg-white border border-gray-200 mb-6 p-6 rounded-md">
-              <h5 className="text-[#206bc4] text-lg font-bold mb-4">Filter Options</h5>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="bg-white border border-gray-200 mb-8 p-6 rounded-xl shadow-sm">
+              <h5 className="text-[#206bc4] text-lg font-bold mb-6 flex items-center gap-2">
+                <Filter size={20} />
+                Refine Search
+              </h5>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Category</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Category</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                     value={activeFilters.category}
-                    onChange={(e) => setActiveFilters({ ...activeFilters, category: e.target.value })}
+                    onChange={(e) => setActiveFilters({ ...activeFilters, category: e.target.value, subCategory: '' })}
                   >
                     <option value="">Select Category</option>
-                    <option value="Rooftop">Rooftop Solar</option>
-                    <option value="SolarPump">Solar Pump</option>
-                    <option value="SolarLight">Solar Light</option>
+                    {masterCategories.map(cat => (
+                      <option key={cat._id} value={cat.name}>{cat.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Sub Category</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Sub Category</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                     value={activeFilters.subCategory}
                     onChange={(e) => setActiveFilters({ ...activeFilters, subCategory: e.target.value })}
                   >
                     <option value="">Sub Category</option>
-                    <option value="Residential">Residential</option>
-                    <option value="Commercial">Commercial</option>
+                    {masterSubCategories
+                      .filter(sub => {
+                        if (!activeFilters.category) return true;
+                        const selCat = masterCategories.find(c => c.name === activeFilters.category);
+                        const subCatId = sub.categoryId?._id || sub.categoryId;
+                        return selCat && subCatId === selCat._id;
+                      })
+                      .map(sub => (
+                        <option key={sub._id} value={sub.name}>{sub.name}</option>
+                      ))
+                    }
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Project Type (kW)</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Project Type (kW)</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                     value={activeFilters.projectType}
-                    onChange={(e) => setActiveFilters({ ...activeFilters, projectType: e.target.value })}
+                    onChange={(e) => setActiveFilters({ ...activeFilters, projectType: e.target.value, subProjectType: '' })}
                   >
                     <option value="">Select Range</option>
-                    <option value="1-5">1 kW – 5 kW</option>
-                    <option value="6-10">6 kW – 10 kW</option>
-                    <option value="10+">Above 10 kW</option>
+                    {masterProjectTypes.map((type, idx) => (
+                      <option key={idx} value={type}>{type}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Sub Project Type</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Sub Project Type</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                     value={activeFilters.subProjectType}
                     onChange={(e) => setActiveFilters({ ...activeFilters, subProjectType: e.target.value })}
                   >
                     <option value="">Sub Project Type</option>
-                    <option value="On Grid">On Grid</option>
-                    <option value="Off Grid">Off Grid</option>
-                    <option value="Hybrid">Hybrid</option>
+                    {masterSubProjectTypes
+                      .filter(sub => {
+                        if (!activeFilters.projectType) return true;
+                        const activeMapping = projectMappings.find(m => 
+                          `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === activeFilters.projectType
+                        );
+                        if (activeMapping && activeMapping.subProjectTypeId) {
+                          const subId = sub._id || sub;
+                          const mappingSubId = activeMapping.subProjectTypeId._id || activeMapping.subProjectTypeId;
+                          return subId === mappingSubId;
+                        }
+                        return true;
+                      })
+                      .map(sub => (
+                        <option key={sub._id} value={sub.name}>{sub.name}</option>
+                      ))
+                    }
                   </select>
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-6 items-end">
                 <div>
-                  <label className="block text-sm text-gray-700 mb-2">Kit Type</label>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Kit Type</label>
                   <select
-                    className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-700"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-700 bg-gray-50 focus:bg-white focus:ring-2 focus:ring-blue-500 transition-all outline-none"
                     value={activeFilters.kitType}
                     onChange={(e) => setActiveFilters({ ...activeFilters, kitType: e.target.value })}
                   >
@@ -553,13 +792,7 @@ const InventoryManagement = () => {
                     <option value="Customize Kit">Customize Kit</option>
                   </select>
                 </div>
-                <div className="md:col-span-3 flex justify-end items-end space-x-4">
-                  <button
-                    className="px-4 py-2 bg-[#206bc4] text-white rounded text-sm font-medium flex items-center hover:bg-blue-700 transition"
-                  >
-                    <Filter size={14} className="mr-2" />
-                    Apply Filters
-                  </button>
+                <div className="md:col-span-3 flex justify-end gap-3">
                   <button
                     onClick={() => {
                       setActiveFilters({
@@ -572,94 +805,73 @@ const InventoryManagement = () => {
                       setSearchQuery('');
                       setShowOnlyLowStock(false);
                     }}
-                    className="px-4 py-2 text-gray-600 text-sm font-medium hover:text-gray-800 flex items-center transition"
+                    className="px-6 py-2 border border-gray-300 text-gray-600 text-sm font-bold rounded-lg hover:bg-gray-100 transition flex items-center gap-2"
                   >
-                    <RefreshCw size={14} className="mr-2" />
-                    Reset Filters
+                    <RefreshCw size={14} />
+                    Reset
+                  </button>
+                  <button
+                    className="px-8 py-2 bg-[#206bc4] text-white rounded-lg text-sm font-bold flex items-center hover:bg-blue-700 shadow-lg shadow-blue-100 transition gap-2"
+                  >
+                    <Filter size={14} />
+                    Apply Filters
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Low Stock Alert - Dynamic */}
-            {summary.lowStockCount > 0 && (
-              <div className="bg-[#f8d7da] border border-[#f5c6cb] rounded px-4 py-3 mb-6 flex justify-between items-center">
-                <div>
-                  <h5 className="font-bold text-[#721c24] mb-1 flex items-center">
-                    <AlertTriangle className="mr-2" size={18} />
-                    Low Stock Alert
-                  </h5>
-                  <p className="text-[#721c24] text-sm">
-                    {summary.lowStockCount} product{summary.lowStockCount > 1 ? 's' : ''} {summary.lowStockCount > 1 ? 'are' : 'is'} running low on stock
-                  </p>
+            {/* Table Section */}
+            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
+              <div className="p-6 border-b flex flex-wrap justify-between items-center bg-gray-50 gap-4">
+                <h5 className="flex items-center text-lg font-bold text-gray-800">
+                  Product Inventory
+                  {summary.lowStockCount > 0 && (
+                    <span className="ml-3 bg-[#dc3545] text-white text-[10px] font-bold px-2 py-1 rounded-full uppercase">
+                      {summary.lowStockCount} Low Stock
+                    </span>
+                  )}
+                </h5>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setShowOnlyLowStock(!showOnlyLowStock)}
+                    className={`text-xs font-bold px-4 py-2 rounded-lg flex items-center transition ${showOnlyLowStock
+                      ? 'text-white bg-red-600 shadow-lg shadow-red-100'
+                      : 'text-red-500 border border-red-200 hover:bg-red-50'
+                      }`}
+                  >
+                    <AlertTriangle size={14} className="mr-2" />
+                    {showOnlyLowStock ? 'Showing Low Stock' : 'Filter Low Stock'}
+                  </button>
+                  <button
+                    onClick={() => setSettingsModalOpen(true)}
+                    className="bg-gray-100 text-gray-700 text-xs font-bold px-4 py-2 rounded-lg hover:bg-gray-200 flex items-center transition"
+                  >
+                    <Settings size={14} className="mr-2" />
+                    Settings
+                  </button>
                 </div>
-                <button className="bg-white border border-gray-300 text-gray-700 font-medium text-xs px-3 py-1.5 rounded hover:bg-gray-50 transition">
-                  View Items
-                </button>
               </div>
-            )}
-          </div>
 
-          {/* Inventory Table */}
-          <div className="bg-white border border-gray-200 rounded-md">
-            <div className="p-4 border-b flex justify-between items-center bg-gray-50 rounded-t-md">
-              <h5 className="flex items-center text-lg font-bold text-gray-800">
-                Product Inventory
-                {summary.lowStockCount > 0 && (
-                  <span className="ml-3 bg-[#dc3545] text-white text-xs font-bold px-2 py-1 rounded">
-                    {summary.lowStockCount}
-                  </span>
-                )}
-              </h5>
-              <div className="flex space-x-3">
-                <button
-                  onClick={() => setShowOnlyLowStock(!showOnlyLowStock)}
-                  className={`text-sm font-medium px-3 py-1.5 rounded flex items-center transition ${showOnlyLowStock
-                    ? 'text-red-600 bg-red-100 hover:bg-red-200'
-                    : 'text-red-500 hover:bg-red-50'
-                    }`}
-                >
-                  <Filter size={14} className="mr-1" />
-                  {showOnlyLowStock ? 'Show All Products' : 'Show Low Stock Only'}
-                </button>
-                <button
-                  onClick={() => setSettingsModalOpen(true)}
-                  className="bg-[#17a2b8] text-white text-sm font-medium px-3 py-1.5 rounded hover:bg-cyan-600 flex items-center transition"
-                >
-                  <Settings size={14} className="mr-1" />
-                  Settings
-                </button>
-              </div>
-            </div>
-
-            {/* Search & Sort */}
-            <div className="p-6 border-b">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-2">
-                  <div className="relative">
-                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                      <Search className="text-gray-400" size={20} />
-                    </div>
-                    <input
-                      type="text"
-                      className="w-full border rounded-lg pl-10 pr-10 py-2"
-                      placeholder="Search products..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                    {searchQuery && (
-                      <button
-                        className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                        onClick={() => setSearchQuery('')}
-                      >
-                        <X className="text-gray-400 hover:text-gray-600" size={20} />
-                      </button>
-                    )}
-                  </div>
+              {/* Search & Sort */}
+              <div className="p-6 border-b flex flex-col md:flex-row gap-4 bg-white">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-xl pl-10 pr-10 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 transition-all outline-none"
+                    placeholder="Search by name, SKU or brand..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  {searchQuery && (
+                    <button className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600" onClick={() => setSearchQuery('')}>
+                      <X size={18} />
+                    </button>
+                  )}
                 </div>
-                <div className="flex space-x-3">
+                <div className="md:w-64">
                   <select
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="w-full border border-gray-300 rounded-xl px-4 py-2.5 text-sm appearance-none bg-no-repeat bg-[right_1rem_center] bg-[length:1em_1em] outline-none"
                     value={currentSortField}
                     onChange={(e) => setCurrentSortField(e.target.value)}
                   >
@@ -670,80 +882,62 @@ const InventoryManagement = () => {
                   </select>
                 </div>
               </div>
-            </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-sm">
-                <thead className="bg-[#343a40] text-white">
-                  <tr>
-                    <th className="p-3 border-b border-[#454d55] font-bold">#</th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">Product Name <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">Brand <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">SKU <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">Quantity <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">Price (₹) <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">
-                      <div className="flex items-center">Total Value (₹) <ChevronUp size={14} className="ml-1 opacity-50" /></div>
-                    </th>
-                    <th className="p-3 border-b border-[#454d55] font-bold">Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr><td colSpan="8" className="p-8 text-center"><Loader className="animate-spin mx-auto" /></td></tr>
-                  ) : inventoryData.length === 0 ? (
-                    <tr><td colSpan="8" className="p-8 text-center text-gray-500">No inventory found</td></tr>
-                  ) : (
-                    inventoryData.map((item, index) => {
-                      const isLowStock = item.quantity <= getThresholdForItem(item);
-                      const totalValue = item.price * item.quantity;
-
-                      return (
-                        <tr key={item._id} className={`border-b border-gray-200 transition-colors ${isLowStock ? 'bg-[#f8d7da]' : 'bg-white hover:bg-gray-50'}`}>
-                          <td className="p-3">{index + 1}</td>
-                          <td className="p-3 text-gray-800">{item.itemName}</td>
-                          <td className="p-3 text-gray-700">{item.brand?.brandName || 'Unknown'}</td>
-                          <td className="p-3 text-gray-600 font-mono text-xs">{item.sku}</td>
-                          <td className="p-3 font-semibold text-gray-800">
-                            <div className="flex items-center">
-                              {item.quantity}
-                              {isLowStock && (
-                                <span className="ml-2 inline-flex items-center justify-center w-4 h-4 bg-[#dc3545] text-white rounded-full text-[10px] font-bold">
-                                  i
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3 text-gray-800">₹{item.price.toLocaleString()}</td>
-                          <td className="p-3 text-gray-800">₹{totalValue.toLocaleString()}</td>
-                          <td className="p-3">
-                            <span className={`px-2 py-1 rounded text-xs font-bold text-white ${isLowStock ? 'bg-[#dc3545]' : 'bg-[#28a745]'}`}>
-                              {isLowStock ? 'Low Stock' : 'In Stock'}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <div className="p-4 border-t text-right text-gray-500 text-sm">
-              Showing {inventoryData.length} items
+              {/* Table */}
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-sm">
+                  <thead className="bg-[#343a40] text-gray-100">
+                    <tr>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">#</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Product Name</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Brand</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">SKU</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Quantity</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Price (₹)</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Total (₹)</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {loading ? (
+                      <tr><td colSpan="8" className="p-16 text-center"><Loader className="animate-spin mx-auto text-blue-500" size={32} /></td></tr>
+                    ) : inventoryData.length === 0 ? (
+                      <tr><td colSpan="8" className="p-16 text-center text-gray-400 italic">No inventory matching your criteria</td></tr>
+                    ) : (
+                      inventoryData.map((item, index) => {
+                        const isLowStock = item.quantity <= getThresholdForItem(item);
+                        const totalValue = item.price * item.quantity;
+                        return (
+                          <tr key={item._id} className={`hover:bg-gray-50 transition-colors ${isLowStock ? 'bg-red-50/50' : 'bg-white'}`}>
+                            <td className="p-4 text-gray-400 font-medium">{index + 1}</td>
+                            <td className="p-4">
+                              <div className="font-bold text-gray-900">{item.itemName}</div>
+                              <div className="text-[10px] text-gray-400 uppercase tracking-tight">{item.category}</div>
+                            </td>
+                            <td className="p-4 text-gray-600">{item.brand?.brandName || 'Unknown'}</td>
+                            <td className="p-4"><code className="bg-gray-100 text-[10px] px-1.5 py-0.5 rounded font-mono">{item.sku}</code></td>
+                            <td className="p-4 font-bold text-gray-900">{item.quantity}</td>
+                            <td className="p-4 text-gray-600">₹{item.price.toLocaleString()}</td>
+                            <td className="p-4 font-bold text-blue-600">₹{totalValue.toLocaleString()}</td>
+                            <td className="p-4">
+                              <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
+                                {isLowStock ? 'Low' : 'OK'}
+                              </span>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-4 border-t text-sm text-gray-400 font-medium flex justify-between bg-gray-50">
+                <span>Total Items Found</span>
+                <span>{inventoryData.length} records</span>
+              </div>
             </div>
           </div>
-        </>
+        </div>
       )}
 
       {settingsModalOpen && <SettingsModal />}

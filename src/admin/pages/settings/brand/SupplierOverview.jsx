@@ -37,11 +37,14 @@ const BrandSupplierOverview = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   // --- Filter State ---
+  const [selectedCountries, setSelectedCountries] = useState(new Set());
   const [selectedStates, setSelectedStates] = useState(new Set());
-  const [selectedCities, setSelectedCities] = useState(new Set()); // Renamed from Clusters
+  const [selectedClusters, setSelectedClusters] = useState(new Set());
   const [selectedDistricts, setSelectedDistricts] = useState(new Set());
   const [selectedManufactures, setSelectedManufactures] = useState(new Set());
-  const [showCities, setShowCities] = useState(false);
+  
+  const [showStates, setShowStates] = useState(false);
+  const [showClusters, setShowClusters] = useState(false);
   const [showDistricts, setShowDistricts] = useState(false);
   const [showManufactures, setShowManufactures] = useState(false);
 
@@ -54,8 +57,9 @@ const BrandSupplierOverview = () => {
   const [procurementTypes, setProcurementTypes] = useState([]);
 
   // --- Location Master Data (for Filters) ---
+  const [allCountries, setAllCountries] = useState([]);
   const [allStates, setAllStates] = useState([]);
-  const [allCities, setAllCities] = useState([]);
+  const [allClusters, setAllClusters] = useState([]);
   const [allDistricts, setAllDistricts] = useState([]);
 
   // --- Master Data for Dropdowns ---
@@ -147,7 +151,7 @@ const BrandSupplierOverview = () => {
       const [
         suppliersData, 
         manuData, 
-        statesResp,
+        countryResp,
         prodResp,
         catResp,
         subCatResp,
@@ -157,7 +161,7 @@ const BrandSupplierOverview = () => {
       ] = await Promise.all([
         getAllSuppliers(),
         getAllManufacturers(),
-        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?isActive=true`),
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/countries?isActive=true`),
         getProducts(),
         getCategories(),
         getSubCategories(),
@@ -168,16 +172,23 @@ const BrandSupplierOverview = () => {
 
       setSuppliers(suppliersData);
       setManufacturers(manuData);
-      if (statesResp.data.success) {
-        setAllStates(statesResp.data.data);
+      if (countryResp.data.success) {
+        setAllCountries(countryResp.data.data);
       }
 
       setMasterProducts(prodResp?.data || []);
       setMasterCategories(catResp?.data || []);
       setMasterSubCategories(subCatResp?.data || []);
-      setMasterProjectTypes(ptResp?.data || []);
+      
+      // Derive unique project types from mappings (e.g., "3 to 30 kW")
+      const mappings = mappingResp?.data || [];
+      const derivedProjectTypes = mappings.length > 0 
+        ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
+        : ptResp?.data?.map(p => p.name) || [];
+
+      setMasterProjectTypes(derivedProjectTypes);
       setMasterSubProjectTypes(subPtResp?.data || []);
-      setMasterProjectMappings(mappingResp?.data || []);
+      setMasterProjectMappings(mappings);
 
     } catch (error) {
       console.error('Error fetching initial data:', error);
@@ -191,40 +202,53 @@ const BrandSupplierOverview = () => {
   // But strictly adhering to "Dynamic", we should fetch location lists based on selection.
   // Using the same API pattern as AddBrandManufacturer.
 
+  // --- Dynamic Location Fetchers for Filters ---
   useEffect(() => {
-    // When selectedStates changes, fetch relevant cities
-    // Note: API supports filtering by ONE stateId usually. 
-    // If filtering by multiple, we might need to make multiple calls or get all cities.
-    // For simplicity/performance, let's fetch ALL cities if states selected, or just on demand.
-    // Let's assume we can fetch cities for selected states. 
-    // If multiple states > complicated URL. 
-    // Workaround: Fetch cities for EACH selected state and merge.
-    const fetchFilterCities = async () => {
-      if (selectedStates.size === 0) {
-        setAllCities([]);
+    const fetchFilterStates = async () => {
+      if (selectedCountries.size === 0) {
+        setAllStates([]);
         return;
       }
-      const promises = Array.from(selectedStates).map(stateId =>
-        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/cities?stateId=${stateId}&isActive=true`)
+      const promises = Array.from(selectedCountries).map(countryId =>
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/states?countryId=${countryId}&isActive=true`)
       );
       try {
         const responses = await Promise.all(promises);
-        const mergedCities = responses.flatMap(r => r.data.success ? r.data.data : []);
-        const uniqueCities = Array.from(new Map(mergedCities.map(item => [item._id, item])).values());
-        setAllCities(uniqueCities);
+        const mergedStates = responses.flatMap(r => r.data.success ? r.data.data : []);
+        const uniqueStates = Array.from(new Map(mergedStates.map(item => [item._id, item])).values());
+        setAllStates(uniqueStates);
       } catch (err) { console.error(err); }
     };
-    fetchFilterCities();
+    fetchFilterStates();
+  }, [selectedCountries]);
+
+  useEffect(() => {
+    const fetchFilterClusters = async () => {
+      if (selectedStates.size === 0) {
+        setAllClusters([]);
+        return;
+      }
+      const promises = Array.from(selectedStates).map(stateId =>
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/clusters?stateId=${stateId}&isActive=true`)
+      );
+      try {
+        const responses = await Promise.all(promises);
+        const mergedClusters = responses.flatMap(r => r.data.success ? r.data.data : []);
+        const uniqueClusters = Array.from(new Map(mergedClusters.map(item => [item._id, item])).values());
+        setAllClusters(uniqueClusters);
+      } catch (err) { console.error(err); }
+    };
+    fetchFilterClusters();
   }, [selectedStates]);
 
   useEffect(() => {
     const fetchFilterDistricts = async () => {
-      if (selectedCities.size === 0) {
+      if (selectedClusters.size === 0) {
         setAllDistricts([]);
         return;
       }
-      const promises = Array.from(selectedCities).map(cityId =>
-        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/districts?cityId=${cityId}&isActive=true`)
+      const promises = Array.from(selectedClusters).map(clusterId =>
+        axios.get(`${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/locations/districts?clusterId=${clusterId}&isActive=true`)
       );
       try {
         const responses = await Promise.all(promises);
@@ -234,13 +258,14 @@ const BrandSupplierOverview = () => {
       } catch (err) { console.error(err); }
     };
     fetchFilterDistricts();
-  }, [selectedCities]);
+  }, [selectedClusters]);
 
 
   // --- Filter Logic ---
   const filteredSuppliers = suppliers.filter(supplier => {
+    if (selectedCountries.size > 0 && !selectedCountries.has(supplier.country?._id || supplier.country)) return false;
     if (selectedStates.size > 0 && !selectedStates.has(supplier.state?._id || supplier.state)) return false;
-    if (selectedCities.size > 0 && !selectedCities.has(supplier.cluster?._id || supplier.cluster)) return false;
+    if (selectedClusters.size > 0 && !selectedClusters.has(supplier.cluster?._id || supplier.cluster)) return false;
     if (selectedDistricts.size > 0 && !selectedDistricts.has(supplier.district?._id || supplier.district)) return false;
     if (selectedManufactures.size > 0) {
       // Manufacturer name or ID?
@@ -266,23 +291,37 @@ const BrandSupplierOverview = () => {
   const distributorCount = filteredSuppliers.filter(s => s.type === "Distributor").length;
 
   // --- Filter Handlers ---
+  const handleCountrySelect = (countryId) => {
+    const newSet = new Set(selectedCountries);
+    if (newSet.has(countryId)) newSet.delete(countryId);
+    else newSet.add(countryId);
+    setSelectedCountries(newSet);
+    setShowStates(newSet.size > 0);
+    // Reset lower filters
+    setSelectedStates(new Set());
+    setSelectedClusters(new Set());
+    setSelectedDistricts(new Set());
+    setShowClusters(false);
+    setShowDistricts(false);
+  };
+
   const handleStateSelect = (stateId) => {
     const newSet = new Set(selectedStates);
     if (newSet.has(stateId)) newSet.delete(stateId);
     else newSet.add(stateId);
     setSelectedStates(newSet);
-    setShowCities(newSet.size > 0);
+    setShowClusters(newSet.size > 0);
     // Reset lower filters
-    setSelectedCities(new Set());
+    setSelectedClusters(new Set());
     setSelectedDistricts(new Set());
     setShowDistricts(false);
   };
 
-  const handleCitySelect = (cityId) => {
-    const newSet = new Set(selectedCities);
-    if (newSet.has(cityId)) newSet.delete(cityId);
-    else newSet.add(cityId);
-    setSelectedCities(newSet);
+  const handleClusterSelect = (clusterId) => {
+    const newSet = new Set(selectedClusters);
+    if (newSet.has(clusterId)) newSet.delete(clusterId);
+    else newSet.add(clusterId);
+    setSelectedClusters(newSet);
     setShowDistricts(newSet.size > 0);
     setSelectedDistricts(new Set());
   };
@@ -513,42 +552,64 @@ const BrandSupplierOverview = () => {
         </button>
       </div>
 
-      {/* State Selection */}
+      {/* Country Selection */}
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select States</h2>
+        <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Country</h2>
         <div className="flex gap-2 mb-4">
-          <button onClick={() => setSelectedStates(new Set(allStates.map(s => s._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
-          <button onClick={() => setSelectedStates(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
+          <button onClick={() => setSelectedCountries(new Set(allCountries.map(c => c._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
+          <button onClick={() => setSelectedCountries(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          {allStates.map((state) => (
+          {allCountries.map((country) => (
             <div
-              key={state._id}
-              className={`border rounded-lg cursor-pointer p-4 text-center transition-all duration-200 ${selectedStates.has(state._id) ? 'border-blue-500 bg-blue-500 text-white' : 'border-blue-200 hover:border-blue-300'}`}
-              onClick={() => handleStateSelect(state._id)}
+              key={country._id}
+              className={`border rounded-lg cursor-pointer p-4 text-center transition-all duration-200 ${selectedCountries.has(country._id) ? 'border-indigo-600 bg-indigo-600 text-white' : 'border-indigo-100 hover:border-indigo-300'}`}
+              onClick={() => handleCountrySelect(country._id)}
             >
-              <p className="font-bold">{state.name}</p>
+              <p className="font-bold">{country.name}</p>
             </div>
           ))}
         </div>
       </div>
 
-      {/* City Selection (Clusters) */}
-      {selectedStates.size > 0 && (
+      {/* State Selection */}
+      {selectedCountries.size > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Districts</h2>
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select States</h2>
           <div className="flex gap-2 mb-4">
-            <button onClick={() => setSelectedCities(new Set(allCities.map(c => c._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
-            <button onClick={() => setSelectedCities(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
+            <button onClick={() => setSelectedStates(new Set(allStates.map(s => s._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
+            <button onClick={() => setSelectedStates(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
           </div>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-            {allCities.map((city) => (
+            {allStates.map((state) => (
               <div
-                key={city._id}
-                className={`border rounded-lg p-4 text-center cursor-pointer transition-all duration-200 ${selectedCities.has(city._id) ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-200'}`}
-                onClick={() => handleCitySelect(city._id)}
+                key={state._id}
+                className={`border rounded-lg cursor-pointer p-4 text-center transition-all duration-200 ${selectedStates.has(state._id) ? 'border-blue-500 bg-blue-500 text-white' : 'border-blue-200 hover:border-blue-300'}`}
+                onClick={() => handleStateSelect(state._id)}
               >
-                {city.name || `Zones: ${city.zones?.map(z => z.name).join(', ') || 'N/A'}`}
+                <p className="font-bold">{state.name}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Cluster Selection */}
+      {selectedStates.size > 0 && (
+        <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Clusters</h2>
+          <div className="flex gap-2 mb-4">
+            <button onClick={() => setSelectedClusters(new Set(allClusters.map(c => c._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
+            <button onClick={() => setSelectedClusters(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {allClusters.map((cluster) => (
+              <div
+                key={cluster._id}
+                className={`border rounded-lg p-4 text-center cursor-pointer transition-all duration-200 ${selectedClusters.has(cluster._id) ? 'border-purple-600 bg-purple-600 text-white' : 'border-gray-200'}`}
+                onClick={() => handleClusterSelect(cluster._id)}
+              >
+                {cluster.name}
               </div>
             ))}
           </div>
@@ -556,9 +617,9 @@ const BrandSupplierOverview = () => {
       )}
 
       {/* District Selection */}
-      {selectedCities.size > 0 && (
+      {selectedClusters.size > 0 && (
         <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
-          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Clusters</h2>
+          <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Select Districts</h2>
           <div className="flex gap-2 mb-4">
             <button onClick={() => setSelectedDistricts(new Set(allDistricts.map(d => d._id)))} className="px-4 py-2 border border-blue-500 text-blue-500 rounded">Select All</button>
             <button onClick={() => setSelectedDistricts(new Set())} className="px-4 py-2 border border-gray-400 text-gray-600 rounded">Clear All</button>
@@ -625,8 +686,9 @@ const BrandSupplierOverview = () => {
                 suppliers
                   .filter(s => {
                     // Filter by location
+                    if (selectedCountries.size > 0 && !selectedCountries.has(s.country?._id || s.country)) return false;
                     if (selectedStates.size > 0 && !selectedStates.has(s.state?._id || s.state)) return false;
-                    if (selectedCities.size > 0 && !selectedCities.has(s.cluster?._id || s.cluster)) return false;
+                    if (selectedClusters.size > 0 && !selectedClusters.has(s.cluster?._id || s.cluster)) return false;
                     if (selectedDistricts.size > 0 && !selectedDistricts.has(s.district?._id || s.district)) return false;
 
                     // Filter by ALL other advanced filters except the current one
@@ -649,7 +711,7 @@ const BrandSupplierOverview = () => {
                 {/* Products */}
                 <FilterDropdown
                   label="Products"
-                  options={getDynamicOptions('product', { supplierTypes })}
+                  options={masterProducts.map(p => p.name).filter(Boolean).sort()}
                   selectedValues={products}
                   onSelect={(val) => {
                     const newProds = products.includes(val)
@@ -664,7 +726,7 @@ const BrandSupplierOverview = () => {
                 {/* Categories */}
                 <FilterDropdown
                   label="Categories"
-                  options={getDynamicOptions('category', { supplierTypes })}
+                  options={masterCategories.map(c => c.name).filter(Boolean).sort()}
                   selectedValues={categories}
                   onSelect={(val) => {
                     const newCats = categories.includes(val)
@@ -679,7 +741,7 @@ const BrandSupplierOverview = () => {
                 {/* Sub Categories */}
                 <FilterDropdown
                   label="Sub Categories"
-                  options={getDynamicOptions('subCategory', { supplierTypes })}
+                  options={masterSubCategories.map(sc => sc.name).filter(Boolean).sort()}
                   selectedValues={subCategories}
                   onSelect={(val) => {
                     const newSubCats = subCategories.includes(val)
@@ -694,7 +756,7 @@ const BrandSupplierOverview = () => {
                 {/* Project Types */}
                 <FilterDropdown
                   label="Project Types"
-                  options={getDynamicOptions('projectType', { supplierTypes })}
+                  options={masterProjectTypes.map(pt => pt.name || pt).filter(Boolean).sort()}
                   selectedValues={projectTypes}
                   onSelect={(val) => {
                     const newTypes = projectTypes.includes(val)
@@ -709,7 +771,7 @@ const BrandSupplierOverview = () => {
                 {/* Sub Project Types */}
                 <FilterDropdown
                   label="Sub Project Types"
-                  options={getDynamicOptions('subProjectType', { supplierTypes })}
+                  options={masterSubProjectTypes.map(spt => spt.name).filter(Boolean).sort()}
                   selectedValues={subProjectTypes}
                   onSelect={(val) => {
                     const newTypes = subProjectTypes.includes(val)
@@ -903,7 +965,7 @@ const BrandSupplierOverview = () => {
                     {modalProjectTypes.length > 0 ? (
                       modalProjectTypes.map((r, i) => <option key={i} value={r}>{r}</option>)
                     ) : (
-                      masterProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)
+                      masterProjectTypes.map((pt, i) => <option key={i} value={pt}>{pt}</option>)
                     )}
                   </select>
                 </div>

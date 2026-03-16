@@ -1245,11 +1245,7 @@ const CustomizeCombokit = () => {
               </div>
               <button
                 onClick={addNewCustomization}
-                disabled={!selectedCountry || !selectedStates.size || !selectedRoles.size}
-                className={`flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all shadow-md text-sm font-bold active:scale-95 ${(!selectedCountry || !selectedStates.size || !selectedRoles.size)
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-                  : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                  }`}
+                className="flex items-center gap-2 px-5 py-2.5 rounded-lg transition-all shadow-md text-sm font-bold bg-indigo-600 text-white hover:bg-indigo-700 active:scale-95"
               >
                 <Plus className="w-4 h-4" />
                 Add New Configuration

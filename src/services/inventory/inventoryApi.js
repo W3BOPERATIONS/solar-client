@@ -2,33 +2,44 @@ import api from '../../api/axios';
 
 const inventoryApi = {
     // Inventory Items
-    createItem: (data) => api.post('/inventory/items', data),
-    getItems: (params) => api.get('/inventory/items', { params }),
-    updateItem: (id, data) => api.patch(`/inventory/items/${id}`, data),
-    deleteItem: (id) => api.delete(`/inventory/items/${id}`),
+    createItem: (data, config = {}) => api.post('/inventory/items', data, config),
+    getItems: (params, config = {}) => {
+        // Handle case where silent is passed inside params object (from old code)
+        const { silent, ...restParams } = params || {};
+        const finalConfig = { ...config, params: restParams };
+        if (silent !== undefined) finalConfig.silent = silent;
+        return api.get('/inventory/items', finalConfig);
+    },
+    updateItem: (id, data, config = {}) => api.patch(`/inventory/items/${id}`, data, config),
+    deleteItem: (id, config = {}) => api.delete(`/inventory/items/${id}`, config),
 
     // Summary
-    getSummary: (params) => api.get('/inventory/summary', { params }),
+    getSummary: (params, config = {}) => {
+        const { silent, ...restParams } = params || {};
+        const finalConfig = { ...config, params: restParams };
+        if (silent !== undefined) finalConfig.silent = silent;
+        return api.get('/inventory/summary', finalConfig);
+    },
 
     // Brands
-    createBrand: (data) => api.post('/inventory/brands', data),
-    getBrands: () => api.get('/inventory/brands'),
-    getBrandOverview: (params) => api.get('/inventory/brand-overview', { params }),
+    createBrand: (data, config = {}) => api.post('/inventory/brands', data, config),
+    getBrands: (config = {}) => api.get('/inventory/brands', config),
+    getBrandOverview: (params, config = {}) => api.get('/inventory/brand-overview', { params, ...config }),
 
     // Restock Limits
-    getRestockLimits: (params) => api.get('/inventory/restock-limits', { params }),
-    setRestockLimit: (data) => api.post('/inventory/restock-limits', data),
+    getRestockLimits: (params, config = {}) => api.get('/inventory/restock-limits', { params, ...config }),
+    setRestockLimit: (data, config = {}) => api.post('/inventory/restock-limits', data, config),
 
     // Warehouses
-    getAllWarehouses: (params) => api.get('/inventory/warehouses', { params }),
-    getWarehouseById: (id) => api.get(`/inventory/warehouses/${id}`),
-    createWarehouse: (data) => api.post('/inventory/warehouses', data),
-    updateWarehouse: (id, data) => api.patch(`/inventory/warehouses/${id}`, data),
-    deleteWarehouse: (id) => api.delete(`/inventory/warehouses/${id}`),
+    getAllWarehouses: (params, config = {}) => api.get('/inventory/warehouses', { params, ...config }),
+    getWarehouseById: (id, config = {}) => api.get(`/inventory/warehouses/${id}`, config),
+    createWarehouse: (data, config = {}) => api.post('/inventory/warehouses', data, config),
+    updateWarehouse: (id, data, config = {}) => api.patch(`/inventory/warehouses/${id}`, data, config),
+    deleteWarehouse: (id, config = {}) => api.delete(`/inventory/warehouses/${id}`, config),
 
     // Inventory Settings
-    getSettings: () => api.get('/inventory/settings'),
-    updateSettings: (data) => api.put('/inventory/settings', data),
+    getSettings: (config = {}) => api.get('/inventory/settings', config),
+    updateSettings: (data, config = {}) => api.put('/inventory/settings', data, config),
 };
 
 export default inventoryApi;

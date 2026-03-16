@@ -678,36 +678,31 @@ export default function AddComboKit() {
     if (isEditSingle) {
       setActiveKitIndex(kitIdx);
       setIsNewKitTab(false);
-      await loadKitIntoForm(existingKits[kitIdx]);
+      await loadKitIntoForm(existingKits[kitIdx], rowId);
     } else {
-      if (existingKits.length > 0) {
-        setActiveKitIndex(0);
-        setIsNewKitTab(false);
-        await loadKitIntoForm(existingKits[0]);
-      } else {
-        setIsNewKitTab(true);
-        resetComboKitForm();
+      // Always open the "New Kit" (+) tab by default for standard "Add" click
+      setIsNewKitTab(true);
+      resetComboKitForm();
 
-        // Fetch and load SolarKit BOM for the new kit
-        if (row && row.solarkitName) {
-          const kitModel = solarKits.find(k => k.name === row.solarkitName);
-          if (kitModel && kitModel._id) {
-            try {
-              const bomData = await getSolarKitBOM(kitModel._id);
-              if (bomData && bomData.bom) {
-                const mappedBom = bomData.bom.map(section => ({
-                  ...section,
-                  items: section.items?.map(item => ({
-                    ...item,
-                    itemType: item.itemType || item.type || ''
-                  })) || []
-                }));
-                setBomSections(mappedBom);
-                setShowBomSection(true);
-              }
-            } catch (err) {
-              console.error("Error loading SolarKit BOM:", err);
+      // Fetch and load SolarKit BOM for the new kit
+      if (row && row.solarkitName) {
+        const kitModel = solarKits.find(k => k.name === row.solarkitName);
+        if (kitModel && kitModel._id) {
+          try {
+            const bomData = await getSolarKitBOM(kitModel._id);
+            if (bomData && bomData.bom) {
+              const mappedBom = bomData.bom.map(section => ({
+                ...section,
+                items: section.items?.map(item => ({
+                  ...item,
+                  itemType: item.itemType || item.type || ''
+                })) || []
+              }));
+              setBomSections(mappedBom);
+              setShowBomSection(true);
             }
+          } catch (err) {
+            console.error("Error loading SolarKit BOM:", err);
           }
         }
       }
@@ -716,7 +711,7 @@ export default function AddComboKit() {
     setShowComboKitModal(true);
   };
 
-  const loadKitIntoForm = async (kit) => {
+  const loadKitIntoForm = async (kit, projectRowId = null) => {
     if (!kit) {
       resetComboKitForm();
       return;
@@ -725,8 +720,44 @@ export default function AddComboKit() {
     setComboKitImage(kit.image || null);
     setSolarPanelBrand(kit.panelBrand || '');
     setInverterBrand(kit.inverterBrand || '');
-    setBomSections(kit.bomSections || []);
-    setShowBomSection(kit.bomSections?.length > 0);
+
+    // BOM Show/Fetch Logic
+    if (kit.bomSections && kit.bomSections.length > 0) {
+      setBomSections(kit.bomSections);
+      setShowBomSection(true);
+    } else {
+      // If kit has no internal BOM, check if the project has a Solarkit name to pull from
+      const pid = projectRowId || currentRowId;
+      const row = projectRows.find(r => r.id === pid);
+      if (row && row.solarkitName) {
+        const kitModel = solarKits.find(k => k.name === row.solarkitName);
+        if (kitModel && kitModel._id) {
+          try {
+            const bomData = await getSolarKitBOM(kitModel._id);
+            if (bomData && bomData.bom) {
+              const mappedBom = bomData.bom.map(section => ({
+                ...section,
+                items: section.items?.map(item => ({
+                  ...item,
+                  itemType: item.itemType || item.type || ''
+                })) || []
+              }));
+              setBomSections(mappedBom);
+            } else {
+              setBomSections([]);
+            }
+          } catch (err) {
+            console.error("Error loading SolarKit BOM for existing kit:", err);
+            setBomSections([]);
+          }
+        } else {
+          setBomSections([]);
+        }
+      } else {
+        setBomSections([]);
+      }
+      setShowBomSection(true); // Always show BOM editor as requested for already created
+    }
 
     if (kit.panelBrand) {
       await handleSolarPanelBrandChange(kit.panelBrand, false);
@@ -793,7 +824,7 @@ export default function AddComboKit() {
     } else {
       setIsNewKitTab(false);
       setActiveKitIndex(newIdx);
-      await loadKitIntoForm(updatedKits[newIdx]);
+      await loadKitIntoForm(updatedKits[newIdx], currentRowId);
     }
   };
 

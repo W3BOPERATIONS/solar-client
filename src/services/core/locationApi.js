@@ -1,9 +1,9 @@
 import api from '../../api/axios';
 
 // Get all countries
-export const getCountries = async () => {
+export const getCountries = async (config = {}) => {
     try {
-        const res = await api.get('/locations/countries');
+        const res = await api.get('/locations/countries', config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -11,11 +11,11 @@ export const getCountries = async () => {
 };
 
 // Get all states (optionally by country)
-export const getStates = async (params = {}) => {
+export const getStates = async (params = {}, config = {}) => {
     try {
         const query = typeof params === 'string' ? `countryId=${params}` : new URLSearchParams(params).toString();
         const url = query ? `/locations/states?${query}` : '/locations/states';
-        const res = await api.get(url);
+        const res = await api.get(url, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -23,10 +23,10 @@ export const getStates = async (params = {}) => {
 };
 
 // Get cities by state
-export const getCities = async (params = {}) => {
+export const getCities = async (params = {}, config = {}) => {
     try {
         const query = typeof params === 'string' ? `stateId=${params}` : new URLSearchParams(params).toString();
-        const res = await api.get(`/locations/cities?${query}`);
+        const res = await api.get(`/locations/cities?${query}`, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -34,10 +34,10 @@ export const getCities = async (params = {}) => {
 };
 
 // Get districts by city or state
-export const getDistricts = async (params = {}) => {
+export const getDistricts = async (params = {}, config = {}) => {
     try {
         const query = new URLSearchParams(params).toString();
-        const res = await api.get(`/locations/districts?${query}`);
+        const res = await api.get(`/locations/districts?${query}`, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -45,10 +45,10 @@ export const getDistricts = async (params = {}) => {
 };
 
 // Get clusters by district
-export const getClusters = async (params = {}) => {
+export const getClusters = async (params = {}, config = {}) => {
     try {
         const query = typeof params === 'string' ? `districtId=${params}` : new URLSearchParams(params).toString();
-        const res = await api.get(`/locations/clusters?${query}`);
+        const res = await api.get(`/locations/clusters?${query}`, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -56,39 +56,39 @@ export const getClusters = async (params = {}) => {
 };
 
 // Hierarchy functions
-export const getStatesHierarchy = async () => {
+export const getStatesHierarchy = async (config = {}) => {
     try {
-        const res = await api.get('/locations/hierarchy/states');
+        const res = await api.get('/locations/hierarchy/states', config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
     }
 };
 
-export const getClustersHierarchy = async (stateId) => {
+export const getClustersHierarchy = async (stateId, config = {}) => {
     try {
         const url = stateId ? `/locations/hierarchy/clusters?stateId=${stateId}` : '/locations/hierarchy/clusters';
-        const res = await api.get(url);
+        const res = await api.get(url, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
     }
 };
 
-export const getDistrictsHierarchy = async (clusterId) => {
+export const getDistrictsHierarchy = async (clusterId, config = {}) => {
     try {
         const url = clusterId ? `/locations/hierarchy/districts?clusterId=${clusterId}` : '/locations/hierarchy/districts';
-        const res = await api.get(url);
+        const res = await api.get(url, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
     }
 };
 
-export const getCitiesHierarchy = async (districtId) => {
+export const getCitiesHierarchy = async (districtId, config = {}) => {
     try {
         const url = districtId ? `/locations/hierarchy/cities?districtId=${districtId}` : '/locations/hierarchy/cities';
-        const res = await api.get(url);
+        const res = await api.get(url, config);
         return res.data.data;
     } catch (err) {
         throw err.response?.data || err.message;
