@@ -84,8 +84,8 @@ import PriceMaster from './admin/pages/settings/product/PriceMaster';
 import AddUnitManagement from './admin/pages/settings/product/AddUnitManagement';
 
 // Brand Settings
-import AddBrandManufacturer from './admin/pages/settings/brand/AddBrandManufacturer';
-import SupplierOverview from './admin/pages/settings/brand/SupplierOverview';
+import AddBrandManufacturer from './admin/pages/operations/brand/AddBrandManufacturer';
+import SupplierOverview from './admin/pages/operations/brand/SupplierOverview';
 
 // ComboKit Settings
 import CreateSolarkit from './admin/pages/settings/combokit/CreateSolarkit';
@@ -445,8 +445,8 @@ function App() {
               <Route path="settings/product/add-unit-management" element={<AddUnitManagement />} />
 
               {/* Brand Settings */}
-              <Route path="settings/brand/add-brand-manufacturer" element={<AddBrandManufacturer />} />
-              <Route path="settings/brand/supplier-overview" element={<SupplierOverview />} />
+              <Route path="operations/brand/add-brand-manufacturer" element={<AddBrandManufacturer />} />
+              <Route path="operations/brand/supplier-overview" element={<SupplierOverview />} />
 
               {/* ComboKit Settings */}
               <Route path="settings/combokit/create-solarkit" element={<CreateSolarkit />} />

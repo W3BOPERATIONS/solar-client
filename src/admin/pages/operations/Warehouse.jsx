@@ -179,8 +179,8 @@ export default function OurWarehouse() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.manager || !formData.contact || !formData.state || !formData.cluster || !formData.district) {
-      toast.error('Please fill all required fields');
+    if (!formData.name || !formData.manager || !formData.contact || !formData.state || !formData.cluster || !formData.district || !formData.address || !formData.capacity) {
+      toast.error('Please fill all required fields including Address and Capacity');
       return;
     }
 
@@ -504,6 +504,7 @@ export default function OurWarehouse() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all"
                     placeholder="Total area"
+                    required
                   />
                 </div>
               </div>
@@ -545,6 +546,7 @@ export default function OurWarehouse() {
                   rows="2"
                   className="w-full px-4 py-3 border border-gray-200 rounded-2xl focus:ring-2 focus:ring-blue-500 outline-none transition-all resize-none"
                   placeholder="Street address, landmark, pin code..."
+                  required
                 />
               </div>
 

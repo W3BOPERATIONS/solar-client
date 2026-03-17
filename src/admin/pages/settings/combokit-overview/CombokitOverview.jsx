@@ -473,21 +473,7 @@ export default function CombokitOverview() {
   if (viewMode === 'details') {
     return (
       <div className="min-h-screen bg-[#f8fafc] pb-10">
-        {/* Header Section */}
-        <div className="bg-white border-b border-slate-200 px-6 py-4 flex justify-between items-center sticky top-0 z-40">
-          <div className="flex items-center gap-2">
-            <div className="p-2 bg-indigo-50 rounded-lg">
-              <Settings className="text-indigo-600" size={18} />
-            </div>
-            <h1 className="text-lg font-black text-slate-800 tracking-tight flex items-center gap-2">
-              <span className="opacity-40"><Eye size={16} /></span>
-              Combokit Details
-            </h1>
-          </div>
-          <button className="text-slate-400 hover:text-slate-600">
-            <Settings size={20} />
-          </button>
-        </div>
+
 
         <div className="container mx-auto px-6 py-8">
           {/* Dashboard Title & Back Link */}
@@ -761,23 +747,7 @@ export default function CombokitOverview() {
         />
       )}
 
-      {/* Admin Dashboard Header */}
-      <div className="flex flex-col mb-8 animate-fadeIn">
-        <div className="flex items-center justify-between mb-6">
-          <h1 className="text-3xl font-black text-slate-800 tracking-tight">Admin Dashboard</h1>
-          <div className="flex items-center gap-4">
-            <Settings className="text-slate-400 cursor-pointer hover:text-slate-600 transition-colors" size={20} />
-            <div className="flex items-center gap-3 pl-4 border-l border-slate-200">
-              <div className="text-right">
-                <p className="text-xs font-black text-slate-800 uppercase tracking-tighter">Super Admin</p>
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ADMIN</p>
-              </div>
-              <div className="w-10 h-10 bg-indigo-50 rounded-full flex items-center justify-center text-indigo-600 font-black">
-                SA
-              </div>
-            </div>
-          </div>
-        </div>
+
 
         {selectedCity && (
           <div className="mb-2">
@@ -786,7 +756,7 @@ export default function CombokitOverview() {
             </div>
           </div>
         )}
-      </div>
+
 
       {/* Country Selection */}
       <div className="mb-6">

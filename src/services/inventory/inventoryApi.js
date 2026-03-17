@@ -21,6 +21,14 @@ const inventoryApi = {
         return api.get('/inventory/summary', finalConfig);
     },
 
+    // Projection
+    getProjection: (params, config = {}) => {
+        const { silent, ...restParams } = params || {};
+        const finalConfig = { ...config, params: restParams };
+        if (silent !== undefined) finalConfig.silent = silent;
+        return api.get('/inventory/projection', finalConfig);
+    },
+
     // Brands
     createBrand: (data, config = {}) => api.post('/inventory/brands', data, config),
     getBrands: (config = {}) => api.get('/inventory/brands', config),

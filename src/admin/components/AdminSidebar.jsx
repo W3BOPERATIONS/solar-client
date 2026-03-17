@@ -52,7 +52,6 @@ export default function AdminSidebar() {
     'settingsProduct': 'settings_product',
     'settingsBrand': 'settings_brand',
     'settingsCombokit': 'settings_combokit',
-    'settingsCombokitOverview': 'settings_combokit_overview', // Check if key matches seed
     'settingsOrderProcurement': 'settings_order_procurement',
     'settingsPartner': 'settings_partner',
     'settingsHrms': 'settings_hrms',
@@ -103,7 +102,6 @@ export default function AdminSidebar() {
     settingsProduct: false,
     settingsBrand: false,
     settingsCombokit: false,
-    settingsCombokitOverview: false,
     settingsOrderProcurement: false,
     settingsPartner: false,
     settingsHrms: false,
@@ -169,11 +167,22 @@ export default function AdminSidebar() {
       isExpanded: expandedSections.operations,
       children: [
         { name: 'Our Warehouse', icon: Building, href: '/admin/operations/warehouse' },
-        { name: 'Add Inventory', icon: Package, href: '/admin/operations/add-inventory' },
+        { name: 'Add Inventory Request', icon: Package, href: '/admin/operations/add-inventory' },
         {
           name: 'Inventory Management',
           icon: Store,
           href: '/admin/operations/inventory-management',
+        },
+        {
+          id: 'settingsBrand',
+          name: 'Brand Manufacturer',
+          icon: StoreIcon,
+          isGroup: true,
+          isExpanded: expandedSections.settingsBrand,
+          children: [
+            { name: '- Add Brand Manufacturer', href: '/admin/operations/brand/add-brand-manufacturer', icon: StoreIcon },
+            { name: '- Brand Supplier Overview', href: '/admin/operations/brand/supplier-overview', icon: FileBarChart },
+          ],
         },
       ],
     },
@@ -298,17 +307,7 @@ export default function AdminSidebar() {
             { name: '- Add Unit Management', href: '/admin/settings/product/add-unit-management', icon: ClipboardList },
           ],
         },
-        {
-          id: 'settingsBrand',
-          name: 'Brand Manufacturer',
-          icon: StoreIcon,
-          isGroup: true,
-          isExpanded: expandedSections.settingsBrand,
-          children: [
-            { name: '- Add Brand Manufacturer', href: '/admin/settings/brand/add-brand-manufacturer', icon: StoreIcon },
-            { name: '- Brand Supplier Overview', href: '/admin/settings/brand/supplier-overview', icon: FileBarChart },
-          ],
-        },
+
         {
           id: 'settingsCombokit',
           name: 'ComboKit',
@@ -322,15 +321,6 @@ export default function AdminSidebar() {
             { name: '- Solarkit Bundle Plans', href: '/admin/settings/combokit/bundle-plans', icon: Package },
             { name: '- Add ComboKit', href: '/admin/settings/combokit/add-combokit', icon: Building },
             { name: '- Customize Combokit', href: '/admin/settings/combokit/customize', icon: LayoutDashboard },
-          ],
-        },
-        {
-          id: 'settingsCombokitOverview',
-          name: 'Combokit Overview',
-          icon: Package,
-          isGroup: true,
-          isExpanded: expandedSections.settingsCombokitOverview,
-          children: [
             { name: '- Combokit Overview', href: '/admin/settings/combokit-overview', icon: Package },
           ],
         },

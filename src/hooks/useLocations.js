@@ -21,6 +21,7 @@ export const useLocations = () => {
   // Load basic data on mount
   useEffect(() => {
     fetchCountries();
+    fetchStates();
   }, []);
 
   const fetchCountries = useCallback(async () => {
@@ -77,8 +78,8 @@ export const useLocations = () => {
       // Support both hierarchy and flat fetch based on presence of params
       const data = countryId
         ? await locationApi.getStates(countryId, { silent: true })
-        : await locationApi.getStatesHierarchy({ silent: true });  // getStatesHierarchy takes only (config)
-      setStates(data || []);
+        : await locationApi.getStatesHierarchy({ silent: true });
+      setStates(Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []));
       return data || [];
     } catch (err) {
       setError('Failed to load states');
@@ -97,17 +98,14 @@ export const useLocations = () => {
 
       let data;
       if (sanitizedStateId) {
-        // Fetch clusters for a specific state
         data = await locationApi.getClustersHierarchy(sanitizedStateId, { silent: true });
       } else if (districtId) {
-        // Fetch clusters for a specific district
         data = await locationApi.getClusters(districtId, { silent: true });
       } else {
-        // Fetch ALL clusters — must pass undefined as first arg, not the config object!
         data = await locationApi.getClustersHierarchy(undefined, { silent: true });
       }
 
-      setClusters(data || []);
+      setClusters(Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []));
       return data || [];
     } catch (err) {
       setError('Failed to load clusters');
@@ -125,14 +123,12 @@ export const useLocations = () => {
 
       let data;
       if (sanitizedClusterId) {
-        // Fetch districts for a specific cluster
         data = await locationApi.getDistrictsHierarchy(sanitizedClusterId, { silent: true });
       } else {
-        // Fetch ALL districts — must pass undefined as first arg, not the config object!
         data = await locationApi.getDistrictsHierarchy(undefined, { silent: true });
       }
 
-      setDistricts(data || []);
+      setDistricts(Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []));
       return data || [];
     } catch (err) {
       setError('Failed to load districts');
@@ -150,9 +146,9 @@ export const useLocations = () => {
         ? await locationApi.getCitiesHierarchy(districtId, { silent: true })
         : await locationApi.getCities(districtId, { silent: true });
 
-      setCities(data || []);
+      setCities(Array.isArray(data) ? data : (Array.isArray(data?.data) ? data.data : []));
 
-      if (data && data.length === 1 && districtId === selectedDistrict) {
+      if (data && Array.isArray(data) && data.length === 1 && districtId === selectedDistrict) {
         setSelectedCity(data[0]._id);
       }
     } catch (err) {

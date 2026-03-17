@@ -153,3 +153,12 @@ export const getSKUs = async () => {
         throw err.response?.data || err.message;
     }
 };
+
+export const getProjectCategoryMappings = async (params) => {
+    try {
+        const res = await api.get('/masters/project-category-mappings', { params });
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};

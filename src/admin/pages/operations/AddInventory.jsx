@@ -1,11 +1,12 @@
 // Location data
 import React, { useState, useEffect, useRef } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, ClipboardList, Layers, Zap } from 'lucide-react';
 import Chart from 'chart.js/auto';
 import { useLocations } from '../../../hooks/useLocations';
 import inventoryApi from '../../../services/inventory/inventoryApi';
 import { productAPI } from '../../../api/api';
-import { getProjectTypes, getCategories, getSKUs } from '../../../services/core/masterApi';
+import { getProjectTypes, getCategories, getSKUs, getSubCategories, getSubProjectTypes, getProjectCategoryMappings } from '../../../services/core/masterApi';
+import { getAllManufacturers } from '../../../services/brand/brandApi';
 
 export default function AddInventory() {
   // Location hook
@@ -13,15 +14,15 @@ export default function AddInventory() {
     states,
     clusters,
     districts,
-    // cities, // Not used in this UI?
+    cities,
     selectedState,
     setSelectedState,
     selectedCluster,
     setSelectedCluster,
     selectedDistrict,
     setSelectedDistrict,
-    // selectedCity,
-    // setSelectedCity,
+    selectedCity,
+    setSelectedCity,
   } = useLocations();
 
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
@@ -31,20 +32,26 @@ export default function AddInventory() {
   const [brandsList, setBrandsList] = useState([]);
   const [categoriesList, setCategoriesList] = useState([]);
   const [skuList, setSkuList] = useState([]);
+  const [mappingsList, setMappingsList] = useState([]);
   const [projectTypesList, setProjectTypesList] = useState([]);
+  const [subCategoriesList, setSubCategoriesList] = useState([]);
+  const [subProjectTypesList, setSubProjectTypesList] = useState([]);
+  const [productsList, setProductsList] = useState([]);
 
   // Derived Options
   const [techOptions, setTechOptions] = useState([]);
   const [skuOptions, setSkuOptions] = useState([]);
   const [wattOptions, setWattOptions] = useState([]);
+  const [productTypeOptions, setProductTypeOptions] = useState([]);
   const [filteredSkus, setFilteredSkus] = useState([]);
+  const [summary, setSummary] = useState({ totalItems: 0, totalPanels: 0, totalKw: 0 });
 
   // Form state
   // ... existing form state ...
   const [form, setForm] = useState({
     warehouse: '',
-    categoryType: '',
-    subCategoryType: '',
+    category: '',
+    subCategory: '',
     projectType: '',
     subProjectType: '',
     productType: '',
@@ -68,6 +75,14 @@ export default function AddInventory() {
     boskit: true
   });
 
+  // All Inventory Table State
+  const [allInventory, setAllInventory] = useState([]);
+  const [allInventoryLoading, setAllInventoryLoading] = useState(false);
+  const [allInventoryPage, setAllInventoryPage] = useState(1);
+  const [allInventoryTotal, setAllInventoryTotal] = useState(0);
+  const [allInventorySearch, setAllInventorySearch] = useState('');
+  const ALL_INV_PAGE_SIZE = 10;
+
   const productTypes = [
     { value: 'solarpanel', label: 'Solar Panels' },
     { value: 'invertor', label: 'Inverters' },
@@ -85,23 +100,41 @@ export default function AddInventory() {
   // Fetch Initial Data
   useEffect(() => {
     fetchDynamicData();
+    fetchAllInventory(1, '');
   }, []);
 
   const fetchDynamicData = async () => {
     try {
       const results = await Promise.allSettled([
         inventoryApi.getAllWarehouses(),
-        inventoryApi.getBrands(),
+        getAllManufacturers(),
         getCategories(),
         getProjectTypes(),
-        getSKUs()
+        getSKUs(),
+        getSubCategories(),
+        getSubProjectTypes(),
+        getProjectCategoryMappings(),
+        productAPI.getAll()
       ]);
 
-      setWarehousesList(results[0].status === 'fulfilled' ? (results[0].value.data?.data || []) : []);
-      setBrandsList(results[1].status === 'fulfilled' ? (results[1].value.data || []) : []);
-      setCategoriesList(results[2].status === 'fulfilled' ? (results[2].value || []) : []);
-      setProjectTypesList(results[3].status === 'fulfilled' ? (results[3].value || []) : []);
-      setSkuList(results[4].status === 'fulfilled' ? (results[4].value || []) : []);
+      const safeExtract = (result) => {
+        if (result.status !== 'fulfilled') return [];
+        const val = result.value;
+        if (Array.isArray(val)) return val;
+        if (val && Array.isArray(val.data)) return val.data;
+        if (val && val.data && Array.isArray(val.data.data)) return val.data.data;
+        return [];
+      };
+
+      setWarehousesList(safeExtract(results[0]));
+      setBrandsList(safeExtract(results[1]));
+      setCategoriesList(safeExtract(results[2]));
+      setProjectTypesList(safeExtract(results[3]));
+      setSkuList(safeExtract(results[4]));
+      setSubCategoriesList(safeExtract(results[5]));
+      setSubProjectTypesList(safeExtract(results[6]));
+      setMappingsList(safeExtract(results[7]));
+      setProductsList(safeExtract(results[8]));
 
     } catch (error) {
       console.error("Error fetching dynamic data", error);
@@ -121,7 +154,7 @@ export default function AddInventory() {
           productType: item.productType || item.category,
           sku: item.sku,
           projectType: item.projectType,
-          brand: item.brand?.brandName || 'N/A',
+          brand: item.brand?.brand || item.brand?.companyName || item.brand?.brandName || 'N/A',
           technology: item.technology,
           watt: item.wattage,
           panels: item.quantity,
@@ -133,69 +166,161 @@ export default function AddInventory() {
     }
   };
 
+  const fetchAllInventory = async (page = 1, search = '') => {
+    try {
+      setAllInventoryLoading(true);
+      const params = { page, limit: ALL_INV_PAGE_SIZE, sort: '-createdAt' };
+      if (search) params.search = search;
+      const res = await inventoryApi.getItems(params);
+      if (res.data?.items) {
+        setAllInventory(res.data.items.map(item => ({
+          id: item._id,
+          date: new Date(item.createdAt).toLocaleDateString('en-GB'),
+          productType: item.productType || item.category || '–',
+          sku: item.sku || '–',
+          projectType: item.projectType || '–',
+          brand: item.brand?.brand || item.brand?.companyName || item.brand?.brandName || '–',
+          technology: item.technology || '–',
+          watt: item.wattage || '–',
+          panels: item.quantity || 0,
+          kw: ((item.quantity * (item.wattage || 0)) / 1000).toFixed(2)
+        })));
+        setAllInventoryTotal(res.data.totalItems || 0);
+      }
+    } catch (error) {
+      console.error('Error fetching all inventory', error);
+    } finally {
+      setAllInventoryLoading(false);
+    }
+  };
+  
+  const fetchSummary = async () => {
+    try {
+      const res = await inventoryApi.getSummary();
+      if (res.data) {
+        setSummary({
+          totalItems: res.data.totalProducts || 0,
+          totalPanels: res.data.totalQuantity || 0,
+          totalKw: (res.data.totalValue / 100) || 0
+        });
+      } else {
+        const allRes = await inventoryApi.getItems({ limit: 1000 });
+        const items = allRes.data?.items || [];
+        const totalPanels = items.reduce((acc, curr) => acc + (curr.quantity || 0), 0);
+        const totalKw = items.reduce((acc, curr) => acc + ((curr.quantity * (curr.wattage || 0)) / 1000), 0);
+        setSummary({
+          totalItems: items.length,
+          totalPanels: totalPanels,
+          totalKw: totalKw.toFixed(2)
+        });
+      }
+    } catch (error) {
+      console.error("Error fetching summary", error);
+    }
+  };
+
   useEffect(() => {
     fetchRecentInventory();
+    fetchSummary();
   }, []);
 
   useEffect(() => {
     console.log("AddInventory Data State:", {
-      warehouses: warehousesList.length,
-      brands: brandsList.length,
-      categories: categoriesList.length,
-      projectTypes: projectTypesList.length,
-      skus: skuList.length,
-      skuListPreview: skuList.slice(0, 3)
+      warehouses: Array.isArray(warehousesList) ? warehousesList.length : typeof warehousesList,
+      brands: Array.isArray(brandsList) ? brandsList.length : typeof brandsList,
+      categories: Array.isArray(categoriesList) ? categoriesList.length : typeof categoriesList,
+      projectTypes: Array.isArray(projectTypesList) ? projectTypesList.length : typeof projectTypesList,
+      skus: Array.isArray(skuList) ? skuList.length : typeof skuList,
+      subCategories: Array.isArray(subCategoriesList) ? subCategoriesList.length : typeof subCategoriesList,
+      subProjectTypes: Array.isArray(subProjectTypesList) ? subProjectTypesList.length : typeof subProjectTypesList,
+      skuListPreview: Array.isArray(skuList) ? skuList.slice(0, 3) : []
     });
-  }, [warehousesList, brandsList, categoriesList, projectTypesList, skuList]);
+  }, [warehousesList, brandsList, categoriesList, projectTypesList, skuList, subCategoriesList, subProjectTypesList]);
 
   // Update derived options when filters change
   useEffect(() => {
     let activeSkus = skuList;
 
-    // Filter logic if needed, e.g. by Brand
+    // Filter logic based on form selections to narrow down derived options (Tech, Watt, SKUs)
     if (form.brand) {
-      activeSkus = activeSkus.filter(s => (s.brand?._id || String(s.brand)) === String(form.brand));
+      const brandObj = brandsList.find(b => b._id === form.brand);
+      const brandName = brandObj ? (brandObj.brand || brandObj.brandName || brandObj.name) : '';
+
+      activeSkus = activeSkus.filter(s => {
+        const sBrandId = String(s.brand?._id || s.brand || '');
+        const sBrandName = String(s.brandName || '').toLowerCase();
+        const targetId = String(form.brand);
+        const targetName = brandName.toLowerCase();
+
+        return sBrandId === targetId || (targetName && sBrandName.includes(targetName)) || (sBrandName && targetName.includes(sBrandName));
+      });
     }
 
-    // Extract unique Techs
-    const techs = [...new Set(activeSkus.map(s => s.technology).filter(Boolean))];
-    // Filter activeSkus based on selections to narrow down subsequent placeholders
-    if (form.categoryType) {
-      // Assuming categoryType maps to ProjectType Name or similar
-      const pt = projectTypesList.find(p => p._id === form.categoryType)?.name;
-      if (pt) activeSkus = activeSkus.filter(s => s.projectType === pt || s.categoryType === pt);
+    if (form.category) {
+      const catObj = categoriesList.find(c => c._id === form.category);
+      if (catObj) {
+        activeSkus = activeSkus.filter(s => {
+          const sCat = (s.category || s.productType || s.categoryType || '').toLowerCase();
+          const target = catObj.name.toLowerCase();
+          return sCat.includes(target) || target.includes(sCat) || (s.category?.id === catObj._id);
+        });
+      }
     }
+
+    if (form.subCategory) {
+      const subCatObj = subCategoriesList.find(sc => sc._id === form.subCategory);
+      if (subCatObj) {
+        activeSkus = activeSkus.filter(s => {
+          const sSub = (s.subCategory || s.subCategoryType || '').toLowerCase();
+          const target = subCatObj.name.toLowerCase();
+          return sSub.includes(target) || target.includes(sSub) || (s.subCategoryId === subCatObj._id);
+        });
+      }
+    }
+
+    // Extract unique product types after category/sub filters 
+    // We combine types from active SKUs and the Master Product List
+    const skuProdTypes = activeSkus.map(s => s.productType).filter(Boolean);
+    const masterProdTypes = productsList
+      .filter(p => !form.category || (p.categoryId?._id || p.categoryId) === form.category || (p.categoryId?.name === categoriesList.find(c => c._id === form.category)?.name))
+      .filter(p => !form.subCategory || (p.subCategoryId?._id || p.subCategoryId) === form.subCategory || (p.subCategoryId?.name === subCategoriesList.find(sc => sc._id === form.subCategory)?.name))
+      .map(p => p.name);
+
+    const uniqueProductTypes = [...new Set([...skuProdTypes, ...masterProdTypes])];
+
     if (form.productType) {
-      // activeSkus = activeSkus.filter(s => s.category === form.productType); 
+      const directMatch = activeSkus.filter(s => s.productType === form.productType || s.itemName === form.productType);
+      // If we find direct matches (by type or name), use them. 
+      // Otherwise, we keep the previous list (category/sub/brand) to allow tech selection for mapping.
+      if (directMatch.length > 0) activeSkus = directMatch;
     }
-    // Note: complex filtering logic omitted for brevity, relying on SKU list to drive options
 
-    // Extract unique values from SKUs for dropdowns
-    const uniqueSubCats = [...new Set(skuList.map(s => s.subCategory).filter(Boolean))];
-    const uniqueProjTypes = [...new Set(skuList.map(s => s.projectType).filter(Boolean))];
-    const uniqueSubProjTypes = [...new Set(skuList.map(s => s.subProjectType).filter(Boolean))];
-    const uniqueTechs = [...new Set(skuList.map(s => s.technology).filter(Boolean))];
-    const uniqueWatts = [...new Set(skuList.map(s => s.wattage).filter(Boolean))];
+    // Note: Removed projectType filter for Tech/Watt derivation 
+    // because kW ranges (e.g. "3 to 30 kW") are mapping rules, NOT SKU properties.
 
-    // Filter SKUs based on form state for the SKU dropdown
-    let filtered = activeSkus;
-    if (form.brand) filtered = filtered.filter(s => (s.brand?._id || String(s.brand)) === String(form.brand));
-    if (form.technology) filtered = filtered.filter(s => s.technology === form.technology);
-    if (form.watt) filtered = filtered.filter(s => s.wattage == form.watt);
-    if (form.productType) filtered = filtered.filter(s => s.productType === form.productType);
+    // Combine values from narrowed SKUs and the selected Product Master entry
+    const skuTechs = activeSkus.map(s => s.technology).filter(Boolean);
+    const skuWatts = activeSkus.map(s => s.wattage).filter(Boolean);
 
-    console.log("Derived Options Logic:", {
-      activeSkusCount: activeSkus.length,
-      uniqueTechs,
-      uniqueWatts,
-      filteredSkusCount: filtered.length
-    });
+    const masterTechs = productsList
+      .filter(p => !form.productType || p.name === form.productType)
+      .map(p => p.technology)
+      .filter(Boolean);
 
-    setSkuOptions(filtered.map(s => ({ value: s.skuCode || s.name, label: s.name || s.skuCode, original: s })));
+    const uniqueTechs = [...new Set([...skuTechs, ...masterTechs])];
+    const uniqueWatts = [...new Set([...skuWatts])]; // Watts typically only in SKUs
+
+    // Final list for SKU dropdown includes tech/watt filters
+    let filteredForSkus = activeSkus;
+    if (form.technology) filteredForSkus = filteredForSkus.filter(s => s.technology === form.technology);
+    if (form.watt) filteredForSkus = filteredForSkus.filter(s => s.wattage == form.watt);
+
+    setSkuOptions(filteredForSkus.map(s => ({ value: s.skuCode || s.name, label: s.name || s.skuCode, original: s })));
     setTechOptions(uniqueTechs.map(t => ({ value: t, label: t })));
     setWattOptions(uniqueWatts.map(w => ({ value: w, label: `${w}W` })));
+    setProductTypeOptions(uniqueProductTypes.map(pt => ({ value: pt, label: pt })));
 
-  }, [skuList, form, projectTypesList]);
+  }, [skuList, productsList, form, categoriesList, subCategoriesList, projectTypesList, mappingsList]);
 
 
   // Handle form changes
@@ -209,18 +334,44 @@ export default function AddInventory() {
         const selectedSku = skuList.find(s => s.skuCode === value || s.name === value);
         if (selectedSku) {
           updated.brand = selectedSku.brand?._id || selectedSku.brand || '';
-          updated.productType = selectedSku.productType || selectedSku.category || '';
           updated.technology = selectedSku.technology || '';
           updated.watt = selectedSku.wattage || '';
-          updated.projectType = selectedSku.projectType || '';
-          updated.subProjectType = selectedSku.subProjectType || '';
-          updated.subCategoryType = selectedSku.subCategory || '';
 
-          // Try to match Category Type (Project Type ID)
-          const matchedProjectType = projectTypesList.find(pt => pt.name === selectedSku.projectType);
-          if (matchedProjectType) {
-            updated.categoryType = matchedProjectType._id;
+          // Only update productType if SKU has it, otherwise try to keep current or match by name
+          if (selectedSku.productType) {
+            updated.productType = selectedSku.productType;
+          } else {
+            // Check if SKU name matches any Master Product name
+            const masterProd = productsList.find(p =>
+              p.name === selectedSku.name ||
+              p.name === selectedSku.productType ||
+              (selectedSku.skuCode && selectedSku.skuCode.toLowerCase().includes(p.name.toLowerCase()))
+            );
+            if (masterProd) updated.productType = masterProd.name;
+            // if no match found, we KEEP the previous updated.productType (which is the current selection)
           }
+
+          // Try to match Category 
+          const matchedCat = categoriesList.find(c => c.name === selectedSku.category || c.name === selectedSku.categoryType);
+          if (matchedCat) updated.category = matchedCat._id;
+
+          // Try to match Sub Category
+          const matchedSubCat = subCategoriesList.find(sc => sc.name === selectedSku.subCategory || sc.name === selectedSku.subCategoryType);
+          if (matchedSubCat) updated.subCategory = matchedSubCat._id;
+
+          // Try to match Project Type
+          if (selectedSku.projectType) {
+            if (selectedSku.projectType.includes('to')) {
+              updated.projectType = selectedSku.projectType;
+            } else {
+              const matchedPT = projectTypesList.find(pt => pt.name === selectedSku.projectType);
+              if (matchedPT) updated.projectType = matchedPT._id;
+            }
+          }
+
+          // Try to match Sub Project Type
+          const matchedSPT = subProjectTypesList.find(spt => spt.name === selectedSku.subProjectType);
+          if (matchedSPT) updated.subProjectType = matchedSPT._id;
         }
       }
 
@@ -237,7 +388,29 @@ export default function AddInventory() {
           setSelectedState(warehouse.state?._id || warehouse.state);
           setTimeout(() => setSelectedCluster(warehouse.cluster?._id || warehouse.cluster), 100);
           setTimeout(() => setSelectedDistrict(warehouse.district?._id || warehouse.district), 200);
+          setTimeout(() => setSelectedCity(warehouse.city?._id || warehouse.city), 300);
         }
+      }
+      if (name === 'category') {
+        updated.subCategory = '';
+        updated.productType = '';
+        updated.brand = '';
+        updated.technology = '';
+        updated.watt = '';
+        updated.sku = '';
+      }
+      if (name === 'subCategory') {
+        updated.productType = '';
+        updated.brand = '';
+        updated.technology = '';
+        updated.watt = '';
+        updated.sku = '';
+      }
+      if (name === 'productType') {
+        updated.brand = '';
+        updated.technology = '';
+        updated.watt = '';
+        updated.sku = '';
       }
       return updated;
     });
@@ -248,6 +421,7 @@ export default function AddInventory() {
     setSelectedState('');
     setSelectedCluster('');
     setSelectedDistrict('');
+    setSelectedCity('');
   };
 
 
@@ -261,8 +435,8 @@ export default function AddInventory() {
       return;
     }
 
-    if (!selectedState || !selectedCluster || !selectedDistrict) {
-      showToast('Please select a valid location (State, Cluster, District)', 'error');
+    if (!selectedState || !selectedCluster || !selectedDistrict || !selectedCity) {
+      showToast('Please select a valid location (State, Cluster, District, City)', 'error');
       return;
     }
 
@@ -274,40 +448,39 @@ export default function AddInventory() {
       return;
     }
 
-    // Prepare Payload
-    // Find IDs/Names from lists
-    const brandObj = brandsList.find(b => b._id === form.brand);
+    const catObj = categoriesList.find(c => c._id === form.category);
+    const subCatObj = subCategoriesList.find(sc => sc._id === form.subCategory);
+    const ptObj = projectTypesList.find(p => p._id === form.projectType);
+    const sptObj = subProjectTypesList.find(s => s._id === form.subProjectType);
     const skuObj = skuList.find(s => s.skuCode === form.sku || s.name === form.sku);
 
     const payload = {
-      warehouse: form.warehouse, // ID
+      warehouse: form.warehouse,
       state: selectedState,
       cluster: selectedCluster,
       district: selectedDistrict,
-      // Using form values which are now derived/selected correctly
-      itemName: skuObj?.description || form.sku, // Required by backend
-      category: form.productType || skuObj?.category || skuObj?.productType, // Using Product Type as Category
-      subCategory: form.subCategoryType || skuObj?.subCategory,
-      projectType: form.projectType || skuObj?.projectType,
-      subProjectType: form.subProjectType || skuObj?.subProjectType,
-      brand: form.brand || skuObj?.brand?._id || skuObj?.brand, // ID
+      city: selectedCity,
+      itemName: skuObj?.description || form.sku,
+      category: catObj?.name || skuObj?.category || 'General',
+      subCategory: subCatObj?.name || skuObj?.subCategory,
+      projectType: ptObj?.name || form.projectType || skuObj?.projectType,
+      subProjectType: sptObj?.name || skuObj?.subProjectType,
+      brand: form.brand || skuObj?.brand?._id || skuObj?.brand,
       technology: form.technology || skuObj?.technology,
       wattage: form.watt || skuObj?.wattage,
-      productType: form.productType || skuObj?.productType || skuObj?.category,
+      productType: form.productType || skuObj?.productType || catObj?.name,
       sku: form.sku,
       quantity: panels,
-      price: 0, // Price logic?
+      price: 0,
       date: form.date,
-      // Any other fields required by createInventoryItem
     };
 
     try {
       await inventoryApi.createItem(payload);
 
-      await inventoryApi.createItem(payload);
-
       // Refresh recent additions list
       fetchRecentInventory();
+      fetchSummary();
 
       // Logic to update charts... (omitted for brevity, keep existing logic if needed or fetch updated stats)
       // Ideally should fetch updated stats, but for UI responsiveness we can update local state
@@ -556,31 +729,26 @@ export default function AddInventory() {
         </div>
       )}
 
-      {/* Header */}
-      <div className="mb-4">
-        <nav className="bg-white p-3 rounded-lg shadow-sm">
-          <div className="flex justify-between items-center">
-            <div>
-              <h3 className="mb-0 text-xl font-semibold">Add New Inventory Request</h3>
-            </div>
-            <button
-              className="btn btn-outline-primary flex items-center border border-blue-500 text-blue-500 hover:bg-blue-50 px-4 py-2 rounded transition-colors"
-              onClick={() => setLocationCardsVisible(!locationCardsVisible)}
-            >
-              {locationCardsVisible ? (
-                <>
-                  <EyeOff className="w-4 h-4 mr-2" />
-                  Hide Location Cards
-                </>
-              ) : (
-                <>
-                  <Eye className="w-4 h-4 mr-2" />
-                  Show Location Cards
-                </>
-              )}
-            </button>
-          </div>
-        </nav>
+
+
+      {/* Location Cards Visibility Toggle */}
+      <div className="flex justify-end mb-4">
+        <button
+          className="btn btn-outline-primary flex items-center border border-blue-500 text-blue-500 hover:bg-blue-50 px-4 py-2 rounded transition-colors"
+          onClick={() => setLocationCardsVisible(!locationCardsVisible)}
+        >
+          {locationCardsVisible ? (
+            <>
+              <EyeOff className="w-4 h-4 mr-2" />
+              Hide Selection Cards
+            </>
+          ) : (
+            <>
+              <Eye className="w-4 h-4 mr-2" />
+              Show Selection Cards
+            </>
+          )}
+        </button>
       </div>
 
       {/* Location Selection Section */}
@@ -658,7 +826,30 @@ export default function AddInventory() {
                   >
                     <div className="card-body p-4">
                       <h6 className="card-title font-bold">{district.name}</h6>
-                      {/* <p className="text-gray-600 mb-0">{currentCluster}</p> */}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* City Selection */}
+        {selectedDistrict && (
+          <div className={`city-section transition-all duration-500 overflow-hidden`}>
+            <h4 className="mb-3 text-lg font-medium">Select City</h4>
+            <div className="row grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 my-4">
+              {cities.map((city) => (
+                <div className="col mb-3" key={city._id}>
+                  <div
+                    className={`card h-full shadow text-center cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg border rounded-lg ${selectedCity === city._id
+                      ? 'border-2 border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => setSelectedCity(city._id)}
+                  >
+                    <div className="card-body p-4">
+                      <h6 className="card-title font-bold">{city.name}</h6>
                     </div>
                   </div>
                 </div>
@@ -713,41 +904,41 @@ export default function AddInventory() {
         <div className="lg:w-7/12">
           <div className="card mb-4 border rounded-lg">
             <div className="card-header bg-blue-600 text-white p-3 rounded-t-lg">
-              <h5 className="mb-0 text-white font-medium">Add New Inventory</h5>
+              <h5 className="mb-0 text-white font-medium">Add New Inventory Request</h5>
             </div>
             <div className="card-body p-4">
               <form id="add-inventory-form" onSubmit={handleSubmit}>
-                <div className="row grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="row grid grid-cols-1 md:grid-cols-4 gap-4">
                   <div className="mb-3">
-                    <label htmlFor="category-type" className="form-label block mb-2">Category Type</label>
+                    <label htmlFor="category" className="form-label block mb-2">Category</label>
                     <select
                       className="form-control border border-gray-300 rounded-lg px-3 py-2 w-full"
-                      id="category-type"
-                      name="categoryType"
-                      value={form.categoryType}
+                      id="category"
+                      name="category"
+                      value={form.category}
                       onChange={handleChange}
                     >
-                      <option value="">-- Select Category Type --</option>
-                      {projectTypesList.map((pt) => (
-                        <option key={pt._id} value={pt._id}>
-                          {pt.name}
-                        </option>
+                      <option value="">-- Select Category --</option>
+                      {categoriesList.map((cat) => (
+                        <option key={cat._id} value={cat._id}>{cat.name}</option>
                       ))}
                     </select>
                   </div>
                   <div className="mb-3">
-                    <label htmlFor="sub-category-type" className="form-label block mb-2">Sub Category Type</label>
+                    <label htmlFor="sub-category" className="form-label block mb-2">Sub Category</label>
                     <select
                       className="form-control border border-gray-300 rounded-lg px-3 py-2 w-full"
-                      id="sub-category-type"
-                      name="subCategoryType"
-                      value={form.subCategoryType}
+                      id="sub-category"
+                      name="subCategory"
+                      value={form.subCategory}
                       onChange={handleChange}
                     >
-                      <option value="">-- Select Sub Category Type --</option>
-                      {[...new Set(skuList.map(s => s.subCategory).filter(Boolean))].map((sc) => (
-                        <option key={sc} value={sc}>{sc}</option>
-                      ))}
+                      <option value="">-- Select Sub Category --</option>
+                      {subCategoriesList
+                        .filter(sc => !form.category || (sc.categoryId?._id || sc.categoryId) === form.category)
+                        .map((sc) => (
+                          <option key={sc._id} value={sc._id}>{sc.name}</option>
+                        ))}
                     </select>
                   </div>
                   <div className="mb-3">
@@ -758,12 +949,20 @@ export default function AddInventory() {
                       name="projectType"
                       value={form.projectType}
                       onChange={handleChange}
-                      required
                     >
                       <option value="">-- Select Project Type --</option>
-                      {[...new Set(skuList.map(s => s.projectType).filter(Boolean))].map((pt) => (
-                        <option key={pt} value={pt}>{pt}</option>
-                      ))}
+                      {mappingsList
+                        .filter(m =>
+                          (!selectedState || (m.stateId?._id || m.stateId) === selectedState) &&
+                          (!selectedCluster || (m.clusterId?._id || m.clusterId) === selectedCluster) &&
+                          (!form.category || (m.categoryId?._id || m.categoryId) === form.category) &&
+                          (!form.subCategory || (m.subCategoryId?._id || m.subCategoryId) === form.subCategory)
+                        )
+                        .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                        .filter((v, i, a) => v && a.indexOf(v) === i)
+                        .map((label) => (
+                          <option key={label} value={label}>{label}</option>
+                        ))}
                     </select>
                   </div>
                   <div className="mb-3">
@@ -776,25 +975,40 @@ export default function AddInventory() {
                       onChange={handleChange}
                     >
                       <option value="">-- Select Sub Project Type --</option>
-                      {[...new Set(skuList.map(s => s.subProjectType).filter(Boolean))].map((spt) => (
-                        <option key={spt} value={spt}>{spt}</option>
+                      {mappingsList
+                        .filter(m =>
+                          (!selectedState || (m.stateId?._id || m.stateId) === selectedState) &&
+                          (!selectedCluster || (m.clusterId?._id || m.clusterId) === selectedCluster) &&
+                          (!form.category || (m.categoryId?._id || m.categoryId) === form.category) &&
+                          (!form.subCategory || (m.subCategoryId?._id || m.subCategoryId) === form.subCategory) &&
+                          (!form.projectType || `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === form.projectType)
+                        )
+                        .map(m => m.subProjectTypeId)
+                        .filter(Boolean)
+                        .filter((v, i, a) => a.findIndex(t => t?._id === v?._id) === i)
+                        .map((spt) => (
+                          <option key={spt._id} value={spt._id}>{spt.name}</option>
+                        ))}
+                      {/* Fallback to full list if no mappings match categories yet */}
+                      {form.subProjectType === '' && mappingsList.length === 0 && subProjectTypesList.map((spt) => (
+                        <option key={spt._id} value={spt._id}>{spt.name}</option>
                       ))}
                     </select>
                   </div>
-                  <div className="mb-3 md:col-span-3">
+
+                  {/* Product Type Row (Reference Image alignment) */}
+                  <div className="col-span-full mb-3">
                     <label htmlFor="product-type" className="form-label block mb-2">Product Type</label>
                     <select
-                      className="form-control border border-gray-300 rounded-lg px-3 py-2 w-full"
+                      className="form-control border border-gray-300 rounded-lg px-3 py-2 w-full max-w-md"
                       id="product-type"
                       name="productType"
                       value={form.productType}
                       onChange={handleChange}
                     >
                       <option value="">-- Select Product Type --</option>
-                      {categoriesList.map((cat) => (
-                        <option key={cat._id} value={cat.name}>
-                          {cat.name}
-                        </option>
+                      {productTypeOptions.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
                   </div>
@@ -811,7 +1025,7 @@ export default function AddInventory() {
                       <option value="">-- Select Brand --</option>
                       {brandsList.map((brand) => (
                         <option key={brand._id} value={brand._id}>
-                          {brand.brandName || brand.name}
+                          {brand.brand || brand.brandName || brand.name}
                         </option>
                       ))}
                     </select>
@@ -906,7 +1120,7 @@ export default function AddInventory() {
                   </div>
                 </div>
                 <button type="submit" className="btn btn-primary mt-3 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
-                  Add Inventory
+                  Add Inventory Request
                 </button>
               </form>
             </div>
@@ -1033,6 +1247,136 @@ export default function AddInventory() {
           </div>
         </div>
       )}
+
+      {/* ===== ALL INVENTORY RECORDS TABLE ===== */}
+      <div className="mt-8 mb-10">
+        {/* Header Row */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <h5 className="text-lg font-bold text-gray-800 flex items-center gap-2">
+            <span className="inline-block w-1 h-6 bg-blue-500 rounded-full"></span>
+            All Inventory Records
+            <span className="text-sm font-normal text-gray-400 ml-2">({allInventoryTotal} total)</span>
+          </h5>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              placeholder="Search SKU, Brand, Technology..."
+              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-64"
+              value={allInventorySearch}
+              onChange={e => {
+                setAllInventorySearch(e.target.value);
+                setAllInventoryPage(1);
+                fetchAllInventory(1, e.target.value);
+              }}
+            />
+            <button
+              onClick={() => fetchAllInventory(allInventoryPage, allInventorySearch)}
+              className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+            >
+              Refresh
+            </button>
+          </div>
+        </div>
+
+        {/* Table */}
+        <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full">
+              <thead>
+                <tr className="bg-[#56B2D1] text-white">
+                  {['Date','Product Type','SKU Number','Project Type','Brand','Technology','Watt','No. of Panels','KW'].map(col => (
+                    <th key={col} className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider border-r border-white/20 last:border-r-0 whitespace-nowrap">{col}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {allInventoryLoading ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-16">
+                      <div className="flex flex-col items-center gap-3 text-gray-400">
+                        <svg className="animate-spin h-8 w-8 text-blue-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                        </svg>
+                        <span className="text-sm">Loading inventory records...</span>
+                      </div>
+                    </td>
+                  </tr>
+                ) : allInventory.length === 0 ? (
+                  <tr>
+                    <td colSpan="9" className="text-center py-16">
+                      <div className="flex flex-col items-center gap-2 text-gray-400">
+                        <svg className="w-12 h-12 text-gray-200" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+                        </svg>
+                        <p className="font-medium">No inventory records found</p>
+                        <p className="text-xs">Add your first inventory item using the form above</p>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  allInventory.map((item, idx) => (
+                    <tr key={item.id} className={`hover:bg-blue-50/40 transition-colors text-sm text-gray-700 ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/50'}`}>
+                      <td className="px-5 py-3 whitespace-nowrap">{item.date}</td>
+                      <td className="px-5 py-3 whitespace-nowrap">{item.productType}</td>
+                      <td className="px-5 py-3 whitespace-nowrap font-mono text-xs">{item.sku}</td>
+                      <td className="px-5 py-3 whitespace-nowrap">{item.projectType}</td>
+                      <td className="px-5 py-3 whitespace-nowrap font-medium">{item.brand}</td>
+                      <td className="px-5 py-3 whitespace-nowrap">{item.technology}</td>
+                      <td className="px-5 py-3 whitespace-nowrap">{item.watt}</td>
+                      <td className="px-5 py-3 whitespace-nowrap text-center font-semibold text-blue-700">{item.panels}</td>
+                      <td className="px-5 py-3 whitespace-nowrap text-center font-semibold text-green-600">{item.kw}</td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination */}
+          {!allInventoryLoading && allInventoryTotal > ALL_INV_PAGE_SIZE && (
+            <div className="flex items-center justify-between px-5 py-3 border-t border-gray-100 bg-gray-50">
+              <p className="text-xs text-gray-500">
+                Showing {((allInventoryPage - 1) * ALL_INV_PAGE_SIZE) + 1}–{Math.min(allInventoryPage * ALL_INV_PAGE_SIZE, allInventoryTotal)} of {allInventoryTotal} records
+              </p>
+              <div className="flex gap-2">
+                <button
+                  disabled={allInventoryPage === 1}
+                  onClick={() => { const p = allInventoryPage - 1; setAllInventoryPage(p); fetchAllInventory(p, allInventorySearch); }}
+                  className="px-3 py-1.5 rounded text-xs font-medium border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  ← Previous
+                </button>
+                {Array.from({ length: Math.ceil(allInventoryTotal / ALL_INV_PAGE_SIZE) }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === Math.ceil(allInventoryTotal / ALL_INV_PAGE_SIZE) || Math.abs(p - allInventoryPage) <= 2)
+                  .map((p, i, arr) => (
+                    <React.Fragment key={p}>
+                      {i > 0 && arr[i - 1] !== p - 1 && <span className="px-1 py-1.5 text-gray-400 text-xs">…</span>}
+                      <button
+                        onClick={() => { setAllInventoryPage(p); fetchAllInventory(p, allInventorySearch); }}
+                        className={`px-3 py-1.5 rounded text-xs font-medium border transition-colors ${
+                          p === allInventoryPage
+                            ? 'bg-blue-500 text-white border-blue-500'
+                            : 'border-gray-200 bg-white hover:bg-gray-100'
+                        }`}
+                      >
+                        {p}
+                      </button>
+                    </React.Fragment>
+                  ))
+                }
+                <button
+                  disabled={allInventoryPage >= Math.ceil(allInventoryTotal / ALL_INV_PAGE_SIZE)}
+                  onClick={() => { const p = allInventoryPage + 1; setAllInventoryPage(p); fetchAllInventory(p, allInventorySearch); }}
+                  className="px-3 py-1.5 rounded text-xs font-medium border border-gray-200 bg-white hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
