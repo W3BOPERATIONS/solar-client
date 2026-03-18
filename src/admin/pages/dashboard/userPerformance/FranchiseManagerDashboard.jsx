@@ -348,7 +348,7 @@ export default function FranchiseManagerDashboard() {
             <div className="flex justify-between items-center">
               <h2 className="text-xl md:text-2xl font-bold text-white mb-2 md:mb-0">
                 <BarChart3 className="inline mr-2" size={24} />
-                Admin Franchise Manager Dashboard
+                Admin Partner Manager Dashboard
               </h2>
             </div>
           </div>
@@ -427,7 +427,7 @@ export default function FranchiseManagerDashboard() {
 
       {/* Key Metrics Row - Franchise Manager */}
       <div className="mb-6">
-        <h5 className="text-blue-600 font-semibold mb-3">Franchise Manager</h5>
+        <h5 className="text-blue-600 font-semibold mb-3">Partner Manager</h5>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Franchise Manager */}
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-blue-500 hover:-translate-y-1 transition-transform duration-300">
@@ -439,7 +439,7 @@ export default function FranchiseManagerDashboard() {
                 <div className="w-3 h-3 rounded-full bg-red-500" title="Inactive"></div>
               </div>
             </div>
-            <div className="text-gray-600 font-medium">Total Franchise Manager</div>
+            <div className="text-gray-600 font-medium">Total Partner Manager</div>
             <div className="text-sm text-gray-500 mt-2">
               <span className="text-green-600 mr-3">{performanceData?.summary?.statusCounts?.Performer || 0} Performers</span>
               <span className="text-gray-500 mr-3">{performanceData?.summary?.statusCounts?.Active || 0} Active</span>
@@ -447,7 +447,7 @@ export default function FranchiseManagerDashboard() {
             </div>
           </div>
 
-          {/* Total Franchises */}
+          {/* Total Partners */}
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-cyan-500 hover:-translate-y-1 transition-transform duration-300">
             <div className="flex justify-between items-center mb-3">
               <div className="text-2xl font-bold text-gray-800">{performanceData?.summary?.totalCP || 0}</div>
@@ -457,7 +457,7 @@ export default function FranchiseManagerDashboard() {
                 <div className="w-3 h-3 rounded-full bg-red-500" title="Inactive"></div>
               </div>
             </div>
-            <div className="text-gray-600 font-medium">Total Franchises's</div>
+            <div className="text-gray-600 font-medium">Total Partner's</div>
             <div className="text-sm text-gray-500 mt-2">
               <span className="text-green-600 mr-2">{performanceData?.summary?.statusCounts?.Performer || 0} Performers,</span>
               <span className="text-gray-500 mr-2">{performanceData?.summary?.statusCounts?.Active || 0} Active,</span>
@@ -495,7 +495,7 @@ export default function FranchiseManagerDashboard() {
 
       {/* Key Metrics Row - Franchise Manager Trainee */}
       <div className="mb-6">
-        <h5 className="text-blue-600 font-semibold mb-3">Franchise Manager Trainee</h5>
+        <h5 className="text-blue-600 font-semibold mb-3">Partner Manager Trainee</h5>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Total Leads */}
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-green-500 hover:-translate-y-1 transition-transform duration-300 relative">
@@ -528,7 +528,7 @@ export default function FranchiseManagerDashboard() {
           {/* Franchisee Signups */}
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-yellow-500 hover:-translate-y-1 transition-transform duration-300">
             <div className="text-2xl font-bold text-gray-800 mb-1">{performanceData?.summary?.signups || 0}</div>
-            <div className="text-gray-600 font-medium mb-2">Franchisee's Signups</div>
+            <div className="text-gray-600 font-medium mb-2">Partner's Signups</div>
             <div>
               <span className="text-gray-500 text-sm">New onboardings</span>
             </div>
@@ -595,8 +595,8 @@ export default function FranchiseManagerDashboard() {
           onChange={(e) => setUserType(e.target.value)}
           className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
         >
-          <option value="cprm">Franchise Manager</option>
-          <option value="cprmtrainee">Franchise Manager Trainee</option>
+          <option value="cprm">Partner Manager</option>
+          <option value="cprmtrainee">Partner Manager Trainee</option>
         </select>
 
         <button
@@ -624,8 +624,8 @@ export default function FranchiseManagerDashboard() {
           <div className="bg-blue-600 text-white px-5 py-3">
             <h5 className="font-semibold text-lg">
               {userType === 'cprmtrainee'
-                ? 'Franchise Manager Trainee Performance Summary'
-                : 'Franchise Manager Performance Summary'}
+                ? 'Partner Manager Trainee Performance Summary'
+                : 'Partner Manager Performance Summary'}
             </h5>
           </div>
           <div className="overflow-x-auto">
@@ -735,19 +735,19 @@ export default function FranchiseManagerDashboard() {
       {/* Franchisee's Onboarding Goals */}
       <div className="mb-8">
         <h3 className="text-xl font-semibold text-blue-600 mb-4">
-          Franchisee's Onboarding Goals - Engineer Franchisee Goal
+          Partner's Onboarding Goals - Engineer Partner Goal
         </h3>
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-gray-800 text-white">
                 <tr>
-                  <th className="px-5 py-3 text-left font-semibold">Franchise Manager Trainee Name</th>
+                  <th className="px-5 py-3 text-left font-semibold">Partner Manager Trainee Name</th>
                   <th className="px-5 py-3 text-left font-semibold">Self Leads</th>
                   <th className="px-5 py-3 text-left font-semibold">Company Leads</th>
                   <th className="px-5 py-3 text-left font-semibold">Conversion Rate</th>
-                  <th className="px-5 py-3 text-left font-semibold">Active / InActive Franchisee's</th>
-                  <th className="px-5 py-3 text-left font-semibold">Franchisee Onboarding Goals</th>
+                  <th className="px-5 py-3 text-left font-semibold">Active / InActive Partner's</th>
+                  <th className="px-5 py-3 text-left font-semibold">Partner Onboarding Goals</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -793,7 +793,7 @@ export default function FranchiseManagerDashboard() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="bg-blue-600 text-white px-5 py-3">
-            <h5 className="font-semibold text-lg">Franchise Manager Performance by State</h5>
+            <h5 className="font-semibold text-lg">Partner Manager Performance by State</h5>
           </div>
           <div className="p-5">
             <div ref={chart1Ref}></div>

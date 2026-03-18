@@ -461,7 +461,7 @@ const FranchiseeManagerSetting = () => {
           <div className="flex flex-col md:flex-row md:items-center justify-between">
             <div className="mb-4 md:mb-0">
               <h3 className="text-2xl font-bold text-gray-800">
-                Franchisee Manager Trainee & Franchisee Manager Setting
+                Partner Manager Trainee & Partner Manager Setting
               </h3>
             </div>
             <button
@@ -558,7 +558,7 @@ const FranchiseeManagerSetting = () => {
             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
         >
-          Franchisee Manager Trainee Setting
+          Partner Manager Trainee Setting
         </button>
         <button
           onClick={() => setActiveForm('cprm-form')}
@@ -567,7 +567,7 @@ const FranchiseeManagerSetting = () => {
             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
             }`}
         >
-          Franchisee Manager Setting
+          Partner Manager Setting
         </button>
       </div>
 
@@ -575,7 +575,7 @@ const FranchiseeManagerSetting = () => {
       {activeForm === 'cprm-trainee-form' && (
         <div className="bg-white rounded-lg shadow-lg my-8">
           <div className="bg-cyan-600 text-white rounded-t-lg p-4">
-            <h4 className="text-xl font-bold">Franchisee Manager Trainee Settings</h4>
+            <h4 className="text-xl font-bold">Partner Manager Trainee Settings</h4>
           </div>
           <div className="p-6">
             <form onSubmit={handleSaveSettings}>
@@ -603,7 +603,7 @@ const FranchiseeManagerSetting = () => {
                 <label className="block font-medium mb-2">Evaluation Flow</label>
                 <div className="bg-gray-50 rounded-lg border border-gray-200">
                   <div className="px-4 py-3 border-b border-gray-200">
-                    1. AppDemo Submitted by Franchisee
+                    1. AppDemo Submitted by Partner
                   </div>
                   <div className="px-4 py-3 border-b border-gray-200">
                     2. Evaluated by Marketing Manager
@@ -620,7 +620,7 @@ const FranchiseeManagerSetting = () => {
               <h5 className="text-lg font-bold text-green-600 mb-4">90 Days Goal Setting</h5>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="block font-medium mb-2">Franchisee Target</label>
+                  <label className="block font-medium mb-2">Partner Target</label>
                   <input type="number"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2"
                     value={traineeSettings.ninetyDaysGoal.target}
@@ -644,12 +644,12 @@ const FranchiseeManagerSetting = () => {
               {/* Commission Eligibility */}
               <h5 className="text-lg font-bold text-amber-600 mb-4">Commission Eligibility</h5>
               <p className="text-gray-600 mb-4">
-                If 90 Days Goal is achieved & signups are completed, the Franchisee Manager is eligible for commission.
+                If 90 Days Goal is achieved & signups are completed, the Partner Manager is eligible for commission.
               </p>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="block font-medium mb-2">Required Franchisee's (90 Days)</label>
+                  <label className="block font-medium mb-2">Required Partner's (90 Days)</label>
                   <input type="number"
                     className="w-full border border-gray-300 rounded-lg px-3 py-2"
                     value={traineeSettings.commissionEligibility.requiredFranchisees}
@@ -675,7 +675,7 @@ const FranchiseeManagerSetting = () => {
               <h5 className="text-lg font-bold text-cyan-600 mb-4">Company Lead Eligibility</h5>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 <div>
-                  <label className="block font-medium mb-2">Franchisee Signup Count</label>
+                  <label className="block font-medium mb-2">Partner Signup Count</label>
                   <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2"
                     value={traineeSettings.companyLeadEligibility.signupCount}
                     onChange={(e) => setTraineeSettings({ ...traineeSettings, companyLeadEligibility: { ...traineeSettings.companyLeadEligibility, signupCount: e.target.value } })}
@@ -702,7 +702,7 @@ const FranchiseeManagerSetting = () => {
               <h5 className="text-lg font-bold text-red-600 mb-4">Commission Settings</h5>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                 <div>
-                  <label className="block font-medium mb-2">Commission for New Franchisee Creation (₹)</label>
+                  <label className="block font-medium mb-2">Commission for New Partner Creation (₹)</label>
                   <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2"
                     value={traineeSettings.commissionSettings.newFranchiseeCommission}
                     onChange={(e) => setTraineeSettings({ ...traineeSettings, commissionSettings: { ...traineeSettings.commissionSettings, newFranchiseeCommission: e.target.value } })}
@@ -730,7 +730,7 @@ const FranchiseeManagerSetting = () => {
                 className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium flex justify-center items-center"
               >
                 {saving ? <Loader className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                Save Franchisee Manager Settings
+                Save Partner Manager Settings
               </button>
             </form>
           </div >
@@ -742,7 +742,7 @@ const FranchiseeManagerSetting = () => {
         activeForm === 'cprm-form' && (
           <div className="bg-white rounded-lg shadow-lg my-8">
             <div className="bg-blue-600 text-white rounded-t-lg p-4">
-              <h4 className="text-xl font-bold">Franchisee Manager Settings</h4>
+              <h4 className="text-xl font-bold">Partner Manager Settings</h4>
             </div>
             <div className="p-6">
               <form onSubmit={handleSaveSettings}>
@@ -767,7 +767,7 @@ const FranchiseeManagerSetting = () => {
                 <h5 className="text-lg font-bold text-green-600 mb-4">90 Days Goal Setting</h5>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                   <div>
-                    <label className="block font-medium mb-2">Franchisee Target</label>
+                    <label className="block font-medium mb-2">Partner Target</label>
                     <input type="number" className="w-full border border-gray-300 rounded-lg px-3 py-2"
                       value={managerSettings.ninetyDaysGoal.target}
                       onChange={(e) => setManagerSettings({ ...managerSettings, ninetyDaysGoal: { ...managerSettings.ninetyDaysGoal, target: e.target.value } })}
@@ -786,7 +786,7 @@ const FranchiseeManagerSetting = () => {
                   className="w-full bg-blue-600 text-white py-3 rounded-lg hover:bg-blue-700 font-medium flex justify-center items-center"
                 >
                   {saving ? <Loader className="animate-spin mr-2" /> : <Save className="mr-2" />}
-                  Save Franchisee Manager Settings
+                  Save Partner Manager Settings
                 </button>
               </form>
             </div>

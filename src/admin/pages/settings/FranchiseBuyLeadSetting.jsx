@@ -15,7 +15,7 @@ import {
   deleteBuyLeadSetting
 } from '../../../services/settings/settingsApi';
 
-const FranchiseeBuyLeadSetting = () => {
+const PartnerBuyLeadSetting = () => {
   // Store all lead settings
   const [leadSettings, setLeadSettings] = useState([]);
   const [editingId, setEditingId] = useState(null);
@@ -335,10 +335,10 @@ const FranchiseeBuyLeadSetting = () => {
       {/* Header Section */}
       <div className="mb-8">
         <h1 className="text-4xl font-bold text-gray-900 mb-2">
-          Franchisee Buy Lead Setting
+          Partner Buy Lead Setting
         </h1>
         <p className="text-lg text-gray-600">
-          Configure lead allocation for franchisees
+          Configure lead allocation for partners
         </p>
       </div>
 
@@ -820,4 +820,4 @@ const FranchiseeBuyLeadSetting = () => {
 };
 
 
-export default FranchiseeBuyLeadSetting;
+export default PartnerBuyLeadSetting;

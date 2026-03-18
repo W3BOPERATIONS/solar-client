@@ -19,7 +19,8 @@ import AdminVendorsDashboard from './admin/pages/dashboard/VendorsDashboard';
 import AdminDepartments from './admin/pages/departments/Departments';
 import AdminOrganizationChart from './admin/pages/departments/OrganizationChart';
 import AdminApprovals from './admin/pages/approvals/Approvals';
-import AdminProjects from './admin/pages/projectManagement/Projects';
+import ManageProjects from './admin/pages/projectManagement/Manage';
+import TrackProjects from './admin/pages/projectManagement/Track';
 import AdminWarehouse from './admin/pages/operations/Warehouse';
 import AdminAddInventory from './admin/pages/operations/AddInventory';
 import AdminInventoryManagement from './admin/pages/operations/InventoryManagement';
@@ -363,11 +364,11 @@ function App() {
 
               {/* User Performance sub-dashboards */}
               <Route
-                path="dashboard/user-performance/franchise-manager"
+                path="dashboard/user-performance/partner-manager"
                 element={<FranchiseManagerDashboard />}
               />
               <Route
-                path="dashboard/user-performance/franchise"
+                path="dashboard/user-performance/partner"
                 element={<FranchisePerformanceDashboard />}
               />
               <Route
@@ -385,7 +386,8 @@ function App() {
                 element={<AdminOrganizationChart />}
               />
               <Route path="approvals" element={<AdminApprovals />} />
-              <Route path="project-management" element={<AdminProjects />} />
+              <Route path="project-management" element={<ManageProjects />} />
+              <Route path="project-management/track" element={<TrackProjects />} />
               <Route path="operations/warehouse" element={<AdminWarehouse />} />
               <Route path="operations/add-inventory" element={<AdminAddInventory />} />
               <Route
@@ -495,8 +497,8 @@ function App() {
               <Route path="settings/approval-overdue" element={<ApprovalOverdueSetting />} />
               <Route path="settings/overdue-task" element={<OverdueTaskSetting />} />
               <Route path="settings/overdue-status" element={<OverdueStatusSetting />} />
-              <Route path="settings/franchisee-manager" element={<FranchiseeManagerSetting />} />
-              <Route path="settings/franchise-buy-lead" element={<FranchiseBuyLeadSetting />} />
+              <Route path="settings/partner-manager" element={<FranchiseeManagerSetting />} />
+              <Route path="settings/partner-buy-lead" element={<FranchiseBuyLeadSetting />} />
               <Route path="settings/loan" element={<LoanSetting />} />
               <Route path="settings/checklist" element={<ChecklistSetting />} />
               <Route path="reports/financial-pl" element={<AdminFinancialPLReport />} />

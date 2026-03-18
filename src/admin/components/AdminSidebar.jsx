@@ -26,6 +26,7 @@ import {
   FileBarChart,
   UserCheck,
   TrendingUp,
+  Activity,
   Home,
   MapPin,
   ClipboardList,
@@ -57,6 +58,7 @@ export default function AdminSidebar() {
     'settingsHrms': 'settings_hrms',
     'settingsProject': 'settings_project',
     'settingsQuote': 'settings_quote',
+    'settingsOverdue': 'settings_overdue',
     'reports': 'reports'
   };
 
@@ -90,6 +92,7 @@ export default function AdminSidebar() {
     operations: false,
     settings: false,
     reports: false,
+    projectManagement: false,
     // Settings nested groups
     settingsLocation: false,
     settingsHr: false,
@@ -107,6 +110,8 @@ export default function AdminSidebar() {
     settingsHrms: false,
     settingsProject: false,
     settingsQuote: false,
+    settingsOperations: false,
+    settingsOverdue: false,
   });
 
   const toggleSection = (section) => {
@@ -131,8 +136,8 @@ export default function AdminSidebar() {
           isGroup: true,
           isExpanded: expandedSections.userPerformance,
           children: [
-            { name: '- Franchise Manager Dashboard', href: '/admin/dashboard/user-performance/franchise-manager', icon: UserCog },
-            { name: '- Franchise Dashboard', href: '/admin/dashboard/user-performance/franchise', icon: Building },
+            { name: '- Partner Manager Dashboard', href: '/admin/dashboard/user-performance/partner-manager', icon: UserCog },
+            { name: '- Partner Dashboard', href: '/admin/dashboard/user-performance/partner', icon: Building },
             { name: '- Dealer Manager Dashboard', href: '/admin/dashboard/user-performance/dealer-manager', icon: UserCheck },
             { name: '- Dealer Dashboard', href: '/admin/dashboard/user-performance/dealer', icon: StoreIcon },
           ]
@@ -159,7 +164,16 @@ export default function AdminSidebar() {
       ],
     },
     { id: 'approvals', name: 'Approvals', icon: CheckCircle2, href: '/admin/approvals' },
-    { id: 'project-management', name: 'Project Management', icon: BriefcaseBusiness, href: '/admin/project-management' },
+    {
+      id: 'projectManagement',
+      name: 'Project Management',
+      icon: BriefcaseBusiness,
+      isExpanded: expandedSections.projectManagement,
+      children: [
+        { name: 'Manage', href: '/admin/project-management', icon: Settings },
+        { name: 'Track', href: '/admin/project-management/track', icon: Activity },
+      ],
+    },
     {
       id: 'operations',
       name: 'Operations',
@@ -254,16 +268,48 @@ export default function AdminSidebar() {
           ],
         },
         {
-          id: 'settingsDelivery',
-          name: 'Delivery Settings',
-          icon: Truck,
+          id: 'settingsOperations',
+          name: 'Settings Operations',
+          icon: Workflow,
           isGroup: true,
-          isExpanded: expandedSections.settingsDelivery,
+          isExpanded: expandedSections.settingsOperations,
           children: [
-            { name: '- Delivery Type', href: '/admin/settings/delivery/delivery-type', icon: Truck },
-            { name: '- Delivery Benchmark Price', href: '/admin/settings/delivery/benchmark-price', icon: FileBarChart },
-            { name: '- Vehicle Selection', href: '/admin/settings/delivery/vehicle-selection', icon: Truck },
-            { name: '- Vendor Delivery Plan', href: '/admin/settings/delivery/vendor-delivery-plan', icon: StoreIcon },
+            {
+              id: 'settingsDelivery',
+              name: 'Delivery Settings',
+              icon: Truck,
+              isGroup: true,
+              isExpanded: expandedSections.settingsDelivery,
+              children: [
+                { name: '- Delivery Type', href: '/admin/settings/delivery/delivery-type', icon: Truck },
+                { name: '- Delivery Benchmark Price', href: '/admin/settings/delivery/benchmark-price', icon: FileBarChart },
+                { name: '- Vehicle Selection', href: '/admin/settings/delivery/vehicle-selection', icon: Truck },
+                { name: '- Vendor Delivery Plan', href: '/admin/settings/delivery/vendor-delivery-plan', icon: StoreIcon },
+              ],
+            },
+            {
+              id: 'settingsInventory',
+              name: 'Inventory Management',
+              icon: Package,
+              isGroup: true,
+              isExpanded: expandedSections.settingsInventory,
+              children: [
+                { name: '- Inventory Overview', href: '/admin/settings/inventory/inventory-overview', icon: Package },
+                { name: '- Inventory Level Management', href: '/admin/settings/inventory/level-management-setting', icon: FileBarChart },
+                { name: '- Restock Order Limit', href: '/admin/settings/inventory/restock-order-limit', icon: ClipboardList },
+                { name: '- Combokit Brand Overview', href: '/admin/settings/inventory/combokit-brand-overview', icon: StoreIcon },
+              ],
+            },
+            {
+              id: 'settingsOrderProcurement',
+              name: 'Order Procurement',
+              icon: ShoppingCart,
+              isGroup: true,
+              isExpanded: expandedSections.settingsOrderProcurement,
+              children: [
+                { name: '- Order Procurement', href: '/admin/settings/order-procurement', icon: ShoppingCart },
+              ],
+            },
           ],
         },
         {
@@ -277,19 +323,6 @@ export default function AdminSidebar() {
             { name: '- Installer Tool Requirements', href: '/admin/settings/installer/tool-requirements', icon: Wrench },
             { name: '- Rating Setting', href: '/admin/settings/installer/rating-setting', icon: FileBarChart },
             { name: '- Installer Agency Plans', href: '/admin/settings/installer/agency-plans', icon: FileText },
-          ],
-        },
-        {
-          id: 'settingsInventory',
-          name: 'Inventory Management',
-          icon: Package,
-          isGroup: true,
-          isExpanded: expandedSections.settingsInventory,
-          children: [
-            { name: '- Inventory Overview', href: '/admin/settings/inventory/inventory-overview', icon: Package },
-            { name: '- Inventory Level Management', href: '/admin/settings/inventory/level-management-setting', icon: FileBarChart },
-            { name: '- Restock Order Limit', href: '/admin/settings/inventory/restock-order-limit', icon: ClipboardList },
-            { name: '- Combokit Brand Overview', href: '/admin/settings/inventory/combokit-brand-overview', icon: StoreIcon },
           ],
         },
         {
@@ -325,16 +358,6 @@ export default function AdminSidebar() {
           ],
         },
         {
-          id: 'settingsOrderProcurement',
-          name: 'Order Procurement',
-          icon: ShoppingCart,
-          isGroup: true,
-          isExpanded: expandedSections.settingsOrderProcurement,
-          children: [
-            { name: '- Order Procurement', href: '/admin/settings/order-procurement', icon: ShoppingCart },
-          ],
-        },
-        {
           id: 'settingsPartner',
           name: 'Partner Settings',
           icon: Users,
@@ -346,6 +369,8 @@ export default function AdminSidebar() {
             { name: '- Partner Onboarding Goals', href: '/admin/settings/partner/onboarding-goals', icon: ClipboardList },
             { name: '- Partner Profession Type', href: '/admin/settings/partner/profession-type', icon: BriefcaseBusiness },
             { name: '- Add Partner', href: '/admin/settings/partner/add-partner', icon: Users },
+            { name: '- Partner Manager Setting', href: '/admin/settings/partner-manager', icon: BriefcaseBusiness },
+            { name: '- Partner Buy Lead Setting', href: '/admin/settings/partner-buy-lead', icon: BriefcaseBusiness },
           ],
         },
         {
@@ -392,13 +417,20 @@ export default function AdminSidebar() {
 
           ],
         },
-        { name: 'Approval Overdue Setting', icon: CheckCircle2, href: '/admin/settings/approval-overdue' },
-        { name: 'Overdue Task Setting', icon: ClipboardList, href: '/admin/settings/overdue-task' },
-        { name: 'Overdue Status Setting', icon: ClipboardList, href: '/admin/settings/overdue-status' },
-        { name: 'Franchisee Manager Setting', icon: BriefcaseBusiness, href: '/admin/settings/franchisee-manager' },
-        { name: 'Franchise Buy Lead Setting', icon: BriefcaseBusiness, href: '/admin/settings/franchise-buy-lead' },
-        { name: 'Loan Setting', icon: FileBarChart, href: '/admin/settings/loan' },
-        { name: 'Checklist Setting', icon: ClipboardList, href: '/admin/settings/checklist' },
+        {
+          id: 'settingsOverdue',
+          name: 'Overdue Setting',
+          icon: CheckCircle2,
+          isGroup: true,
+          isExpanded: expandedSections.settingsOverdue,
+          children: [
+            { name: '- Approval Overdue Setting', href: '/admin/settings/approval-overdue', icon: CheckCircle2 },
+            { name: '- Overdue Task Setting', href: '/admin/settings/overdue-task', icon: ClipboardList },
+            { name: '- Overdue Status Setting', href: '/admin/settings/overdue-status', icon: ClipboardList },
+            { name: '- Loan Setting', href: '/admin/settings/loan', icon: FileBarChart },
+            { name: '- Checklist Setting', href: '/admin/settings/checklist', icon: ClipboardList },
+          ],
+        },
       ],
     },
     {
@@ -481,54 +513,52 @@ export default function AdminSidebar() {
               {/* Children Sections */}
               {section.children && section.isExpanded && (
                 <div className="mt-1 ml-6">
-                  {section.children.filter(child => hasAccess(child.id)).map((child, index) => {
-                    if (child.isGroup) {
+                  {section.children.map((child) => {
+                    const renderChild = (item, depth = 1) => {
+                      if (!hasAccess(item.id)) return null;
+
+                      if (item.isGroup) {
+                        return (
+                          <div key={item.id} className="mt-2">
+                            <button
+                              onClick={() => toggleSection(item.id)}
+                              className="w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-800 rounded-lg transition"
+                            >
+                              <div className="flex items-center space-x-2">
+                                <item.icon size={16} />
+                                <span>{item.name}</span>
+                              </div>
+                              <ChevronRight
+                                size={14}
+                                className={`transform transition ${item.isExpanded ? 'rotate-90' : ''
+                                  }`}
+                              />
+                            </button>
+
+                            {/* Sub-children of nested groups */}
+                            {item.isExpanded && item.children && (
+                              <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-2">
+                                {item.children.map((subChild) => renderChild(subChild, depth + 1))}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      }
+
                       return (
-                        <div key={child.id} className="mt-2">
-                          <button
-                            onClick={() => toggleSection(child.id)}
-                            className="w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-800 rounded-lg transition"
-                          >
-                            <div className="flex items-center space-x-2">
-                              <child.icon size={16} />
-                              <span>{child.name}</span>
-                            </div>
-                            <ChevronRight
-                              size={14}
-                              className={`transform transition ${child.isExpanded ? 'rotate-90' : ''
-                                }`}
-                            />
-                          </button>
-
-                          {/* Sub-children of nested groups */}
-                          {child.isExpanded && child.children && (
-                            <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-2">
-                              {child.children.map((subChild) => (
-                                <Link
-                                  key={subChild.href}
-                                  to={subChild.href}
-                                  className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition"
-                                >
-                                  {subChild.icon && <subChild.icon size={14} />}
-                                  <span>{subChild.name}</span>
-                                </Link>
-                              ))}
-                            </div>
-                          )}
-                        </div>
+                        <Link
+                          key={item.href || item.name}
+                          to={item.href}
+                          className={`flex items-center space-x-2 px-3 py-2 text-sm hover:text-white hover:bg-gray-800 rounded-lg transition ${depth > 1 ? 'text-gray-300' : 'text-gray-200'
+                            }`}
+                        >
+                          {item.icon && <item.icon size={depth > 1 ? 14 : 16} />}
+                          <span>{item.name}</span>
+                        </Link>
                       );
-                    }
+                    };
 
-                    return (
-                      <Link
-                        key={child.href || child.name}
-                        to={child.href}
-                        className="flex items-center space-x-2 px-3 py-2 text-sm text-gray-200 hover:text-white hover:bg-gray-800 rounded-lg transition"
-                      >
-                        {child.icon && <child.icon size={16} />}
-                        <span>{child.name}</span>
-                      </Link>
-                    );
+                    return renderChild(child);
                   })}
                 </div>
               )}

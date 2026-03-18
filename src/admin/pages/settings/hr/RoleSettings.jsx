@@ -53,15 +53,14 @@ const SIDEBAR_MODULES = [
       { name: "Vendor Settings", key: "settings_vendor" },
       { name: "Sales Settings", key: "settings_sales" },
       { name: "Marketing Settings", key: "settings_marketing" },
-      { name: "Delivery Settings", key: "settings_delivery" },
+      { name: "Settings Operations", key: "settings_operations" },
       { name: "Installer Settings", key: "settings_installer" },
-      { name: "Inventory Management", key: "settings_inventory" },
       { name: "Product Configuration", key: "settings_product" },
       { name: "Brand Manufacturer", key: "settings_brand" },
       { name: "ComboKit", key: "settings_combokit" },
       { name: "Combokit Overview", key: "settings_combokit_overview" },
       { name: "Order Procurement", key: "settings_order_procurement" },
-      { name: "Franchisee Settings", key: "settings_franchisee" },
+      { name: "Partner Settings", key: "settings_franchisee" },
       { name: "Dealer Settings", key: "settings_dealer" },
       { name: "HRMS Settings", key: "settings_hrms" },
       { name: "Project Management Settings", key: "settings_project" },
@@ -69,8 +68,8 @@ const SIDEBAR_MODULES = [
       { name: "Approval Overdue Setting", key: "settings_approval_overdue" },
       { name: "Overdue Task Setting", key: "settings_overdue_task" },
       { name: "Overdue Status Setting", key: "settings_overdue_status" },
-      { name: "Franchisee Manager Setting", key: "settings_franchisee_manager" },
-      { name: "Franchise Buy Lead Setting", key: "settings_franchise_buy_lead" },
+      { name: "Partner Manager Setting", key: "settings_franchisee_manager" },
+      { name: "Partner Buy Lead Setting", key: "settings_franchise_buy_lead" },
       { name: "Loan Setting", key: "settings_loan" },
       { name: "Checklist Setting", key: "settings_checklist" },
     ]
@@ -99,8 +98,8 @@ const MANDATORY_TASK_STRUCTURE = [
     category: "Dashboard",
     subItems: [
       "User Performance",
-      "Franchise Manager Dashboard",
-      "Franchise Dashboard",
+      "Partner Manager Dashboard",
+      "Partner Dashboard",
       "Dealer Manager Dashboard",
       "Dealer Dashboard",
       "Orders",
@@ -135,18 +134,32 @@ const MANDATORY_TASK_STRUCTURE = [
       { label: "Vendor Settings", items: ["Installer Vendors", "Supplier Type", "Supplier Vendors"] },
       { label: "Sales Settings", items: ["Set Price", "Set Price For AMC", "Offers", "Solar Panel Bundle Setting"] },
       { label: "Marketing Settings", items: ["Campaign Management"] },
-      { label: "Delivery Settings", items: ["Delivery Type", "Delivery Benchmark Price", "Vehicle Selection", "Vendor Delivery Plan"] },
+      {
+        label: "Settings Operations",
+        subGroups: [
+          {
+            label: "Delivery Settings",
+            items: ["Delivery Type", "Delivery Benchmark Price", "Vehicle Selection", "Vendor Delivery Plan"]
+          },
+          {
+            label: "Inventory Management",
+            items: ["Inventory Overview", "Inventory Level Management", "Restock Order Limit", "Combokit Brand Overview"]
+          },
+          {
+            label: "Order Procurement",
+            items: ["Order Procurement"]
+          }
+        ]
+      },
       { label: "Installer Settings", items: ["Solar Installer", "Installer Tool Requirements", "Rating Setting", "Installer Agency Plans"] },
-      { label: "Inventory Management", items: ["Inventory Overview", "Inventory Level Management", "Restock Order Limit", "Combokit Brand Overview"] },
       { label: "Product Configuration", items: ["Add Project Type", "Add Project Category", "Add Product", "SKU", "Price Master", "Add Unit Management"] },
       { label: "Brand Manufacturer", items: ["Add Brand Manufacturer", "Brand Supplier Overview"] },
       { label: "ComboKit", items: ["Create Solarkit", "Create AMC Plans", "AMC Services", "Solarkit Bundle Plans", "Add ComboKit", "Customize Combokit"] },
       { label: "Combokit Overview", items: ["Combokit Overview"] },
-      { label: "Order Procurement", items: ["Order Procurement"] },
-      { label: "Partner Settings", items: ["Partner Plans", "Partner Points & Reward Setting", "Partner Onboarding Goals", "Partner Profession Type", "Add Partner"] },
+      { label: "Partner Settings", items: ["Partner Plans", "Partner Points & Reward Setting", "Partner Onboarding Goals", "Partner Profession Type", "Add Partner", "Partner Manager Setting", "Partner Buy Lead Setting"] },
       { label: "HRMS Settings", items: ["HRMS Settings", "Candidate Test Setting", "Candidate Training Setting"] },
       { label: "Project Management Settings", items: ["Project Journey Stage Setting", "Project Management Overdue Setting", "Project Management Configuration", "Project Documentation Setting", "Placeholder Name Setting"] },
-      { label: "Quote", items: ["Quote Setting", "Survey BOM Setting", "Terrace Setting", "Structure Setting", "Building Setting", "Discom Master", "Approval Overdue Setting", "Overdue Task Setting", "Overdue Status Setting", "Franchisee Manager Setting", "Franchise Buy Lead Setting", "Loan Setting", "Checklist Setting"] }
+      { label: "Quote", items: ["Quote Setting", "Survey BOM Setting", "Terrace Setting", "Structure Setting", "Building Setting", "Discom Master", "Approval Overdue Setting", "Overdue Task Setting", "Overdue Status Setting", "Loan Setting", "Checklist Setting"] }
     ]
   },
   {
@@ -437,13 +450,32 @@ export default function RoleSettings() {
         const structure = type === 'mandatory' ? MANDATORY_TASK_STRUCTURE : OPTIONAL_TASK_STRUCTURE;
         const categoriesToExpand = [];
         structure.forEach(cat => {
-          const items = cat.groups ? cat.groups.reduce((acc, g) => acc.concat(g.items), []) : (cat.subItems || []);
+          const items = cat.groups
+            ? cat.groups.reduce((acc, g) => {
+              if (g.subGroups) {
+                return acc.concat(g.subGroups.reduce((subAcc, sg) => subAcc.concat(sg.items || []), []));
+              }
+              return acc.concat(g.items || []);
+            }, [])
+            : (cat.subItems || []);
+
           if (items.some(item => tasks.includes(item))) {
             categoriesToExpand.push(cat.category);
             if (cat.groups) {
               cat.groups.forEach(g => {
-                if (g.items.some(item => tasks.includes(item))) {
+                const groupItems = g.subGroups
+                  ? g.subGroups.reduce((acc, sg) => acc.concat(sg.items || []), [])
+                  : (g.items || []);
+
+                if (groupItems.some(item => tasks.includes(item))) {
                   categoriesToExpand.push(`${cat.category}:${g.label}`);
+                  if (g.subGroups) {
+                    g.subGroups.forEach(sg => {
+                      if (sg.items.some(item => tasks.includes(item))) {
+                        categoriesToExpand.push(`${cat.category}:${g.label}:${sg.label}`);
+                      }
+                    });
+                  }
                 }
               });
             }
@@ -1127,7 +1159,14 @@ export default function RoleSettings() {
 
                     return taskStructure.map((catObj) => {
                       const isExpanded = expandedCategories.includes(catObj.category);
-                      const allItems = catObj.groups ? catObj.groups.reduce((acc, g) => acc.concat(g.items), []) : (catObj.subItems || []);
+                      const allItems = catObj.groups
+                        ? catObj.groups.reduce((acc, g) => {
+                          if (g.subGroups) {
+                            return acc.concat(g.subGroups.reduce((subAcc, sg) => subAcc.concat(sg.items || []), []));
+                          }
+                          return acc.concat(g.items || []);
+                        }, [])
+                        : (catObj.subItems || []);
                       const allSelected = allItems.every(item => currentSelected.includes(item));
                       const someSelected = allItems.some(item => currentSelected.includes(item));
 
@@ -1178,9 +1217,12 @@ export default function RoleSettings() {
                                 <div className="p-2 space-y-2">
                                   {catObj.groups.map(group => {
                                     const groupKey = `${catObj.category}:${group.label}`;
+                                    const groupItems = group.subGroups
+                                      ? group.subGroups.reduce((acc, sg) => acc.concat(sg.items || []), [])
+                                      : (group.items || []);
                                     const isGroupExpanded = expandedCategories.includes(groupKey);
-                                    const groupSelected = group.items.every(item => currentSelected.includes(item));
-                                    const groupSome = group.items.some(item => currentSelected.includes(item));
+                                    const groupSelected = groupItems.every(item => currentSelected.includes(item));
+                                    const groupSome = groupItems.some(item => currentSelected.includes(item));
 
                                     return (
                                       <div key={group.label} className="border border-gray-100 rounded">
@@ -1199,14 +1241,14 @@ export default function RoleSettings() {
                                             <input
                                               type="checkbox"
                                               className="accent-blue-400"
-                                              checked={group.items.length > 0 && groupSelected}
+                                              checked={groupItems.length > 0 && groupSelected}
                                               ref={el => el && (el.indeterminate = groupSome && !groupSelected)}
                                               onClick={(e) => e.stopPropagation()}
                                               onChange={(e) => {
                                                 e.stopPropagation();
                                                 const newVal = e.target.checked;
                                                 let updated = [...currentSelected];
-                                                group.items.forEach(item => {
+                                                groupItems.forEach(item => {
                                                   if (newVal) {
                                                     if (!updated.includes(item)) updated.push(item);
                                                   } else {
@@ -1219,25 +1261,97 @@ export default function RoleSettings() {
                                             <span className="text-xs font-semibold text-gray-600">{group.label}</span>
                                           </div>
                                           <span className="text-[9px] text-gray-400">
-                                            {group.items.filter(i => currentSelected.includes(i)).length}/{group.items.length}
+                                            {groupItems.filter(i => currentSelected.includes(i)).length}/{groupItems.length}
                                           </span>
                                         </div>
 
-                                        {isGroupExpanded && (
-                                          <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 bg-white">
-                                            {group.items.map(item => (
-                                              <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
-                                                <input
-                                                  type="checkbox"
-                                                  className="accent-blue-600"
-                                                  checked={currentSelected.includes(item)}
-                                                  onChange={() => handleTaskToggle(item, activeTaskModalType)}
-                                                />
-                                                <span className="text-[11px] text-gray-600">{item}</span>
-                                              </label>
-                                            ))}
-                                          </div>
-                                        )}
+                                          {isGroupExpanded && (
+                                            <div className="bg-white">
+                                              {group.subGroups ? (
+                                                <div className="p-2 space-y-3">
+                                                  {group.subGroups.map((subGroup) => {
+                                                    const subGroupKey = `${groupKey}:${subGroup.label}`;
+                                                    const isSubExpanded = expandedCategories.includes(subGroupKey);
+                                                    const subAllSelected = subGroup.items.every(item => currentSelected.includes(item));
+                                                    const subSomeSelected = subGroup.items.some(item => currentSelected.includes(item));
+
+                                                    return (
+                                                      <div key={subGroup.label} className="border border-gray-100 rounded-lg overflow-hidden shadow-sm">
+                                                        <div
+                                                          className="p-2 bg-gray-50 flex items-center justify-between cursor-pointer hover:bg-gray-100"
+                                                          onClick={() => {
+                                                            setExpandedCategories(prev =>
+                                                              prev.includes(subGroupKey)
+                                                                ? prev.filter(k => k !== subGroupKey)
+                                                                : [...prev, subGroupKey]
+                                                            );
+                                                          }}
+                                                        >
+                                                          <div className="flex items-center gap-2">
+                                                            {isSubExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                                                            <input
+                                                              type="checkbox"
+                                                              className="accent-blue-500"
+                                                              checked={subGroup.items.length > 0 && subAllSelected}
+                                                              ref={el => el && (el.indeterminate = subSomeSelected && !subAllSelected)}
+                                                              onClick={(e) => e.stopPropagation()}
+                                                              onChange={(e) => {
+                                                                e.stopPropagation();
+                                                                const newVal = e.target.checked;
+                                                                let updated = [...currentSelected];
+                                                                subGroup.items.forEach(item => {
+                                                                  if (newVal) {
+                                                                    if (!updated.includes(item)) updated.push(item);
+                                                                  } else {
+                                                                    updated = updated.filter(u => u !== item);
+                                                                  }
+                                                                });
+                                                                setter(updated);
+                                                              }}
+                                                            />
+                                                            <span className="text-xs font-bold text-gray-700">{subGroup.label}</span>
+                                                          </div>
+                                                          <span className="text-[9px] text-gray-400">
+                                                            {subGroup.items.filter(i => currentSelected.includes(i)).length}/{subGroup.items.length}
+                                                          </span>
+                                                        </div>
+
+                                                        {isSubExpanded && (
+                                                          <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2 bg-white">
+                                                            {subGroup.items.map(item => (
+                                                              <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                                                                <input
+                                                                  type="checkbox"
+                                                                  className="accent-blue-600"
+                                                                  checked={currentSelected.includes(item)}
+                                                                  onChange={() => handleTaskToggle(item, activeTaskModalType)}
+                                                                />
+                                                                <span className="text-[11px] text-gray-600">{item}</span>
+                                                              </label>
+                                                            ))}
+                                                          </div>
+                                                        )}
+                                                      </div>
+                                                    );
+                                                  })}
+                                                </div>
+                                              ) : (
+                                                <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-2">
+                                                  {group.items.map(item => (
+                                                    <label key={item} className="flex items-center gap-2 cursor-pointer hover:text-blue-600">
+                                                      <input
+                                                        type="checkbox"
+                                                        className="accent-blue-600"
+                                                        checked={currentSelected.includes(item)}
+                                                        onChange={() => handleTaskToggle(item, activeTaskModalType)}
+                                                      />
+                                                      <span className="text-[11px] text-gray-600">{item}</span>
+                                                    </label>
+                                                  ))}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
                                       </div>
                                     );
                                   })}

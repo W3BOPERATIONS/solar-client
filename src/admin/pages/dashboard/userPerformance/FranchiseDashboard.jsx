@@ -138,7 +138,7 @@ export default function FranchiseDashboard() {
       });
 
       const info = new window.google.maps.InfoWindow({
-        content: `<div class="p-2"><strong class="text-sm">${d.name}</strong><br><strong class="text-primary">Total Franchisee: ${d.message}</strong></div>`,
+        content: `<div class="p-2"><strong class="text-sm">${d.name}</strong><br><strong class="text-primary">Total Partner: ${d.message}</strong></div>`,
       });
 
       marker.addListener("click", () => {
@@ -388,7 +388,7 @@ export default function FranchiseDashboard() {
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-white mb-2">
               <BarChart3 className="inline mr-2" size={24} />
-              Frenchisee Dashboard
+              Partner Dashboard
             </h2>
           </div>
         </div>
@@ -454,7 +454,7 @@ export default function FranchiseDashboard() {
               onChange={(e) => handleFilterChange('franchiseeType', e.target.value)}
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              <option value="all" disabled>Frenchisee Type</option>
+              <option value="all" disabled>Partner Type</option>
               <option value="startup">Start Up(Dealer)</option>
               <option value="startup">Basic</option>
               <option value="enterprice">Enterprice</option>
@@ -591,7 +591,7 @@ export default function FranchiseDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">
-            Frenchisee Type
+            Partner Type
           </label>
           <select
             value={filters.franchiseeType}
@@ -607,7 +607,7 @@ export default function FranchiseDashboard() {
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">
-            Frenchisee Name
+            Partner Name
           </label>
           <select
             value={filters.franchiseeName}
@@ -658,7 +658,7 @@ export default function FranchiseDashboard() {
           <div className="bg-white px-5 py-4 border-b">
             <h4 className="font-semibold text-lg text-green-600 flex items-center">
               <BarChart3 className="mr-2" size={20} />
-              Frenchisee Chart
+              Partner Chart
             </h4>
           </div>
           <div className="p-5">
@@ -736,7 +736,7 @@ export default function FranchiseDashboard() {
         <div className="bg-white px-5 py-4 border-b">
           <h4 className="font-semibold text-lg text-green-600 flex items-center">
             <BarChart3 className="mr-2" size={20} />
-            Franchise Manager Orders Chart
+            Partner Manager Orders Chart
           </h4>
         </div>
         <div className="p-5">
@@ -761,7 +761,7 @@ export default function FranchiseDashboard() {
             <table className="w-full">
               <thead className="bg-gray-50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border">Franchisee Name</th>
+                  <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border">Partner Name</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border">Dealer Name</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border">Orders</th>
                   <th className="px-4 py-3 text-left text-sm font-semibold text-gray-600 border">Performance</th>
