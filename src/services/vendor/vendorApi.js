@@ -32,8 +32,8 @@ export const deleteInstallerVendor = async (id) => {
 
 // ==================== SUPPLIER TYPES ====================
 
-export const getSupplierTypes = async () => {
-    const response = await axios.get(`${API_URL}/supplier-types`, getAuthHeaders());
+export const getSupplierTypes = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/supplier-types`, { ...getAuthHeaders(), params });
     return response.data;
 };
 

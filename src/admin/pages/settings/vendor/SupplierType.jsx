@@ -1,12 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Eye, EyeOff, Loader, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Loader, Trash2, X, ChevronRight } from 'lucide-react';
 import {
   getSupplierTypes,
   createSupplierType,
+  updateSupplierType,
   deleteSupplierType
 } from '../../../../services/vendor/vendorApi';
-import { locationAPI } from '../../../../api/api';
+import { locationAPI, masterAPI } from '../../../../api/api';
+import { productApi } from '../../../../api/productApi';
 import toast from 'react-hot-toast';
+import { SIDEBAR_NAVIGATION } from '../../../constants/navigation';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
   <div
@@ -30,14 +33,134 @@ export default function SupplierType() {
   // Form State
   const [formData, setFormData] = useState({
     loginTypeName: '',
-    category: '',
-    subCategory: '',
-    projectType: '',
-    subType: '',
+    categories: [],
+    subCategories: [],
+    projectTypes: [],
+    subTypes: [],
     assignModules: '',
     loginAccessType: '',
-    orderTat: '10 Days'
+    orderTat: '10 Days',
+    modulesTasks: []
   });
+
+  const [openSelect, setOpenSelect] = useState(null);
+  const [showTaskModal, setShowTaskModal] = useState(false);
+  const [tempModules, setTempModules] = useState([]);
+  const [expandedSection, setExpandedSection] = useState(null);
+  const [editingTypeId, setEditingTypeId] = useState(null); // null = creating, id = editing existing row
+
+  // Get total sub-modules count for a section
+  const getSubModulesCount = (item) => {
+    let count = 0;
+    const countItems = (arr) => {
+      arr.forEach(i => {
+        if (i.children) countItems(i.children);
+        else count++;
+      });
+    };
+    if (item.children) countItems(item.children);
+    else count = 1;
+    return count;
+  };
+
+  // Get selected sub-modules count for a section
+  const getSelectedCount = (item, selected) => {
+    let count = 0;
+    const process = (arr) => {
+      arr.forEach(i => {
+        if (i.children) process(i.children);
+        else if (selected.includes(i.name)) count++; // Or use ID/fullName if preferred
+      });
+    };
+    if (item.children) process(item.children);
+    else if (selected.includes(item.name)) count = 1;
+    return count;
+  };
+
+  // Toggle all children of a section
+  const toggleSectionModules = (item, isAdding) => {
+    const sectionModules = [];
+    const getNames = (arr) => {
+      arr.forEach(i => {
+        if (i.children) getNames(i.children);
+        else sectionModules.push(i.name);
+      });
+    };
+    if (item.children) getNames(item.children);
+    else sectionModules.push(item.name);
+
+    if (isAdding) {
+      setTempModules(prev => [...new Set([...prev, ...sectionModules])]);
+    } else {
+      setTempModules(prev => prev.filter(m => !sectionModules.includes(m)));
+    }
+  };
+
+  const handleOpenTaskModal = () => {
+    setEditingTypeId(null); // new row creation
+    setTempModules(formData.modulesTasks || []);
+    setShowTaskModal(true);
+  };
+
+  const handleOpenEditTaskModal = (type) => {
+    setEditingTypeId(type._id);
+    setTempModules(Array.isArray(type.modulesTasks) ? type.modulesTasks : []);
+    setShowTaskModal(true);
+  };
+
+  const handleSaveTasks = async () => {
+    if (editingTypeId) {
+      // Update existing supplier type
+      try {
+        await updateSupplierType(editingTypeId, { modulesTasks: tempModules });
+        toast.success('Tasks updated successfully');
+        fetchTypes();
+      } catch (error) {
+        console.error('Error updating tasks:', error);
+        toast.error('Failed to update tasks');
+      }
+    } else {
+      // New row
+      setFormData(prev => ({ ...prev, modulesTasks: tempModules }));
+    }
+    setShowTaskModal(false);
+    setEditingTypeId(null);
+  };
+
+  const handleToggleTempModule = (name) => {
+    setTempModules(prev =>
+      prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]
+    );
+  };
+
+  const handleToggleOption = (field, value) => {
+    setFormData(prev => {
+      const current = prev[field] || [];
+      const isSelected = current.includes(value);
+      const updated = isSelected
+        ? current.filter(item => item !== value)
+        : [...current, value];
+
+      let nextState = { ...prev, [field]: updated };
+
+      // If categories changed, clear dependent fields to avoid invalid combinations
+      if (field === 'categories' && isSelected) {
+        // If we removed a category, we might want to filter out orphaned subcategories, 
+        // but for simplicity and better UX, we'll clear them if they were dependent.
+        // Actually, clearing everything below is safer when mappings change.
+        nextState.subCategories = [];
+        nextState.projectTypes = [];
+        nextState.subTypes = [];
+      } else if (field === 'subCategories' && isSelected) {
+        nextState.projectTypes = [];
+        nextState.subTypes = [];
+      } else if (field === 'projectTypes' && isSelected) {
+        nextState.subTypes = [];
+      }
+
+      return nextState;
+    });
+  };
 
   // Location Hierarchy State
   const [locationData, setLocationData] = useState({
@@ -47,12 +170,32 @@ export default function SupplierType() {
     districts: []
   });
 
+  // Master Lists State
+  const [masterLists, setMasterLists] = useState({
+    categories: [],
+    subCategories: [],
+    projectTypes: [],
+    subProjectTypes: [],
+    mappings: []
+  });
+
   const [selectedLocation, setSelectedLocation] = useState({
     country: '',
     state: '',
     cluster: '',
     district: ''
   });
+
+  // Click outside to close custom selects
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (openSelect && !event.target.closest('.relative')) {
+        setOpenSelect(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [openSelect]);
 
   // Location Fetching Logic
   useEffect(() => {
@@ -122,12 +265,108 @@ export default function SupplierType() {
         } catch (error) {
           setLocationData(prev => ({ ...prev, districts: [] }));
         }
-      } else {
-        setLocationData(prev => ({ ...prev, districts: [] }));
       }
     };
     fetchDistricts();
   }, [selectedLocation.cluster, selectedLocation.state]);
+
+  // Fetch Mappings and All Categories when location changes
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!selectedLocation.state) return;
+      try {
+        const params = { status: 'true' };
+        if (selectedLocation.cluster && selectedLocation.cluster !== 'all') {
+          params.clusterId = selectedLocation.cluster;
+        } else if (selectedLocation.state && selectedLocation.state !== 'all') {
+          params.stateId = selectedLocation.state;
+        }
+
+        const [mappingRes, catRes] = await Promise.all([
+          productApi.getProjectCategoryMappings(params),
+          masterAPI.getAllCategories({ status: 'true' })
+        ]);
+
+        setMasterLists(prev => ({
+          ...prev,
+          mappings: mappingRes.data?.data || [],
+          categories: catRes.data?.data || []
+        }));
+      } catch (error) {
+        console.error('Failed to fetch data', error);
+      }
+    };
+    fetchData();
+  }, [selectedLocation.state, selectedLocation.cluster]);
+
+  // Cascading logic based on Mappings
+  useEffect(() => {
+    if (formData.categories.length > 0) {
+      const selectedCatMappings = masterLists.mappings.filter(m => formData.categories.includes(m.categoryId?.name));
+
+      // Extract unique subCategories
+      const uniqueSubs = [];
+      const seenSubs = new Set();
+      selectedCatMappings.forEach(m => {
+        if (m.subCategoryId && !seenSubs.has(m.subCategoryId._id)) {
+          seenSubs.add(m.subCategoryId._id);
+          uniqueSubs.push(m.subCategoryId);
+        }
+      });
+      setMasterLists(prev => ({ ...prev, subCategories: uniqueSubs }));
+    } else {
+      setMasterLists(prev => ({ ...prev, subCategories: [] }));
+    }
+  }, [formData.categories, masterLists.mappings]);
+
+  useEffect(() => {
+    if (formData.categories.length > 0 && formData.subCategories.length > 0) {
+      const filteredMappings = masterLists.mappings.filter(m =>
+        formData.categories.includes(m.categoryId?.name) &&
+        formData.subCategories.includes(m.subCategoryId?.name)
+      );
+
+      // Extract unique Project Type Ranges
+      const ranges = [];
+      const seenRanges = new Set();
+      filteredMappings.forEach(m => {
+        const rangeText = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+        if (!seenRanges.has(rangeText)) {
+          seenRanges.add(rangeText);
+          ranges.push({ id: rangeText, name: rangeText, ...m });
+        }
+      });
+      setMasterLists(prev => ({ ...prev, projectTypes: ranges }));
+    } else {
+      setMasterLists(prev => ({ ...prev, projectTypes: [] }));
+    }
+  }, [formData.categories, formData.subCategories, masterLists.mappings]);
+
+  useEffect(() => {
+    if (formData.categories.length > 0 && formData.subCategories.length > 0 && formData.projectTypes.length > 0) {
+      const filteredMappings = masterLists.mappings.filter(m =>
+        formData.categories.includes(m.categoryId?.name) &&
+        formData.subCategories.includes(m.subCategoryId?.name) &&
+        formData.projectTypes.includes(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+      );
+
+      // Extract unique Sub Project Types
+      const subTypes = [];
+      const seenSubTypes = new Set();
+      filteredMappings.forEach(m => {
+        if (m.subProjectTypeId && !seenSubTypes.has(m.subProjectTypeId._id)) {
+          seenSubTypes.add(m.subProjectTypeId._id);
+          subTypes.push(m.subProjectTypeId);
+        }
+      });
+      setMasterLists(prev => ({ ...prev, subProjectTypes: subTypes }));
+    } else {
+      setMasterLists(prev => ({ ...prev, subProjectTypes: [] }));
+    }
+  }, [formData.categories, formData.subCategories, formData.projectTypes, masterLists.mappings]);
+
+  // Remove the old master fetching effects if they exist
+  // (I already replace the previous effects block in the next chunk)
 
   // Fetch Types from DB
   useEffect(() => {
@@ -142,16 +381,10 @@ export default function SupplierType() {
     try {
       setLoading(true);
       const params = {};
-      
-      if (selectedLocation.district && selectedLocation.district !== 'all') {
-        params.districtId = selectedLocation.district;
-      } else if (selectedLocation.cluster && selectedLocation.cluster !== 'all') {
-        params.clusterId = selectedLocation.cluster;
-      } else if (selectedLocation.state && selectedLocation.state !== 'all') {
-        params.stateId = selectedLocation.state;
-      } else if (selectedLocation.country && selectedLocation.country !== 'all') {
-        params.countryId = selectedLocation.country;
-      }
+      if (selectedLocation.country && selectedLocation.country !== 'all') params.countryId = selectedLocation.country;
+      if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
+      if (selectedLocation.cluster && selectedLocation.cluster !== 'all') params.clusterId = selectedLocation.cluster;
+      if (selectedLocation.district && selectedLocation.district !== 'all') params.districtId = selectedLocation.district;
 
       const res = await getSupplierTypes(params);
       if (res.success) {
@@ -167,14 +400,22 @@ export default function SupplierType() {
 
   const handleCreate = async () => {
     if (!formData.loginTypeName.trim()) {
-       toast.error('Login Type name is required');
-       return;
+      toast.error('Login Type name is required');
+      return;
     }
 
     setSubmitting(true);
     try {
       const payload = {
-        ...formData,
+        loginTypeName: formData.loginTypeName,
+        category: formData.categories,
+        subCategory: formData.subCategories,
+        projectType: formData.projectTypes,
+        subType: formData.subTypes,
+        assignModules: formData.assignModules,
+        loginAccessType: formData.loginAccessType,
+        orderTat: formData.orderTat,
+        modulesTasks: formData.modulesTasks,
         countryId: selectedLocation.country === 'all' ? null : selectedLocation.country,
         stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
         clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
@@ -185,7 +426,7 @@ export default function SupplierType() {
       if (res.success) {
         toast.success('Supplier type created/updated successfully');
         setFormData({
-            loginTypeName: '', category: '', subCategory: '', projectType: '', subType: '', assignModules: '', loginAccessType: '', orderTat: '10 Days'
+          loginTypeName: '', categories: [], subCategories: [], projectTypes: [], subTypes: [], assignModules: '', loginAccessType: '', orderTat: '10 Days', modulesTasks: []
         });
         fetchTypes();
       }
@@ -384,101 +625,210 @@ export default function SupplierType() {
                   {/* Create Row */}
                   <tr className="bg-[#f8f9fc] border-b border-gray-200">
                     <td className="p-3 border-r border-gray-200">
-                      <input 
+                      <input
                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500"
                         placeholder="Enter Login Type name"
                         value={formData.loginTypeName}
-                        onChange={e => setFormData({...formData, loginTypeName: e.target.value})}
+                        onChange={e => setFormData({ ...formData, loginTypeName: e.target.value })}
                       />
                     </td>
-                    <td className="p-3 border-r border-gray-200">
-                      <select 
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.category}
-                        onChange={e => setFormData({...formData, category: e.target.value})}
-                      >
-                        <option value="">Category</option>
-                        <option value="Category 1">Category 1</option>
-                        <option value="Category 2">Category 2</option>
-                      </select>
+                    <td className="p-3 border-r border-gray-200 min-w-[200px]">
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'cat' ? null : 'cat')}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[34px]"
+                        >
+                          {formData.categories.length === 0 ? (
+                            <span className="text-gray-400">Select Categories</span>
+                          ) : (
+                            formData.categories.map(name => (
+                              <span key={name} className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('categories', name); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'cat' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.categories.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">No categories found</div>
+                            ) : (
+                              masterLists.categories.map(cat => (
+                                <label key={cat._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={formData.categories.includes(cat.name)}
+                                    onChange={() => handleToggleOption('categories', cat.name)}
+                                  />
+                                  <span className="text-xs text-gray-700">{cat.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="p-3 border-r border-gray-200">
-                      <select 
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.subCategory}
-                        onChange={e => setFormData({...formData, subCategory: e.target.value})}
-                      >
-                        <option value="">Select Sub Category</option>
-                        <option value="Sub 1">Sub 1</option>
-                        <option value="Sub 2">Sub 2</option>
-                      </select>
+                    <td className="p-3 border-r border-gray-200 min-w-[200px]">
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'subCat' ? null : 'subCat')}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[34px]"
+                        >
+                          {formData.subCategories.length === 0 ? (
+                            <span className="text-gray-400">Select Sub Categories</span>
+                          ) : (
+                            formData.subCategories.map(name => (
+                              <span key={name} className="bg-green-100 text-green-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('subCategories', name); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'subCat' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.subCategories.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">{formData.categories.length === 0 ? 'Select Category first' : 'No sub categories'}</div>
+                            ) : (
+                              masterLists.subCategories.map(sub => (
+                                <label key={sub._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={formData.subCategories.includes(sub.name)}
+                                    onChange={() => handleToggleOption('subCategories', sub.name)}
+                                  />
+                                  <span className="text-xs text-gray-700">{sub.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="p-3 border-r border-gray-200">
-                      <select 
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.projectType}
-                        onChange={e => setFormData({...formData, projectType: e.target.value})}
-                      >
-                        <option value="">Select Project Type</option>
-                        <option value="Project 1">Project 1</option>
-                        <option value="Project 2">Project 2</option>
-                      </select>
+                    <td className="p-3 border-r border-gray-200 min-w-[200px]">
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'pType' ? null : 'pType')}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[34px]"
+                        >
+                          {formData.projectTypes.length === 0 ? (
+                            <span className="text-gray-400">Select Project Types</span>
+                          ) : (
+                            formData.projectTypes.map(name => (
+                              <span key={name} className="bg-orange-100 text-orange-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('projectTypes', name); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'pType' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.projectTypes.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">Select Category & Sub Category first</div>
+                            ) : (
+                              masterLists.projectTypes.map(proj => (
+                                <label key={proj.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={formData.projectTypes.includes(proj.name)}
+                                    onChange={() => handleToggleOption('projectTypes', proj.name)}
+                                  />
+                                  <span className="text-xs text-gray-700">{proj.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
-                    <td className="p-3 border-r border-gray-200">
-                      <select 
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.subType}
-                        onChange={e => setFormData({...formData, subType: e.target.value})}
-                      >
-                        <option value="">Select Sub Type</option>
-                        <option value="Sub Type 1">Sub Type 1</option>
-                        <option value="Sub Type 2">Sub Type 2</option>
-                      </select>
+                    <td className="p-3 border-r border-gray-200 min-w-[200px]">
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'subType' ? null : 'subType')}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[34px]"
+                        >
+                          {formData.subTypes.length === 0 ? (
+                            <span className="text-gray-400">Select Sub Types</span>
+                          ) : (
+                            formData.subTypes.map(name => (
+                              <span key={name} className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('subTypes', name); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'subType' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.subProjectTypes.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">Select Project Type first</div>
+                            ) : (
+                              masterLists.subProjectTypes.map(sub => (
+                                <label key={sub._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={formData.subTypes.includes(sub.name)}
+                                    onChange={() => handleToggleOption('subTypes', sub.name)}
+                                  />
+                                  <span className="text-xs text-gray-700">{sub.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 border-r border-gray-200 text-center text-gray-500 font-medium">
                       -
                     </td>
                     <td className="p-3 border-r border-gray-200">
-                      <select 
+                      <select
                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
                         value={formData.assignModules}
-                        onChange={e => setFormData({...formData, assignModules: e.target.value})}
+                        onChange={e => setFormData({ ...formData, assignModules: e.target.value })}
                       >
                         <option value="">Select Modules For Assigning</option>
-                        <option value="Module A">Module A</option>
-                        <option value="Module B">Module B</option>
+                        <option value="Bidding">Bidding</option>
+                        <option value="P.O Order">P.O Order</option>
+                        <option value="Customize Kit Supply">Customize Kit Supply</option>
                       </select>
                     </td>
                     <td className="p-3 border-r border-gray-200">
-                      <select 
+                      <select
                         className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
                         value={formData.loginAccessType}
-                        onChange={e => setFormData({...formData, loginAccessType: e.target.value})}
+                        onChange={e => setFormData({ ...formData, loginAccessType: e.target.value })}
                       >
                         <option value="">Select Type of login</option>
-                        <option value="User">User</option>
-                        <option value="Admin">Admin</option>
+                        <option value="Distributor">Distributor</option>
+                        <option value="Installer">Installer</option>
+                        <option value="Vendor">Vendor</option>
                       </select>
                     </td>
                     <td className="p-3 border-r border-gray-200">
-                      <input 
+                      <input
                         className="w-full px-3 py-1.5 text-sm border border-transparent bg-transparent outline-none text-gray-700"
                         value={formData.orderTat}
-                        onChange={e => setFormData({...formData, orderTat: e.target.value})}
+                        onChange={e => setFormData({ ...formData, orderTat: e.target.value })}
                       />
                     </td>
                     <td className="p-3 border-r border-gray-200 text-center">
-                      <button className="bg-[#00babc] text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-[#009ca0] transition-colors whitespace-nowrap">
+                      <button 
+                        onClick={handleOpenTaskModal}
+                        className="bg-[#00babc] text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-[#009ca0] transition-colors whitespace-nowrap"
+                      >
                         Set Task
                       </button>
                     </td>
                     <td className="p-3 text-center">
-                      <button 
+                      <button
                         onClick={handleCreate}
                         disabled={submitting}
                         className={`bg-[#00babc] text-white px-5 py-1.5 rounded text-xs font-bold hover:bg-[#009ca0] transition-colors whitespace-nowrap ${submitting ? 'opacity-50' : ''}`}
                       >
-                       {submitting ? 'Saving' : 'Create'}
+                        {submitting ? 'Saving' : 'Create'}
                       </button>
                     </td>
                   </tr>
@@ -498,19 +848,49 @@ export default function SupplierType() {
                     types.map(type => (
                       <tr key={type._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
                         <td className="p-3 border-r border-gray-100 text-sm font-bold text-gray-800">{type.loginTypeName}</td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.category || '-'}</td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.subCategory || '-'}</td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.projectType || '-'}</td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.subType || '-'}</td>
-                        <td className="p-3 border-r border-gray-100 text-center text-sm text-gray-600">-</td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.category) ? type.category.map(c => <span key={c} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[10px]">{c}</span>) : type.category || '-'}
+                          </div>
+                        </td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.subCategory) ? type.subCategory.map(c => <span key={c} className="bg-green-50 text-green-600 px-1.5 py-0.5 rounded text-[10px]">{c}</span>) : type.subCategory || '-'}
+                          </div>
+                        </td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.projectType) ? type.projectType.map(c => <span key={c} className="bg-orange-50 text-orange-600 px-1.5 py-0.5 rounded text-[10px]">{c}</span>) : type.projectType || '-'}
+                          </div>
+                        </td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.subType) ? type.subType.map(c => <span key={c} className="bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded text-[10px]">{c}</span>) : type.subType || '-'}
+                          </div>
+                        </td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.modulesTasks) ? type.modulesTasks.map(t => (
+                              <div key={t} className="flex items-center gap-1.5 text-[11px] text-gray-600 w-full mb-0.5">
+                                <div className="w-1 h-1 bg-blue-500 rounded-full"></div>
+                                {t}
+                              </div>
+                            )) : '-'}
+                          </div>
+                        </td>
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.assignModules || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.loginAccessType || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.orderTat || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-center">
-                          <button className="text-[#00babc] text-xs font-bold hover:underline">Edit Task</button>
+                          <button 
+                            onClick={() => handleOpenEditTaskModal(type)}
+                            className="text-[#00babc] text-xs font-bold hover:underline"
+                          >
+                            Edit Task
+                          </button>
                         </td>
                         <td className="p-3 text-center">
-                          <button 
+                          <button
                             onClick={() => handleDelete(type._id)}
                             className="p-1.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded transition-colors inline-block"
                           >
@@ -524,16 +904,125 @@ export default function SupplierType() {
                 </tbody>
               </table>
             </div>
-            
+
             <div className="bg-white border-t border-gray-200 py-4 w-full">
-                <p className="text-center text-xs font-semibold text-gray-600 uppercase tracking-widest mt-2">
-                    Copyright © 2025 Solarkits. All Rights Reserved.
-                </p>
+              <p className="text-center text-xs font-semibold text-gray-600 uppercase tracking-widest mt-2">
+                Copyright © 2025 Solarkits. All Rights Reserved.
+              </p>
             </div>
           </div>
         )}
 
       </div>
+
+      {showTaskModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-60 backdrop-blur-sm">
+          <div className="bg-white rounded shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 bg-[#0a305f] text-white">
+              <h2 className="text-xl font-bold">Select Tasks</h2>
+              <button
+                onClick={() => setShowTaskModal(false)}
+                className="text-white opacity-80 hover:opacity-100 transition-opacity"
+              >
+                <X size={24} />
+              </button>
+            </div>
+
+            {/* Sub Header */}
+            <div className="bg-gray-50 border-b border-gray-100 py-3 px-6">
+              <div className="bg-white border border-gray-200 rounded py-2 px-4 shadow-sm text-center font-bold text-gray-700 text-sm">
+                Assign Optional Tasks
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-[#f0f4f8]">
+              {SIDEBAR_NAVIGATION.map((section) => {
+                const totalCount = getSubModulesCount(section);
+                const selCount = getSelectedCount(section, tempModules);
+                const isExpanded = expandedSection === section.id;
+                const isAllSelected = selCount === totalCount;
+
+                return (
+                  <div key={section.id} className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors">
+                      <div className="flex items-center gap-4 flex-1">
+                        <button
+                          onClick={() => setExpandedSection(isExpanded ? null : section.id)}
+                          className="text-gray-400 hover:text-gray-600"
+                        >
+                          <ChevronRight size={18} className={`transform transition ${isExpanded ? 'rotate-90' : ''}`} />
+                        </button>
+                        <label className="flex items-center cursor-pointer group">
+                          <input
+                            type="checkbox"
+                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                            checked={isAllSelected}
+                            onChange={(e) => toggleSectionModules(section, e.target.checked)}
+                          />
+                          <span className="ml-3 font-bold text-gray-700 group-hover:text-blue-600 transition-colors">{section.name}</span>
+                        </label>
+                      </div>
+                      <div className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${selCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
+                        {selCount} / {totalCount}
+                      </div>
+                    </div>
+
+                    {/* Sub-modules list when expanded */}
+                    {isExpanded && section.children && (
+                      <div className="bg-[#fcfdff] border-t border-gray-100 p-3 pl-14 space-y-2">
+                        {/* Note: This only flattens one level for simplicity in the UI, but recursive can be used if needed */}
+                        {section.children.map(child => {
+                          if (child.isGroup && child.children) {
+                            return (
+                              <div key={child.name} className="space-y-1">
+                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{child.name}</p>
+                                {child.children.map(sub => (
+                                  <label key={sub.name} className="flex items-center py-1 cursor-pointer hover:text-blue-600 transition-colors">
+                                    <input
+                                      type="checkbox"
+                                      className="h-3.5 w-3.5 text-blue-500 border-gray-300 rounded"
+                                      checked={tempModules.includes(sub.name)}
+                                      onChange={() => handleToggleTempModule(sub.name)}
+                                    />
+                                    <span className="ml-3 text-sm text-gray-600">{sub.name}</span>
+                                  </label>
+                                ))}
+                              </div>
+                            );
+                          }
+                          return (
+                            <label key={child.name} className="flex items-center py-1 cursor-pointer hover:text-blue-600 transition-colors">
+                              <input
+                                type="checkbox"
+                                className="h-3.5 w-3.5 text-blue-500 border-gray-300 rounded"
+                                checked={tempModules.includes(child.name)}
+                                onChange={() => handleToggleTempModule(child.name)}
+                              />
+                              <span className="ml-3 text-sm text-gray-600">{child.name}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-end p-4 border-t border-gray-100 bg-white">
+              <button
+                onClick={handleSaveTasks}
+                className="px-8 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-all shadow-sm hover:shadow active:scale-95"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
-}
+};

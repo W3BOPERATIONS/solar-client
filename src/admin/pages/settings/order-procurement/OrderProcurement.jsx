@@ -65,7 +65,7 @@ export default function OrderProcurement() {
     product: '',
     brand: '',
     skus: [],
-    skuSelectionOption: 'ComboKit',
+    skuSelectionOption: 'Assign Modules',
     skuItems: [{ minRange: '', maxRange: '', comboKit: '', supplierType: '' }]
   };
   const [formData, setFormData] = useState(initialFormState);
@@ -113,7 +113,7 @@ export default function OrderProcurement() {
       setSkusList(skuData?.data || []);
       setComboKits(Array.isArray(comboData) ? comboData : comboData?.data || []);
       setSupplierTypes(suppTypeData?.data || []);
-      
+
       setSubCategories(allSubCatData?.data || []);
       setSubProjectTypes(allSubPTypeData?.data || []);
       setProjectMappings(mappingData?.data || []);
@@ -210,11 +210,11 @@ export default function OrderProcurement() {
   const handleSubCategoryChange = async (e) => {
     const subCatName = e.target.value;
     setFormData(prev => ({ ...prev, subCategory: subCatName, projectType: '', subProjectType: '' }));
-    
+
     // Filter mappings for ranges
     const selCat = categories.find(c => c.name === formData.category);
     const selSubCat = subCategories.find(sc => sc.name === subCatName);
-    
+
     if (selCat && selSubCat) {
       const ranges = projectMappings
         .filter(m => (m.categoryId?._id || m.categoryId) === selCat._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id)
@@ -299,7 +299,7 @@ export default function OrderProcurement() {
       const res = await getSubCategories(selCat._id);
       const subCats = res.data || [];
       setFormSubCategories(subCats);
-      
+
       const selSubCat = subCats.find(sc => sc.name === subCatName);
       if (selSubCat) {
         const ranges = projectMappings
@@ -375,7 +375,7 @@ export default function OrderProcurement() {
       {/* Header and Add Button inside one card */}
       <div className="p-6 mb-6 bg-white rounded-lg shadow-sm border border-gray-100 flex flex-col items-start gap-4">
         <h4 className="text-xl font-bold text-blue-600 mb-0">Order Procurement Setting</h4>
-        
+
         {/* Filters Grid */}
         <div className="w-full grid grid-cols-1 gap-4 md:grid-cols-4 items-center">
           <select
@@ -407,9 +407,9 @@ export default function OrderProcurement() {
             {filters.category && filters.subCategory && projectMappings?.length > 0 ? (
               projectMappings
                 .filter(m => {
-                    const selCat = categories.find(c => c.name === filters.category);
-                    const selSubCat = subCategories.find(sc => sc.name === filters.subCategory);
-                    return (m.categoryId?._id || m.categoryId) === selCat?._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat?._id;
+                  const selCat = categories.find(c => c.name === filters.category);
+                  const selSubCat = subCategories.find(sc => sc.name === filters.subCategory);
+                  return (m.categoryId?._id || m.categoryId) === selCat?._id && (m.subCategoryId?._id || m.subCategoryId) === selSubCat?._id;
                 })
                 .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
                 .filter((v, i, a) => a.indexOf(v) === i)
@@ -429,20 +429,20 @@ export default function OrderProcurement() {
             {filterSubProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
           </select>
         </div>
-        
+
         <div className="flex w-full justify-between items-center mt-2">
-            <button 
-                onClick={() => setFilters({ category: '', subCategory: '', projectType: '', subProjectType: '' })}
-                className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
-            >
-                <X size={14} className="mr-1" /> Clear Filters
-            </button>
-            <button
+          <button
+            onClick={() => setFilters({ category: '', subCategory: '', projectType: '', subProjectType: '' })}
+            className="text-sm text-gray-500 hover:text-gray-700 flex items-center"
+          >
+            <X size={14} className="mr-1" /> Clear Filters
+          </button>
+          <button
             onClick={() => { resetForm(); setShowModal(true); }}
             className="bg-blue-600 text-white px-5 py-2 rounded-md flex items-center gap-2 hover:bg-blue-700 transition"
-            >
+          >
             <Plus size={18} /> Add
-            </button>
+          </button>
         </div>
       </div>
 
@@ -510,7 +510,7 @@ export default function OrderProcurement() {
       {showModal && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4 xl:p-0">
           <div className="bg-[#f0f4f8] rounded-xl shadow-xl w-full max-w-5xl overflow-hidden flex flex-col max-h-[95vh]">
-            
+
             <div className="p-6 bg-white border-b border-gray-200 flex justify-between items-center rounded-t-xl">
               <h3 className="text-[22px] font-bold text-[#1f8dec] m-0 leading-tight">
                 {isEdit ? 'Edit Order Procurement Setting' : 'Add Order Procurement Setting'}
@@ -522,7 +522,7 @@ export default function OrderProcurement() {
 
             <div className="p-8 overflow-y-auto flex-1 bg-white mx-0 my-0">
               <form onSubmit={handleSubmit} className="space-y-6">
-                
+
                 {/* Row 1: Category, Sub Category, Project Type, Sub Project Type */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   <div className="flex flex-col gap-1">
@@ -616,136 +616,134 @@ export default function OrderProcurement() {
                 {/* SKUs block with Tabs */}
                 <div className="mt-8 border border-gray-200 rounded-lg p-1 max-w-sm inline-block w-full sm:w-80">
                   <div className="p-3">
-                      <label className="block font-medium text-blue-600 mb-4">SKUs</label>
-                      <Select
-                          isMulti
-                          placeholder="Select SKUs"
-                          className="mb-4 text-sm"
-                          options={skusList.map(s => ({ label: s.skuCode, value: s._id }))}
-                          value={formData.skus.map(sId => {
-                              const s = skusList.find(x => x._id === sId);
-                              return { label: s?.skuCode || sId, value: sId };
-                          })}
-                          onChange={(selected) => setFormData({ ...formData, skus: selected ? selected.map(s => s.value) : [] })}
-                      />
-                      
-                      <div className="flex bg-gray-100 rounded overflow-hidden mt-4 shadow-inner">
-                        <button
-                          type="button"
-                          className={`flex-1 py-2 text-sm font-medium transition ${
-                            formData.skuSelectionOption === 'ComboKit' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
+                    <label className="block font-medium text-blue-600 mb-4">SKUs</label>
+                    <Select
+                      isMulti
+                      placeholder="Select SKUs"
+                      className="mb-4 text-sm"
+                      options={skusList.map(s => ({ label: s.skuCode, value: s._id }))}
+                      value={formData.skus.map(sId => {
+                        const s = skusList.find(x => x._id === sId);
+                        return { label: s?.skuCode || sId, value: sId };
+                      })}
+                      onChange={(selected) => setFormData({ ...formData, skus: selected ? selected.map(s => s.value) : [] })}
+                    />
+
+                    <div className="flex bg-gray-100 rounded overflow-hidden mt-4 shadow-inner">
+                      <button
+                        type="button"
+                        className={`flex-1 py-2 text-sm font-medium transition ${formData.skuSelectionOption === 'Assign Modules' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
                           }`}
-                          onClick={() => setFormData({ ...formData, skuSelectionOption: 'ComboKit' })}
-                        >
-                          ComboKit
-                        </button>
-                        <button
-                          type="button"
-                          className={`flex-1 py-2 text-sm font-medium transition ${
-                            formData.skuSelectionOption === 'Customize' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
+                        onClick={() => setFormData({ ...formData, skuSelectionOption: 'Assign Modules' })}
+                      >
+                        Assign Modules
+                      </button>
+                      <button
+                        type="button"
+                        className={`flex-1 py-2 text-sm font-medium transition ${formData.skuSelectionOption === 'Customize' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
                           }`}
-                          onClick={() => setFormData({ ...formData, skuSelectionOption: 'Customize' })}
-                        >
-                          Customize
-                        </button>
-                      </div>
+                        onClick={() => setFormData({ ...formData, skuSelectionOption: 'Customize' })}
+                      >
+                        Customize
+                      </button>
+                    </div>
                   </div>
                 </div>
-                
+
                 {/* Red Arrow helper mapping UI visually */}
                 {/* This represents the logic mapping on the UI image */}
                 <div className="relative mt-8 bg-[#f8f9fa] border border-gray-200 rounded-xl p-6">
-                    
+
                   {/* Table headers for dynamic rows */}
-                  <div className="flex mb-2">
+                    <div className="flex mb-2">
                       <div className="w-[30%] text-[13px] font-medium text-gray-600">Range (kW)</div>
-                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">{formData.skuSelectionOption}</div>
-                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Supplier Type</div>
+                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Assign Modules</div>
+                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Login Type</div>
                       <div className="w-10"></div>
-                  </div>
+                    </div>
 
                   <div className="space-y-4">
                     {formData.skuItems.map((item, index) => (
                       <div key={index} className="flex items-center gap-4 bg-white p-3 rounded-lg border border-gray-200 shadow-sm">
-                        
+
                         <div className="w-[30%] flex gap-2">
-                           <input
-                              required
-                              type="number"
-                              min="0"
-                              placeholder="Min"
-                              className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                              value={item.minRange}
-                              onChange={(e) => handleSkuItemChange(index, 'minRange', e.target.value)}
-                            />
-                            <input
-                              required
-                              type="number"
-                              min="0"
-                              placeholder="Max"
-                              className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                              value={item.maxRange}
-                              onChange={(e) => handleSkuItemChange(index, 'maxRange', e.target.value)}
-                            />
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            placeholder="Min"
+                            className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                            value={item.minRange}
+                            onChange={(e) => handleSkuItemChange(index, 'minRange', e.target.value)}
+                          />
+                          <input
+                            required
+                            type="number"
+                            min="0"
+                            placeholder="Max"
+                            className="w-1/2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                            value={item.maxRange}
+                            onChange={(e) => handleSkuItemChange(index, 'maxRange', e.target.value)}
+                          />
                         </div>
-                        
+
                         <div className="w-[30%]">
-                            {formData.skuSelectionOption === 'ComboKit' ? (
-                                <select
-                                    required
-                                    className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                                    value={item.comboKit}
-                                    onChange={(e) => handleSkuItemChange(index, 'comboKit', e.target.value)}
-                                >
-                                    <option value="">Select ComboKit</option>
-                                    {comboKits.map(c => (
-                                      <option key={c._id} value={c._id}>
-                                        {c.name || c.solarkitName || 'Unnamed ComboKit'}
-                                      </option>
-                                    ))}
-                                </select>
+                          <select
+                            required
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                            value={item.comboKit}
+                            onChange={(e) => handleSkuItemChange(index, 'comboKit', e.target.value)}
+                          >
+                            <option value="">Select Assign Modules</option>
+                            {supplierTypes.filter(s => s.assignModules).length > 0 ? (
+                              supplierTypes.filter(s => s.assignModules).map(s => (
+                                <option key={s._id} value={s._id}>
+                                  {s.assignModules}
+                                </option>
+                              ))
                             ) : (
-                                <div className="w-full px-3 py-2 bg-gray-100 border border-dashed border-gray-300 rounded-md text-sm text-gray-500 text-center">
-                                    Custom Logic Applied
-                                </div>
+                              <option disabled>No modules available</option>
                             )}
+                          </select>
                         </div>
-                        
+
                         <div className="w-[30%]">
-                            <select
-                                required
-                                className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                                value={item.supplierType}
-                                onChange={(e) => handleSkuItemChange(index, 'supplierType', e.target.value)}
-                            >
-                                <option value="">Select Supplier Type</option>
-                                {supplierTypes.map(s => <option key={s._id} value={s._id}>{s.loginTypeName || s.name || s._id}</option>)}
-                            </select>
+                          <select
+                            required
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
+                            value={item.supplierType}
+                            onChange={(e) => handleSkuItemChange(index, 'supplierType', e.target.value)}
+                          >
+                            <option value="">Select Login Type</option>
+                            {supplierTypes.filter(s => s.assignModules).map(s => (
+                               <option key={s._id} value={s._id}>{s.loginTypeName || s.name}</option>
+                            ))}
+                          </select>
                         </div>
-                        
+
                         <div className="w-10 flex justify-center">
-                            {formData.skuItems.length > 1 && (
-                                <button
-                                    type="button"
-                                    onClick={() => removeSkuItem(index)}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
-                                >
-                                    <X size={18} />
-                                </button>
-                            )}
+                          {formData.skuItems.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => removeSkuItem(index)}
+                              className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
+                            >
+                              <X size={18} />
+                            </button>
+                          )}
                         </div>
                       </div>
                     ))}
                   </div>
 
                   <div className="mt-4">
-                     <button 
-                        type="button" 
-                        onClick={addSkuItem} 
-                        className="text-[#1f8dec] text-sm font-medium hover:underline flex items-center"
-                     >
-                        <Plus size={16} className="mr-1" /> Add {formData.skuSelectionOption}
-                     </button>
+                    <button
+                      type="button"
+                      onClick={addSkuItem}
+                      className="text-[#1f8dec] text-sm font-medium hover:underline flex items-center"
+                    >
+                      <Plus size={16} className="mr-1" /> Add New Row
+                    </button>
                   </div>
                 </div>
 
@@ -766,9 +764,9 @@ export default function OrderProcurement() {
                 </div>
               </form>
             </div>
-            
+
             <div className="bg-white py-3 border-t text-center text-xs text-gray-500 border-gray-200">
-                Copyright © {new Date().getFullYear()} Solarkits. All Rights Reserved.
+              Copyright © {new Date().getFullYear()} Solarkits. All Rights Reserved.
             </div>
           </div>
         </div>

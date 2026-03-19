@@ -137,6 +137,32 @@ export const locationAPI = {
   deleteZone: (id) => api.delete(`/locations/zones/${id}`),
 };
 
+export const masterAPI = {
+  // Category APIs
+  getAllCategories: (params) => api.get('/masters/categories', { params }),
+  createCategory: (data) => api.post('/masters/categories', data),
+  updateCategory: (id, data) => api.put(`/masters/categories/${id}`, data),
+  deleteCategory: (id) => api.delete(`/masters/categories/${id}`),
+
+  // Sub Category APIs
+  getAllSubCategories: (params) => api.get('/masters/sub-categories', { params }),
+  createSubCategory: (data) => api.post('/masters/sub-categories', data),
+  updateSubCategory: (id, data) => api.put(`/masters/sub-categories/${id}`, data),
+  deleteSubCategory: (id) => api.delete(`/masters/sub-categories/${id}`),
+
+  // Project Type APIs
+  getAllProjectTypes: (params) => api.get('/masters/project-types', { params }),
+  createProjectType: (data) => api.post('/masters/project-types', data),
+  updateProjectType: (id, data) => api.put(`/masters/project-types/${id}`, data),
+  deleteProjectType: (id) => api.delete(`/masters/project-types/${id}`),
+
+  // Sub Project Type APIs
+  getAllSubProjectTypes: (params) => api.get('/masters/sub-project-types', { params }),
+  createSubProjectType: (data) => api.post('/masters/sub-project-types', data),
+  updateSubProjectTypes: (id, data) => api.put(`/masters/sub-project-types/${id}`, data),
+  deleteSubProjectTypes: (id) => api.delete(`/masters/sub-project-types/${id}`),
+};
+
 export const vendorAPI = {
   // Installer Vendor
   getInstallerVendors: () => api.get('/vendors/installer-vendors'),

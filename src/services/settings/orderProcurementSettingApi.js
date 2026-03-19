@@ -102,7 +102,7 @@ export const getProducts = async () => {
 
 export const getBrands = async () => {
     try {
-        const res = await api.get('/brand/manufacturer'); 
+        const res = await api.get('/brand/manufacturer');
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;
@@ -123,7 +123,7 @@ export const getComboKits = async () => {
         const res = await api.get('/combokit/assignments');
         // Handle both raw array and { success: true, data: [] } formats
         const assignments = Array.isArray(res.data) ? res.data : (res.data.data || []);
-        
+
         return assignments.map(item => {
             // Priority: solarkitName -> First Kit Name -> Unnamed
             let name = item.solarkitName;
@@ -135,12 +135,12 @@ export const getComboKits = async () => {
             if (!name || name === "Solarkit Name" || name === "0 ComboKits") {
                 name = 'Custom Assignment';
             }
-            
+
             // Add location and project type info to name for better identification
             const stateName = item.state?.name || (item.state && typeof item.state === 'object' ? item.state.name : '');
             const pt = item.projectType || '';
             const displayName = `${name}${pt ? ` [${pt}]` : ''}${stateName ? ` (${stateName})` : ''}`;
-            
+
             return {
                 ...item,
                 name: displayName
@@ -154,31 +154,12 @@ export const getComboKits = async () => {
 
 export const getSupplierTypes = async () => {
     try {
-        // Fetch from actual Brand Suppliers since that's what the user manages
-        const res = await api.get('/brand/supplier');
-        const suppliers = Array.isArray(res.data) ? res.data : (res.data.data || []);
-        
-        // Extract unique types (Dealer, Distributor, etc.)
-        const types = Array.from(new Set(suppliers.map(s => s.type)))
-            .filter(t => t)
-            .map(t => ({ _id: t, loginTypeName: t }));
-            
-        // If no suppliers exist yet, provide defaults so the dropdown isn't empty
-        if (types.length === 0) {
-            return { data: [
-                { _id: 'Dealer', loginTypeName: 'Dealer' },
-                { _id: 'Distributor', loginTypeName: 'Distributor' }
-            ]};
-        }
-        
-        return { data: types };
+        const res = await api.get('/vendors/supplier-types');
+        // Standardize response to ensure it's the array of documents
+        return res.data;
     } catch (err) {
-        console.error("Error in getSupplierTypes API:", err);
-        // Fallback to defaults on error
-        return { data: [
-            { _id: 'Dealer', loginTypeName: 'Dealer' },
-            { _id: 'Distributor', loginTypeName: 'Distributor' }
-        ]};
+        console.error("Error fetching supplier types from vendors/supplier-types:", err);
+        throw err.response?.data || err.message;
     }
 };
 
