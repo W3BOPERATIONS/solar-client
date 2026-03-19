@@ -64,7 +64,6 @@ export default function InventoryDashboard() {
   // Initial Load & Location Logic
   useEffect(() => {
     fetchStatesList();
-    fetchData();
   }, []);
 
   // Fetch States

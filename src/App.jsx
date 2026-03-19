@@ -60,6 +60,11 @@ import SolarPanelBundleSetting from './admin/pages/settings/sales/SolarPanelBund
 // Marketing Settings
 import CampaignManagement from './admin/pages/settings/marketing/CampaignManagement';
 
+// Delivery Settings
+import DeliveryType from './admin/pages/settings/delivery/DeliveryType';
+import VehicleSelection from './admin/pages/settings/delivery/VehicleSelection';
+import VendorDeliveryPlan from './admin/pages/settings/delivery/VendorDeliveryPlan';
+
 
 
 // Installer Settings
@@ -72,7 +77,6 @@ import AgencyPlan from './admin/pages/settings/installer/AgencyPlan';
 
 // Inventory Settings
 import InventoryOverview from './admin/pages/settings/inventory/InventoryOverview';
-import LevelManagementSetting from './admin/pages/settings/inventory/LevelManagementSetting';
 import RestockOrderLimit from './admin/pages/settings/inventory/RestockOrderLimit';
 import CombokitBrandOverview from './admin/pages/settings/inventory/CombokitBrandOverview';
 
@@ -422,6 +426,14 @@ function App() {
               {/* Marketing Settings */}
               <Route path="settings/marketing/campaign-management" element={<CampaignManagement />} />
 
+              {/* Delivery Settings */}
+              <Route path="settings/delivery/delivery-type" element={<DeliveryType />} />
+              <Route path="settings/delivery/delivery_type" element={<DeliveryType />} />
+              <Route path="settings/delivery/vehicle-selection" element={<VehicleSelection />} />
+              <Route path="settings/delivery/vehicle_selection" element={<VehicleSelection />} />
+              <Route path="settings/delivery/vendor-delivery-plan" element={<VendorDeliveryPlan />} />
+              <Route path="settings/delivery/vendor_delivery_plan" element={<VendorDeliveryPlan />} />
+
 
 
               {/* Installer Settings */}
@@ -434,7 +446,6 @@ function App() {
 
               {/* Inventory Settings */}
               <Route path="settings/inventory/inventory-overview" element={<InventoryOverview />} />
-              <Route path="settings/inventory/level-management-setting" element={<LevelManagementSetting />} />
               <Route path="settings/inventory/restock-order-limit" element={<RestockOrderLimit />} />
               <Route path="settings/inventory/combokit-brand-overview" element={<CombokitBrandOverview />} />
 

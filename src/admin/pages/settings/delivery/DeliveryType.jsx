@@ -4,12 +4,14 @@ import {
   Settings, Map, Tag, Clock, DollarSign, AlertCircle, Save, Check
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
+import Select from 'react-select';
 import {
   getDeliveryTypes,
   createDeliveryType,
   updateDeliveryType,
   deleteDeliveryType
 } from '../../../../services/delivery/deliveryApi';
+import { getAllOrderProcurementSettings } from '../../../../services/settings/orderProcurementSettingApi';
 import { locationAPI } from '../../../../api/api';
 
 const SECTION_OPTIONS = [
@@ -24,7 +26,7 @@ const SECTION_OPTIONS = [
 const INITIAL_FORM_STATE = {
   name: '',
   description: '',
-  coverageType: [],
+  coverageRange: '',
   applicableCategories: [
     { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '3kw - 5kw', subProjectType: 'On-Grid', cost: 500, isActive: true },
     { category: 'Solar Rooftop', subCategory: 'Commercial', projectType: '30kw - 50kw', subProjectType: 'Hybrid', cost: 500, isActive: true },
@@ -35,7 +37,8 @@ const INITIAL_FORM_STATE = {
   deliveryTiming: {
     minDays: 3,
     maxDays: 5,
-    estimatedDelivery: '3-5 Days'
+    estimatedDelivery: '3-5 Days',
+    procurementResults: []
   },
   status: 'active'
 };
@@ -71,6 +74,7 @@ const DeliveryType = () => {
 
   // Form State
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
+  const [procurementOptions, setProcurementOptions] = useState([]);
 
   // Initial Fetch
   useEffect(() => {
@@ -84,6 +88,24 @@ const DeliveryType = () => {
       else fetchStates({ country: countries[0]._id });
     }
   }, [countries]);
+
+  useEffect(() => {
+    const fetchProcurementSettings = async () => {
+      try {
+        const res = await getAllOrderProcurementSettings();
+        if (res.success && res.data) {
+          const options = res.data.map(item => ({
+            value: item._id,
+            label: `${item.category?.name || item.category} - ${item.subCategory?.name || item.subCategory} (${item.projectType?.name || item.projectType})`
+          }));
+          setProcurementOptions(options);
+        }
+      } catch (error) {
+        console.error("Failed to fetch procurement settings", error);
+      }
+    };
+    fetchProcurementSettings();
+  }, []);
 
   const loadDeliveryTypes = async (districtId) => {
     if (!districtId) return;
@@ -235,7 +257,7 @@ const DeliveryType = () => {
       setFormData({
         name: type.name || '',
         description: type.description || '',
-        coverageType: type.coverageType || [],
+        coverageRange: type.coverageRange || '',
         applicableCategories: type.applicableCategories?.length ? type.applicableCategories : INITIAL_FORM_STATE.applicableCategories,
         deliveryTiming: type.deliveryTiming || INITIAL_FORM_STATE.deliveryTiming,
         status: type.status || 'active'
@@ -247,17 +269,6 @@ const DeliveryType = () => {
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleCoverageToggle = (type) => {
-    setFormData(prev => {
-      const current = prev.coverageType || [];
-      if (current.includes(type)) {
-        return { ...prev, coverageType: current.filter(t => t !== type) };
-      } else {
-        return { ...prev, coverageType: [...current, type] };
-      }
-    });
   };
 
   const handleCategoryCostChange = (index, newCost) => {
@@ -279,6 +290,16 @@ const DeliveryType = () => {
       deliveryTiming: {
         ...prev.deliveryTiming,
         [name]: name === 'estimatedDelivery' ? value : Number(value)
+      }
+    }));
+  };
+
+  const handleProcurementChange = (selectedOptions) => {
+    setFormData(prev => ({
+      ...prev,
+      deliveryTiming: {
+        ...prev.deliveryTiming,
+        procurementResults: selectedOptions ? selectedOptions.map(opt => opt.value) : []
       }
     }));
   };
@@ -599,19 +620,33 @@ const DeliveryType = () => {
                     Coverage Area
                   </div>
                   <div className="p-4 bg-white">
-                    <p className="text-sm font-semibold text-gray-700 mb-3">Coverage Type</p>
-                    <div className="flex space-x-8">
-                      {['Cluster', 'District', 'State'].map(type => (
-                        <label key={type} className="flex items-center space-x-2 cursor-pointer">
-                          <input
-                            type="checkbox"
-                            checked={formData.coverageType.includes(type)}
-                            onChange={() => handleCoverageToggle(type)}
-                            className="rounded text-green-500 focus:ring-green-500 w-4 h-4 cursor-pointer accent-green-600"
-                          />
-                          <span className="text-sm text-gray-700 font-medium">{type}</span>
+                    <div className="flex flex-col md:flex-row md:items-center space-y-4 md:space-y-0 md:space-x-8">
+                      <div className="flex-1 max-w-xs">
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">
+                          Coverage Type
                         </label>
-                      ))}
+                        <div className="flex items-center space-x-2 bg-gray-100 px-3 py-2 rounded-lg text-gray-500 text-sm italic">
+                          <span>Auto-calculated by Kms</span>
+                        </div>
+                      </div>
+                      <div className="flex-1 max-w-xs">
+                        <label className="block text-sm font-semibold text-gray-700 mb-1">
+                          Coverage Range (Kms)
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            name="coverageRange"
+                            value={formData.coverageRange}
+                            onChange={handleInputChange}
+                            className="w-full pl-3 pr-10 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none text-sm"
+                            placeholder="e.g. 50"
+                          />
+                          <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                            <span className="text-gray-400 text-sm">Kms</span>
+                          </div>
+                        </div>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -670,7 +705,7 @@ const DeliveryType = () => {
                   <div className="bg-[#eab308] text-white p-3 font-bold text-sm">
                     Delivery Timing
                   </div>
-                  <div className="p-4 bg-white grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="p-4 bg-white grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Minimum Days</label>
                       <input
@@ -700,6 +735,41 @@ const DeliveryType = () => {
                         onChange={handleTimingChange}
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#eab308] outline-none text-sm"
                         placeholder="e.g. 3-5 Days"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Procurement Results</label>
+                      <Select
+                        isMulti
+                        name="procurementResults"
+                        options={procurementOptions}
+                        value={procurementOptions.filter(opt => formData.deliveryTiming.procurementResults?.includes(opt.value))}
+                        onChange={handleProcurementChange}
+                        className="text-sm"
+                        placeholder="Select Results..."
+                        styles={{
+                          control: (base) => ({
+                            ...base,
+                            minHeight: '38px',
+                            borderColor: '#d1d5db',
+                            '&:hover': { borderColor: '#eab308' },
+                            boxShadow: 'none'
+                          }),
+                          multiValue: (base) => ({
+                            ...base,
+                            backgroundColor: '#fef9c3',
+                            borderRadius: '4px',
+                          }),
+                          multiValueLabel: (base) => ({
+                            ...base,
+                            color: '#854d0e',
+                          }),
+                          multiValueRemove: (base) => ({
+                            ...base,
+                            color: '#854d0e',
+                            '&:hover': { backgroundColor: '#fde047', color: '#854d0e' },
+                          })
+                        }}
                       />
                     </div>
                   </div>

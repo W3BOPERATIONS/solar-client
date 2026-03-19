@@ -25,11 +25,11 @@ const LocationCard = ({ title, subtitle, isSelected, onClick, colorClass = 'bg-[
 
 const InventoryRestockLimit = () => {
   // --- Location State (independent, direct API) ---
-  const [locData, setLocData] = useState({ countries: [], states: [], clusters: [], districts: [] });
+  const [locData, setLocData] = useState({ countries: [], states: [], clusters: [], warehouses: [] });
   const [selCountry, setSelCountry] = useState('');
   const [selState, setSelState]     = useState('');
   const [selCluster, setSelCluster] = useState('');
-  const [selDistrict, setSelDistrict] = useState('');
+  const [selWarehouse, setSelWarehouse] = useState('');
 
   const [showLocationSection, setShowLocationSection] = useState(true);
 
@@ -46,9 +46,9 @@ const InventoryRestockLimit = () => {
     if (selCountry) {
       fetchStates(selCountry);
     } else {
-      setLocData(p => ({ ...p, states: [], clusters: [], districts: [] }));
+      setLocData(p => ({ ...p, states: [], clusters: [], warehouses: [] }));
     }
-    setSelState(''); setSelCluster(''); setSelDistrict('');
+    setSelState(''); setSelCluster(''); setSelWarehouse('');
   }, [selCountry]);
 
   // ── state → clusters ───────────────────────────────────────────────────────
@@ -56,25 +56,25 @@ const InventoryRestockLimit = () => {
     if (selState) {
       fetchClusters(selState);
     } else {
-      setLocData(p => ({ ...p, clusters: [], districts: [] }));
+      setLocData(p => ({ ...p, clusters: [], warehouses: [] }));
     }
-    setSelCluster(''); setSelDistrict('');
+    setSelCluster(''); setSelWarehouse('');
   }, [selState]);
 
   // ── cluster → districts ────────────────────────────────────────────────────
   useEffect(() => {
     if (selCluster) {
-      fetchDistricts(selCluster);
+      fetchWarehouses(selCluster);
     } else {
-      setLocData(p => ({ ...p, districts: [] }));
+      setLocData(p => ({ ...p, warehouses: [] }));
     }
-    setSelDistrict('');
+    setSelWarehouse('');
   }, [selCluster]);
 
   // ── any selection → fetch restock limits ──────────────────────────────────
   useEffect(() => {
     fetchRestockLimits();
-  }, [selCountry, selState, selCluster, selDistrict]);
+  }, [selCountry, selState, selCluster, selWarehouse]);
 
   // ── Location fetchers ─────────────────────────────────────────────────────
   const fetchCountries = async () => {
@@ -108,17 +108,17 @@ const InventoryRestockLimit = () => {
     }
   };
 
-  const fetchDistricts = async (clusterId) => {
+  const fetchWarehouses = async (clusterId) => {
     try {
-      const params = { isActive: true };
-      if (clusterId !== 'all') params.clusterId = clusterId;
-      // Try getAllDistricts with cluster param, fallback to state param
-      if (selState && selState !== 'all' && clusterId === 'all') params.stateId = selState;
-      const res = await locationAPI.getAllDistricts(params);
-      setLocData(p => ({ ...p, districts: res.data?.data || [] }));
+      const params = { status: 'Active' };
+      if (clusterId !== 'all') params.cluster = clusterId;
+      if (selState && selState !== 'all') params.state = selState;
+      
+      const res = await inventoryApi.getAllWarehouses(params);
+      setLocData(p => ({ ...p, warehouses: res.data?.data || [] }));
     } catch (err) {
-      console.error('Failed to fetch districts', err);
-      setLocData(p => ({ ...p, districts: [] }));
+      console.error('Failed to fetch warehouses', err);
+      setLocData(p => ({ ...p, warehouses: [] }));
     }
   };
 
@@ -130,7 +130,11 @@ const InventoryRestockLimit = () => {
       if (selCountry && selCountry !== 'all') params.country = selCountry;
       if (selState   && selState   !== 'all') params.state   = selState;
       if (selCluster && selCluster !== 'all') params.cluster = selCluster;
-      if (selDistrict && selDistrict !== 'all') params.district = selDistrict;
+      if (selWarehouse && selWarehouse !== 'all') {
+        // If we select a warehouse, we might want to filter by its district
+        const selectedWh = locData.warehouses.find(w => w._id === selWarehouse);
+        if (selectedWh?.district) params.district = selectedWh.district;
+      }
 
       const response = await inventoryApi.getRestockLimits(params);
       const data = response.data || [];
@@ -150,7 +154,7 @@ const InventoryRestockLimit = () => {
   const handleCountrySelect = (id) => setSelCountry(p => p === id ? '' : id);
   const handleStateSelect   = (id) => setSelState(p => p === id ? '' : id);
   const handleClusterSelect = (id) => setSelCluster(p => p === id ? '' : id);
-  const handleDistrictSelect= (id) => setSelDistrict(p => p === id ? '' : id);
+  const handleWarehouseSelect= (id) => setSelWarehouse(p => p === id ? '' : id);
 
   // ── Save handler ──────────────────────────────────────────────────────────
   const handleAmountChange = (itemId, value) =>
@@ -180,6 +184,10 @@ const InventoryRestockLimit = () => {
       const techs = ['Mono Perc', 'Polycrystalline', 'Bifacial', 'Half Cut', 'Mono', 'Poly', 'Thin Film'];
       const found = techs.find(t => new RegExp(t, 'i').test(name));
       if (found) return found;
+    }
+    if (field === 'kitType') {
+      if (item.kitType && item.kitType !== '-') return item.kitType;
+      if (item.brand?.comboKit) return 'Combokit Available';
     }
     if (field === 'kitType' && name.includes('+')) {
       const parts = name.split('+');
@@ -315,37 +323,37 @@ const InventoryRestockLimit = () => {
             </section>
           )}
 
-          {/* 4. District */}
+          {/* 4. Warehouse */}
           {selCluster && (
             <section className="animate-in fade-in slide-in-from-top-2">
               <div className="flex justify-between items-center mb-4">
                 <h5 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-                  <MapPin size={14} /> 4. Select District
+                  <Factory size={14} /> 4. Select Warehouse
                 </h5>
                 <button
-                  onClick={() => handleDistrictSelect('all')}
+                  onClick={() => handleWarehouseSelect('all')}
                   className="text-xs font-bold text-blue-600 hover:text-blue-800 transition-colors uppercase tracking-wider"
                 >
-                  {selDistrict === 'all' ? 'Unselect All' : 'Select All'}
+                  {selWarehouse === 'all' ? 'Unselect All' : 'Select All'}
                 </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <LocationCard
-                  title="All Districts" subtitle="ALL"
-                  isSelected={selDistrict === 'all'}
-                  onClick={() => handleDistrictSelect('all')}
+                  title="All Warehouses" subtitle="ALL"
+                  isSelected={selWarehouse === 'all'}
+                  onClick={() => handleWarehouseSelect('all')}
                   colorClass="bg-[#28a745]"
                 />
-                {locData.districts.map(d => (
+                {locData.warehouses.map(w => (
                   <LocationCard
-                    key={d._id} title={d.name}
-                    isSelected={selDistrict === d._id}
-                    onClick={() => handleDistrictSelect(d._id)}
+                    key={w._id} title={w.name} subtitle={w.district?.name}
+                    isSelected={selWarehouse === w._id}
+                    onClick={() => handleWarehouseSelect(w._id)}
                     colorClass="bg-[#28a745]"
                   />
                 ))}
-                {locData.districts.length === 0 && (
-                  <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">No districts found for this cluster.</div>
+                {locData.warehouses.length === 0 && (
+                  <div className="col-span-full py-6 text-center text-gray-400 italic text-sm">No warehouses found for this cluster.</div>
                 )}
               </div>
             </section>
@@ -378,7 +386,7 @@ const InventoryRestockLimit = () => {
                 products.map((item) => (
                   <tr key={item._id} className="bg-white hover:bg-gray-50 transition-colors">
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434] font-medium">{item.itemName}</td>
-                    <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434]">{item.brand?.brandName || '-'}</td>
+                    <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434]">{item.brand?.brand || '-'}</td>
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434]">{getDisplayValue(item, 'kitType')}</td>
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434] font-medium">{getDisplayValue(item, 'technology')}</td>
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434] font-medium">{getDisplayValue(item, 'wattage')}</td>

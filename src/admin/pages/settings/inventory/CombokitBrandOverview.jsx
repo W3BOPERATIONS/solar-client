@@ -1,6 +1,7 @@
 // CombokitBrandOverview.jsx
 import React, { useState, useEffect } from 'react';
-import { Globe, MapPin, Factory, Loader } from 'lucide-react';
+import { Globe, MapPin, Factory, Loader, X } from 'lucide-react';
+import { productApi } from '../../../../api/productApi';
 import { locationAPI } from '../../../../api/api';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
 import { getPartners, getPartnerPlans } from '../../../../services/partner/partnerApi';
@@ -25,7 +26,7 @@ const LocationCard = ({ title, subtitle, isSelected, onClick, colorClass = 'bg-[
 const CombokitBrandOverview = () => {
   // --- Independent Location State ---
   const [locData, setLocData] = useState({ countries: [], states: [], clusters: [], districts: [] });
-  const [selCountry, setSelCountry] = useState('');
+  const [selCountry, setSelCountry] = useState('all');
   const [selState, setSelState] = useState('');
   const [selCluster, setSelCluster] = useState('');
   const [selDistrict, setSelDistrict] = useState('');
@@ -37,9 +38,15 @@ const CombokitBrandOverview = () => {
 
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [selectedBrand, setSelectedBrand] = useState(null);
+  const [skus, setSkus] = useState([]);
+  const [skuLoading, setSkuLoading] = useState(false);
 
-  // ── On mount: countries ────────────────────────────────────────────────────
-  useEffect(() => { fetchCountries(); }, []);
+  // ── On mount: countries & initial data ──────────────────────────────────
+  useEffect(() => { 
+    fetchCountries(); 
+    fetchOverview();
+  }, []);
 
   // ── country → states ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -62,10 +69,13 @@ const CombokitBrandOverview = () => {
     setSelDistrict('');
   }, [selCluster]);
 
-  // ── Fetch brand overview when plans selected ───────────────────────────
+  // ── Fetch brand overview when criteria changes ───────────────────────────
   useEffect(() => {
-    if (selectedPlans.length > 0 && selCountry) fetchOverview();
-    else setData([]);
+    if (selCountry) {
+      fetchOverview();
+    } else {
+      setData([]);
+    }
   }, [selCountry, selState, selCluster, selDistrict, selectedPlans]);
 
   // ── Fetch Partner Types ──────────────────────────────────────────────────
@@ -180,6 +190,28 @@ const CombokitBrandOverview = () => {
       console.error('Failed to fetch brand overview', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleBrandClick = async (brand, productName) => {
+    try {
+      setSelectedBrand({ ...brand, productName });
+      setSkus([]);
+      setSkuLoading(true);
+      
+      // Fetch SKUs for this specific brand and product
+      const res = await productApi.getSkus({ 
+        brand: brand.brandId,
+        product: brand.productId
+      });
+      
+      if (res.data.success) {
+        setSkus(res.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching SKUs:', error);
+    } finally {
+      setSkuLoading(false);
     }
   };
 
@@ -469,12 +501,28 @@ const CombokitBrandOverview = () => {
                       <td className="py-5 px-6 text-[#1c2434] border-r border-gray-200">
                         {item.brands?.map(b => b.brandName).join(', ')}
                       </td>
-                      <td className="py-5 px-6">
-                        <div className="flex flex-wrap gap-4">
+                      <td className="py-6 px-6">
+                        <div className="flex flex-wrap gap-6">
                           {item.brands?.map((brand, bIndex) => (
-                            <div key={bIndex} className="flex items-center bg-gray-50 rounded px-3 py-1.5 border border-gray-100">
-                              {brand.logo && <img src={brand.logo} alt={brand.brandName} className="w-8 h-8 object-contain mr-2" />}
-                              <span className="font-bold text-[#1c2434] text-[14px]">{brand.skus} SKUs</span>
+                            <div 
+                              key={bIndex} 
+                              className="group flex flex-col items-center bg-white rounded-xl p-4 border border-gray-100 shadow-sm hover:shadow-md hover:border-blue-200 transition-all cursor-pointer min-w-[120px]"
+                              onClick={() => handleBrandClick(brand, item._id)}
+                              title="Click here and go inside for more details"
+                            >
+                              <div className="h-14 flex items-center justify-center mb-3">
+                                {brand.logo ? (
+                                  <img src={brand.logo} alt={brand.brandName} className="max-h-full max-w-full object-contain grayscale group-hover:grayscale-0 transition-all" />
+                                ) : (
+                                  <div className="text-gray-300 font-bold text-xs uppercase text-center">{brand.brandName}<br/>Logo</div>
+                                )}
+                              </div>
+                              
+                              <div className="w-full h-[1px] bg-gray-100 mb-3" />
+                              
+                              <div className="bg-[#3c50e0] text-white text-[11px] font-black px-3 py-1.5 rounded-lg shadow-sm group-hover:bg-blue-600 transition-colors">
+                                {brand.skus} SKUs
+                              </div>
                             </div>
                           ))}
                         </div>
@@ -488,12 +536,119 @@ const CombokitBrandOverview = () => {
         </div>
       </div>
 
-      {/* Footer */}
+      {/* Copyright Footer */}
       <div className="mt-8 bg-white py-4 rounded shadow-sm border border-gray-100 flex justify-center items-center">
-        <span className="text-[14px] text-[#1c2434] font-medium">
+        <span className="text-[14px] text-[#1c2434] font-medium uppercase tracking-tight">
           Copyright © {new Date().getFullYear()} Solarkits. All Rights Reserved.
         </span>
       </div>
+
+      {/* --- SKU Details Modal --- */}
+      {selectedBrand && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-sm p-4 text-left font-sans">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-300 border border-gray-100">
+            {/* Modal Header */}
+            <div className="flex justify-between items-center p-6 bg-gradient-to-r from-blue-50 to-white border-b border-gray-100">
+              <div className="flex items-center gap-5">
+                <div className="bg-white p-2 rounded-xl border border-blue-50 shadow-sm">
+                  {selectedBrand.logo ? (
+                    <img src={selectedBrand.logo} alt="" className="h-12 w-12 object-contain" />
+                  ) : (
+                    <div className="h-12 w-12 flex items-center justify-center bg-blue-600 text-white font-black text-xs rounded-lg uppercase">
+                      {selectedBrand.brandName?.substring(0, 2)}
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <h2 className="text-2xl font-black text-[#1c2434] tracking-tight">Generated SKUs</h2>
+                  <p className="text-[11px] text-blue-600 font-bold uppercase tracking-widest mt-0.5">
+                    {selectedBrand.brandName} • {selectedBrand.productName}
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setSelectedBrand(null)} 
+                className="text-gray-400 hover:text-red-500 transition-all p-3 hover:bg-red-50 rounded-full"
+              >
+                <X size={26} />
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-8 overflow-y-auto max-h-[65vh] space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-black text-gray-400 uppercase tracking-widest">General Information</h3>
+                <span className="bg-[#3c50e0] text-white px-4 py-1.5 rounded-full text-[11px] font-black shadow-lg">
+                   {skus.length} {skus.length === 1 ? 'SKU' : 'SKUs'} AVAILABLE
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 gap-6">
+                <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 hover:border-blue-100 transition-all">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider block mb-1">Brand Name</span>
+                  <span className="text-sm font-bold text-[#1c2434]">{selectedBrand.brandName}</span>
+                </div>
+                <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 hover:border-blue-100 transition-all">
+                  <span className="text-[10px] text-gray-400 font-black uppercase tracking-wider block mb-1">Product Category</span>
+                  <span className="text-sm font-bold text-[#1c2434]">{selectedBrand.productName}</span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest mt-8 flex items-center gap-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-blue-600" /> All Generated SKUs
+                </h4>
+                
+                <div className="space-y-3">
+                  {skuLoading ? (
+                    <div className="flex flex-col items-center justify-center p-12 gap-3">
+                      <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-[#3c50e0]"></div>
+                      <span className="text-xs font-bold text-gray-400 animate-pulse">Fetching details...</span>
+                    </div>
+                  ) : skus.length === 0 ? (
+                    <div className="text-center py-12 text-gray-400 border-2 border-dashed border-gray-100 rounded-3xl">
+                      <p className="font-bold text-sm">No SKUs found</p>
+                      <p className="text-[11px] mt-1">Add some SKUs from the Product module first.</p>
+                    </div>
+                  ) : (
+                    skus.map((sku, index) => (
+                      <div 
+                        key={index} 
+                        className="flex justify-between items-center p-5 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md hover:border-blue-200 transition-all group"
+                      >
+                        <div className="flex flex-col">
+                          <span className="font-mono text-[15px] font-black text-blue-600 tracking-tight group-hover:translate-x-1 transition-transform inline-block">
+                            {sku.skuCode}
+                          </span>
+                          <div className="flex gap-3 text-[11px] text-gray-500 font-bold mt-2">
+                            <span className="bg-gray-100 px-2 py-0.5 rounded uppercase">{sku.capacity || '-'}</span>
+                            <span className="bg-gray-100 px-2 py-0.5 rounded uppercase">{sku.phase || '-'}</span>
+                            <span className="bg-gray-100 px-2 py-0.5 rounded uppercase">{sku.wattage}W</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                           <span className="w-2.5 h-2.5 rounded-full bg-green-500 shadow-[0_0_10px_rgba(34,197,94,0.4)] animate-pulse" />
+                           <span className="text-[11px] font-black text-gray-300 uppercase letter tracking-tighter">Active</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button
+                onClick={() => setSelectedBrand(null)}
+                className="px-10 py-3 bg-[#1c2434] text-white rounded-xl text-xs font-black hover:bg-black transition-all shadow-xl hover:-translate-y-0.5 uppercase tracking-widest active:translate-y-0"
+              >
+                Close Full Details
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

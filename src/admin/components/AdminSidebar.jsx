@@ -59,6 +59,8 @@ export default function AdminSidebar() {
     'settingsProject': 'settings_project',
     'settingsQuote': 'settings_quote',
     'settingsOverdue': 'settings_overdue',
+    'settingsLoan': 'settings_loan',
+    'settingsChecklist': 'settings_checklist',
     'reports': 'reports'
   };
 
@@ -112,6 +114,8 @@ export default function AdminSidebar() {
     settingsQuote: false,
     settingsOperations: false,
     settingsOverdue: false,
+    settingsLoan: false,
+    settingsChecklist: false,
   });
 
   const toggleSection = (section) => {
@@ -282,7 +286,6 @@ export default function AdminSidebar() {
               isExpanded: expandedSections.settingsDelivery,
               children: [
                 { name: '- Delivery Type', href: '/admin/settings/delivery/delivery-type', icon: Truck },
-                { name: '- Delivery Benchmark Price', href: '/admin/settings/delivery/benchmark-price', icon: FileBarChart },
                 { name: '- Vehicle Selection', href: '/admin/settings/delivery/vehicle-selection', icon: Truck },
                 { name: '- Vendor Delivery Plan', href: '/admin/settings/delivery/vendor-delivery-plan', icon: StoreIcon },
               ],
@@ -295,7 +298,6 @@ export default function AdminSidebar() {
               isExpanded: expandedSections.settingsInventory,
               children: [
                 { name: '- Inventory Overview', href: '/admin/settings/inventory/inventory-overview', icon: Package },
-                { name: '- Inventory Level Management', href: '/admin/settings/inventory/level-management-setting', icon: FileBarChart },
                 { name: '- Restock Order Limit', href: '/admin/settings/inventory/restock-order-limit', icon: ClipboardList },
                 { name: '- Combokit Brand Overview', href: '/admin/settings/inventory/combokit-brand-overview', icon: StoreIcon },
               ],
@@ -427,9 +429,19 @@ export default function AdminSidebar() {
             { name: '- Approval Overdue Setting', href: '/admin/settings/approval-overdue', icon: CheckCircle2 },
             { name: '- Overdue Task Setting', href: '/admin/settings/overdue-task', icon: ClipboardList },
             { name: '- Overdue Status Setting', href: '/admin/settings/overdue-status', icon: ClipboardList },
-            { name: '- Loan Setting', href: '/admin/settings/loan', icon: FileBarChart },
-            { name: '- Checklist Setting', href: '/admin/settings/checklist', icon: ClipboardList },
           ],
+        },
+        {
+          id: 'settingsLoan',
+          name: 'Loan Setting',
+          icon: FileBarChart,
+          href: '/admin/settings/loan'
+        },
+        {
+          id: 'settingsChecklist',
+          name: 'Checklist Setting',
+          icon: ClipboardList,
+          href: '/admin/settings/checklist'
         },
       ],
     },

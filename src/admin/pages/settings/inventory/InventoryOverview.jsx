@@ -78,7 +78,7 @@ const InventoryManagement = () => {
 
       setMasterCategories(cats || []);
       setMasterSubCategories(subCats || []);
-      
+
       const uniqueProjectTypes = (mappings?.length > 0)
         ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
         : projs?.map(p => p.name) || [];
@@ -158,7 +158,7 @@ const InventoryManagement = () => {
       setInventoryData([]);
       return;
     }
-    
+
     // Don't fetch while locations are still loading
     if (locationsLoading) return;
 
@@ -215,7 +215,7 @@ const InventoryManagement = () => {
 
       const partnerObj = partnerTypes.find(p => p._id === selectedPartner);
       const partnerName = partnerObj ? (partnerObj.name || partnerObj.label) : '';
-      
+
       const res = await partnerApi.getPartnerPlans(partnerName, selectedState);
       const plans = Array.isArray(res) ? res : (res.data || []);
       setPartnerPlans(plans);
@@ -406,7 +406,7 @@ const InventoryManagement = () => {
         const res = await getAllManufacturers();
         // The API might return an array directly or a wrapped object
         const data = Array.isArray(res) ? res : (res.data || res.data?.data || []);
-        
+
         // Map manufacturers to unique brand objects for the settings list
         // and ensure we handle cases where multiple manufacturers might have the same brand name
         const uniqueBrandMap = new Map();
@@ -419,7 +419,7 @@ const InventoryManagement = () => {
             });
           }
         });
-        
+
         setBrands(Array.from(uniqueBrandMap.values()));
       } catch (err) {
         console.error("Failed to fetch brands", err);
@@ -762,7 +762,7 @@ const InventoryManagement = () => {
                     {masterSubProjectTypes
                       .filter(sub => {
                         if (!activeFilters.projectType) return true;
-                        const activeMapping = projectMappings.find(m => 
+                        const activeMapping = projectMappings.find(m =>
                           `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === activeFilters.projectType
                         );
                         if (activeMapping && activeMapping.subProjectTypeId) {
