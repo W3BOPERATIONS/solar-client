@@ -20,6 +20,7 @@ const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
 
 export default function SetPrice() {
   const [showLocationCards, setShowLocationCards] = useState(true);
+  const [selectedCountryId, setSelectedCountryId] = useState('');
   const [selectedStateId, setSelectedStateId] = useState('');
   const [selectedDistrictId, setSelectedDistrictId] = useState('');
   const [selectedClusterId, setSelectedClusterId] = useState('');
@@ -30,7 +31,11 @@ export default function SetPrice() {
   const [projectTypesList, setProjectTypesList] = useState([]);
   const [subProjectTypesList, setSubProjectTypesList] = useState([]);
   const [brandsList, setBrandsList] = useState([]);
-  const [productTypesList, setProductTypesList] = useState(['Solar Panel', 'Inverter', 'Battery', 'Solar Water Heater', 'Solar Street Light', 'Solar Pump']); // Standard products
+  const [productsList, setProductsList] = useState([]);
+  
+  // Modal specific filtered lists
+  const [filteredModalSubCategories, setFilteredModalSubCategories] = useState([]);
+  const [filteredModalSubProjectTypes, setFilteredModalSubProjectTypes] = useState([]);
 
   const [kitType, setKitType] = useState('Custom Kit'); // Custom Kit or Combo Kit
 
@@ -74,7 +79,8 @@ export default function SetPrice() {
     status: 'Active'
   });
 
-  const { states, districts, clusters, fetchDistricts, fetchClusters } = useLocations();
+  const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  const selectedCountryObj = countries.find((c) => c._id === selectedCountryId) || null;
   const selectedStateObj = states.find((s) => s._id === selectedStateId) || null;
   const selectedClusterObj = clusters.find((c) => c._id === selectedClusterId) || null;
   const selectedDistrictObj = districts.find((d) => d._id === selectedDistrictId) || null;
@@ -83,12 +89,13 @@ export default function SetPrice() {
   useEffect(() => {
     const fetchFilterData = async () => {
       try {
-        const [catRes, subCatRes, projRes, subProjRes, brandRes] = await Promise.all([
+        const [catRes, subCatRes, projRes, subProjRes, brandRes, prodRes] = await Promise.all([
           productApi.getCategories(),
           productApi.getSubCategories(),
           productApi.getProjectTypes(),
           productApi.getSubProjectTypes(),
-          productApi.getBrands()
+          productApi.getBrands(),
+          productApi.getAll()
         ]);
         
         if (catRes.data?.data) setCategoriesList(catRes.data.data);
@@ -96,6 +103,7 @@ export default function SetPrice() {
         if (projRes.data?.data) setProjectTypesList(projRes.data.data);
         if (subProjRes.data?.data) setSubProjectTypesList(subProjRes.data.data);
         if (brandRes.data?.data) setBrandsList(brandRes.data.data);
+        if (prodRes.data?.data) setProductsList(prodRes.data.data);
 
       } catch (error) {
         console.error("Error fetching filter data:", error);
@@ -104,32 +112,48 @@ export default function SetPrice() {
     fetchFilterData();
   }, []);
 
-  // 2. Fetch Prices depends on District/Cluster/State
-  useEffect(() => {
-    if (selectedStateId) {
-      // Clear downstream
-      setSelectedClusterId('');
-      setSelectedDistrictId('');
-      fetchClusters({ stateId: selectedStateId }); // fetch clusters for state
+  // 2. Location Selection Handlers (Hierarchy)
+  const handleCountrySelect = (countryId) => {
+    setSelectedCountryId(countryId);
+    setSelectedStateId('');
+    setSelectedClusterId('');
+    setSelectedDistrictId('');
+    if (countryId && countryId !== 'all') {
+      fetchStates({ countryId });
     }
-  }, [selectedStateId]);
+  };
 
-  useEffect(() => {
-    if (selectedClusterId) {
-       setSelectedDistrictId('');
-       fetchDistricts({ clusterId: selectedClusterId }); // if useLocations supports this, or fetch all districts
+  const handleStateSelect = (stateId) => {
+    setSelectedStateId(stateId);
+    setSelectedClusterId('');
+    setSelectedDistrictId('');
+    if (stateId && stateId !== 'all') {
+      fetchClusters({ stateId });
     }
-  }, [selectedClusterId]);
+  };
+
+  const handleClusterSelect = (clusterId) => {
+    setSelectedClusterId(clusterId);
+    setSelectedDistrictId('');
+    if (clusterId && clusterId !== 'all') {
+      fetchDistricts({ clusterId });
+    }
+  };
+
+  const handleDistrictSelect = (districtId) => {
+    setSelectedDistrictId(districtId);
+  };
 
   useEffect(() => {
     fetchPrices();
-  }, [selectedStateId, selectedClusterId, selectedDistrictId, kitType]); // reload on kitType change too? Usually client side filter.
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType]);
 
   const fetchPrices = async () => {
     setLoading(true);
     try {
       const query = {};
       // Even if 'all' is selected, we map to missing ID
+      if (selectedCountryId && selectedCountryId !== 'all') query.country = selectedCountryId;
       if (selectedStateId && selectedStateId !== 'all') query.state = selectedStateId;
       if (selectedClusterId && selectedClusterId !== 'all') query.cluster = selectedClusterId;
       if (selectedDistrictId && selectedDistrictId !== 'all') query.district = selectedDistrictId;
@@ -158,12 +182,15 @@ export default function SetPrice() {
     }
   };
 
-  const handleStateSelect = (stateId) => setSelectedStateId(stateId);
-  const handleClusterSelect = (clusterId) => setSelectedClusterId(clusterId);
-  const handleDistrictSelect = (districtId) => setSelectedDistrictId(districtId);
+
 
   const handleFilterChange = (filterName, value) => {
-    setFilters(prev => ({ ...prev, [filterName]: value }));
+    setFilters(prev => {
+      const newFilters = { ...prev, [filterName]: value };
+      if (filterName === 'category') newFilters.subCategory = 'All Sub Categories';
+      if (filterName === 'projectType') newFilters.subProjectType = 'All Sub Types';
+      return newFilters;
+    });
   };
 
   const handleApplyFilters = () => {
@@ -238,7 +265,8 @@ export default function SetPrice() {
         ...newPriceForm,
         state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
         cluster: (selectedClusterId && selectedClusterId !== 'all') ? selectedClusterId : undefined,
-        district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined
+        district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined,
+        country: (selectedCountryId && selectedCountryId !== 'all') ? selectedCountryId : undefined
       };
       await salesSettingsService.createSetPrice(payload);
       setShowAddModal(false);
@@ -268,41 +296,65 @@ export default function SetPrice() {
         {/* Location Selection Section */}
         {showLocationCards ? (
           <div className="space-y-10 mb-8">
-            {/* States */}
+            {/* Countries */}
             <div className="mb-6">
-              <h2 className="text-xl font-bold text-[#14233c] mb-4">Select State</h2>
+              <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Country</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <LocationCard
-                  title="All States"
+                  title="All Countries"
                   subtitle="ALL"
-                  isSelected={selectedStateId === 'all' || selectedStateId === ''}
-                  onClick={() => handleStateSelect('all')}
+                  isSelected={selectedCountryId === 'all' || selectedCountryId === ''}
+                  onClick={() => handleCountrySelect('all')}
                 />
-                {states.map(s => (
+                {countries.map(c => (
                   <LocationCard
-                    key={s._id}
-                    title={s.name}
-                    subtitle={s.code || s.name.substring(0, 2).toUpperCase()}
-                    isSelected={selectedStateId === s._id}
-                    onClick={() => handleStateSelect(s._id)}
-                    isState={true}
+                    key={c._id}
+                    title={c.name}
+                    subtitle={c.code || c.name.substring(0, 2).toUpperCase()}
+                    isSelected={selectedCountryId === c._id}
+                    onClick={() => handleCountrySelect(c._id)}
                   />
                 ))}
               </div>
             </div>
 
+            {/* States */}
+            {(selectedCountryId && selectedCountryId !== 'all') && (
+              <div className="mb-6">
+                <h2 className="text-xl font-bold text-[#14233c] mb-4">Select State</h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <LocationCard
+                    title="All States"
+                    subtitle="ALL"
+                    isSelected={selectedStateId === 'all' || selectedStateId === ''}
+                    onClick={() => handleStateSelect('all')}
+                  />
+                  {states.map(s => (
+                    <LocationCard
+                      key={s._id}
+                      title={s.name}
+                      subtitle={s.code || s.name.substring(0, 2).toUpperCase()}
+                      isSelected={selectedStateId === s._id}
+                      onClick={() => handleStateSelect(s._id)}
+                      isState={true}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Clusters */}
-            {selectedStateId && (
+            {(selectedStateId && selectedStateId !== 'all') && (
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Cluster</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard
                     title="All Clusters"
                     subtitle="ALL"
-                    isSelected={selectedClusterId === 'all'}
+                    isSelected={selectedClusterId === 'all' || selectedClusterId === ''}
                     onClick={() => handleClusterSelect('all')}
                   />
-                  {clusters.filter(c => selectedStateId === 'all' || c.state === selectedStateId || c.state?._id === selectedStateId).map(c => {
+                  {clusters.map(c => {
                     const parentState = states.find(s => s._id === c.state || s._id === c.state?._id) || selectedStateObj;
                     return (
                       <LocationCard
@@ -319,14 +371,14 @@ export default function SetPrice() {
             )}
 
             {/* Districts */}
-            {selectedClusterId && (
+            {(selectedClusterId && selectedClusterId !== 'all') && (
               <div className="mb-6">
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select District</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard
                     title="All Districts"
                     subtitle="ALL"
-                    isSelected={selectedDistrictId === 'all'}
+                    isSelected={selectedDistrictId === 'all' || selectedDistrictId === ''}
                     onClick={() => handleDistrictSelect('all')}
                   />
                   {districts.map(d => {
@@ -394,9 +446,12 @@ export default function SetPrice() {
                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] text-gray-700 bg-white focus:outline-none focus:border-[#0076a8]"
                         value={filters.subCategory}
                         onChange={(e) => handleFilterChange('subCategory', e.target.value)}
+                        disabled={filters.category === 'All Categories'}
                       >
                         <option>All Sub Categories</option>
-                        {subCategoriesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                        {subCategoriesList
+                          .filter(sc => filters.category === 'All Categories' || sc.categoryId?.name === filters.category)
+                          .map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
                     <div>
@@ -416,9 +471,12 @@ export default function SetPrice() {
                         className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] text-gray-700 bg-white focus:outline-none focus:border-[#0076a8]"
                         value={filters.subProjectType}
                         onChange={(e) => handleFilterChange('subProjectType', e.target.value)}
+                        disabled={filters.projectType === 'All Project Types'}
                       >
                         <option>All Sub Types</option>
-                        {subProjectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                        {subProjectTypesList
+                          .filter(sp => filters.projectType === 'All Project Types' || sp.projectTypeId?.name === filters.projectType)
+                          .map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
                   </div>
@@ -473,7 +531,7 @@ export default function SetPrice() {
                      onChange={(e) => handleFilterChange('productType', e.target.value)}
                    >
                      <option>All Product</option>
-                     {productTypesList.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                     {productsList.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
                    </select>
                  </div>
                  <button 
@@ -601,43 +659,88 @@ export default function SetPrice() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pointer-events-auto">
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Product Type</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.productType} onChange={e => setNewPriceForm({ ...newPriceForm, productType: e.target.value })}>
-                     {productTypesList.map((p, i) => <option key={i} value={p}>{p}</option>)}
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.productType} 
+                    onChange={e => setNewPriceForm({ ...newPriceForm, productType: e.target.value })}
+                  >
+                     <option value="">Select Product Type</option>
+                     {productsList.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Brand</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.brand} onChange={e => setNewPriceForm({ ...newPriceForm, brand: e.target.value })}>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.brand} 
+                    onChange={e => setNewPriceForm({ ...newPriceForm, brand: e.target.value })}
+                  >
                       <option value="">Select Brand</option>
                       {brandsList.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Category</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.category} onChange={e => setNewPriceForm({ ...newPriceForm, category: e.target.value })}>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.category} 
+                    onChange={e => {
+                        const catName = e.target.value;
+                        setNewPriceForm({ ...newPriceForm, category: catName, subCategory: '' });
+                        const catObj = categoriesList.find(c => c.name === catName);
+                        if (catObj) {
+                          setFilteredModalSubCategories(subCategoriesList.filter(sc => sc.categoryId === catObj._id || sc.categoryId?._id === catObj._id));
+                        } else {
+                          setFilteredModalSubCategories([]);
+                        }
+                    }}
+                  >
                        <option value="">Select Category</option>
                       {categoriesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sub Category</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.subCategory} onChange={e => setNewPriceForm({ ...newPriceForm, subCategory: e.target.value })}>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.subCategory} 
+                    onChange={e => setNewPriceForm({ ...newPriceForm, subCategory: e.target.value })}
+                    disabled={!newPriceForm.category}
+                  >
                        <option value="">Select Sub Category</option>
-                       {subCategoriesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                       {filteredModalSubCategories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Project Type</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.projectType} onChange={e => setNewPriceForm({ ...newPriceForm, projectType: e.target.value })}>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.projectType} 
+                    onChange={e => {
+                        const projName = e.target.value;
+                        setNewPriceForm({ ...newPriceForm, projectType: projName, subProjectType: '' });
+                        const projObj = projectTypesList.find(p => p.name === projName);
+                        if (projObj) {
+                          setFilteredModalSubProjectTypes(subProjectTypesList.filter(sp => sp.projectTypeId === projObj._id || sp.projectTypeId?._id === projObj._id));
+                        } else {
+                          setFilteredModalSubProjectTypes([]);
+                        }
+                    }}
+                  >
                        <option value="">Select Project Type</option>
                        {projectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sub Project Type</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.subProjectType} onChange={e => setNewPriceForm({ ...newPriceForm, subProjectType: e.target.value })}>
+                  <select 
+                    className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" 
+                    value={newPriceForm.subProjectType} 
+                    onChange={e => setNewPriceForm({ ...newPriceForm, subProjectType: e.target.value })}
+                    disabled={!newPriceForm.projectType}
+                  >
                        <option value="">Select Sub Project Type</option>
-                       {subProjectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                       {filteredModalSubProjectTypes.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
                 <div>

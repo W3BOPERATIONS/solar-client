@@ -59,8 +59,11 @@ const DeliveryType = () => {
   // Tab State
   const [activeTabId, setActiveTabId] = useState('new'); // 'new' or valid mapped delivery type ID
   const [activeSection, setActiveSection] = useState('setup');
+  const [deliveryStats, setDeliveryStats] = useState({ country: {}, state: {}, cluster: {}, district: {} });
 
   // Hierarchical Location Selection
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountryName, setSelectedCountryName] = useState('');
   const [selectedState, setSelectedState] = useState('');
   const [selectedStateName, setSelectedStateName] = useState('');
   const [clusterOptions, setClusterOptions] = useState([]);
@@ -82,13 +85,40 @@ const DeliveryType = () => {
     fetchCountries();
   }, []);
 
-  useEffect(() => {
-    if (countries.length > 0) {
-      const india = countries.find(c => c.name === 'India');
-      if (india) fetchStates({ country: india._id });
-      else fetchStates({ country: countries[0]._id });
+  const fetchDeliveryStats = async () => {
+    try {
+      const res = await getDeliveryTypes(); // Fetch all
+      if (res.success && res.data) {
+        const stats = { country: {}, state: {}, cluster: {}, district: {} };
+        
+        // We need state-to-country mapping because DeliveryType doesn't store country
+        // but states list from useLocations has it.
+        // If states isn't loaded yet, country counts will be updated later.
+        
+        res.data.forEach(type => {
+          if (type.state?._id) stats.state[type.state._id] = (stats.state[type.state._id] || 0) + 1;
+          if (type.cluster?._id) stats.cluster[type.cluster._id] = (stats.cluster[type.cluster._id] || 0) + 1;
+          if (type.district?._id) stats.district[type.district._id] = (stats.district[type.district._id] || 0) + 1;
+        });
+
+        // Calculate Country counts by summing state counts
+        states.forEach(state => {
+          const cId = state.country?._id || state.country;
+          if (cId && stats.state[state._id]) {
+            stats.country[cId] = (stats.country[cId] || 0) + stats.state[state._id];
+          }
+        });
+
+        setDeliveryStats(stats);
+      }
+    } catch (error) {
+      console.error("Failed to fetch delivery stats", error);
     }
-  }, [countries]);
+  };
+
+  useEffect(() => {
+    fetchDeliveryStats();
+  }, [states]); // Re-calculate country stats when states are loaded
 
   useEffect(() => {
     const fetchProcurementSettings = async () => {
@@ -136,6 +166,30 @@ const DeliveryType = () => {
   };
 
   // Location Handlers
+  const handleCountrySelect = (countryId, countryName) => {
+    setSelectedCountry(countryId);
+    setSelectedCountryName(countryName);
+    
+    // Fetch states for this country
+    // Note: useLocations hook uses fetchStates({ countryId: ... })
+    fetchStates({ countryId: countryId });
+
+    // Reset subsequent selections
+    setSelectedState('');
+    setSelectedStateName('');
+    setSelectedAllStates(false);
+    setClusterOptions([]);
+    setSelectedCluster('');
+    setSelectedClusterName('');
+    setSelectedAllClusters(false);
+    setDistrictOptions([]);
+    setSelectedDistrict('');
+    setSelectedDistrictName('');
+    setSelectedAllDistricts(false);
+    setDeliveryTypes([]);
+    setActiveTabId('new');
+  };
+
   const handleStateSelect = async (stateId, stateName) => {
     if (stateId === 'all') {
       setSelectedState('all');
@@ -153,9 +207,8 @@ const DeliveryType = () => {
       setActiveTabId('new');
 
       try {
-        // Fetch ALL clusters across all states
-        // If your API supports `{ isActive: 'true' }` without providing `state` to get all clusters
-        const res = await locationAPI.getAllClusters({ isActive: 'true' });
+        // Fetch ALL clusters across all states in the selected country
+        const res = await locationAPI.getAllClusters({ countryId: selectedCountry, isActive: 'true' });
         if (res.data && res.data.data) {
           setClusterOptions(res.data.data);
         }
@@ -178,7 +231,7 @@ const DeliveryType = () => {
       setActiveTabId('new');
 
       try {
-        const res = await locationAPI.getAllClusters({ state: stateId, isActive: 'true' });
+        const res = await locationAPI.getAllClusters({ stateId: stateId, isActive: 'true' });
         if (res.data && res.data.data) {
           setClusterOptions(res.data.data);
         }
@@ -203,7 +256,7 @@ const DeliveryType = () => {
       try {
         // If selectedState is 'all', fetch ALL districts.
         // Otherwise, fetch districts for the given selectedState.
-        const queryParams = selectedState === 'all' ? { isActive: 'true' } : { state: selectedState, isActive: 'true' };
+        const queryParams = selectedState === 'all' ? { countryId: selectedCountry, isActive: 'true' } : { stateId: selectedState, isActive: 'true' };
         const res = await locationAPI.getAllDistricts(queryParams);
         if (res.data && res.data.data) {
           setDistrictOptions(res.data.data);
@@ -223,7 +276,7 @@ const DeliveryType = () => {
       setActiveTabId('new');
 
       try {
-        const res = await locationAPI.getAllDistricts({ cluster: clusterId, isActive: 'true' });
+        const res = await locationAPI.getAllDistricts({ clusterId: clusterId, isActive: 'true' });
         if (res.data && res.data.data) {
           setDistrictOptions(res.data.data);
         }
@@ -369,6 +422,7 @@ const DeliveryType = () => {
           showNotification('Delivery type updated successfully', 'success');
           loadDeliveryTypes(selectedDistrict);
         }
+        fetchDeliveryStats(); // Refresh badges
       }
     } catch (error) {
       showNotification(error.response?.data?.message || 'Operation failed', 'error');
@@ -407,9 +461,33 @@ const DeliveryType = () => {
       {/* Hierarchy Selection Cards */}
       {locationCardsVisible && (
         <div className="space-y-6 mb-8">
+          {/* Country Selection */}
           <div>
-            <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Select Country</h3>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {countries.map(country => (
+                <div
+                  key={country._id}
+                  className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCountry === country._id
+                    ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                    : 'bg-white border-gray-200 hover:border-blue-300'
+                    }`}
+                  onClick={() => handleCountrySelect(country._id, country.name)}
+                >
+                  <div className="absolute top-2 right-2 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-blue-200 shadow-sm">
+                    {deliveryStats.country[country._id] || 0}
+                  </div>
+                  <div className="font-semibold text-sm">{country.name}</div>
+                  <div className="text-xs text-gray-400 mt-1 uppercase">{country.name.substring(0, 2)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {selectedCountry && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
               {states.length > 0 && (
                 <div
                   className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === 'all'
@@ -425,18 +503,22 @@ const DeliveryType = () => {
               {states.map(state => (
                 <div
                   key={state._id}
-                  className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === state._id
+                  className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === state._id
                     ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
                     : 'bg-white border-gray-200 hover:border-blue-300'
                     }`}
                   onClick={() => handleStateSelect(state._id, state.name)}
                 >
+                  <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-green-200 shadow-sm">
+                    {deliveryStats.state[state._id] || 0}
+                  </div>
                   <div className="font-semibold text-sm">{state.name}</div>
                   <div className="text-xs text-gray-400 mt-1 uppercase">{state.name.substring(0, 2)}</div>
                 </div>
               ))}
             </div>
           </div>
+          )}
 
           {selectedState && (
             <div className="animate-in fade-in slide-in-from-top-4 duration-300">
@@ -457,12 +539,15 @@ const DeliveryType = () => {
                 {clusterOptions.map(cluster => (
                   <div
                     key={cluster._id}
-                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCluster === cluster._id
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCluster === cluster._id
                       ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
                       : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
                     onClick={() => handleClusterSelect(cluster._id, cluster.name)}
                   >
+                    <div className="absolute top-2 right-2 bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-purple-200 shadow-sm">
+                      {deliveryStats.cluster[cluster._id] || 0}
+                    </div>
                     <div className="font-semibold text-sm">{cluster.name}</div>
                     <div className="text-xs text-gray-400 mt-1">{selectedStateName}</div>
                   </div>
@@ -490,12 +575,15 @@ const DeliveryType = () => {
                 {districtOptions.map(district => (
                   <div
                     key={district._id}
-                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedDistrict === district._id
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedDistrict === district._id
                       ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
                       : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
                     onClick={() => handleDistrictSelect(district._id, district.name)}
                   >
+                    <div className="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-orange-200 shadow-sm">
+                      {deliveryStats.district[district._id] || 0}
+                    </div>
                     <div className="font-semibold text-sm">{district.name}</div>
                     <div className="text-xs text-gray-400 mt-1">{selectedClusterName}</div>
                   </div>

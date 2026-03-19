@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Search, X, Filter, RefreshCw, Settings, AlertTriangle,
   ChevronUp, ChevronDown, Save, Plus, Minus,
-  Factory, MapPin, Users, Package, Loader
+  Factory, MapPin, Users, Package, Loader, Pencil, Trash2
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
@@ -59,6 +59,10 @@ const InventoryManagement = () => {
   const [masterProjectTypes, setMasterProjectTypes] = useState([]);
   const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
+
+  // Actions State
+  const [editingItem, setEditingItem] = useState(null);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   useEffect(() => {
     fetchSettings();
@@ -148,7 +152,7 @@ const InventoryManagement = () => {
 
   useEffect(() => {
     if (selectedCountry) {
-      fetchStates({ countryId: selectedCountry });
+      fetchStates({ countryId: selectedCountry === 'all' ? undefined : selectedCountry });
     }
   }, [selectedCountry, fetchStates]);
 
@@ -164,7 +168,7 @@ const InventoryManagement = () => {
 
     try {
       setLoading(true);
-      const params = {
+      const baseParams = {
         country: selectedCountry,
         state: selectedState,
         cluster: selectedCluster,
@@ -177,8 +181,13 @@ const InventoryManagement = () => {
         order: currentSortOrder
       };
 
-      // Remove empty params
-      Object.keys(params).forEach(key => !params[key] && delete params[key]);
+      // Create a new params object and filter out 'all' values and empty strings
+      const params = {};
+      for (const key in baseParams) {
+        if (baseParams[key] !== 'all' && baseParams[key] !== '' && baseParams[key] !== undefined && baseParams[key] !== null) {
+          params[key] = baseParams[key];
+        }
+      }
 
       const [itemsResponse, summaryResponse] = await Promise.all([
         inventoryApi.getItems({ ...params, silent: true }),
@@ -227,22 +236,22 @@ const InventoryManagement = () => {
 
   // --- Helper Functions ---
   const getUniqueBrands = () => {
-    return [...new Set(inventoryData.map(product => product.brand?.brandName || 'Unknown'))];
+    return [...new Set(inventoryData.map(product => product.brand?.brand || product.brand?.brandName || product.brand?.companyName || 'Unknown'))];
   };
 
   // --- Selection Handlers ---
   const handleCountrySelect = (countryId) => {
-    setSelectedCountry(prev => prev === countryId ? '' : countryId);
+    setSelectedCountry(countryId);
     setSelectedState('');
     setSelectedCluster('');
     setSelectedDistrict('');
     setSelectedPartner('');
     setSelectedPlan('');
-    if (countryId) fetchStates({ countryId });
+    fetchStates({ countryId: countryId === 'all' ? undefined : countryId });
   };
 
   const handleStateSelect = (stateId) => {
-    setSelectedState(prev => prev === stateId ? '' : stateId);
+    setSelectedState(stateId);
     setSelectedCluster('');
     setSelectedDistrict('');
     setSelectedPartner('');
@@ -250,14 +259,14 @@ const InventoryManagement = () => {
   };
 
   const handleClusterSelect = (clusterId) => {
-    setSelectedCluster(prev => prev === clusterId ? '' : clusterId);
+    setSelectedCluster(clusterId);
     setSelectedDistrict('');
     setSelectedPartner('');
     setSelectedPlan('');
   };
 
   const handleDistrictSelect = (districtId) => {
-    setSelectedDistrict(prev => prev === districtId ? '' : districtId);
+    setSelectedDistrict(districtId);
     setSelectedPartner('');
     setSelectedPlan('');
   };
@@ -271,6 +280,24 @@ const InventoryManagement = () => {
     setSelectedPlan(prev => prev === planName ? '' : planName);
   };
 
+  const handleDeleteItem = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this inventory item?')) return;
+
+    try {
+      await inventoryApi.deleteItem(id);
+      toast.success('Item deleted successfully');
+      fetchInventory(); // Refresh table
+    } catch (error) {
+      console.error('Delete failed', error);
+      toast.error(error.response?.data?.message || 'Failed to delete item');
+    }
+  };
+
+  const openEditModal = (item) => {
+    setEditingItem(item);
+    setEditModalOpen(true);
+  };
+
 
   // --- Render Functions ---
   const renderClusters = () => {
@@ -280,6 +307,15 @@ const InventoryManagement = () => {
       <div className="mt-6 mb-6">
         <h5 className="text-lg font-bold text-gray-700 mb-4">Select Clusters</h5>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedCluster === 'all'
+              ? 'bg-[#17a2b8] text-white border-[#17a2b8]'
+              : 'bg-white border-gray-300 text-gray-800 hover:border-blue-400'
+              }`}
+            onClick={() => handleClusterSelect('all')}
+          >
+            <div className="font-bold text-sm tracking-wide">All Clusters</div>
+          </div>
           {clusters.map(cluster => (
             <div
               key={cluster._id}
@@ -305,6 +341,15 @@ const InventoryManagement = () => {
       <div className="mt-6 mb-6">
         <h5 className="text-lg font-bold text-gray-700 mb-4">Select Districts</h5>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedDistrict === 'all'
+              ? 'bg-[#28a745] text-white border-[#28a745]'
+              : 'bg-white border-gray-300 text-gray-800 hover:border-green-400'
+              }`}
+            onClick={() => handleDistrictSelect('all')}
+          >
+            <div className="font-bold text-sm tracking-wide">All Districts</div>
+          </div>
           {districts.map(district => (
             <div
               key={district._id}
@@ -572,7 +617,7 @@ const InventoryManagement = () => {
                     <div key={item._id} className={`flex justify-between items-start py-4 ${index !== allProducts.length - 1 ? 'border-b border-gray-100' : ''}`}>
                       <div className="flex flex-col w-1/3 pt-2">
                         <span className="font-semibold text-sm text-gray-800">{item.name || item.itemName}</span>
-                        <span className="text-[11px] text-gray-500">{(item.brandId?.name || item.brandId?.companyName) || item.brand?.brandName || 'Unknown'}</span>
+                        <span className="text-[11px] text-gray-500">{(item.brandId?.name || item.brandId?.companyName) || item.brand?.brand || item.brand?.brandName || item.brand?.companyName || 'Unknown'}</span>
                       </div>
                       <div className="w-2/3">
                         <input
@@ -606,6 +651,114 @@ const InventoryManagement = () => {
     );
   };
 
+  const EditItemModal = () => {
+    const [formData, setFormData] = useState({
+      itemName: editingItem?.itemName || '',
+      quantity: editingItem?.quantity || 0,
+      price: editingItem?.price || 0,
+      minLevel: editingItem?.minLevel || 0
+    });
+    const [saving, setSaving] = useState(false);
+
+    const handleSave = async (e) => {
+      e.preventDefault();
+      try {
+        setSaving(true);
+        await inventoryApi.updateItem(editingItem._id, formData);
+        toast.success('Inventory updated successfully');
+        setEditModalOpen(false);
+        fetchInventory();
+      } catch (error) {
+        console.error('Update failed', error);
+        toast.error(error.response?.data?.message || 'Failed to update inventory');
+      } finally {
+        setSaving(false);
+      }
+    };
+
+    return (
+      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+        <div className="bg-white rounded-xl w-[500px] overflow-hidden shadow-2xl animate-fade-in-up">
+          <div className="p-4 bg-gray-50 border-b flex justify-between items-center">
+            <h3 className="text-gray-800 font-bold flex items-center gap-2 text-sm">
+              <Pencil size={16} className="text-blue-500" />
+              Edit Inventory: <span className="text-blue-600">{editingItem.sku}</span>
+            </h3>
+            <button onClick={() => setEditModalOpen(false)} className="text-gray-400 hover:text-gray-600">
+              <X size={20} />
+            </button>
+          </div>
+
+          <form onSubmit={handleSave} className="p-6 space-y-4">
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Product Name</label>
+              <input
+                type="text"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={formData.itemName}
+                onChange={(e) => setFormData({ ...formData, itemName: e.target.value })}
+                required
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Quantity</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={formData.quantity}
+                  onChange={(e) => setFormData({ ...formData, quantity: Number(e.target.value) })}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Price (₹)</label>
+                <input
+                  type="number"
+                  className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                  value={formData.price}
+                  onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
+                  required
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-[10px] font-bold text-gray-400 uppercase mb-1">Low Stock Threshold (Min Level)</label>
+              <input
+                type="number"
+                className="w-full border border-gray-200 rounded-lg px-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                value={formData.minLevel}
+                onChange={(e) => setFormData({ ...formData, minLevel: Number(e.target.value) })}
+                required
+              />
+            </div>
+
+            <div className="pt-4 flex gap-3">
+              <button 
+                type="button" 
+                onClick={() => setEditModalOpen(false)} 
+                className="flex-1 px-4 py-2.5 bg-gray-100 text-gray-600 rounded-lg text-sm font-bold hover:bg-gray-200 transition-colors"
+                disabled={saving}
+              >
+                Cancel
+              </button>
+              <button 
+                type="submit" 
+                className="flex-1 px-4 py-2.5 bg-blue-600 text-white rounded-lg text-sm font-bold hover:bg-blue-700 transition-colors flex items-center justify-center gap-2 shadow-lg shadow-blue-100"
+                disabled={saving}
+              >
+                {saving && <Loader className="animate-spin" size={14} />}
+                Save Changes
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="container mx-auto px-4 py-8">
       {/* Title */}
@@ -617,6 +770,16 @@ const InventoryManagement = () => {
       <div className="mb-6">
         <h5 className="text-lg font-bold text-gray-700 mb-4">Select Country</h5>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedCountry === 'all'
+              ? 'bg-[#6c5ce7] text-white border-[#6c5ce7]'
+              : 'bg-white border-gray-300 text-gray-800 hover:border-purple-400'
+              }`}
+            onClick={() => handleCountrySelect('all')}
+          >
+            <h6 className="font-bold text-sm tracking-wide">All Countries</h6>
+            <div className="font-bold text-xs mt-1">ALL</div>
+          </div>
           {countries.map(country => (
             <div
               key={country._id}
@@ -639,6 +802,16 @@ const InventoryManagement = () => {
         <div className="mb-6">
           <h5 className="text-lg font-bold text-gray-700 mb-4">Select States</h5>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div
+              className={`cursor-pointer border rounded p-4 text-center transition-all duration-200 hover:scale-105 ${selectedState === 'all'
+                ? 'bg-[#1d64b2] text-white border-[#1d64b2]'
+                : 'bg-white border-gray-300 text-gray-800 hover:border-blue-400'
+                }`}
+              onClick={() => handleStateSelect('all')}
+            >
+              <h6 className="font-bold text-sm tracking-wide">All States</h6>
+              <div className="font-bold text-xs mt-1">ALL</div>
+            </div>
             {states.map(state => (
               <div
                 key={state._id}
@@ -896,6 +1069,7 @@ const InventoryManagement = () => {
                       <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Price (₹)</th>
                       <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Total (₹)</th>
                       <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px]">Status</th>
+                      <th className="p-4 border-b border-gray-700 font-bold uppercase tracking-wider text-[11px] text-center">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
@@ -914,7 +1088,7 @@ const InventoryManagement = () => {
                               <div className="font-bold text-gray-900">{item.itemName}</div>
                               <div className="text-[10px] text-gray-400 uppercase tracking-tight">{item.category}</div>
                             </td>
-                            <td className="p-4 text-gray-600">{item.brand?.brandName || 'Unknown'}</td>
+                            <td className="p-4 text-gray-600">{item.brand?.brand || item.brand?.brandName || item.brand?.companyName || 'Unknown'}</td>
                             <td className="p-4"><code className="bg-gray-100 text-[10px] px-1.5 py-0.5 rounded font-mono">{item.sku}</code></td>
                             <td className="p-4 font-bold text-gray-900">{item.quantity}</td>
                             <td className="p-4 text-gray-600">₹{item.price.toLocaleString()}</td>
@@ -923,6 +1097,24 @@ const InventoryManagement = () => {
                               <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${isLowStock ? 'bg-red-100 text-red-600' : 'bg-green-100 text-green-600'}`}>
                                 {isLowStock ? 'Low' : 'OK'}
                               </span>
+                            </td>
+                            <td className="p-4">
+                              <div className="flex justify-center gap-2">
+                                <button
+                                  onClick={() => openEditModal(item)}
+                                  className="p-1.5 text-blue-600 hover:bg-blue-50 rounded transition-colors"
+                                  title="Edit Item"
+                                >
+                                  <Pencil size={15} />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteItem(item._id)}
+                                  className="p-1.5 text-red-600 hover:bg-red-50 rounded transition-colors"
+                                  title="Delete Item"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -941,6 +1133,7 @@ const InventoryManagement = () => {
       )}
 
       {settingsModalOpen && <SettingsModal />}
+      {editModalOpen && editingItem && <EditItemModal />}
     </div>
   );
 };
