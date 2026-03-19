@@ -40,6 +40,7 @@ const INITIAL_FORM_STATE = {
     estimatedDelivery: '3-5 Days',
     procurementResults: []
   },
+  coverageType: [],
   status: 'active'
 };
 
@@ -260,6 +261,7 @@ const DeliveryType = () => {
         coverageRange: type.coverageRange || '',
         applicableCategories: type.applicableCategories?.length ? type.applicableCategories : INITIAL_FORM_STATE.applicableCategories,
         deliveryTiming: type.deliveryTiming || INITIAL_FORM_STATE.deliveryTiming,
+        coverageType: type.coverageType || [],
         status: type.status || 'active'
       });
     }
@@ -813,7 +815,7 @@ const DeliveryType = () => {
                     </div>
                   </div>
                   <div className="text-xs space-y-2 text-gray-700">
-                    <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageType.length > 0 ? formData.coverageType.join(', ') : '50km Radius'}</span></p>
+                    <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageType?.length > 0 ? formData.coverageType.join(', ') : '50km Radius'}</span></p>
                     <p className="flex items-center text-[#0284c7] font-medium"><Truck size={14} className="mr-1" />Access: <span className="text-gray-900 font-medium ml-1">Standard Access</span></p>
                     <p className="font-bold mt-4 mb-2 text-gray-900 text-[13px]">Features:</p>
                     <div className="flex items-center mb-2">
