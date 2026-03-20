@@ -4,7 +4,8 @@ import {
   getSupplierTypes,
   createSupplierType,
   updateSupplierType,
-  deleteSupplierType
+  deleteSupplierType,
+  getSupplierVendorPlans
 } from '../../../../services/vendor/vendorApi';
 import { locationAPI, masterAPI } from '../../../../api/api';
 import { productApi } from '../../../../api/productApi';
@@ -29,6 +30,7 @@ export default function SupplierType() {
   const [loading, setLoading] = useState(false);
   const [showLocationCards, setShowLocationCards] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [loginTypes, setLoginTypes] = useState([]);
 
   // Form State
   const [formData, setFormData] = useState({
@@ -208,6 +210,22 @@ export default function SupplierType() {
       }
     };
     fetchCountries();
+  }, []);
+
+  useEffect(() => {
+    const fetchLoginTypes = async () => {
+      try {
+        const res = await getSupplierVendorPlans({ fetchAllNames: true });
+        if (res.success && res.data) {
+          const baseNames = ['Manufacturer', 'Distributor', 'Dealer'];
+          const finalNames = res.data.length > 0 ? res.data : baseNames;
+          setLoginTypes(finalNames);
+        }
+      } catch (error) {
+        console.error('Error fetching login types:', error);
+      }
+    };
+    fetchLoginTypes();
   }, []);
 
   useEffect(() => {
@@ -802,9 +820,9 @@ export default function SupplierType() {
                         onChange={e => setFormData({ ...formData, loginAccessType: e.target.value })}
                       >
                         <option value="">Select Type of login</option>
-                        <option value="Distributor">Distributor</option>
-                        <option value="Installer">Installer</option>
-                        <option value="Vendor">Vendor</option>
+                        {loginTypes.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
                       </select>
                     </td>
                     <td className="p-3 border-r border-gray-200">

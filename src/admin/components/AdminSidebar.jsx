@@ -174,8 +174,10 @@ export default function AdminSidebar() {
       icon: BriefcaseBusiness,
       isExpanded: expandedSections.projectManagement,
       children: [
-        { name: 'Manage', href: '/admin/project-management', icon: Settings },
-        { name: 'Track', href: '/admin/project-management/track', icon: Activity },
+        { name: 'Management', href: '/admin/project-management/management', icon: Settings },
+        { name: 'Install', href: '/admin/project-management/install', icon: Wrench },
+        { name: 'Service', href: '/admin/project-management/service', icon: Wrench },
+        { name: 'Track Service', href: '/admin/project-management/track-service', icon: ClipboardList },
       ],
     },
     {

@@ -71,6 +71,8 @@ const InventoryRestockLimit = () => {
     setSelWarehouse('');
   }, [selCluster]);
 
+  const [editingId, setEditingId] = useState(null);
+
   // ── any selection → fetch restock limits ──────────────────────────────────
   useEffect(() => {
     fetchRestockLimits();
@@ -131,18 +133,23 @@ const InventoryRestockLimit = () => {
       if (selState   && selState   !== 'all') params.state   = selState;
       if (selCluster && selCluster !== 'all') params.cluster = selCluster;
       if (selWarehouse && selWarehouse !== 'all') {
-        // If we select a warehouse, we might want to filter by its district
         const selectedWh = locData.warehouses.find(w => w._id === selWarehouse);
-        if (selectedWh?.district) params.district = selectedWh.district;
+        if (selectedWh?.district) {
+          // If district is populated, use _id
+          params.district = selectedWh.district._id || selectedWh.district;
+        }
       }
 
       const response = await inventoryApi.getRestockLimits(params);
       const data = response.data || [];
-      setProducts(data);
+      // Sort by name for better UX
+      const sortedData = [...data].sort((a, b) => a.itemName.localeCompare(b.itemName));
+      setProducts(sortedData);
 
       const initialInputs = {};
-      data.forEach(item => { initialInputs[item._id] = item.currentRestockLimit || ''; });
+      sortedData.forEach(item => { initialInputs[item._id] = item.currentRestockLimit || ''; });
       setLimitInputs(initialInputs);
+      setEditingId(null);
     } catch (error) {
       console.error('Failed to fetch limits', error);
     } finally {
@@ -169,6 +176,7 @@ const InventoryRestockLimit = () => {
       }
       await inventoryApi.setRestockLimit({ itemId: item._id, threshold: Number(threshold) });
       setProducts(pp => pp.map(p => p._id === item._id ? { ...p, currentRestockLimit: Number(threshold) } : p));
+      setEditingId(null);
       toast.success(`Limit set to ₹${threshold} for ${item.itemName}`);
     } catch (error) {
       console.error('Failed to save limit', error);
@@ -391,21 +399,37 @@ const InventoryRestockLimit = () => {
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434] font-medium">{getDisplayValue(item, 'technology')}</td>
                     <td className="py-3.5 px-4 border-r border-gray-200 text-[#1c2434] font-medium">{getDisplayValue(item, 'wattage')}</td>
                     <td className="py-3.5 px-4 border-r border-gray-200">
-                      <input
-                        type="number"
-                        className="w-[90%] outline-none border border-gray-300 rounded focus:border-[#206bc4] text-gray-600 px-3 py-1.5 placeholder-gray-400"
-                        placeholder="Enter ₹ amount"
-                        value={limitInputs[item._id] ?? ''}
-                        onChange={(e) => handleAmountChange(item._id, e.target.value)}
-                      />
+                        {editingId === item._id ? (
+                            <input
+                                type="number"
+                                autoFocus
+                                className="w-[90%] outline-none border border-gray-300 rounded focus:border-[#206bc4] text-gray-600 px-3 py-1.5 placeholder-gray-400 shadow-inner"
+                                placeholder="Enter ₹ amount"
+                                value={limitInputs[item._id] ?? ''}
+                                onChange={(e) => handleAmountChange(item._id, e.target.value)}
+                            />
+                        ) : (
+                            <div className="py-1.5 px-3 font-semibold text-gray-700">
+                                ₹{item.currentRestockLimit || 0}
+                            </div>
+                        )}
                     </td>
                     <td className="py-3.5 px-4 text-center">
-                      <button
-                        onClick={() => handleSaveLimit(item)}
-                        className="px-4 py-1.5 bg-[#6c757d] text-white text-[13px] rounded hover:bg-[#5a6268] transition-colors"
-                      >
-                        Done
-                      </button>
+                        {editingId === item._id ? (
+                            <button
+                                onClick={() => handleSaveLimit(item)}
+                                className="px-4 py-1.5 bg-[#28a745] text-white text-[13px] rounded hover:bg-[#218838] transition-colors font-bold flex items-center gap-1 mx-auto"
+                            >
+                                Done
+                            </button>
+                        ) : (
+                            <button
+                                onClick={() => setEditingId(item._id)}
+                                className="px-4 py-1.5 bg-[#007bff] text-white text-[13px] rounded hover:bg-[#0069d9] transition-colors font-bold flex items-center gap-1 mx-auto"
+                            >
+                                Edit
+                            </button>
+                        )}
                     </td>
                   </tr>
                 ))

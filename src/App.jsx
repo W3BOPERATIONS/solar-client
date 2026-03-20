@@ -19,8 +19,10 @@ import AdminVendorsDashboard from './admin/pages/dashboard/VendorsDashboard';
 import AdminDepartments from './admin/pages/departments/Departments';
 import AdminOrganizationChart from './admin/pages/departments/OrganizationChart';
 import AdminApprovals from './admin/pages/approvals/Approvals';
-import ManageProjects from './admin/pages/projectManagement/Manage';
-import TrackProjects from './admin/pages/projectManagement/Track';
+import ManagementProjects from './admin/pages/project-management/management/Management';
+import InstallProjects from './admin/pages/project-management/install/Install';
+import ServiceProjects from './admin/pages/project-management/service/Service';
+import TrackServiceProjects from './admin/pages/project-management/track-service/TrackService';
 import AdminWarehouse from './admin/pages/operations/Warehouse';
 import AdminAddInventory from './admin/pages/operations/AddInventory';
 import AdminInventoryManagement from './admin/pages/operations/InventoryManagement';
@@ -390,8 +392,11 @@ function App() {
                 element={<AdminOrganizationChart />}
               />
               <Route path="approvals" element={<AdminApprovals />} />
-              <Route path="project-management" element={<ManageProjects />} />
-              <Route path="project-management/track" element={<TrackProjects />} />
+              <Route path="project-management/management" element={<ManagementProjects />} />
+              <Route path="project-management/install" element={<InstallProjects />} />
+              <Route path="project-management/service" element={<ServiceProjects />} />
+              <Route path="project-management/track-service" element={<TrackServiceProjects />} />
+              <Route path="project-management" element={<Navigate to="management" />} />
               <Route path="operations/warehouse" element={<AdminWarehouse />} />
               <Route path="operations/add-inventory" element={<AdminAddInventory />} />
               <Route

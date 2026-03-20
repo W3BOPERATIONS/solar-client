@@ -133,8 +133,8 @@ export default function SupplierVendors() {
 
   const resetToDefaults = () => {
       const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
-      const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
-      const sortedTabs = Array.from(new Set([...baseTabs, ...fetchedNames]));
+      const currentNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
+      const sortedTabs = Array.from(new Set(currentNames));
 
       setTabs(sortedTabs);
       setActiveTab(sortedTabs[0] || 'Manufacturer');
@@ -161,8 +161,8 @@ export default function SupplierVendors() {
           : dbPlans;
 
         const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
-        const fetchedNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
-        const uniqueTabs = Array.from(new Set([...baseTabs, ...fetchedNames, ...districtPlans.map(p => p.name)]));
+        const currentNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
+        const uniqueTabs = Array.from(new Set([...currentNames, ...districtPlans.map(p => p.name)]));
         setTabs(uniqueTabs);
         if (!uniqueTabs.includes(activeTab)) setActiveTab(uniqueTabs[0]);
 
@@ -221,22 +221,26 @@ export default function SupplierVendors() {
 
   const handleDelete = async (planName, providedId) => {
       try {
-          const planId = providedId || allFetchedPlans.find(p => p.name === planName)?._id;
-          if (planId) {
-              await deleteSupplierVendorPlan(planId);
+          if (providedId) {
+              await deleteSupplierVendorPlan(providedId);
               toast.success('Configuration deleted');
           } else {
-              // Delete globally
+              if (!window.confirm(`Are you sure you want to completely delete "${planName}" and all its configurations?`)) return;
+              
               await deleteSupplierVendorPlan('by-name', { name: planName });
               toast.success('Plan deleted globally');
+              
+              if (["Manufacturer", "Distributor", "Dealer"].includes(planName)) {
+                  setFormSettings(prev => ({ ...prev, [planName]: getDefaultFormState() }));
+              } else {
+                  setTabs(prev => prev.filter(t => t !== planName));
+                  if (activeTab === planName) {
+                      const remainingTabs = tabs.filter(t => t !== planName);
+                      setActiveTab(remainingTabs.length > 0 ? remainingTabs[0] : 'Manufacturer');
+                  }
+              }
           }
 
-          if (["Manufacturer", "Distributor", "Dealer"].includes(planName)) {
-              setFormSettings(prev => ({ ...prev, [planName]: getDefaultFormState() }));
-          } else {
-              setTabs(prev => prev.filter(t => t !== planName));
-              if (activeTab === planName) setActiveTab(tabs.length > 0 ? tabs[0] : 'Manufacturer');
-          }
           await fetchGlobalNames();
           fetchPlans();
       } catch (error) {

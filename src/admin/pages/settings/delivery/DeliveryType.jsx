@@ -90,11 +90,11 @@ const DeliveryType = () => {
       const res = await getDeliveryTypes(); // Fetch all
       if (res.success && res.data) {
         const stats = { country: {}, state: {}, cluster: {}, district: {} };
-        
+
         // We need state-to-country mapping because DeliveryType doesn't store country
         // but states list from useLocations has it.
         // If states isn't loaded yet, country counts will be updated later.
-        
+
         res.data.forEach(type => {
           if (type.state?._id) stats.state[type.state._id] = (stats.state[type.state._id] || 0) + 1;
           if (type.cluster?._id) stats.cluster[type.cluster._id] = (stats.cluster[type.cluster._id] || 0) + 1;
@@ -169,7 +169,7 @@ const DeliveryType = () => {
   const handleCountrySelect = (countryId, countryName) => {
     setSelectedCountry(countryId);
     setSelectedCountryName(countryName);
-    
+
     // Fetch states for this country
     // Note: useLocations hook uses fetchStates({ countryId: ... })
     fetchStates({ countryId: countryId });
@@ -488,36 +488,36 @@ const DeliveryType = () => {
             <div className="animate-in fade-in slide-in-from-top-4 duration-300">
               <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              {states.length > 0 && (
-                <div
-                  className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === 'all'
-                    ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
-                    : 'bg-white border-gray-200 hover:border-blue-300'
-                    }`}
-                  onClick={() => handleStateSelect('all', 'All States')}
-                >
-                  <div className="font-semibold text-sm">Select All</div>
-                  <div className="text-xs text-gray-400 mt-1 uppercase">ALL IN</div>
-                </div>
-              )}
-              {states.map(state => (
-                <div
-                  key={state._id}
-                  className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === state._id
-                    ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
-                    : 'bg-white border-gray-200 hover:border-blue-300'
-                    }`}
-                  onClick={() => handleStateSelect(state._id, state.name)}
-                >
-                  <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-green-200 shadow-sm">
-                    {deliveryStats.state[state._id] || 0}
+                {states.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleStateSelect('all', 'All States')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1 uppercase">ALL IN</div>
                   </div>
-                  <div className="font-semibold text-sm">{state.name}</div>
-                  <div className="text-xs text-gray-400 mt-1 uppercase">{state.name.substring(0, 2)}</div>
-                </div>
-              ))}
+                )}
+                {states.map(state => (
+                  <div
+                    key={state._id}
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === state._id
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleStateSelect(state._id, state.name)}
+                  >
+                    <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-green-200 shadow-sm">
+                      {deliveryStats.state[state._id] || 0}
+                    </div>
+                    <div className="font-semibold text-sm">{state.name}</div>
+                    <div className="text-xs text-gray-400 mt-1 uppercase">{state.name.substring(0, 2)}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
           )}
 
           {selectedState && (
