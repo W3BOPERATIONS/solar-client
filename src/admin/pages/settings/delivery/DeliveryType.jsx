@@ -37,6 +37,7 @@ const INITIAL_FORM_STATE = {
     minDays: 3,
     maxDays: 5,
     estimatedDelivery: '3-5 Days',
+    deliveryCharges: 500,
     procurementResults: []
   },
   coverageType: [],
@@ -81,7 +82,6 @@ const DeliveryType = () => {
   // Form State
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [procurementOptions, setProcurementOptions] = useState([]);
-  const [allDistrictOptions, setAllDistrictOptions] = useState([]);
 
   // Modal State for Adding Categories
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -170,12 +170,12 @@ const DeliveryType = () => {
           productApi.getSubProjectTypes(),
           productApi.getProjectCategoryMappings()
         ]);
-        
+
         const getArr = (res) => res?.data?.data || res?.data || [];
         const mappings = getArr(mappingRes);
-        
+
         // Extract unique project type ranges (e.g., "3 to 30 kW")
-        const dynamicProjectTypes = [...new Set(mappings.map(m => 
+        const dynamicProjectTypes = [...new Set(mappings.map(m =>
           `${m.projectTypeFrom} to ${m.projectTypeTo} kW`
         ))].sort();
 
@@ -368,7 +368,10 @@ const DeliveryType = () => {
         description: type.description || '',
         coverageRange: type.coverageRange || '',
         applicableCategories: type.applicableCategories?.length ? type.applicableCategories : INITIAL_FORM_STATE.applicableCategories,
-        deliveryTiming: type.deliveryTiming || INITIAL_FORM_STATE.deliveryTiming,
+        deliveryTiming: {
+          ...INITIAL_FORM_STATE.deliveryTiming,
+          ...(type.deliveryTiming || {})
+        },
         coverageType: type.coverageType || [],
         restrictions: type.restrictions || { districts: [] },
         status: type.status || 'active'
@@ -435,12 +438,12 @@ const DeliveryType = () => {
           res = await updateApplicableCategory(activeTabId, modalCategoryData._id, modalCategoryData);
           showNotification('Category updated and saved', 'success');
         }
-        
+
         // Sync the refreshed document state
         if (res?.data) {
-          setFormData(prev => ({ 
-            ...prev, 
-            applicableCategories: res.data.applicableCategories 
+          setFormData(prev => ({
+            ...prev,
+            applicableCategories: res.data.applicableCategories
           }));
         }
       } else {
@@ -467,7 +470,7 @@ const DeliveryType = () => {
     const { name, value } = e.target;
     setModalCategoryData(prev => {
       const newState = { ...prev, [name]: name === 'cost' ? Number(value) : value };
-      
+
       // Cascade resets
       if (name === 'category') {
         newState.subCategory = '';
@@ -475,14 +478,17 @@ const DeliveryType = () => {
       } else if (name === 'subCategory') {
         newState.projectType = '';
       }
-      
+
       return newState;
     });
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
+    setFormData(prev => ({
+      ...prev,
+      [name]: name === 'coverageRange' ? (value === '' ? '' : Number(value)) : value
+    }));
   };
 
   const handleTimingChange = (e) => {
@@ -506,15 +512,6 @@ const DeliveryType = () => {
     }));
   };
 
-  const handleRestrictionDistrictsChange = (selectedOptions) => {
-    setFormData(prev => ({
-      ...prev,
-      restrictions: {
-        ...prev.restrictions,
-        districts: selectedOptions ? selectedOptions.map(opt => opt.value) : []
-      }
-    }));
-  };
 
   const handleSave = async () => {
     if (!selectedDistrict) {
@@ -567,12 +564,12 @@ const DeliveryType = () => {
                 <X size={24} />
               </button>
             </div>
-            
+
             <form onSubmit={handleModalSubmit} className="p-6 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
-                  <select 
+                  <select
                     name="category"
                     value={modalCategoryData.category}
                     onChange={handleModalInputChange}
@@ -586,7 +583,7 @@ const DeliveryType = () => {
 
                 <div className="col-span-2">
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Category</label>
-                  <select 
+                  <select
                     name="subCategory"
                     value={modalCategoryData.subCategory}
                     onChange={handleModalInputChange}
@@ -602,7 +599,7 @@ const DeliveryType = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Project Type (Range)</label>
-                  <select 
+                  <select
                     name="projectType"
                     value={modalCategoryData.projectType}
                     onChange={handleModalInputChange}
@@ -612,12 +609,12 @@ const DeliveryType = () => {
                     <option value="">Select Range</option>
                     {masterData.mappings
                       .filter(m => {
-                        const catMatch = !modalCategoryData.category || 
-                                       m.categoryId?.name === modalCategoryData.category || 
-                                       m.category?.name === modalCategoryData.category;
-                        const subCatMatch = !modalCategoryData.subCategory || 
-                                          m.subCategoryId?.name === modalCategoryData.subCategory || 
-                                          m.subCategory?.name === modalCategoryData.subCategory;
+                        const catMatch = !modalCategoryData.category ||
+                          m.categoryId?.name === modalCategoryData.category ||
+                          m.category?.name === modalCategoryData.category;
+                        const subCatMatch = !modalCategoryData.subCategory ||
+                          m.subCategoryId?.name === modalCategoryData.subCategory ||
+                          m.subCategory?.name === modalCategoryData.subCategory;
                         return catMatch && subCatMatch;
                       })
                       .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
@@ -630,7 +627,7 @@ const DeliveryType = () => {
 
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Project Type</label>
-                  <select 
+                  <select
                     name="subProjectType"
                     value={modalCategoryData.subProjectType}
                     onChange={handleModalInputChange}
@@ -646,7 +643,7 @@ const DeliveryType = () => {
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost per KW (₹)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
-                    <input 
+                    <input
                       type="number"
                       name="cost"
                       value={modalCategoryData.cost}
@@ -660,7 +657,7 @@ const DeliveryType = () => {
 
                 <div className="flex items-end pb-1">
                   <label className="flex items-center gap-2 cursor-pointer group">
-                    <input 
+                    <input
                       type="checkbox"
                       checked={modalCategoryData.isActive}
                       onChange={(e) => setModalCategoryData(prev => ({ ...prev, isActive: e.target.checked }))}
@@ -672,14 +669,14 @@ const DeliveryType = () => {
               </div>
 
               <div className="pt-4 flex gap-3">
-                <button 
+                <button
                   type="submit"
                   className="flex-1 bg-[#0284c7] text-white font-bold py-2.5 rounded-lg hover:bg-[#0369a1] transition-all flex items-center justify-center gap-2"
                 >
                   <Save size={18} />
                   {modalMode === 'add' ? 'Add Category' : 'Update Category'}
                 </button>
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowCategoryModal(false)}
                   className="px-6 py-2.5 border border-gray-300 text-gray-600 font-semibold rounded-lg hover:bg-gray-50 transition"
@@ -1003,7 +1000,7 @@ const DeliveryType = () => {
                 <div id="categories" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#0ea5e9] text-white p-3 font-bold text-sm flex justify-between items-center">
                     <span>Applicable Categories</span>
-                    <button 
+                    <button
                       onClick={handleAddCategoryClick}
                       className="bg-white text-[#0ea5e9] px-3 py-1 rounded text-xs font-bold flex items-center gap-1.5 hover:bg-blue-50 transition"
                     >
@@ -1057,13 +1054,13 @@ const DeliveryType = () => {
                               </td>
                               <td className="px-4 py-3 text-center">
                                 <div className="flex items-center justify-center gap-2">
-                                  <button 
+                                  <button
                                     onClick={() => handleEditCategoryClick(i)}
                                     className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition"
                                   >
                                     <Edit2 size={16} />
                                   </button>
-                                  <button 
+                                  <button
                                     onClick={() => handleDeleteCategory(i)}
                                     className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
                                   >
@@ -1115,6 +1112,20 @@ const DeliveryType = () => {
                         className="w-full px-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#eab308] outline-none text-sm"
                         placeholder="e.g. 3-5 Days"
                       />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1">Delivery Charges (Per kW)</label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                        <input
+                          type="number"
+                          name="deliveryCharges"
+                          value={formData.deliveryTiming.deliveryCharges}
+                          onChange={handleTimingChange}
+                          className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded focus:ring-2 focus:ring-[#eab308] outline-none text-sm"
+                          placeholder="Enter amount (e.g. 500)"
+                        />
+                      </div>
                     </div>
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-1">Procurement Results</label>
@@ -1194,16 +1205,26 @@ const DeliveryType = () => {
                   <div className="p-4 bg-white">
                     <div className="max-w-md">
                       <label className="block text-sm font-semibold text-gray-700 mb-2">
-                        District Selection
+                        Partner Plan Restrictions
                       </label>
                       <Select
-                        isMulti
                         name="restrictedDistricts"
-                        options={allDistrictOptions}
-                        value={allDistrictOptions.filter(opt => formData.restrictions?.districts?.includes(opt.value))}
-                        onChange={handleRestrictionDistrictsChange}
+                        options={[
+                          { value: 'yes', label: 'Yes' },
+                          { value: 'no', label: 'No' }
+                        ]}
+                        value={formData.restrictions?.districts?.length > 0 ? { value: 'yes', label: 'Yes' } : { value: 'no', label: 'No' }}
+                        onChange={(opt) => {
+                          setFormData(prev => ({
+                            ...prev,
+                            restrictions: {
+                              ...prev.restrictions,
+                              districts: opt.value === 'yes' ? [selectedDistrict] : []
+                            }
+                          }));
+                        }}
                         className="text-sm"
-                        placeholder="Select Districts..."
+                        placeholder="Apply Restriction?"
                         styles={{
                           control: (base) => ({
                             ...base,
@@ -1212,20 +1233,6 @@ const DeliveryType = () => {
                             '&:hover': { borderColor: '#f43f5e' },
                             boxShadow: 'none',
                             borderRadius: '8px'
-                          }),
-                          multiValue: (base) => ({
-                            ...base,
-                            backgroundColor: '#fee2e2',
-                            borderRadius: '4px',
-                          }),
-                          multiValueLabel: (base) => ({
-                            ...base,
-                            color: '#991b1b',
-                          }),
-                          multiValueRemove: (base) => ({
-                            ...base,
-                            color: '#991b1b',
-                            '&:hover': { backgroundColor: '#fecaca', color: '#991b1b' },
                           }),
                           menu: (base) => ({
                             ...base,
@@ -1237,14 +1244,6 @@ const DeliveryType = () => {
                             backgroundColor: 'white',
                             zIndex: 9999
                           }),
-                          menuList: (base) => ({
-                            ...base,
-                            padding: '4px',
-                            '&::-webkit-scrollbar': { width: '8px' },
-                            '&::-webkit-scrollbar-track': { background: '#fff1f2' },
-                            '&::-webkit-scrollbar-thumb': { background: '#fecaca', borderRadius: '10px' },
-                            '&::-webkit-scrollbar-thumb:hover': { background: '#fda4af' }
-                          }),
                           option: (base, state) => ({
                             ...base,
                             backgroundColor: state.isSelected ? '#fee2e2' : state.isFocused ? '#fff1f2' : 'white',
@@ -1255,8 +1254,7 @@ const DeliveryType = () => {
                             margin: '2px 0',
                             borderRadius: '6px',
                             cursor: 'pointer',
-                            transition: 'all 0.15s ease',
-                            '&:active': { backgroundColor: '#fecaca' }
+                            transition: 'all 0.15s ease'
                           })
                         }}
                         menuPortalTarget={document.body}
@@ -1297,7 +1295,7 @@ const DeliveryType = () => {
                   <div className="text-xs text-gray-500 mb-6 italic">{formData.description || 'Reliable delivery for standard orders'}</div>
                   <div className="flex justify-between items-end mb-6">
                     <div>
-                      <div className="text-2xl font-bold text-gray-900 leading-none mb-1">₹{formData.applicableCategories[0]?.cost || '500'}</div>
+                      <div className="text-2xl font-bold text-gray-900 leading-none mb-1">₹{formData.deliveryTiming?.deliveryCharges || '0'}</div>
                       <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">per kw charges</div>
                     </div>
                     <div className="text-right">
@@ -1306,22 +1304,16 @@ const DeliveryType = () => {
                     </div>
                   </div>
                   <div className="text-xs space-y-2 text-gray-700">
-                    <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageType?.length > 0 ? formData.coverageType.join(', ') : '50km Radius'}</span></p>
+                    <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageRange !== '' ? `${formData.coverageRange}km Radius` : '50km Radius'}</span></p>
                     <p className="flex items-center text-[#0284c7] font-medium"><Truck size={14} className="mr-1" />Access: <span className="text-gray-900 font-medium ml-1">Standard Access</span></p>
                     <p className="font-bold mt-4 mb-2 text-gray-900 text-[13px]">Features:</p>
-                    {formData.restrictions?.districts?.length > 0 && (
-                      <div className="flex items-center mb-2 text-red-600 font-medium">
-                        <AlertCircle size={14} className="mr-2" />
-                        <span>Restricted: {formData.restrictions.districts.length} Districts</span>
-                      </div>
-                    )}
                     <div className="flex items-center mb-2">
                       <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
                       <span>{formData.deliveryTiming.estimatedDelivery || '3-5 Day'} Delivery</span>
                     </div>
                     <div className="flex items-center mb-2">
                       <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
-                      <span>50km Coverage</span>
+                      <span>{formData.coverageRange !== '' ? `${formData.coverageRange}km Coverage` : '50km Coverage'}</span>
                     </div>
                     <div className="flex items-center">
                       <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>

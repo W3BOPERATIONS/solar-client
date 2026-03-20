@@ -3,8 +3,8 @@ import axios from 'axios';
 const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/delivery-settings`;
 
 // Delivery Types
-export const getDeliveryTypes = async () => {
-    const response = await axios.get(`${API_URL}/types`);
+export const getDeliveryTypes = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/types`, { params });
     return response.data;
 };
 
