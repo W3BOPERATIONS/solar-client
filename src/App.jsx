@@ -23,6 +23,8 @@ import ManagementProjects from './admin/pages/project-management/management/Mana
 import InstallProjects from './admin/pages/project-management/install/Install';
 import ServiceProjects from './admin/pages/project-management/service/Service';
 import TrackServiceProjects from './admin/pages/project-management/track-service/TrackService';
+import AdminResidentialProject from './admin/pages/project-management/residential/AdminResidentialProject';
+import AdminCommercialProject from './admin/pages/project-management/commercial/AdminCommercialProject';
 import AdminWarehouse from './admin/pages/operations/Warehouse';
 import AdminAddInventory from './admin/pages/operations/AddInventory';
 import AdminInventoryManagement from './admin/pages/operations/InventoryManagement';
@@ -396,6 +398,8 @@ function App() {
               <Route path="project-management/install" element={<InstallProjects />} />
               <Route path="project-management/service" element={<ServiceProjects />} />
               <Route path="project-management/track-service" element={<TrackServiceProjects />} />
+              <Route path="residential-project" element={<AdminResidentialProject />} />
+              <Route path="commercial-project" element={<AdminCommercialProject />} />
               <Route path="project-management" element={<Navigate to="management" />} />
               <Route path="operations/warehouse" element={<AdminWarehouse />} />
               <Route path="operations/add-inventory" element={<AdminAddInventory />} />

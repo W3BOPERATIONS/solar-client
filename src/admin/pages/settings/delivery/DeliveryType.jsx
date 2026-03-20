@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import {
   Truck, Plus, Search, Loader, EyeOff, Eye,
-  Settings, Map, Tag, Clock, DollarSign, AlertCircle, Save, Check
+  Settings, Map, Tag, Clock, DollarSign, AlertCircle, Save, Check,
+  PlusCircle, Edit2, Trash2, X
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import Select from 'react-select';
@@ -9,10 +10,14 @@ import {
   getDeliveryTypes,
   createDeliveryType,
   updateDeliveryType,
-  deleteDeliveryType
+  deleteDeliveryType,
+  deleteApplicableCategory,
+  addApplicableCategory,
+  updateApplicableCategory
 } from '../../../../services/delivery/deliveryApi';
 import { getAllOrderProcurementSettings } from '../../../../services/settings/orderProcurementSettingApi';
 import { locationAPI } from '../../../../api/api';
+import { productApi } from '../../../../api/productApi';
 
 const SECTION_OPTIONS = [
   { id: 'setup', label: 'Delivery Type Setup' },
@@ -27,13 +32,7 @@ const INITIAL_FORM_STATE = {
   name: '',
   description: '',
   coverageRange: '',
-  applicableCategories: [
-    { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '3kw - 5kw', subProjectType: 'On-Grid', cost: 500, isActive: true },
-    { category: 'Solar Rooftop', subCategory: 'Commercial', projectType: '30kw - 50kw', subProjectType: 'Hybrid', cost: 500, isActive: true },
-    { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '5kw - 10kw', subProjectType: 'On-Grid', cost: 500, isActive: true },
-    { category: 'Solar Rooftop', subCategory: 'Commercial', projectType: '10kw - 25kw', subProjectType: 'On-Grid', cost: 500, isActive: true },
-    { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '3kw - 5kw', subProjectType: 'On-Grid', cost: 500, isActive: true },
-  ],
+  applicableCategories: [],
   deliveryTiming: {
     minDays: 3,
     maxDays: 5,
@@ -41,6 +40,9 @@ const INITIAL_FORM_STATE = {
     procurementResults: []
   },
   coverageType: [],
+  restrictions: {
+    districts: []
+  },
   status: 'active'
 };
 
@@ -79,6 +81,29 @@ const DeliveryType = () => {
   // Form State
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [procurementOptions, setProcurementOptions] = useState([]);
+  const [allDistrictOptions, setAllDistrictOptions] = useState([]);
+
+  // Modal State for Adding Categories
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [modalMode, setModalMode] = useState('add');
+  const [editingCategoryIndex, setEditingCategoryIndex] = useState(null);
+  const [modalCategoryData, setModalCategoryData] = useState({
+    category: '',
+    subCategory: '',
+    projectType: '',
+    subProjectType: '',
+    cost: 0,
+    isActive: true
+  });
+
+  // Master Dictionaries for Dropdowns
+  const [masterData, setMasterData] = useState({
+    categories: [],
+    subCategories: [],
+    subProjectTypes: [],
+    projectTypes: [],
+    mappings: []
+  });
 
   // Initial Fetch
   useEffect(() => {
@@ -136,6 +161,36 @@ const DeliveryType = () => {
       }
     };
     fetchProcurementSettings();
+
+    const fetchMasterData = async () => {
+      try {
+        const [catRes, subCatRes, subPTypeRes, mappingRes] = await Promise.all([
+          productApi.getCategories(),
+          productApi.getSubCategories(),
+          productApi.getSubProjectTypes(),
+          productApi.getProjectCategoryMappings()
+        ]);
+        
+        const getArr = (res) => res?.data?.data || res?.data || [];
+        const mappings = getArr(mappingRes);
+        
+        // Extract unique project type ranges (e.g., "3 to 30 kW")
+        const dynamicProjectTypes = [...new Set(mappings.map(m => 
+          `${m.projectTypeFrom} to ${m.projectTypeTo} kW`
+        ))].sort();
+
+        setMasterData({
+          categories: getArr(catRes),
+          subCategories: getArr(subCatRes),
+          subProjectTypes: getArr(subPTypeRes),
+          projectTypes: dynamicProjectTypes,
+          mappings: mappings
+        });
+      } catch (err) {
+        console.error("Failed to fetch master data", err);
+      }
+    };
+    fetchMasterData();
   }, []);
 
   const loadDeliveryTypes = async (districtId) => {
@@ -315,27 +370,119 @@ const DeliveryType = () => {
         applicableCategories: type.applicableCategories?.length ? type.applicableCategories : INITIAL_FORM_STATE.applicableCategories,
         deliveryTiming: type.deliveryTiming || INITIAL_FORM_STATE.deliveryTiming,
         coverageType: type.coverageType || [],
+        restrictions: type.restrictions || { districts: [] },
         status: type.status || 'active'
       });
     }
     setActiveSection('setup');
   };
 
+  const handleAddCategoryClick = () => {
+    setModalMode('add');
+    setModalCategoryData({
+      category: '',
+      subCategory: '',
+      projectType: '',
+      subProjectType: '',
+      cost: 0,
+      isActive: true
+    });
+    setShowCategoryModal(true);
+  };
+
+  const handleEditCategoryClick = (index) => {
+    const cat = formData.applicableCategories[index];
+    setModalMode('edit');
+    setEditingCategoryIndex(index);
+    setModalCategoryData({ ...cat });
+    setShowCategoryModal(true);
+  };
+
+  const handleDeleteCategory = async (index) => {
+    if (window.confirm("Are you sure you want to delete this category permanently?")) {
+      const cat = formData.applicableCategories[index];
+      const categoryId = cat._id;
+
+      try {
+        // If it's an existing record (has _id) and we are not in 'New' mode
+        if (categoryId && activeTabId !== 'new') {
+          await deleteApplicableCategory(activeTabId, categoryId);
+          showNotification('Category deleted from database', 'success');
+        } else {
+          showNotification('Category removed from list', 'success');
+        }
+
+        const newCategories = formData.applicableCategories.filter((_, i) => i !== index);
+        setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
+      } catch (error) {
+        showNotification(error.response?.data?.message || 'Delete failed', 'error');
+      }
+    }
+  };
+
+  const handleModalSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+
+    try {
+      if (activeTabId !== 'new') {
+        // Edit mode - save immediately to DB
+        let res;
+        if (modalMode === 'add') {
+          res = await addApplicableCategory(activeTabId, modalCategoryData);
+          showNotification('Category added and saved', 'success');
+        } else {
+          res = await updateApplicableCategory(activeTabId, modalCategoryData._id, modalCategoryData);
+          showNotification('Category updated and saved', 'success');
+        }
+        
+        // Sync the refreshed document state
+        if (res?.data) {
+          setFormData(prev => ({ 
+            ...prev, 
+            applicableCategories: res.data.applicableCategories 
+          }));
+        }
+      } else {
+        // Create mode (not yet in DB) - just update state
+        const newCategories = [...formData.applicableCategories];
+        if (modalMode === 'add') {
+          newCategories.push(modalCategoryData);
+          showNotification('Category added to plan', 'success');
+        } else {
+          newCategories[editingCategoryIndex] = modalCategoryData;
+          showNotification('Category updated in plan', 'success');
+        }
+        setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
+      }
+      setShowCategoryModal(false);
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Failed to save category', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleModalInputChange = (e) => {
+    const { name, value } = e.target;
+    setModalCategoryData(prev => {
+      const newState = { ...prev, [name]: name === 'cost' ? Number(value) : value };
+      
+      // Cascade resets
+      if (name === 'category') {
+        newState.subCategory = '';
+        newState.projectType = '';
+      } else if (name === 'subCategory') {
+        newState.projectType = '';
+      }
+      
+      return newState;
+    });
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
-  };
-
-  const handleCategoryCostChange = (index, newCost) => {
-    const newCategories = [...formData.applicableCategories];
-    newCategories[index].cost = Number(newCost);
-    setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
-  };
-
-  const handleCategoryToggle = (index) => {
-    const newCategories = [...formData.applicableCategories];
-    newCategories[index].isActive = !newCategories[index].isActive;
-    setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
   };
 
   const handleTimingChange = (e) => {
@@ -359,6 +506,16 @@ const DeliveryType = () => {
     }));
   };
 
+  const handleRestrictionDistrictsChange = (selectedOptions) => {
+    setFormData(prev => ({
+      ...prev,
+      restrictions: {
+        ...prev.restrictions,
+        districts: selectedOptions ? selectedOptions.map(opt => opt.value) : []
+      }
+    }));
+  };
+
   const handleSave = async () => {
     if (!selectedDistrict) {
       showNotification('Please select a district first', 'error');
@@ -371,59 +528,23 @@ const DeliveryType = () => {
 
     try {
       setLoading(true);
+      const payload = {
+        ...formData,
+        state: selectedState,
+        cluster: selectedCluster,
+        district: selectedDistrict
+      };
 
-      if (selectedAllStates) {
-        // If state is "all", it still requires cluster and district to be chosen
-        if (!selectedCluster) {
-          showNotification('Please select a cluster first', 'error');
-          setLoading(false);
-          return;
-        }
-        if (!selectedDistrict) {
-          showNotification('Please select a district first', 'error');
-          setLoading(false);
-          return;
-        }
-      }
-
-      if (selectedAllStates && selectedAllClusters && selectedAllDistricts) {
-        // recursive save all... fallback if needed
-      }
-
-      if (selectedAllDistricts) {
-        // Save for all districts in the chosen list sequentially
-        for (const district of districtOptions) {
-          const payload = {
-            ...formData,
-            state: district.state?._id || district.state || selectedState, // grab exact state from populated district if available
-            cluster: district.cluster?._id || district.cluster || selectedCluster,
-            district: district._id
-          };
-          if (payload.state === 'all' || payload.cluster === 'all') continue; // Sanity check
-          await createDeliveryType(payload);
-        }
-        showNotification('Delivery types created for all selected districts', 'success');
-        setSelectedDistrict('');
-        setSelectedAllDistricts(false);
+      if (activeTabId === 'new') {
+        await createDeliveryType(payload);
+        showNotification('Delivery type created successfully', 'success');
+        loadDeliveryTypes(selectedDistrict);
       } else {
-        const payload = {
-          ...formData,
-          state: selectedState,
-          cluster: selectedCluster,
-          district: selectedDistrict
-        };
-
-        if (activeTabId === 'new') {
-          await createDeliveryType(payload);
-          showNotification('Delivery type created successfully', 'success');
-          loadDeliveryTypes(selectedDistrict);
-        } else {
-          await updateDeliveryType(activeTabId, payload);
-          showNotification('Delivery type updated successfully', 'success');
-          loadDeliveryTypes(selectedDistrict);
-        }
-        fetchDeliveryStats(); // Refresh badges
+        await updateDeliveryType(activeTabId, payload);
+        showNotification('Delivery type updated successfully', 'success');
+        loadDeliveryTypes(selectedDistrict);
       }
+      fetchDeliveryStats();
     } catch (error) {
       showNotification(error.response?.data?.message || 'Operation failed', 'error');
     } finally {
@@ -431,9 +552,146 @@ const DeliveryType = () => {
     }
   };
 
-
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
+      {/* Category Management Modal */}
+      {showCategoryModal && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200">
+            <div className="bg-[#0284c7] px-6 py-4 flex justify-between items-center">
+              <h3 className="text-white font-bold text-lg flex items-center">
+                {modalMode === 'add' ? <Plus size={20} className="mr-2" /> : <Edit2 size={20} className="mr-2" />}
+                {modalMode === 'add' ? 'Add New Category' : 'Edit Category Entry'}
+              </h3>
+              <button onClick={() => setShowCategoryModal(false)} className="text-white/80 hover:text-white transition">
+                <X size={24} />
+              </button>
+            </div>
+            
+            <form onSubmit={handleModalSubmit} className="p-6 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+                  <select 
+                    name="category"
+                    value={modalCategoryData.category}
+                    onChange={handleModalInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    required
+                  >
+                    <option value="">Select Category</option>
+                    {masterData.categories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                  </select>
+                </div>
+
+                <div className="col-span-2">
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Category</label>
+                  <select 
+                    name="subCategory"
+                    value={modalCategoryData.subCategory}
+                    onChange={handleModalInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    required
+                  >
+                    <option value="">Select Sub Category</option>
+                    {masterData.subCategories
+                      .filter(s => !modalCategoryData.category || s.categoryId?.name === modalCategoryData.category || s.category?.name === modalCategoryData.category)
+                      .map(s => <option key={s._id} value={s.name}>{s.name} ({s.categoryId?.name})</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Project Type (Range)</label>
+                  <select 
+                    name="projectType"
+                    value={modalCategoryData.projectType}
+                    onChange={handleModalInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    required
+                  >
+                    <option value="">Select Range</option>
+                    {masterData.mappings
+                      .filter(m => {
+                        const catMatch = !modalCategoryData.category || 
+                                       m.categoryId?.name === modalCategoryData.category || 
+                                       m.category?.name === modalCategoryData.category;
+                        const subCatMatch = !modalCategoryData.subCategory || 
+                                          m.subCategoryId?.name === modalCategoryData.subCategory || 
+                                          m.subCategory?.name === modalCategoryData.subCategory;
+                        return catMatch && subCatMatch;
+                      })
+                      .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                      .filter((val, idx, self) => self.indexOf(val) === idx) // Unique
+                      .map((pt, idx) => (
+                        <option key={idx} value={pt}>{pt}</option>
+                      ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Project Type</label>
+                  <select 
+                    name="subProjectType"
+                    value={modalCategoryData.subProjectType}
+                    onChange={handleModalInputChange}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    required
+                  >
+                    <option value="">Select Sub Project Type</option>
+                    {masterData.subProjectTypes.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost per KW (₹)</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
+                    <input 
+                      type="number"
+                      name="cost"
+                      value={modalCategoryData.cost}
+                      onChange={handleModalInputChange}
+                      className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
+                      min="0"
+                      required
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-end pb-1">
+                  <label className="flex items-center gap-2 cursor-pointer group">
+                    <input 
+                      type="checkbox"
+                      checked={modalCategoryData.isActive}
+                      onChange={(e) => setModalCategoryData(prev => ({ ...prev, isActive: e.target.checked }))}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
+                    />
+                    <span className="text-sm font-semibold text-gray-600 group-hover:text-blue-600 transition">Is Active</span>
+                  </label>
+                </div>
+              </div>
+
+              <div className="pt-4 flex gap-3">
+                <button 
+                  type="submit"
+                  className="flex-1 bg-[#0284c7] text-white font-bold py-2.5 rounded-lg hover:bg-[#0369a1] transition-all flex items-center justify-center gap-2"
+                >
+                  <Save size={18} />
+                  {modalMode === 'add' ? 'Add Category' : 'Update Category'}
+                </button>
+                <button 
+                  type="button"
+                  onClick={() => setShowCategoryModal(false)}
+                  className="px-6 py-2.5 border border-gray-300 text-gray-600 font-semibold rounded-lg hover:bg-gray-50 transition"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
       {/* Notification Toast */}
       {notification.show && (
         <div className={`fixed top-4 right-4 z-50 p-4 rounded-lg shadow-lg text-white font-medium ${notification.type === 'success' ? 'bg-green-500' : 'bg-red-500'}`}>
@@ -743,8 +1001,14 @@ const DeliveryType = () => {
 
                 {/* Categories & Costs */}
                 <div id="categories" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
-                  <div className="bg-[#0ea5e9] text-white p-3 font-bold text-sm">
-                    Applicable Categories
+                  <div className="bg-[#0ea5e9] text-white p-3 font-bold text-sm flex justify-between items-center">
+                    <span>Applicable Categories</span>
+                    <button 
+                      onClick={handleAddCategoryClick}
+                      className="bg-white text-[#0ea5e9] px-3 py-1 rounded text-xs font-bold flex items-center gap-1.5 hover:bg-blue-50 transition"
+                    >
+                      <PlusCircle size={14} /> Add Category
+                    </button>
                   </div>
                   <div className="p-0 bg-white overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
@@ -755,36 +1019,61 @@ const DeliveryType = () => {
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Sub Category</th>
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Project Type</th>
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Sub Project Type</th>
-                          <th className="px-4 py-2">Cost (₹)</th>
+                          <th className="px-4 py-2 border-r border-[#38bdf8]">Cost per KW (₹)</th>
+                          <th className="px-4 py-2 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {formData.applicableCategories.map((cat, i) => (
-                          <tr key={i} className="hover:bg-slate-50 transition-colors">
-                            <td className="px-4 py-3 text-center border-r border-gray-100">
-                              <input
-                                type="checkbox"
-                                checked={cat.isActive}
-                                onChange={() => handleCategoryToggle(i)}
-                                className="rounded text-[#22c55e] focus:ring-[#22c55e] w-4 h-4 accent-[#22c55e]"
-                              />
-                            </td>
-                            <td className="px-4 py-3 border-r border-gray-100 text-gray-700">{cat.category}</td>
-                            <td className="px-4 py-3 border-r border-gray-100 text-gray-700">{cat.subCategory}</td>
-                            <td className="px-4 py-3 border-r border-gray-100 text-gray-700">{cat.projectType}</td>
-                            <td className="px-4 py-3 border-r border-gray-100 text-gray-700">{cat.subProjectType}</td>
-                            <td className="px-4 py-3">
-                              <input
-                                type="number"
-                                value={cat.cost}
-                                onChange={(e) => handleCategoryCostChange(i, e.target.value)}
-                                min="0"
-                                disabled={!cat.isActive}
-                                className={`w-32 px-3 py-1 border rounded focus:ring-2 focus:ring-[#0ea5e9] outline-none text-sm ${!cat.isActive && 'bg-gray-100 text-gray-400'}`}
-                              />
+                        {formData.applicableCategories.length === 0 ? (
+                          <tr>
+                            <td colSpan="7" className="px-4 py-8 text-center text-gray-400 italic">
+                              No categories added yet. Click "Add Category" to begin.
                             </td>
                           </tr>
-                        ))}
+                        ) : (
+                          formData.applicableCategories.map((cat, i) => (
+                            <tr key={i} className="hover:bg-slate-50 transition-colors">
+                              <td className="px-4 py-3 text-center border-r border-gray-100">
+                                <input
+                                  type="checkbox"
+                                  checked={cat.isActive}
+                                  onChange={() => {
+                                    const newCats = [...formData.applicableCategories];
+                                    newCats[i].isActive = !newCats[i].isActive;
+                                    setFormData(prev => ({ ...prev, applicableCategories: newCats }));
+                                  }}
+                                  className="rounded text-[#22c55e] focus:ring-[#22c55e] w-4 h-4 accent-[#22c55e]"
+                                />
+                              </td>
+                              <td className="px-4 py-3 border-r border-gray-100 text-gray-700 font-medium">{cat.category}</td>
+                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600">{cat.subCategory}</td>
+                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600 font-semibold">{cat.projectType}</td>
+                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600 uppercase font-bold text-xs">{cat.subProjectType}</td>
+                              <td className="px-4 py-3 border-r border-gray-100">
+                                <div className="flex items-center gap-1 font-bold text-slate-700">
+                                  <span className="text-gray-400">₹</span>
+                                  {cat.cost}
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 text-center">
+                                <div className="flex items-center justify-center gap-2">
+                                  <button 
+                                    onClick={() => handleEditCategoryClick(i)}
+                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition"
+                                  >
+                                    <Edit2 size={16} />
+                                  </button>
+                                  <button 
+                                    onClick={() => handleDeleteCategory(i)}
+                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
+                                  >
+                                    <Trash2 size={16} />
+                                  </button>
+                                </div>
+                              </td>
+                            </tr>
+                          ))
+                        )}
                       </tbody>
                     </table>
                   </div>
@@ -843,7 +1132,8 @@ const DeliveryType = () => {
                             minHeight: '38px',
                             borderColor: '#d1d5db',
                             '&:hover': { borderColor: '#eab308' },
-                            boxShadow: 'none'
+                            boxShadow: 'none',
+                            borderRadius: '8px'
                           }),
                           multiValue: (base) => ({
                             ...base,
@@ -858,9 +1148,122 @@ const DeliveryType = () => {
                             ...base,
                             color: '#854d0e',
                             '&:hover': { backgroundColor: '#fde047', color: '#854d0e' },
+                          }),
+                          menu: (base) => ({
+                            ...base,
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                            border: '1px solid rgba(234, 179, 8, 0.2)',
+                            marginTop: '8px',
+                            overflow: 'hidden',
+                            backgroundColor: 'white',
+                            zIndex: 9999
+                          }),
+                          menuList: (base) => ({
+                            ...base,
+                            padding: '4px',
+                            '&::-webkit-scrollbar': { width: '8px' },
+                            '&::-webkit-scrollbar-track': { background: '#fefce8' },
+                            '&::-webkit-scrollbar-thumb': { background: '#fef08a', borderRadius: '10px' },
+                            '&::-webkit-scrollbar-thumb:hover': { background: '#fde047' }
+                          }),
+                          option: (base, state) => ({
+                            ...base,
+                            backgroundColor: state.isSelected ? '#fef9c3' : state.isFocused ? '#fefce8' : 'white',
+                            color: state.isSelected ? '#854d0e' : '#71717a',
+                            fontWeight: state.isSelected ? '700' : '500',
+                            fontSize: '13px',
+                            padding: '10px 15px',
+                            margin: '2px 0',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            '&:active': { backgroundColor: '#fef08a' }
                           })
                         }}
+                        menuPortalTarget={document.body}
                       />
+                    </div>
+                  </div>
+                </div>
+                {/* Restrictions */}
+                <div id="restrictions" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
+                  <div className="bg-[#f43f5e] text-white p-3 font-bold text-sm">
+                    Restrictions
+                  </div>
+                  <div className="p-4 bg-white">
+                    <div className="max-w-md">
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">
+                        District Selection
+                      </label>
+                      <Select
+                        isMulti
+                        name="restrictedDistricts"
+                        options={allDistrictOptions}
+                        value={allDistrictOptions.filter(opt => formData.restrictions?.districts?.includes(opt.value))}
+                        onChange={handleRestrictionDistrictsChange}
+                        className="text-sm"
+                        placeholder="Select Districts..."
+                        styles={{
+                          control: (base) => ({
+                            ...base,
+                            minHeight: '38px',
+                            borderColor: '#d1d5db',
+                            '&:hover': { borderColor: '#f43f5e' },
+                            boxShadow: 'none',
+                            borderRadius: '8px'
+                          }),
+                          multiValue: (base) => ({
+                            ...base,
+                            backgroundColor: '#fee2e2',
+                            borderRadius: '4px',
+                          }),
+                          multiValueLabel: (base) => ({
+                            ...base,
+                            color: '#991b1b',
+                          }),
+                          multiValueRemove: (base) => ({
+                            ...base,
+                            color: '#991b1b',
+                            '&:hover': { backgroundColor: '#fecaca', color: '#991b1b' },
+                          }),
+                          menu: (base) => ({
+                            ...base,
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                            border: '1px solid rgba(244, 63, 94, 0.2)',
+                            marginTop: '8px',
+                            overflow: 'hidden',
+                            backgroundColor: 'white',
+                            zIndex: 9999
+                          }),
+                          menuList: (base) => ({
+                            ...base,
+                            padding: '4px',
+                            '&::-webkit-scrollbar': { width: '8px' },
+                            '&::-webkit-scrollbar-track': { background: '#fff1f2' },
+                            '&::-webkit-scrollbar-thumb': { background: '#fecaca', borderRadius: '10px' },
+                            '&::-webkit-scrollbar-thumb:hover': { background: '#fda4af' }
+                          }),
+                          option: (base, state) => ({
+                            ...base,
+                            backgroundColor: state.isSelected ? '#fee2e2' : state.isFocused ? '#fff1f2' : 'white',
+                            color: state.isSelected ? '#991b1b' : '#71717a',
+                            fontWeight: state.isSelected ? '700' : '500',
+                            fontSize: '13px',
+                            padding: '10px 15px',
+                            margin: '2px 0',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s ease',
+                            '&:active': { backgroundColor: '#fecaca' }
+                          })
+                        }}
+                        menuPortalTarget={document.body}
+                      />
+                      <p className="text-[10px] text-gray-400 mt-1 italic">
+                        * Select specific districts where this delivery type is restricted or applicable.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -895,7 +1298,7 @@ const DeliveryType = () => {
                   <div className="flex justify-between items-end mb-6">
                     <div>
                       <div className="text-2xl font-bold text-gray-900 leading-none mb-1">₹{formData.applicableCategories[0]?.cost || '500'}</div>
-                      <div className="text-[10px] text-gray-500">base charge</div>
+                      <div className="text-[10px] text-gray-500 uppercase font-bold tracking-tight">per kw charges</div>
                     </div>
                     <div className="text-right">
                       <div className="font-bold text-gray-800 text-sm mb-1">{formData.deliveryTiming.estimatedDelivery || '3-5 Days'}</div>
@@ -906,6 +1309,12 @@ const DeliveryType = () => {
                     <p>Coverage: <span className="font-medium text-gray-900">{formData.coverageType?.length > 0 ? formData.coverageType.join(', ') : '50km Radius'}</span></p>
                     <p className="flex items-center text-[#0284c7] font-medium"><Truck size={14} className="mr-1" />Access: <span className="text-gray-900 font-medium ml-1">Standard Access</span></p>
                     <p className="font-bold mt-4 mb-2 text-gray-900 text-[13px]">Features:</p>
+                    {formData.restrictions?.districts?.length > 0 && (
+                      <div className="flex items-center mb-2 text-red-600 font-medium">
+                        <AlertCircle size={14} className="mr-2" />
+                        <span>Restricted: {formData.restrictions.districts.length} Districts</span>
+                      </div>
+                    )}
                     <div className="flex items-center mb-2">
                       <div className="bg-[#e0f2fe] rounded-full p-0.5 mr-2 shadow-sm"><Check size={12} className="text-[#0ea5e9]" strokeWidth={3} /></div>
                       <span>{formData.deliveryTiming.estimatedDelivery || '3-5 Day'} Delivery</span>

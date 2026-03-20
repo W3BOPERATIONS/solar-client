@@ -23,6 +23,21 @@ export const deleteDeliveryType = async (id) => {
     return response.data;
 };
 
+export const deleteApplicableCategory = async (id, categoryId) => {
+    const response = await axios.delete(`${API_URL}/types/${id}/categories/${categoryId}`);
+    return response.data;
+};
+
+export const addApplicableCategory = async (id, data) => {
+    const response = await axios.post(`${API_URL}/types/${id}/categories`, data);
+    return response.data;
+};
+
+export const updateApplicableCategory = async (id, categoryId, data) => {
+    const response = await axios.put(`${API_URL}/types/${id}/categories/${categoryId}`, data);
+    return response.data;
+};
+
 // Benchmark Prices
 export const getBenchmarkPrices = async (params = {}) => {
     const response = await axios.get(`${API_URL}/benchmark-prices`, { params });
