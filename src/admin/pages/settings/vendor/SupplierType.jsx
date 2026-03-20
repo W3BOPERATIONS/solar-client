@@ -10,7 +10,17 @@ import {
 import { locationAPI, masterAPI } from '../../../../api/api';
 import { productApi } from '../../../../api/productApi';
 import toast from 'react-hot-toast';
-import { SIDEBAR_NAVIGATION } from '../../../constants/navigation';
+
+const AVAILABLE_MODULES = [
+  'Order Management(Bidding)',
+  'Inventory Management',
+  'Create Delivery Plan',
+  'Delivery',
+  'Pickup',
+  'Add Product',
+  'Add Price',
+  'Setting'
+];
 
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
   <div
@@ -48,55 +58,9 @@ export default function SupplierType() {
   const [openSelect, setOpenSelect] = useState(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [tempModules, setTempModules] = useState([]);
-  const [expandedSection, setExpandedSection] = useState(null);
   const [editingTypeId, setEditingTypeId] = useState(null); // null = creating, id = editing existing row
 
-  // Get total sub-modules count for a section
-  const getSubModulesCount = (item) => {
-    let count = 0;
-    const countItems = (arr) => {
-      arr.forEach(i => {
-        if (i.children) countItems(i.children);
-        else count++;
-      });
-    };
-    if (item.children) countItems(item.children);
-    else count = 1;
-    return count;
-  };
 
-  // Get selected sub-modules count for a section
-  const getSelectedCount = (item, selected) => {
-    let count = 0;
-    const process = (arr) => {
-      arr.forEach(i => {
-        if (i.children) process(i.children);
-        else if (selected.includes(i.name)) count++; // Or use ID/fullName if preferred
-      });
-    };
-    if (item.children) process(item.children);
-    else if (selected.includes(item.name)) count = 1;
-    return count;
-  };
-
-  // Toggle all children of a section
-  const toggleSectionModules = (item, isAdding) => {
-    const sectionModules = [];
-    const getNames = (arr) => {
-      arr.forEach(i => {
-        if (i.children) getNames(i.children);
-        else sectionModules.push(i.name);
-      });
-    };
-    if (item.children) getNames(item.children);
-    else sectionModules.push(item.name);
-
-    if (isAdding) {
-      setTempModules(prev => [...new Set([...prev, ...sectionModules])]);
-    } else {
-      setTempModules(prev => prev.filter(m => !sectionModules.includes(m)));
-    }
-  };
 
   const handleOpenTaskModal = () => {
     setEditingTypeId(null); // new row creation
@@ -633,7 +597,7 @@ export default function SupplierType() {
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Sub Type</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Modules Tasks</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Assign Modules</th>
-                    <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Type OF Login</th>
+                    <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Suppliers Type OF Login</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Order TAT setting</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Set Modules</th>
                     <th className="p-3 text-sm font-semibold text-center whitespace-nowrap">Create</th>
@@ -833,7 +797,7 @@ export default function SupplierType() {
                       />
                     </td>
                     <td className="p-3 border-r border-gray-200 text-center">
-                      <button 
+                      <button
                         onClick={handleOpenTaskModal}
                         className="bg-[#00babc] text-white px-4 py-1.5 rounded text-xs font-bold hover:bg-[#009ca0] transition-colors whitespace-nowrap"
                       >
@@ -900,7 +864,7 @@ export default function SupplierType() {
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.loginAccessType || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.orderTat || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-center">
-                          <button 
+                          <button
                             onClick={() => handleOpenEditTaskModal(type)}
                             className="text-[#00babc] text-xs font-bold hover:underline"
                           >
@@ -934,108 +898,52 @@ export default function SupplierType() {
       </div>
 
       {showTaskModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-60 backdrop-blur-sm">
-          <div className="bg-white rounded shadow-2xl w-full max-w-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-50">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 bg-[#0a305f] text-white">
-              <h2 className="text-xl font-bold">Select Tasks</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+              <h2 className="text-xl font-bold text-gray-800">Select Modules</h2>
               <button
                 onClick={() => setShowTaskModal(false)}
-                className="text-white opacity-80 hover:opacity-100 transition-opacity"
+                className="text-gray-400 hover:text-gray-600 transition-colors"
               >
-                <X size={24} />
+                <X size={20} />
               </button>
             </div>
 
-            {/* Sub Header */}
-            <div className="bg-gray-50 border-b border-gray-100 py-3 px-6">
-              <div className="bg-white border border-gray-200 rounded py-2 px-4 shadow-sm text-center font-bold text-gray-700 text-sm">
-                Assign Optional Tasks
+            {/* Modal Body */}
+            <div className="p-8">
+              <p className="text-sm font-semibold text-gray-600 mb-5">Select Modules:</p>
+              <div className="space-y-3">
+                {AVAILABLE_MODULES.map((module) => (
+                  <label key={module} className="flex items-center group cursor-pointer w-fit">
+                    <input
+                      type="checkbox"
+                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                      checked={tempModules.includes(module)}
+                      onChange={() => handleToggleTempModule(module)}
+                    />
+                    <span className="ml-3 text-sm text-gray-700 group-hover:text-blue-600 transition-colors font-medium">
+                      {module}
+                    </span>
+                  </label>
+                ))}
               </div>
             </div>
 
-            {/* Modal Body */}
-            <div className="p-6 max-h-[60vh] overflow-y-auto space-y-3 bg-[#f0f4f8]">
-              {SIDEBAR_NAVIGATION.map((section) => {
-                const totalCount = getSubModulesCount(section);
-                const selCount = getSelectedCount(section, tempModules);
-                const isExpanded = expandedSection === section.id;
-                const isAllSelected = selCount === totalCount;
-
-                return (
-                  <div key={section.id} className="bg-white border border-gray-200 rounded shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors">
-                      <div className="flex items-center gap-4 flex-1">
-                        <button
-                          onClick={() => setExpandedSection(isExpanded ? null : section.id)}
-                          className="text-gray-400 hover:text-gray-600"
-                        >
-                          <ChevronRight size={18} className={`transform transition ${isExpanded ? 'rotate-90' : ''}`} />
-                        </button>
-                        <label className="flex items-center cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
-                            checked={isAllSelected}
-                            onChange={(e) => toggleSectionModules(section, e.target.checked)}
-                          />
-                          <span className="ml-3 font-bold text-gray-700 group-hover:text-blue-600 transition-colors">{section.name}</span>
-                        </label>
-                      </div>
-                      <div className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${selCount > 0 ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>
-                        {selCount} / {totalCount}
-                      </div>
-                    </div>
-
-                    {/* Sub-modules list when expanded */}
-                    {isExpanded && section.children && (
-                      <div className="bg-[#fcfdff] border-t border-gray-100 p-3 pl-14 space-y-2">
-                        {/* Note: This only flattens one level for simplicity in the UI, but recursive can be used if needed */}
-                        {section.children.map(child => {
-                          if (child.isGroup && child.children) {
-                            return (
-                              <div key={child.name} className="space-y-1">
-                                <p className="text-[11px] font-bold text-gray-400 uppercase tracking-wider">{child.name}</p>
-                                {child.children.map(sub => (
-                                  <label key={sub.name} className="flex items-center py-1 cursor-pointer hover:text-blue-600 transition-colors">
-                                    <input
-                                      type="checkbox"
-                                      className="h-3.5 w-3.5 text-blue-500 border-gray-300 rounded"
-                                      checked={tempModules.includes(sub.name)}
-                                      onChange={() => handleToggleTempModule(sub.name)}
-                                    />
-                                    <span className="ml-3 text-sm text-gray-600">{sub.name}</span>
-                                  </label>
-                                ))}
-                              </div>
-                            );
-                          }
-                          return (
-                            <label key={child.name} className="flex items-center py-1 cursor-pointer hover:text-blue-600 transition-colors">
-                              <input
-                                type="checkbox"
-                                className="h-3.5 w-3.5 text-blue-500 border-gray-300 rounded"
-                                checked={tempModules.includes(child.name)}
-                                onChange={() => handleToggleTempModule(child.name)}
-                              />
-                              <span className="ml-3 text-sm text-gray-600">{child.name}</span>
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-
             {/* Modal Footer */}
-            <div className="flex items-center justify-end p-4 border-t border-gray-100 bg-white">
+            <div className="flex items-center justify-end gap-3 p-4 bg-gray-50 border-t border-gray-100 mt-4">
+              <button
+                onClick={() => setShowTaskModal(false)}
+                className="px-6 py-2 text-sm font-bold text-white bg-[#7a8698] rounded hover:bg-[#6c7a8d] transition-colors shadow-sm"
+              >
+                Close
+              </button>
               <button
                 onClick={handleSaveTasks}
-                className="px-8 py-2 text-sm font-bold text-gray-700 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-all shadow-sm hover:shadow active:scale-95"
+                className="px-6 py-2 text-sm font-bold text-white bg-[#0076a8] rounded hover:bg-blue-700 transition-colors shadow-sm"
               >
-                Done
+                Save Selection
               </button>
             </div>
           </div>

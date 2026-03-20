@@ -154,11 +154,20 @@ export const getComboKits = async () => {
 
 export const getSupplierTypes = async () => {
     try {
-        const res = await api.get('/vendors/supplier-types');
-        // Standardize response to ensure it's the array of documents
+        const res = await api.get('/supplier-types');
         return res.data;
     } catch (err) {
-        console.error("Error fetching supplier types from vendors/supplier-types:", err);
+        console.error("Error fetching supplier types from /supplier-types:", err);
+        throw err.response?.data || err.message;
+    }
+};
+
+export const getModules = async () => {
+    try {
+        const res = await api.get('/modules');
+        return res.data;
+    } catch (err) {
+        console.error("Error fetching modules from /modules:", err);
         throw err.response?.data || err.message;
     }
 };

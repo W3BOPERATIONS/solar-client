@@ -16,6 +16,7 @@ import DealerPerformanceDashboard from './admin/pages/dashboard/userPerformance/
 import AdminOrdersDashboard from './admin/pages/dashboard/OrdersDashboard';
 import AdminOrdersByLoanDashboard from './admin/pages/dashboard/OrdersByLoanDashboard';
 import AdminVendorsDashboard from './admin/pages/dashboard/VendorsDashboard';
+import AdminProjectReport from './admin/pages/dashboard/ProjectReport';
 import AdminDepartments from './admin/pages/departments/Departments';
 import AdminOrganizationChart from './admin/pages/departments/OrganizationChart';
 import AdminApprovals from './admin/pages/approvals/Approvals';
@@ -369,6 +370,7 @@ function App() {
               <Route path="dashboard/orders" element={<AdminOrdersDashboard />} />
               <Route path="dashboard/orders-by-loan" element={<AdminOrdersByLoanDashboard />} />
               <Route path="dashboard/vendors" element={<AdminVendorsDashboard />} />
+              <Route path="dashboard/project-report" element={<AdminProjectReport />} />
 
               {/* User Performance sub-dashboards */}
               <Route

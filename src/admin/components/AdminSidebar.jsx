@@ -152,6 +152,7 @@ export default function AdminSidebar() {
         { name: 'Delivery', icon: Truck, href: '/admin/dashboard/delivery' },
         { name: 'Inventory', icon: Package, href: '/admin/dashboard' },
         { name: 'Vendors', icon: Store, href: '/admin/dashboard/vendors' },
+        { name: 'Project Report', icon: FileBarChart, href: '/admin/dashboard/project-report' },
       ]
     },
     {

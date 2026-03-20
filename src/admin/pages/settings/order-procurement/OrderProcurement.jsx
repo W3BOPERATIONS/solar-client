@@ -64,9 +64,10 @@ export default function OrderProcurement() {
     subProjectType: '',
     product: '',
     brand: '',
+    paymentType: 'None',
     skus: [],
-    skuSelectionOption: 'Assign Modules',
-    skuItems: [{ minRange: '', maxRange: '', comboKit: '', supplierType: '' }]
+    skuSelectionOption: 'ComboKit',
+    skuItems: [{ minRange: '', maxRange: '', assignModules: [], supplierType: [] }]
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -256,7 +257,7 @@ export default function OrderProcurement() {
   const addSkuItem = () => {
     setFormData({
       ...formData,
-      skuItems: [...formData.skuItems, { minRange: '', maxRange: '', comboKit: '', supplierType: '' }]
+      skuItems: [...formData.skuItems, { minRange: '', maxRange: '', assignModules: [], supplierType: [] }]
     });
   };
 
@@ -281,13 +282,14 @@ export default function OrderProcurement() {
       subProjectType: sptName,
       product: setting.product?._id || setting.product,
       brand: setting.brand?._id || setting.brand,
+      paymentType: setting.paymentType || 'None',
       skus: setting.skus?.map(s => s._id || s) || [],
       skuSelectionOption: setting.skuSelectionOption || 'ComboKit',
       skuItems: setting.skuItems.map(i => ({
         minRange: i.minRange,
         maxRange: i.maxRange,
-        comboKit: i.comboKit?._id || i.comboKit || '',
-        supplierType: i.supplierType?._id || i.supplierType || '',
+        assignModules: i.assignModules || [],
+        supplierType: Array.isArray(i.supplierType) ? i.supplierType.map(s => s._id || s) : (i.supplierType ? [i.supplierType._id || i.supplierType] : []),
         _id: i._id
       })),
       _id: setting._id
@@ -341,8 +343,8 @@ export default function OrderProcurement() {
         ...formData,
         skuItems: formData.skuItems.map(item => {
           const newItem = { ...item };
-          if (!newItem.comboKit || newItem.comboKit === '') delete newItem.comboKit;
-          if (!newItem.supplierType || newItem.supplierType === '') delete newItem.supplierType;
+          if (!newItem.assignModules || newItem.assignModules.length === 0) delete newItem.assignModules;
+          if (!newItem.supplierType || newItem.supplierType.length === 0) delete newItem.supplierType;
           return newItem;
         })
       };
@@ -613,9 +615,9 @@ export default function OrderProcurement() {
                   </div>
                 </div>
 
-                {/* SKUs block with Tabs */}
-                <div className="mt-8 border border-gray-200 rounded-lg p-1 max-w-sm inline-block w-full sm:w-80">
-                  <div className="p-3">
+                {/* SKUs and Payment Type block */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start mt-8">
+                  <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
                     <label className="block font-medium text-blue-600 mb-4">SKUs</label>
                     <Select
                       isMulti
@@ -632,11 +634,11 @@ export default function OrderProcurement() {
                     <div className="flex bg-gray-100 rounded overflow-hidden mt-4 shadow-inner">
                       <button
                         type="button"
-                        className={`flex-1 py-2 text-sm font-medium transition ${formData.skuSelectionOption === 'Assign Modules' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
+                        className={`flex-1 py-2 text-sm font-medium transition ${formData.skuSelectionOption === 'ComboKit' ? 'bg-white shadow text-blue-600 border border-gray-200' : 'text-gray-500 hover:bg-gray-200'
                           }`}
-                        onClick={() => setFormData({ ...formData, skuSelectionOption: 'Assign Modules' })}
+                        onClick={() => setFormData({ ...formData, skuSelectionOption: 'ComboKit' })}
                       >
-                        Assign Modules
+                        ComboKit
                       </button>
                       <button
                         type="button"
@@ -648,6 +650,24 @@ export default function OrderProcurement() {
                       </button>
                     </div>
                   </div>
+
+                  <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm h-full">
+                    <label className="block font-medium text-blue-600 mb-4">Payment Type</label>
+                    <select
+                      required
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.paymentType}
+                      onChange={e => setFormData({ ...formData, paymentType: e.target.value })}
+                    >
+                      <option value="None">Payment Type</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Loan">Loan</option>
+                      <option value="EMI">EMI</option>
+                    </select>
+                    <p className="mt-4 text-xs text-gray-400 italic">
+                      * Payment Type is selected once per SKU selection. It applies to all rows below.
+                    </p>
+                  </div>
                 </div>
 
                 {/* Red Arrow helper mapping UI visually */}
@@ -655,12 +675,12 @@ export default function OrderProcurement() {
                 <div className="relative mt-8 bg-[#f8f9fa] border border-gray-200 rounded-xl p-6">
 
                   {/* Table headers for dynamic rows */}
-                    <div className="flex mb-2">
-                      <div className="w-[30%] text-[13px] font-medium text-gray-600">Range (kW)</div>
-                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Assign Modules</div>
-                      <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Login Type</div>
-                      <div className="w-10"></div>
-                    </div>
+                  <div className="flex mb-2">
+                    <div className="w-[30%] text-[13px] font-medium text-gray-600">Range (kW)</div>
+                    <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Assign Modules</div>
+                    <div className="w-[35%] text-[13px] font-medium text-gray-600 ml-4">Login Type</div>
+                    <div className="w-10"></div>
+                  </div>
 
                   <div className="space-y-4">
                     {formData.skuItems.map((item, index) => (
@@ -688,37 +708,30 @@ export default function OrderProcurement() {
                         </div>
 
                         <div className="w-[30%]">
-                          <select
+                          <Select
+                            isMulti
                             required
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                            value={item.comboKit}
-                            onChange={(e) => handleSkuItemChange(index, 'comboKit', e.target.value)}
-                          >
-                            <option value="">Select Assign Modules</option>
-                            {supplierTypes.filter(s => s.assignModules).length > 0 ? (
-                              supplierTypes.filter(s => s.assignModules).map(s => (
-                                <option key={s._id} value={s._id}>
-                                  {s.assignModules}
-                                </option>
-                              ))
-                            ) : (
-                              <option disabled>No modules available</option>
-                            )}
-                          </select>
+                            placeholder="Select Modules"
+                            className="text-sm"
+                            options={[...new Set(supplierTypes.map(s => s.assignModules).filter(m => m))].map(m => ({ label: m, value: m }))}
+                            value={(item.assignModules || []).map(mVal => ({ label: mVal, value: mVal }))}
+                            onChange={(selected) => handleSkuItemChange(index, 'assignModules', selected ? selected.map(o => o.value) : [])}
+                          />
                         </div>
 
-                        <div className="w-[30%]">
-                          <select
+                        <div className="w-[35%]">
+                          <Select
+                            isMulti
                             required
-                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-md text-sm"
-                            value={item.supplierType}
-                            onChange={(e) => handleSkuItemChange(index, 'supplierType', e.target.value)}
-                          >
-                            <option value="">Select Login Type</option>
-                            {supplierTypes.filter(s => s.assignModules).map(s => (
-                               <option key={s._id} value={s._id}>{s.loginTypeName || s.name}</option>
-                            ))}
-                          </select>
+                            placeholder="Select Login Types"
+                            className="text-sm"
+                            options={supplierTypes.map(s => ({ label: s.loginTypeName || s.name, value: s._id }))}
+                            value={(item.supplierType || []).map(sId => {
+                              const s = supplierTypes.find(x => x._id === sId);
+                              return { label: s?.loginTypeName || s?.name || sId, value: sId };
+                            })}
+                            onChange={(selected) => handleSkuItemChange(index, 'supplierType', selected ? selected.map(o => o.value) : [])}
+                          />
                         </div>
 
                         <div className="w-10 flex justify-center">

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
   Truck, Plus, Search, Loader, EyeOff, Eye,
   Settings, Map, Tag, Clock, DollarSign, AlertCircle, Save, Check,
-  PlusCircle, Edit2, Trash2, X
+  Edit2, Trash2, X
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import Select from 'react-select';
@@ -23,8 +23,8 @@ const SECTION_OPTIONS = [
   { id: 'setup', label: 'Delivery Type Setup' },
   { id: 'coverage', label: 'Coverage Area' },
   { id: 'categories', label: 'Category Types' },
-  { id: 'timing', label: 'Delivery Timing' },
-  { id: 'cost', label: 'Cost & Charges' },
+  { id: 'timing', label: 'Delivery Charges & Timing' },
+  // { id: 'cost', label: 'Cost & Charges' },
   { id: 'restrictions', label: 'Restrictions' },
 ];
 
@@ -83,18 +83,21 @@ const DeliveryType = () => {
   const [formData, setFormData] = useState(INITIAL_FORM_STATE);
   const [procurementOptions, setProcurementOptions] = useState([]);
 
-  // Modal State for Adding Categories
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [modalMode, setModalMode] = useState('add');
-  const [editingCategoryIndex, setEditingCategoryIndex] = useState(null);
-  const [modalCategoryData, setModalCategoryData] = useState({
-    category: '',
-    subCategory: '',
-    projectType: '',
-    subProjectType: '',
-    cost: 0,
-    isActive: true
+  // Master Mapping Edit Modal State
+  const [isEditMappingModalOpen, setIsEditMappingModalOpen] = useState(false);
+  const [editMappingForm, setEditMappingForm] = useState({
+    mappingIds: [],
+    categoryId: '',
+    subCategoryId: '',
+    projectTypeFrom: '',
+    projectTypeTo: '',
+    subProjectTypeId: '',
+    clusterIds: [],
+    stateId: '',
+    deliveryCharges: 0
   });
+  const [allClustersForState, setAllClustersForState] = useState([]);
+
 
   // Master Dictionaries for Dropdowns
   const [masterData, setMasterData] = useState({
@@ -150,10 +153,29 @@ const DeliveryType = () => {
       try {
         const res = await getAllOrderProcurementSettings();
         if (res.success && res.data) {
-          const options = res.data.map(item => ({
-            value: item._id,
-            label: `${item.category?.name || item.category} - ${item.subCategory?.name || item.subCategory} (${item.projectType?.name || item.projectType})`
-          }));
+          const options = [];
+          res.data.forEach(item => {
+            // A setting has multiple ranges (skuItems)
+            item.skuItems.forEach(skuItem => {
+              // Robustly extract login types from supplierType (which could be an array, object, or ID)
+              let loginTypes = "No Login Type";
+
+              if (skuItem.supplierType && Array.isArray(skuItem.supplierType)) {
+                const names = skuItem.supplierType
+                  .map(st => st.loginTypeName || st.name || st.loginAccessType || (typeof st === 'string' ? null : "N/A"))
+                  .filter(Boolean);
+                if (names.length > 0) loginTypes = names.join(', ');
+              } else if (skuItem.supplierType && typeof skuItem.supplierType === 'object') {
+                loginTypes = skuItem.supplierType.loginTypeName || skuItem.supplierType.name || skuItem.supplierType.loginAccessType || "No Login Type";
+              }
+
+              const label = `${item.category?.name || item.category} - ${item.subCategory?.name || item.subCategory} (${item.projectType?.name || item.projectType}) | ${skuItem.comboKit?.solarkitName || "No Kit"} | ${loginTypes}`;
+              options.push({
+                value: `${item._id}_${skuItem._id}`, // Combination ID
+                label: label
+              });
+            });
+          });
           setProcurementOptions(options);
         }
       } catch (error) {
@@ -192,6 +214,34 @@ const DeliveryType = () => {
     };
     fetchMasterData();
   }, []);
+
+  // Group mappings exactly like AddProjectCategory.jsx for consistent display
+  const groupedMappings = Object.values(masterData.mappings.reduce((acc, curr) => {
+    // Filter out rows with missing core categorization data
+    if (!curr.categoryId || !curr.subCategoryId) return acc;
+
+    // Unique key: category, subCategory, subProjectType, ranges
+    const key = `${curr.categoryId?._id || curr.categoryId}-${curr.subCategoryId?._id || curr.subCategoryId}-${curr.subProjectTypeId?._id || 'none'}-${curr.projectTypeFrom}-${curr.projectTypeTo}`;
+    if (!acc[key]) {
+      acc[key] = {
+        ...curr,
+        mappingIds: [curr._id],
+        clusters: curr.clusterId ? [curr.clusterId] : []
+      };
+    } else {
+      if (curr.clusterId && !acc[key].clusters.find(c => c._id === curr.clusterId._id)) {
+        acc[key].clusters.push(curr.clusterId);
+        acc[key].mappingIds.push(curr._id);
+      }
+    }
+    return acc;
+  }, {})).filter(m => {
+    // Double check that names are available to avoid N/A rows
+    const catName = m.categoryId?.name || (typeof m.categoryId === 'string' ? m.categoryId : null);
+    const subCatName = m.subCategoryId?.name || (typeof m.subCategoryId === 'string' ? m.subCategoryId : null);
+    return catName && subCatName;
+  });
+
 
   const loadDeliveryTypes = async (districtId) => {
     if (!districtId) return;
@@ -380,107 +430,93 @@ const DeliveryType = () => {
     setActiveSection('setup');
   };
 
-  const handleAddCategoryClick = () => {
-    setModalMode('add');
-    setModalCategoryData({
-      category: '',
-      subCategory: '',
-      projectType: '',
-      subProjectType: '',
-      cost: 0,
-      isActive: true
-    });
-    setShowCategoryModal(true);
-  };
-
-  const handleEditCategoryClick = (index) => {
-    const cat = formData.applicableCategories[index];
-    setModalMode('edit');
-    setEditingCategoryIndex(index);
-    setModalCategoryData({ ...cat });
-    setShowCategoryModal(true);
-  };
-
-  const handleDeleteCategory = async (index) => {
-    if (window.confirm("Are you sure you want to delete this category permanently?")) {
-      const cat = formData.applicableCategories[index];
-      const categoryId = cat._id;
-
-      try {
-        // If it's an existing record (has _id) and we are not in 'New' mode
-        if (categoryId && activeTabId !== 'new') {
-          await deleteApplicableCategory(activeTabId, categoryId);
-          showNotification('Category deleted from database', 'success');
-        } else {
-          showNotification('Category removed from list', 'success');
-        }
-
-        const newCategories = formData.applicableCategories.filter((_, i) => i !== index);
-        setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
-      } catch (error) {
-        showNotification(error.response?.data?.message || 'Delete failed', 'error');
-      }
-    }
-  };
-
-  const handleModalSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-
+  const handleMappingEdit = async (mapping) => {
     try {
-      if (activeTabId !== 'new') {
-        // Edit mode - save immediately to DB
-        let res;
-        if (modalMode === 'add') {
-          res = await addApplicableCategory(activeTabId, modalCategoryData);
-          showNotification('Category added and saved', 'success');
-        } else {
-          res = await updateApplicableCategory(activeTabId, modalCategoryData._id, modalCategoryData);
-          showNotification('Category updated and saved', 'success');
+      setLoading(true);
+      // Fetch all clusters for this mapping's state for the selection list
+      const stateId = mapping.stateId?._id || mapping.stateId;
+      if (stateId) {
+        const res = await locationAPI.getAllClusters({ stateId, isActive: 'true' });
+        if (res.data?.data) {
+          setAllClustersForState(res.data.data);
         }
-
-        // Sync the refreshed document state
-        if (res?.data) {
-          setFormData(prev => ({
-            ...prev,
-            applicableCategories: res.data.applicableCategories
-          }));
-        }
-      } else {
-        // Create mode (not yet in DB) - just update state
-        const newCategories = [...formData.applicableCategories];
-        if (modalMode === 'add') {
-          newCategories.push(modalCategoryData);
-          showNotification('Category added to plan', 'success');
-        } else {
-          newCategories[editingCategoryIndex] = modalCategoryData;
-          showNotification('Category updated in plan', 'success');
-        }
-        setFormData(prev => ({ ...prev, applicableCategories: newCategories }));
       }
-      setShowCategoryModal(false);
+
+      setEditMappingForm({
+        mappingIds: mapping.mappingIds || [mapping._id],
+        categoryId: mapping.categoryId?._id || mapping.categoryId,
+        subCategoryId: mapping.subCategoryId?._id || mapping.subCategoryId,
+        projectTypeFrom: mapping.projectTypeFrom || '',
+        projectTypeTo: mapping.projectTypeTo || '',
+        subProjectTypeId: mapping.subProjectTypeId?._id || mapping.subProjectTypeId || '',
+        clusterIds: mapping.clusters ? mapping.clusters.map(c => c._id) : (mapping.clusterId?._id ? [mapping.clusterId._id] : []),
+        stateId: mapping.stateId?._id || mapping.stateId,
+        deliveryCharges: mapping.deliveryCharges || 0
+      });
+      setIsEditMappingModalOpen(true);
     } catch (error) {
-      showNotification(error.response?.data?.message || 'Failed to save category', 'error');
+      showNotification('Failed to prepare edit form', 'error');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleModalInputChange = (e) => {
-    const { name, value } = e.target;
-    setModalCategoryData(prev => {
-      const newState = { ...prev, [name]: name === 'cost' ? Number(value) : value };
-
-      // Cascade resets
-      if (name === 'category') {
-        newState.subCategory = '';
-        newState.projectType = '';
-      } else if (name === 'subCategory') {
-        newState.projectType = '';
+  const handleUpdateMappingSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      setLoading(true);
+      // Follow the AddProjectCategory.jsx pattern: Delete old ones and create new
+      // This is because a grouped edit might change the number of cluster mapping documents
+      if (editMappingForm.mappingIds.length > 0) {
+        await Promise.all(editMappingForm.mappingIds.map(id => productApi.deleteProjectCategoryMapping(id)));
       }
 
-      return newState;
-    });
+      const payload = {
+        stateId: editMappingForm.stateId,
+        categoryId: editMappingForm.categoryId,
+        subCategoryId: editMappingForm.subCategoryId,
+        projectTypeFrom: Number(editMappingForm.projectTypeFrom),
+        projectTypeTo: Number(editMappingForm.projectTypeTo),
+        subProjectTypeId: editMappingForm.subProjectTypeId,
+        clusterIds: editMappingForm.clusterIds,
+        deliveryCharges: Number(editMappingForm.deliveryCharges) || 0
+      };
+
+      await productApi.createProjectCategoryMapping(payload);
+      showNotification('Classification updated successfully', 'success');
+
+      // Refresh
+      const mappingRes = await productApi.getProjectCategoryMappings();
+      const getArr = (res) => res?.data?.data || res?.data || [];
+      setMasterData(prev => ({ ...prev, mappings: getArr(mappingRes) }));
+
+      setIsEditMappingModalOpen(false);
+    } catch (error) {
+      showNotification(error.response?.data?.message || 'Update failed', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleMasterDelete = async (mappingIds) => {
+
+    if (window.confirm("CRITICAL: This will delete this category mapping permanently from ALL master data. Are you sure?")) {
+      try {
+        setLoading(true);
+        const ids = Array.isArray(mappingIds) ? mappingIds : [mappingIds];
+        await Promise.all(ids.map(id => productApi.deleteProjectCategoryMapping(id)));
+        showNotification('Master mapping deleted successfully', 'success');
+
+        // Refresh master data to reflect the change
+        const mappingRes = await productApi.getProjectCategoryMappings();
+        const getArr = (res) => res?.data?.data || res?.data || [];
+        setMasterData(prev => ({ ...prev, mappings: getArr(mappingRes) }));
+      } catch (error) {
+        showNotification('Failed to delete master mapping', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
   const handleInputChange = (e) => {
@@ -510,6 +546,28 @@ const DeliveryType = () => {
         procurementResults: selectedOptions ? selectedOptions.map(opt => opt.value) : []
       }
     }));
+  };
+
+
+  const handleDeleteType = async (typeId, e) => {
+    e.stopPropagation();
+    if (window.confirm('Are you sure you want to delete this delivery type?')) {
+      try {
+        setLoading(true);
+        await deleteDeliveryType(typeId);
+        showNotification('Delivery type deleted successfully', 'success');
+        loadDeliveryTypes(selectedDistrict);
+        fetchDeliveryStats();
+        if (activeTabId === typeId) {
+          setActiveTabId('new');
+          setFormData(INITIAL_FORM_STATE);
+        }
+      } catch (error) {
+        showNotification('Failed to delete delivery type', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }
   };
 
 
@@ -551,135 +609,168 @@ const DeliveryType = () => {
 
   return (
     <div className="min-h-screen bg-gray-50 p-6 font-sans">
-      {/* Category Management Modal */}
-      {showCategoryModal && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg overflow-hidden border border-gray-200">
-            <div className="bg-[#0284c7] px-6 py-4 flex justify-between items-center">
-              <h3 className="text-white font-bold text-lg flex items-center">
-                {modalMode === 'add' ? <Plus size={20} className="mr-2" /> : <Edit2 size={20} className="mr-2" />}
-                {modalMode === 'add' ? 'Add New Category' : 'Edit Category Entry'}
-              </h3>
-              <button onClick={() => setShowCategoryModal(false)} className="text-white/80 hover:text-white transition">
+      {/* Master Mapping Edit Modal */}
+      {isEditMappingModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden border border-gray-100 scale-in-center">
+            <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-8 py-6 flex justify-between items-center">
+              <div>
+                <h3 className="text-white font-bold text-xl flex items-center gap-2">
+                  <Edit2 size={24} />
+                  Edit Project Category Mapping
+                </h3>
+                <p className="text-blue-100 text-xs mt-1 uppercase tracking-widest font-semibold">Master Configuration Update</p>
+              </div>
+              <button onClick={() => setIsEditMappingModalOpen(false)} className="text-white/80 hover:text-white transition-all bg-white/10 p-2 rounded-full">
                 <X size={24} />
               </button>
             </div>
 
-            <form onSubmit={handleModalSubmit} className="p-6 space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Category</label>
+            <form onSubmit={handleUpdateMappingSubmit} className="p-8 space-y-6">
+              <div className="grid grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Category</label>
                   <select
-                    name="category"
-                    value={modalCategoryData.category}
-                    onChange={handleModalInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    value={editMappingForm.categoryId}
+                    onChange={e => setEditMappingForm({ ...editMappingForm, categoryId: e.target.value, subCategoryId: '' })}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
                     required
                   >
                     <option value="">Select Category</option>
-                    {masterData.categories.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                    {masterData.categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
                   </select>
                 </div>
 
-                <div className="col-span-2">
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Category</label>
+                <div>
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Sub Category</label>
                   <select
-                    name="subCategory"
-                    value={modalCategoryData.subCategory}
-                    onChange={handleModalInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                    value={editMappingForm.subCategoryId}
+                    onChange={e => setEditMappingForm({ ...editMappingForm, subCategoryId: e.target.value })}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all disabled:bg-gray-50"
+                    disabled={!editMappingForm.categoryId}
                     required
                   >
                     <option value="">Select Sub Category</option>
                     {masterData.subCategories
-                      .filter(s => !modalCategoryData.category || s.categoryId?.name === modalCategoryData.category || s.category?.name === modalCategoryData.category)
-                      .map(s => <option key={s._id} value={s.name}>{s.name} ({s.categoryId?.name})</option>)}
+                      .filter(s => (s.categoryId?._id || s.categoryId || s.category?._id || s.category) === editMappingForm.categoryId)
+                      .map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Project Type (Range)</label>
-                  <select
-                    name="projectType"
-                    value={modalCategoryData.projectType}
-                    onChange={handleModalInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Project Type From (kW)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editMappingForm.projectTypeFrom}
+                    onChange={e => setEditMappingForm({ ...editMappingForm, projectTypeFrom: e.target.value })}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
                     required
-                  >
-                    <option value="">Select Range</option>
-                    {masterData.mappings
-                      .filter(m => {
-                        const catMatch = !modalCategoryData.category ||
-                          m.categoryId?.name === modalCategoryData.category ||
-                          m.category?.name === modalCategoryData.category;
-                        const subCatMatch = !modalCategoryData.subCategory ||
-                          m.subCategoryId?.name === modalCategoryData.subCategory ||
-                          m.subCategory?.name === modalCategoryData.subCategory;
-                        return catMatch && subCatMatch;
-                      })
-                      .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
-                      .filter((val, idx, self) => self.indexOf(val) === idx) // Unique
-                      .map((pt, idx) => (
-                        <option key={idx} value={pt}>{pt}</option>
-                      ))}
-                  </select>
+                  />
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Sub Project Type</label>
-                  <select
-                    name="subProjectType"
-                    value={modalCategoryData.subProjectType}
-                    onChange={handleModalInputChange}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm bg-white"
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Project Type To (kW)</label>
+                  <input
+                    type="number"
+                    step="0.1"
+                    value={editMappingForm.projectTypeTo}
+                    onChange={e => setEditMappingForm({ ...editMappingForm, projectTypeTo: e.target.value })}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
                     required
+                  />
+                </div>
+
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Sub Project Type</label>
+                  <select
+                    value={editMappingForm.subProjectTypeId}
+                    onChange={e => setEditMappingForm({ ...editMappingForm, subProjectTypeId: e.target.value })}
+                    className="w-full h-11 px-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-all"
                   >
                     <option value="">Select Sub Project Type</option>
-                    {masterData.subProjectTypes.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+                    {masterData.subProjectTypes.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
                   </select>
                 </div>
 
-                <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Cost per KW (₹)</label>
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Clusters</label>
+                  <div className="relative group">
+                    <div className="w-full min-h-[44px] px-4 py-2 border border-gray-200 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 flex flex-wrap gap-1.5 items-center bg-white cursor-pointer transition-all">
+                      {editMappingForm.clusterIds.length === 0 ? (
+                        <span className="text-gray-400 text-sm italic">Nothing Selected</span>
+                      ) : (
+                        editMappingForm.clusterIds.map(id => {
+                          const cluster = allClustersForState.find(c => c._id === id);
+                          return (
+                            <span key={id} className="bg-blue-50 text-blue-700 text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 border border-blue-100 shadow-sm animate-in fade-in scale-in-95 duration-150">
+                              {cluster?.name || 'Loading...'}
+                              <X size={12} className="cursor-pointer hover:text-red-500 transition-colors" onClick={(e) => {
+                                e.stopPropagation();
+                                setEditMappingForm(prev => ({
+                                  ...prev,
+                                  clusterIds: prev.clusterIds.filter(cid => cid !== id)
+                                }));
+                              }} />
+                            </span>
+                          );
+                        })
+                      )}
+                    </div>
+                    {/* Simplified Multi-select list - shown on group hover for speed, but better as a scrollable menu */}
+                    <div className="absolute top-full left-0 w-full mt-2 bg-white border border-gray-100 rounded-xl shadow-xl max-h-48 overflow-y-auto z-[110] hidden group-hover:block transition-all opacity-0 group-hover:opacity-100">
+                      {allClustersForState.map(c => (
+                        <label key={c._id} className="flex items-center px-4 py-2.5 hover:bg-slate-50 cursor-pointer border-b border-gray-50 last:border-0">
+                          <input
+                            type="checkbox"
+                            className="mr-3 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500 transition-all cursor-pointer"
+                            checked={editMappingForm.clusterIds.includes(c._id)}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setEditMappingForm(prev => ({
+                                ...prev,
+                                clusterIds: checked ? [...prev.clusterIds, c._id] : prev.clusterIds.filter(id => id !== c._id)
+                              }));
+                            }}
+                          />
+                          <span className="text-sm font-medium text-gray-700">{c.name}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-gray-400 mt-1 italic">Hover box to select clusters</p>
+                </div>
+
+                <div className="col-span-1">
+                  <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Delivery Charges (Master)</label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 font-bold">₹</span>
                     <input
                       type="number"
-                      name="cost"
-                      value={modalCategoryData.cost}
-                      onChange={handleModalInputChange}
-                      className="w-full pl-7 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold"
-                      min="0"
+                      value={editMappingForm.deliveryCharges}
+                      onChange={e => setEditMappingForm({ ...editMappingForm, deliveryCharges: e.target.value })}
+                      className="w-full h-11 pl-7 pr-4 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none text-sm font-semibold"
+                      placeholder="Enter amount"
                       required
                     />
                   </div>
-                </div>
-
-                <div className="flex items-end pb-1">
-                  <label className="flex items-center gap-2 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={modalCategoryData.isActive}
-                      onChange={(e) => setModalCategoryData(prev => ({ ...prev, isActive: e.target.checked }))}
-                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500"
-                    />
-                    <span className="text-sm font-semibold text-gray-600 group-hover:text-blue-600 transition">Is Active</span>
-                  </label>
+                  <p className="text-[10px] text-gray-400 mt-1 italic">Default charge for this mapping</p>
                 </div>
               </div>
 
-              <div className="pt-4 flex gap-3">
+              <div className="pt-6 border-t border-gray-100 flex gap-4">
                 <button
                   type="submit"
-                  className="flex-1 bg-[#0284c7] text-white font-bold py-2.5 rounded-lg hover:bg-[#0369a1] transition-all flex items-center justify-center gap-2"
+                  disabled={loading}
+                  className="flex-1 bg-gradient-to-r from-blue-600 to-blue-700 text-white font-bold h-12 rounded-xl hover:translate-y-[-1px] hover:shadow-lg active:translate-y-[1px] transition-all flex items-center justify-center gap-2"
                 >
-                  <Save size={18} />
-                  {modalMode === 'add' ? 'Add Category' : 'Update Category'}
+                  {loading ? <Loader size={20} className="animate-spin" /> : <Save size={20} />}
+                  Update Classification
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowCategoryModal(false)}
-                  className="px-6 py-2.5 border border-gray-300 text-gray-600 font-semibold rounded-lg hover:bg-gray-50 transition"
+                  onClick={() => setIsEditMappingModalOpen(false)}
+                  className="px-8 h-12 border border-gray-200 text-gray-600 font-bold rounded-xl hover:bg-slate-50 transition-all"
                 >
                   Cancel
                 </button>
@@ -870,13 +961,18 @@ const DeliveryType = () => {
                     <button
                       key={type._id}
                       onClick={() => handleTabSwitch(type)}
-                      className={`px-4 py-2 rounded-md font-bold text-sm transition-colors whitespace-nowrap flex items-center ${isActive
-                        ? 'bg-[#64748b] text-white shadow-sm'
-                        : `bg-transparent ${inactiveColor} hover:bg-gray-50`
+                      className={`group px-4 py-2 rounded-md font-bold text-sm transition-all whitespace-nowrap flex items-center gap-2 ${isActive
+                        ? 'bg-[#64748b] text-white shadow-md'
+                        : `bg-white border-transparent ${inactiveColor} hover:bg-gray-100 hover:border-gray-200 shadow-sm border`
                         }`}
                     >
-                      <Truck size={16} className="mr-2" />
-                      {type.name}
+                      <Truck size={16} />
+                      <span>{type.name}</span>
+                      <X
+                        size={14}
+                        className={`hover:bg-red-500 hover:text-white rounded-full p-0.5 transition-colors ${isActive ? 'text-gray-300' : 'text-gray-300 opacity-0 group-hover:opacity-100'}`}
+                        onClick={(e) => handleDeleteType(type._id, e)}
+                      />
                     </button>
                   )
                 })}
@@ -996,16 +1092,10 @@ const DeliveryType = () => {
                   </div>
                 </div>
 
-                {/* Categories & Costs */}
                 <div id="categories" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#0ea5e9] text-white p-3 font-bold text-sm flex justify-between items-center">
                     <span>Applicable Categories</span>
-                    <button
-                      onClick={handleAddCategoryClick}
-                      className="bg-white text-[#0ea5e9] px-3 py-1 rounded text-xs font-bold flex items-center gap-1.5 hover:bg-blue-50 transition"
-                    >
-                      <PlusCircle size={14} /> Add Category
-                    </button>
+                    <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded backdrop-blur-sm">Real-time sync enabled</span>
                   </div>
                   <div className="p-0 bg-white overflow-x-auto">
                     <table className="w-full text-left text-sm whitespace-nowrap">
@@ -1016,60 +1106,128 @@ const DeliveryType = () => {
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Sub Category</th>
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Project Type</th>
                           <th className="px-4 py-2 border-r border-[#38bdf8]">Sub Project Type</th>
-                          <th className="px-4 py-2 border-r border-[#38bdf8]">Cost per KW (₹)</th>
+                          <th className="px-4 py-2 border-r border-[#38bdf8]">Cluster</th>
+                          <th className="px-4 py-2 border-r border-[#38bdf8]">Delivery Charges (₹)</th>
                           <th className="px-4 py-2 text-center">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-100">
-                        {formData.applicableCategories.length === 0 ? (
+                        {groupedMappings.length === 0 ? (
                           <tr>
-                            <td colSpan="7" className="px-4 py-8 text-center text-gray-400 italic">
-                              No categories added yet. Click "Add Category" to begin.
+                            <td colSpan="7" className="px-4 py-12 text-center text-gray-400">
+                              <div className="flex flex-col items-center gap-2">
+                                <Search size={32} className="text-gray-200" />
+                                <p className="italic">No Categories Found in Master Data.</p>
+                                <p className="text-[10px]">Add categories in Project Management → Project Category to see them here.</p>
+                              </div>
                             </td>
                           </tr>
                         ) : (
-                          formData.applicableCategories.map((cat, i) => (
-                            <tr key={i} className="hover:bg-slate-50 transition-colors">
-                              <td className="px-4 py-3 text-center border-r border-gray-100">
-                                <input
-                                  type="checkbox"
-                                  checked={cat.isActive}
-                                  onChange={() => {
-                                    const newCats = [...formData.applicableCategories];
-                                    newCats[i].isActive = !newCats[i].isActive;
-                                    setFormData(prev => ({ ...prev, applicableCategories: newCats }));
-                                  }}
-                                  className="rounded text-[#22c55e] focus:ring-[#22c55e] w-4 h-4 accent-[#22c55e]"
-                                />
-                              </td>
-                              <td className="px-4 py-3 border-r border-gray-100 text-gray-700 font-medium">{cat.category}</td>
-                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600">{cat.subCategory}</td>
-                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600 font-semibold">{cat.projectType}</td>
-                              <td className="px-4 py-3 border-r border-gray-100 text-gray-600 uppercase font-bold text-xs">{cat.subProjectType}</td>
-                              <td className="px-4 py-3 border-r border-gray-100">
-                                <div className="flex items-center gap-1 font-bold text-slate-700">
-                                  <span className="text-gray-400">₹</span>
-                                  {cat.cost}
-                                </div>
-                              </td>
-                              <td className="px-4 py-3 text-center">
-                                <div className="flex items-center justify-center gap-2">
-                                  <button
-                                    onClick={() => handleEditCategoryClick(i)}
-                                    className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition"
-                                  >
-                                    <Edit2 size={16} />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteCategory(i)}
-                                    className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
-                                  >
-                                    <Trash2 size={16} />
-                                  </button>
-                                </div>
-                              </td>
-                            </tr>
-                          ))
+                          groupedMappings.map((mapping, i) => {
+                            const catName = mapping.categoryId?.name || (typeof mapping.categoryId === 'string' ? mapping.categoryId : 'N/A');
+                            const subCatName = mapping.subCategoryId?.name || (typeof mapping.subCategoryId === 'string' ? mapping.subCategoryId : 'N/A');
+                            const prjType = `${mapping.projectTypeFrom} to ${mapping.projectTypeTo} kW`;
+                            const subPrjTypeName = mapping.subProjectTypeId?.name || (typeof mapping.subProjectTypeId === 'string' ? mapping.subProjectTypeId : 'N/A');
+                            const clusterNames = mapping.clusters && mapping.clusters.length > 0
+                              ? mapping.clusters.map(c => c.name || c).join(', ')
+                              : (mapping.clusterId?.name || mapping.clusterId || 'N/A');
+
+                            // Find if this group is selected
+                            const selectedIndex = formData.applicableCategories.findIndex(cat =>
+                              cat.category === catName &&
+                              cat.subCategory === subCatName &&
+                              cat.projectType === prjType &&
+                              cat.subProjectType === subPrjTypeName
+                              // Note: Cluster matching might be tricky if stored differently, but usually we match by categorization
+                            );
+                            const isSelected = selectedIndex !== -1;
+
+                            return (
+                              <tr key={i} className={`hover:bg-slate-50 transition-colors ${isSelected ? 'bg-blue-50/30' : ''}`}>
+                                <td className="px-4 py-3 text-center border-r border-gray-100">
+                                  <input
+                                    type="checkbox"
+                                    checked={isSelected}
+                                    onChange={(e) => {
+                                      if (e.target.checked) {
+                                        // Add to selected
+                                        const newCat = {
+                                          category: catName,
+                                          subCategory: subCatName,
+                                          projectType: prjType,
+                                          subProjectType: subPrjTypeName,
+                                          cluster: clusterNames,
+                                          cost: 0,
+                                          isActive: true
+                                        };
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          applicableCategories: [...prev.applicableCategories, newCat]
+                                        }));
+                                      } else {
+                                        // Remove from selected
+                                        setFormData(prev => ({
+                                          ...prev,
+                                          applicableCategories: prev.applicableCategories.filter((_, idx) => idx !== selectedIndex)
+                                        }));
+                                      }
+                                    }}
+                                    className="rounded text-[#0284c7] focus:ring-[#0284c7] w-4 h-4 cursor-pointer"
+                                  />
+                                </td>
+                                <td className="px-4 py-3 border-r border-gray-100 text-gray-700 font-medium">{catName}</td>
+                                <td className="px-4 py-3 border-r border-gray-100 text-gray-600">{subCatName}</td>
+                                <td className="px-4 py-3 border-r border-gray-100 text-gray-600 font-semibold">{prjType}</td>
+                                <td className="px-4 py-3 border-r border-gray-100 text-gray-400 uppercase font-bold text-[10px]">{subPrjTypeName}</td>
+                                <td className="px-4 py-3 border-r border-gray-100 text-gray-500 italic text-[11px] max-w-[200px] truncate" title={clusterNames}>{clusterNames}</td>
+                                <td className="px-4 py-3">
+                                  {isSelected ? (
+                                    <div className="relative max-w-[120px]">
+                                      <span className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 text-xs">₹</span>
+                                      <input
+                                        type="number"
+                                        value={formData.applicableCategories[selectedIndex].cost}
+                                        onChange={(e) => {
+                                          const newCats = [...formData.applicableCategories];
+                                          newCats[selectedIndex].cost = Number(e.target.value);
+                                          setFormData(prev => ({ ...prev, applicableCategories: newCats }));
+                                        }}
+                                        className="w-full pl-5 pr-2 py-1 border border-blue-200 rounded focus:ring-1 focus:ring-blue-400 outline-none text-xs font-bold text-blue-700 bg-blue-50/50"
+                                        placeholder="0"
+                                      />
+                                    </div>
+                                  ) : (
+                                    <div className="flex flex-col">
+                                      {mapping.deliveryCharges ? (
+                                        <span className="text-blue-600 font-bold text-xs">₹ {mapping.deliveryCharges}</span>
+                                      ) : (
+                                        <span className="text-gray-300 text-xs italic">Select to set cost</span>
+                                      )}
+                                      <p className="text-[8px] text-gray-400 uppercase tracking-tighter"></p>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-center">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => handleMappingEdit(mapping)}
+                                      className="p-1.5 text-blue-500 hover:bg-blue-50 rounded-md transition"
+                                      title="Edit classification"
+                                    >
+                                      <Edit2 size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() => handleMasterDelete(mapping.mappingIds || mapping._id)}
+                                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-md transition"
+                                      title="Delete mapping permanently"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            );
+                          })
                         )}
                       </tbody>
                     </table>
@@ -1079,7 +1237,7 @@ const DeliveryType = () => {
                 {/* Delivery Timing */}
                 <div id="timing" className="bg-white border border-gray-200 shadow-sm rounded-lg overflow-hidden block scroll-mt-6">
                   <div className="bg-[#eab308] text-white p-3 font-bold text-sm">
-                    Delivery Timing
+                    Delivery Charges & Timing
                   </div>
                   <div className="p-4 bg-white grid grid-cols-1 md:grid-cols-4 gap-6">
                     <div>
@@ -1127,33 +1285,40 @@ const DeliveryType = () => {
                         />
                       </div>
                     </div>
-                    <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-1">Procurement Results</label>
+                    <div className="md:col-span-4 border-t border-gray-100 pt-5 mt-2">
+                      <label className="flex items-center text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">
+                        <Tag size={14} className="mr-2 text-[#eab308]" />
+                        Procurement Results Mapping
+                      </label>
                       <Select
                         isMulti
                         name="procurementResults"
                         options={procurementOptions}
                         value={procurementOptions.filter(opt => formData.deliveryTiming.procurementResults?.includes(opt.value))}
                         onChange={handleProcurementChange}
-                        className="text-sm"
+                        className="text-sm shadow-sm"
                         placeholder="Select Results..."
                         styles={{
                           control: (base) => ({
                             ...base,
-                            minHeight: '38px',
-                            borderColor: '#d1d5db',
+                            minHeight: '44px',
+                            borderColor: '#e5e7eb',
                             '&:hover': { borderColor: '#eab308' },
                             boxShadow: 'none',
-                            borderRadius: '8px'
+                            borderRadius: '10px',
+                            backgroundColor: '#f9f9fb'
                           }),
                           multiValue: (base) => ({
                             ...base,
                             backgroundColor: '#fef9c3',
-                            borderRadius: '4px',
+                            borderRadius: '6px',
+                            paddingLeft: '4px'
                           }),
                           multiValueLabel: (base) => ({
                             ...base,
                             color: '#854d0e',
+                            fontWeight: '600',
+                            fontSize: '12px'
                           }),
                           multiValueRemove: (base) => ({
                             ...base,
