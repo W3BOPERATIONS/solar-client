@@ -15,6 +15,7 @@ import {
   CheckCircle,
   Search
 } from 'lucide-react';
+import Select from 'react-select';
 import {
   getVehicles,
   createVehicle,
@@ -34,7 +35,7 @@ const VehicleManagement = () => {
   const [formData, setFormData] = useState({
     name: '',
     type: '',
-    deliveryType: '',
+    deliveryType: [],
     length: '',
     width: '',
     height: '',
@@ -42,8 +43,8 @@ const VehicleManagement = () => {
     costPerKm: '', // Added as per user requirement
     kw: '',
     range: '',
-    orderType: '',
-    locationType: '',
+    orderType: [],
+    locationType: [],
     image: '',
     status: 'active'
   });
@@ -55,6 +56,75 @@ const VehicleManagement = () => {
   const deliveryTypeOptions = ['Prime', 'Regular', 'Express'];
   const orderTypeOptions = ['Combokit', 'CustomKit'];
   const locationTypeOptions = ['Rural', 'Urban'];
+
+  // React Select Styles
+  const customSelectStyles = {
+    control: (base, state) => ({
+      ...base,
+      borderColor: state.isFocused ? '#0284c7' : '#d1d5db',
+      boxShadow: state.isFocused ? '0 0 0 1px #0284c7' : 'none',
+      '&:hover': {
+        borderColor: state.isFocused ? '#0284c7' : '#cbd5e1'
+      },
+      minHeight: '38px',
+      borderRadius: '0.375rem',
+      backgroundColor: 'white',
+      fontSize: '14px',
+    }),
+    placeholder: (base) => ({
+      ...base,
+      color: '#9ca3af',
+    }),
+    multiValue: (base) => ({
+      ...base,
+      backgroundColor: '#e0f2fe',
+      borderRadius: '4px',
+    }),
+    multiValueLabel: (base) => ({
+      ...base,
+      color: '#0369a1',
+      fontSize: '13px',
+      fontWeight: '500',
+      padding: '2px 6px',
+    }),
+    multiValueRemove: (base) => ({
+      ...base,
+      color: '#0284c7',
+      '&:hover': {
+        backgroundColor: '#bae6fd',
+        color: '#0369a1',
+        borderRadius: '0 4px 4px 0',
+      },
+    }),
+    menu: (base) => ({
+      ...base,
+      borderRadius: '0.375rem',
+      boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+      overflow: 'hidden',
+      zIndex: 100,
+    }),
+    option: (base, state) => ({
+      ...base,
+      backgroundColor: state.isFocused ? '#f1f5f9' : 'transparent',
+      color: state.isSelected ? '#0284c7' : '#475569',
+      padding: '8px 12px',
+      cursor: 'pointer',
+      fontSize: '14px',
+      '&:active': {
+        backgroundColor: '#e2e8f0'
+      }
+    }),
+    indicatorSeparator: () => ({
+      display: 'none'
+    }),
+    dropdownIndicator: (base) => ({
+      ...base,
+      color: '#94a3b8',
+      '&:hover': {
+        color: '#64748b'
+      }
+    })
+  };
 
   // Fetch Data
   useEffect(() => {
@@ -92,6 +162,13 @@ const VehicleManagement = () => {
     }));
   };
 
+  const handleMultiSelectChange = (selectedOptions, name) => {
+    setFormData(prev => ({
+      ...prev,
+      [name]: selectedOptions ? selectedOptions.map(option => option.value) : []
+    }));
+  };
+
   // Handle image upload (Base64 for simplicity as no upload route specified)
   const handleImageUpload = (e) => {
     const file = e.target.files[0];
@@ -125,8 +202,8 @@ const VehicleManagement = () => {
       costPerKm: '',
       kw: '',
       range: '',
-      orderType: '',
-      locationType: '',
+      orderType: [],
+      locationType: [],
       image: '',
       status: 'active'
     });
@@ -139,6 +216,11 @@ const VehicleManagement = () => {
   // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    if (!formData.deliveryType || formData.deliveryType.length === 0) {
+      showNotification('Please select at least one delivery type', 'error');
+      return;
+    }
 
     // Mapping form data to API payload
     const payload = {
@@ -180,7 +262,7 @@ const VehicleManagement = () => {
     setFormData({
       name: vehicle.name,
       type: vehicle.type,
-      deliveryType: vehicle.deliveryType,
+      deliveryType: Array.isArray(vehicle.deliveryType) ? vehicle.deliveryType : (vehicle.deliveryType ? [vehicle.deliveryType] : []),
       length: vehicle.dimensions?.length || '',
       width: vehicle.dimensions?.width || '',
       height: vehicle.dimensions?.height || '',
@@ -188,8 +270,8 @@ const VehicleManagement = () => {
       costPerKm: vehicle.costPerKm || '',
       kw: vehicle.kw,
       range: vehicle.range,
-      orderType: vehicle.orderType,
-      locationType: vehicle.locationType,
+      orderType: Array.isArray(vehicle.orderType) ? vehicle.orderType : (vehicle.orderType ? [vehicle.orderType] : []),
+      locationType: Array.isArray(vehicle.locationType) ? vehicle.locationType : (vehicle.locationType ? [vehicle.locationType] : []),
       image: vehicle.image,
       status: vehicle.status
     });
@@ -257,7 +339,7 @@ const VehicleManagement = () => {
       </div>
 
       {/* Add/Edit Vehicle Form */}
-      <div className="bg-white border text-[14px] border-gray-200 shadow-sm rounded-md mb-8 overflow-hidden">
+      <div className="bg-white border text-[14px] border-gray-200 shadow-sm rounded-md mb-8">
         <div className="bg-[#0284c7] text-white p-3 flex justify-between items-center">
           <h2 className="text-base font-semibold flex items-center">
             <PlusCircle className="w-5 h-5 mr-2" />
@@ -317,11 +399,18 @@ const VehicleManagement = () => {
                       {vehicleTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </div>
-                  <div>
-                    <select name="deliveryType" value={formData.deliveryType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700" required>
-                      <option value="">Delivery Type</option>
-                      {deliveryTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                  <div className="flex-1">
+                    <Select
+                      isMulti
+                      name="deliveryType"
+                      value={deliveryTypeOptions.filter(opt => formData.deliveryType.includes(opt)).map(opt => ({ value: opt, label: opt }))}
+                      onChange={(selected) => handleMultiSelectChange(selected, 'deliveryType')}
+                      options={deliveryTypeOptions.map(opt => ({ value: opt, label: opt }))}
+                      placeholder="Delivery Type"
+                      className="text-sm"
+                      styles={customSelectStyles}
+                      menuPortalTarget={document.body}
+                    />
                   </div>
                 </div>
 
@@ -363,21 +452,35 @@ const VehicleManagement = () => {
                     <span className="text-gray-600 font-medium ml-3 text-[13px]">KM</span>
                   </div>
 
-                  <div>
-                    <select name="orderType" value={formData.orderType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700">
-                      <option value="">Order Type</option>
-                      {orderTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                  <div className="flex-1">
+                    <Select
+                      isMulti
+                      name="orderType"
+                      value={orderTypeOptions.filter(opt => formData.orderType.includes(opt)).map(opt => ({ value: opt, label: opt }))}
+                      onChange={(selected) => handleMultiSelectChange(selected, 'orderType')}
+                      options={orderTypeOptions.map(opt => ({ value: opt, label: opt }))}
+                      placeholder="Order Type"
+                      className="text-sm"
+                      styles={customSelectStyles}
+                      menuPortalTarget={document.body}
+                    />
                   </div>
                 </div>
 
                 {/* Row 4 */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-2">
-                  <div>
-                    <select name="locationType" value={formData.locationType} onChange={handleInputChange} className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:border-blue-500 text-gray-700">
-                      <option value="">Location Type</option>
-                      {locationTypeOptions.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                  <div className="flex-1">
+                    <Select
+                      isMulti
+                      name="locationType"
+                      value={locationTypeOptions.filter(opt => formData.locationType.includes(opt)).map(opt => ({ value: opt, label: opt }))}
+                      onChange={(selected) => handleMultiSelectChange(selected, 'locationType')}
+                      options={locationTypeOptions.map(opt => ({ value: opt, label: opt }))}
+                      placeholder="Location Type"
+                      className="text-sm"
+                      styles={customSelectStyles}
+                      menuPortalTarget={document.body}
+                    />
                   </div>
                   <div>
                     <button type="submit" disabled={loading} className="bg-[#0284c7] hover:bg-[#0369a1] text-white px-5 py-2 rounded font-medium flex items-center transition-colors">
@@ -429,7 +532,7 @@ const VehicleManagement = () => {
                 <div className="space-y-3.5">
                   <div className="flex justify-between">
                     <span className="font-bold">Delivery</span>
-                    <span className="text-gray-700">{vehicle.deliveryType || '-'}</span>
+                    <span className="text-gray-700">{Array.isArray(vehicle.deliveryType) ? vehicle.deliveryType.join(', ') : (vehicle.deliveryType || '-')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold">Dimensions</span>
@@ -449,11 +552,11 @@ const VehicleManagement = () => {
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold">Order Type</span>
-                    <span className="text-gray-700">{vehicle.orderType || '-'}</span>
+                    <span className="text-gray-700">{Array.isArray(vehicle.orderType) ? vehicle.orderType.join(', ') : (vehicle.orderType || '-')}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="font-bold">Location</span>
-                    <span className="text-gray-700">{vehicle.locationType || '-'}</span>
+                    <span className="text-gray-700">{Array.isArray(vehicle.locationType) ? vehicle.locationType.join(', ') : (vehicle.locationType || '-')}</span>
                   </div>
                 </div>
 
