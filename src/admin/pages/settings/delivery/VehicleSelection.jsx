@@ -13,23 +13,51 @@ import {
   Loader,
   XCircle,
   CheckCircle,
-  Search
+  Search,
+  EyeOff,
+  Eye,
+  Map
 } from 'lucide-react';
+import { useLocations } from '../../../../hooks/useLocations';
+import { locationAPI } from '../../../../api/api';
+import inventoryApi from '../../../../services/inventory/inventoryApi';
 import Select from 'react-select';
 import {
   getVehicles,
   createVehicle,
   updateVehicle,
-  deleteVehicle
+  deleteVehicle,
+  getDeliveryTypes
 } from '../../../../services/delivery/deliveryApi';
 
 const VehicleManagement = () => {
   // State management
   const [vehicles, setVehicles] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [deliveryTypes, setDeliveryTypes] = useState([]);
+  const [loading, setLoading] = useState(false);
   const [editId, setEditId] = useState(null);
   const [notification, setNotification] = useState({ show: false, message: '', type: '' });
   const [searchTerm, setSearchTerm] = useState('');
+
+  // Common Location State
+  const { countries, states, fetchCountries, fetchStates } = useLocations();
+  const [locationCardsVisible, setLocationCardsVisible] = useState(true);
+  const [deliveryStats, setDeliveryStats] = useState({ country: {}, state: {}, cluster: {}, district: {} });
+
+  // Hierarchical Location Selection
+  const [selectedCountry, setSelectedCountry] = useState('');
+  const [selectedCountryName, setSelectedCountryName] = useState('');
+  const [selectedState, setSelectedState] = useState('');
+  const [selectedStateName, setSelectedStateName] = useState('');
+  const [clusterOptions, setClusterOptions] = useState([]);
+  const [selectedCluster, setSelectedCluster] = useState('');
+  const [selectedClusterName, setSelectedClusterName] = useState('');
+  const [selectedAllClusters, setSelectedAllClusters] = useState(false);
+  const [warehouseOptions, setWarehouseOptions] = useState([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [selectedWarehouseName, setSelectedWarehouseName] = useState('');
+  const [selectedAllWarehouses, setSelectedAllWarehouses] = useState(false);
+  const [selectedAllStates, setSelectedAllStates] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState({
@@ -53,7 +81,7 @@ const VehicleManagement = () => {
 
   // Options
   const vehicleTypeOptions = ['Open Truck', 'Container Truck', 'Pickup Van'];
-  const deliveryTypeOptions = ['Prime', 'Regular', 'Express'];
+  // const deliveryTypeOptions = ['Prime', 'Regular', 'Express']; // Removed hardcoded
   const orderTypeOptions = ['Combokit', 'CustomKit'];
   const locationTypeOptions = ['Rural', 'Urban'];
 
@@ -126,22 +154,204 @@ const VehicleManagement = () => {
     })
   };
 
-  // Fetch Data
+  // Initial Fetch
   useEffect(() => {
-    fetchVehicles();
+    fetchCountries();
+    fetchDeliveryTypes();
   }, []);
 
-  const fetchVehicles = async () => {
+  const fetchDeliveryStats = async () => {
     try {
-      setLoading(true);
-      const response = await getVehicles();
-      if (response.success) {
-        setVehicles(response.data);
+      const res = await getVehicles(); // Fetch all
+      if (res.success && res.data) {
+        const stats = { country: {}, state: {}, cluster: {}, district: {}, warehouse: {} };
+
+        res.data.forEach(vehicle => {
+          if (vehicle.state?._id) stats.state[vehicle.state._id] = (stats.state[vehicle.state._id] || 0) + 1;
+          if (vehicle.cluster?._id) stats.cluster[vehicle.cluster._id] = (stats.cluster[vehicle.cluster._id] || 0) + 1;
+          if (vehicle.district?._id) stats.district[vehicle.district._id] = (stats.district[vehicle.district._id] || 0) + 1;
+          if (vehicle.warehouse?._id) stats.warehouse[vehicle.warehouse._id] = (stats.warehouse[vehicle.warehouse._id] || 0) + 1;
+        });
+
+        // Calculate Country counts by summing state counts
+        states.forEach(state => {
+          const cId = state.country?._id || state.country;
+          if (cId && stats.state[state._id]) {
+            stats.country[cId] = (stats.country[cId] || 0) + stats.state[state._id];
+          }
+        });
+
+        setDeliveryStats(stats);
       }
     } catch (error) {
-      showNotification('Failed to fetch vehicles', 'error');
+      console.error("Failed to fetch vehicle stats", error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDeliveryStats();
+  }, [states, vehicles]); // Re-calculate when states or vehicles change
+
+  const fetchVehiclesByLocation = async (warehouseId) => {
+    if (!warehouseId) return;
+    try {
+      setLoading(true);
+      const res = await getVehicles({ warehouse: warehouseId });
+      if (res.success) {
+        setVehicles(res.data);
+      }
+    } catch (error) {
+      showNotification('Failed to load vehicles for warehouse', 'error');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchDeliveryTypes = async () => {
+    try {
+      const params = {
+        status: 'active',
+        includeGlobal: 'true'
+      };
+
+      if (selectedState && selectedState !== 'all') params.state = selectedState;
+      if (selectedCluster && selectedCluster !== 'all') params.cluster = selectedCluster;
+      if (selectedWarehouse && selectedWarehouse !== 'all') params.warehouse = selectedWarehouse;
+
+      const response = await getDeliveryTypes(params);
+      if (response.success) {
+        setDeliveryTypes(response.data.map(type => type.name));
+      }
+    } catch (error) {
+      console.error('Error fetching delivery types:', error);
+    }
+  };
+
+  useEffect(() => {
+    fetchDeliveryTypes();
+  }, [selectedState, selectedCluster, selectedWarehouse]);
+
+  // Location Handlers
+  const handleCountrySelect = (countryId, countryName) => {
+    setSelectedCountry(countryId);
+    setSelectedCountryName(countryName);
+    fetchStates({ countryId: countryId });
+
+    // Reset subsequent selections
+    setSelectedState('');
+    setSelectedStateName('');
+    setSelectedAllStates(false);
+    setClusterOptions([]);
+    setSelectedCluster('');
+    setSelectedClusterName('');
+    setSelectedAllClusters(false);
+    setWarehouseOptions([]);
+    setSelectedWarehouse('');
+    setSelectedWarehouseName('');
+    setSelectedAllWarehouses(false);
+    setVehicles([]);
+  };
+
+  const handleStateSelect = async (stateId, stateName) => {
+    if (stateId === 'all') {
+      setSelectedState('all');
+      setSelectedStateName('All States');
+      setSelectedAllStates(true);
+      setSelectedCluster('');
+      setSelectedClusterName('');
+      setSelectedAllClusters(false);
+      setClusterOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
+      setVehicles([]);
+
+      try {
+        const res = await locationAPI.getAllClusters({ countryId: selectedCountry, isActive: 'true' });
+        if (res.data && res.data.data) {
+          setClusterOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching all clusters", e);
+      }
+    } else {
+      setSelectedState(stateId);
+      setSelectedStateName(stateName);
+      setSelectedAllStates(false);
+      setSelectedCluster('');
+      setSelectedClusterName('');
+      setSelectedAllClusters(false);
+      setClusterOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
+      setVehicles([]);
+
+      try {
+        const res = await locationAPI.getAllClusters({ stateId: stateId, isActive: 'true' });
+        if (res.data && res.data.data) {
+          setClusterOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching clusters", e);
+      }
+    }
+  };
+
+  const handleClusterSelect = async (clusterId, clusterName) => {
+    if (clusterId === 'all') {
+      setSelectedCluster('all');
+      setSelectedClusterName('All Clusters');
+      setSelectedAllClusters(true);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
+      setVehicles([]);
+
+      try {
+        const queryParams = selectedState === 'all' ? { countryId: selectedCountry, isActive: 'true' } : { stateId: selectedState, isActive: 'true' };
+        const res = await inventoryApi.getAllWarehouses(queryParams);
+        if (res.data && res.data.data) {
+          setWarehouseOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching all warehouses", e);
+      }
+    } else {
+      setSelectedCluster(clusterId);
+      setSelectedClusterName(clusterName);
+      setSelectedAllClusters(false);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
+      setVehicles([]);
+
+      try {
+        const res = await inventoryApi.getAllWarehouses({ cluster: clusterId, status: 'Active' });
+        if (res.data && res.data.data) {
+          setWarehouseOptions(res.data.data);
+        }
+      } catch (e) {
+        console.error("Error fetching warehouses", e);
+      }
+    }
+  };
+
+  const handleWarehouseSelect = (warehouseId, warehouseName) => {
+    if (warehouseId === 'all') {
+      setSelectedWarehouse('all');
+      setSelectedWarehouseName('All Warehouses');
+      setSelectedAllWarehouses(true);
+      setVehicles([]);
+    } else {
+      setSelectedWarehouse(warehouseId);
+      setSelectedWarehouseName(warehouseName);
+      setSelectedAllWarehouses(false);
+      fetchVehiclesByLocation(warehouseId);
     }
   };
 
@@ -239,7 +449,11 @@ const VehicleManagement = () => {
       orderType: formData.orderType,
       locationType: formData.locationType,
       image: formData.image,
-      status: formData.status
+      status: formData.status,
+      country: selectedCountry,
+      state: selectedState,
+      cluster: selectedCluster,
+      warehouse: selectedWarehouse
     };
 
     try {
@@ -250,7 +464,8 @@ const VehicleManagement = () => {
         await createVehicle(payload);
         showNotification('Vehicle added successfully!', 'success');
       }
-      fetchVehicles();
+      fetchVehiclesByLocation(selectedWarehouse);
+      fetchDeliveryStats();
       resetForm();
     } catch (error) {
       showNotification(error.response?.data?.message || 'Operation failed', 'error');
@@ -276,6 +491,13 @@ const VehicleManagement = () => {
       status: vehicle.status
     });
     setEditId(vehicle._id);
+
+    // If vehicle has location data but it's not currently selected, update it
+    if (vehicle.country?._id && vehicle.country._id !== selectedCountry) handleCountrySelect(vehicle.country._id, vehicle.country.name);
+    if (vehicle.state?._id && vehicle.state._id !== selectedState) handleStateSelect(vehicle.state._id, vehicle.state.name);
+    if (vehicle.cluster?._id && vehicle.cluster._id !== selectedCluster) handleClusterSelect(vehicle.cluster._id, vehicle.cluster.name);
+    if (vehicle.warehouse?._id && vehicle.warehouse._id !== selectedWarehouse) handleWarehouseSelect(vehicle.warehouse._id, vehicle.warehouse.name);
+
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -285,7 +507,8 @@ const VehicleManagement = () => {
       try {
         await deleteVehicle(id);
         showNotification('Vehicle deleted successfully!', 'success');
-        fetchVehicles();
+        fetchVehiclesByLocation(selectedWarehouse);
+        fetchDeliveryStats();
       } catch (error) {
         showNotification('Failed to delete vehicle', 'error');
       }
@@ -298,7 +521,8 @@ const VehicleManagement = () => {
       const newStatus = vehicle.status === 'active' ? 'inactive' : 'active';
       await updateVehicle(vehicle._id, { status: newStatus });
       showNotification('Status updated', 'success');
-      fetchVehicles();
+      fetchVehiclesByLocation(selectedWarehouse);
+      fetchDeliveryStats();
     } catch (error) {
       showNotification('Status update failed', 'error');
     }
@@ -321,22 +545,172 @@ const VehicleManagement = () => {
       )}
 
       {/* Header */}
-      <div className="mb-6 flex items-center">
-        <Truck className="w-7 h-7 text-gray-700 mr-2" />
-        <h1 className="text-2xl font-bold text-gray-800 tracking-tight">Vehicle Management</h1>
-      </div>
-
-      {/* Enter Vehicle Type Row */}
-      <div className="mb-4 flex items-center space-x-3">
-        <input
-          type="text"
-          placeholder="Enter Vehicle Type Name"
-          className="border border-gray-300 px-3 py-2 rounded text-sm w-64 focus:outline-none focus:border-blue-500"
-        />
-        <button className="bg-[#0284c7] hover:bg-[#0369a1] text-white px-4 py-2 rounded text-sm font-semibold transition" onClick={(e) => e.preventDefault()}>
-          ADD
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-6 p-4 flex justify-between items-center">
+        <div>
+          <h1 className="text-xl font-bold text-[#1e293b] flex items-center">
+            <Truck className="w-6 h-6 text-blue-600 mr-2" />
+            Vehicle Management
+          </h1>
+        </div>
+        <button
+          className="bg-[#0ea5e9] text-white px-3 py-1.5 rounded-md text-xs font-semibold flex items-center gap-2 hover:bg-[#0284c7] transition"
+          onClick={() => setLocationCardsVisible(!locationCardsVisible)}
+        >
+          {locationCardsVisible ? <EyeOff size={14} /> : <Eye size={14} />}
+          {locationCardsVisible ? 'Hide Location Cards' : 'Show Location Cards'}
         </button>
       </div>
+
+      {/* Hierarchy Selection Cards */}
+      {locationCardsVisible && (
+        <div className="space-y-6 mb-8">
+          {/* Country Selection */}
+          <div>
+            <h3 className="text-lg font-bold text-slate-800 mb-3">Select Country</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              {countries.map(country => (
+                <div
+                  key={country._id}
+                  className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCountry === country._id
+                    ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                    : 'bg-white border-gray-200 hover:border-blue-300'
+                    }`}
+                  onClick={() => handleCountrySelect(country._id, country.name)}
+                >
+                  <div className="absolute top-2 right-2 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-blue-200 shadow-sm">
+                    {deliveryStats.country[country._id] || 0}
+                  </div>
+                  <div className="font-semibold text-sm">{country.name}</div>
+                  <div className="text-xs text-gray-400 mt-1 uppercase">{country.name.substring(0, 2)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {selectedCountry && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select State</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {states.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleStateSelect('all', 'All States')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1 uppercase">ALL IN</div>
+                  </div>
+                )}
+                {states.map(state => (
+                  <div
+                    key={state._id}
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedState === state._id
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleStateSelect(state._id, state.name)}
+                  >
+                    <div className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-green-200 shadow-sm">
+                      {deliveryStats.state[state._id] || 0}
+                    </div>
+                    <div className="font-semibold text-sm">{state.name}</div>
+                    <div className="text-xs text-gray-400 mt-1 uppercase">{state.name.substring(0, 2)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedState && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select Cluster</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {clusterOptions.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCluster === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleClusterSelect('all', 'All Clusters')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1">{selectedStateName}</div>
+                  </div>
+                )}
+                {clusterOptions.map(cluster => (
+                  <div
+                    key={cluster._id}
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedCluster === cluster._id
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleClusterSelect(cluster._id, cluster.name)}
+                  >
+                    <div className="absolute top-2 right-2 bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-purple-200 shadow-sm">
+                      {deliveryStats.cluster[cluster._id] || 0}
+                    </div>
+                    <div className="font-semibold text-sm">{cluster.name}</div>
+                    <div className="text-xs text-gray-400 mt-1">{selectedStateName}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedCluster && (
+            <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select Warehouse</h3>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {warehouseOptions.length > 0 && (
+                  <div
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedWarehouse === 'all'
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleWarehouseSelect('all', 'All Warehouses')}
+                  >
+                    <div className="font-semibold text-sm">Select All</div>
+                    <div className="text-xs text-gray-400 mt-1">Apply to all warehouses</div>
+                  </div>
+                )}
+                {warehouseOptions.map(warehouse => (
+                  <div
+                    key={warehouse._id}
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedWarehouse === warehouse._id
+                      ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
+                      : 'bg-white border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => handleWarehouseSelect(warehouse._id, warehouse.name)}
+                  >
+                    <div className="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-orange-200 shadow-sm">
+                      {deliveryStats.warehouse[warehouse._id] || 0}
+                    </div>
+                    <div className="font-semibold text-sm">{warehouse.name}</div>
+                    <div className="text-xs text-gray-400 mt-1">{selectedClusterName}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedWarehouse ? (
+        <div className="animate-in fade-in duration-500">
+          <div className="mb-4 flex items-center space-x-3">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search vehicles..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="border border-gray-300 pl-10 pr-3 py-2 rounded text-sm w-64 focus:outline-none focus:border-blue-500"
+              />
+            </div>
+          </div>
 
       {/* Add/Edit Vehicle Form */}
       <div className="bg-white border text-[14px] border-gray-200 shadow-sm rounded-md mb-8">
@@ -403,9 +777,9 @@ const VehicleManagement = () => {
                     <Select
                       isMulti
                       name="deliveryType"
-                      value={deliveryTypeOptions.filter(opt => formData.deliveryType.includes(opt)).map(opt => ({ value: opt, label: opt }))}
+                      value={deliveryTypes.filter(opt => formData.deliveryType.includes(opt)).map(opt => ({ value: opt, label: opt }))}
                       onChange={(selected) => handleMultiSelectChange(selected, 'deliveryType')}
-                      options={deliveryTypeOptions.map(opt => ({ value: opt, label: opt }))}
+                      options={deliveryTypes.map(opt => ({ value: opt, label: opt }))}
                       placeholder="Delivery Type"
                       className="text-sm"
                       styles={customSelectStyles}
@@ -581,8 +955,17 @@ const VehicleManagement = () => {
         </div>
       )}
 
+        </div>
+      ) : (
+        <div className="flex flex-col items-center justify-center h-64 bg-white rounded-lg border border-dashed border-gray-300 text-gray-400 mt-8">
+          <Truck size={48} className="text-gray-200 mb-4" />
+          <p className="text-lg font-bold">Please select a Warehouse.</p>
+          <p className="text-sm font-medium mt-1 text-gray-300 uppercase tracking-wider">Select a location from the cards above to manage vehicles.</p>
+        </div>
+      )}
+
       {/* Footer text */}
-      <div className="mt-8 text-center text-[13px] text-gray-500 font-medium">
+      <div className="mt-8 text-center text-[13px] text-gray-500 font-medium pb-4">
         Copyright © 2025 Solarkits. All Rights Reserved.
       </div>
     </div>

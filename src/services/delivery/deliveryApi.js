@@ -60,8 +60,8 @@ export const deleteBenchmarkPrice = async (id) => {
 };
 
 // Vehicles
-export const getVehicles = async () => {
-    const response = await axios.get(`${API_URL}/vehicles`);
+export const getVehicles = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/vehicles`, { params });
     return response.data;
 };
 

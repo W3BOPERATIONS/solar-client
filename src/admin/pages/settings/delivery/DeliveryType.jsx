@@ -18,6 +18,7 @@ import {
 import { getAllOrderProcurementSettings } from '../../../../services/settings/orderProcurementSettingApi';
 import { locationAPI } from '../../../../api/api';
 import { productApi } from '../../../../api/productApi';
+import inventoryApi from '../../../../services/inventory/inventoryApi';
 
 const SECTION_OPTIONS = [
   { id: 'setup', label: 'Delivery Type Setup' },
@@ -42,7 +43,7 @@ const INITIAL_FORM_STATE = {
   },
   coverageType: [],
   restrictions: {
-    districts: []
+    warehouses: []
   },
   status: 'active'
 };
@@ -62,7 +63,7 @@ const DeliveryType = () => {
   // Tab State
   const [activeTabId, setActiveTabId] = useState('new'); // 'new' or valid mapped delivery type ID
   const [activeSection, setActiveSection] = useState('setup');
-  const [deliveryStats, setDeliveryStats] = useState({ country: {}, state: {}, cluster: {}, district: {} });
+  const [deliveryStats, setDeliveryStats] = useState({ country: {}, state: {}, cluster: {}, warehouse: {} });
 
   // Hierarchical Location Selection
   const [selectedCountry, setSelectedCountry] = useState('');
@@ -73,10 +74,10 @@ const DeliveryType = () => {
   const [selectedCluster, setSelectedCluster] = useState('');
   const [selectedClusterName, setSelectedClusterName] = useState('');
   const [selectedAllClusters, setSelectedAllClusters] = useState(false);
-  const [districtOptions, setDistrictOptions] = useState([]);
-  const [selectedDistrict, setSelectedDistrict] = useState('');
-  const [selectedDistrictName, setSelectedDistrictName] = useState('');
-  const [selectedAllDistricts, setSelectedAllDistricts] = useState(false);
+  const [warehouseOptions, setWarehouseOptions] = useState([]);
+  const [selectedWarehouse, setSelectedWarehouse] = useState('');
+  const [selectedWarehouseName, setSelectedWarehouseName] = useState('');
+  const [selectedAllWarehouses, setSelectedAllWarehouses] = useState(false);
   const [selectedAllStates, setSelectedAllStates] = useState(false);
 
   // Form State
@@ -117,7 +118,7 @@ const DeliveryType = () => {
     try {
       const res = await getDeliveryTypes(); // Fetch all
       if (res.success && res.data) {
-        const stats = { country: {}, state: {}, cluster: {}, district: {} };
+        const stats = { country: {}, state: {}, cluster: {}, warehouse: {} };
 
         // We need state-to-country mapping because DeliveryType doesn't store country
         // but states list from useLocations has it.
@@ -126,7 +127,7 @@ const DeliveryType = () => {
         res.data.forEach(type => {
           if (type.state?._id) stats.state[type.state._id] = (stats.state[type.state._id] || 0) + 1;
           if (type.cluster?._id) stats.cluster[type.cluster._id] = (stats.cluster[type.cluster._id] || 0) + 1;
-          if (type.district?._id) stats.district[type.district._id] = (stats.district[type.district._id] || 0) + 1;
+          if (type.warehouse?._id) stats.warehouse[type.warehouse._id] = (stats.warehouse[type.warehouse._id] || 0) + 1;
         });
 
         // Calculate Country counts by summing state counts
@@ -243,11 +244,11 @@ const DeliveryType = () => {
   });
 
 
-  const loadDeliveryTypes = async (districtId) => {
-    if (!districtId) return;
+  const loadDeliveryTypes = async (warehouseId) => {
+    if (!warehouseId) return;
     try {
       setDataLoading(true);
-      const res = await getDeliveryTypes({ district: districtId });
+      const res = await getDeliveryTypes({ warehouse: warehouseId });
       if (res.success) {
         setDeliveryTypes(res.data);
         if (res.data.length > 0) {
@@ -257,7 +258,7 @@ const DeliveryType = () => {
         }
       }
     } catch (error) {
-      showNotification('Failed to load delivery types for district', 'error');
+      showNotification('Failed to load delivery types for warehouse', 'error');
     } finally {
       setDataLoading(false);
     }
@@ -287,10 +288,10 @@ const DeliveryType = () => {
     setSelectedCluster('');
     setSelectedClusterName('');
     setSelectedAllClusters(false);
-    setDistrictOptions([]);
-    setSelectedDistrict('');
-    setSelectedDistrictName('');
-    setSelectedAllDistricts(false);
+    setWarehouseOptions([]);
+    setSelectedWarehouse('');
+    setSelectedWarehouseName('');
+    setSelectedAllWarehouses(false);
     setDeliveryTypes([]);
     setActiveTabId('new');
   };
@@ -304,10 +305,10 @@ const DeliveryType = () => {
       setSelectedClusterName('');
       setSelectedAllClusters(false);
       setClusterOptions([]);
-      setSelectedDistrict('');
-      setSelectedDistrictName('');
-      setSelectedAllDistricts(false);
-      setDistrictOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
       setDeliveryTypes([]);
       setActiveTabId('new');
 
@@ -328,10 +329,10 @@ const DeliveryType = () => {
       setSelectedClusterName('');
       setSelectedAllClusters(false);
       setClusterOptions([]);
-      setSelectedDistrict('');
-      setSelectedDistrictName('');
-      setSelectedAllDistricts(false);
-      setDistrictOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
       setDeliveryTypes([]);
       setActiveTabId('new');
 
@@ -351,58 +352,56 @@ const DeliveryType = () => {
       setSelectedCluster('all');
       setSelectedClusterName('All Clusters');
       setSelectedAllClusters(true);
-      setSelectedDistrict('');
-      setSelectedDistrictName('');
-      setSelectedAllDistricts(false);
-      setDistrictOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
       setDeliveryTypes([]);
       setActiveTabId('new');
 
       try {
-        // If selectedState is 'all', fetch ALL districts.
-        // Otherwise, fetch districts for the given selectedState.
         const queryParams = selectedState === 'all' ? { countryId: selectedCountry, isActive: 'true' } : { stateId: selectedState, isActive: 'true' };
-        const res = await locationAPI.getAllDistricts(queryParams);
+        const res = await inventoryApi.getAllWarehouses(queryParams);
         if (res.data && res.data.data) {
-          setDistrictOptions(res.data.data);
+          setWarehouseOptions(res.data.data);
         }
       } catch (e) {
-        console.error("Error fetching districts", e);
+        console.error("Error fetching all warehouses", e);
       }
     } else {
       setSelectedCluster(clusterId);
       setSelectedClusterName(clusterName);
       setSelectedAllClusters(false);
-      setSelectedDistrict('');
-      setSelectedDistrictName('');
-      setSelectedAllDistricts(false);
-      setDistrictOptions([]);
+      setSelectedWarehouse('');
+      setSelectedWarehouseName('');
+      setSelectedAllWarehouses(false);
+      setWarehouseOptions([]);
       setDeliveryTypes([]);
       setActiveTabId('new');
 
       try {
-        const res = await locationAPI.getAllDistricts({ clusterId: clusterId, isActive: 'true' });
+        const res = await inventoryApi.getAllWarehouses({ cluster: clusterId, status: 'Active' });
         if (res.data && res.data.data) {
-          setDistrictOptions(res.data.data);
+          setWarehouseOptions(res.data.data);
         }
       } catch (e) {
-        console.error("Error fetching districts", e);
+        console.error("Error fetching warehouses", e);
       }
     }
   };
 
-  const handleDistrictSelect = (districtId, districtName) => {
-    if (districtId === 'all') {
-      setSelectedDistrict('all');
-      setSelectedDistrictName('All Districts');
-      setSelectedAllDistricts(true);
+  const handleWarehouseSelect = (warehouseId, warehouseName) => {
+    if (warehouseId === 'all') {
+      setSelectedWarehouse('all');
+      setSelectedWarehouseName('All Warehouses');
+      setSelectedAllWarehouses(true);
       setDeliveryTypes([]);
       setActiveTabId('new');
     } else {
-      setSelectedDistrict(districtId);
-      setSelectedDistrictName(districtName);
-      setSelectedAllDistricts(false);
-      loadDeliveryTypes(districtId);
+      setSelectedWarehouse(warehouseId);
+      setSelectedWarehouseName(warehouseName);
+      setSelectedAllWarehouses(false);
+      loadDeliveryTypes(warehouseId);
     }
   };
 
@@ -423,7 +422,7 @@ const DeliveryType = () => {
           ...(type.deliveryTiming || {})
         },
         coverageType: type.coverageType || [],
-        restrictions: type.restrictions || { districts: [] },
+        restrictions: type.restrictions || { warehouses: [] },
         status: type.status || 'active'
       });
     }
@@ -556,7 +555,7 @@ const DeliveryType = () => {
         setLoading(true);
         await deleteDeliveryType(typeId);
         showNotification('Delivery type deleted successfully', 'success');
-        loadDeliveryTypes(selectedDistrict);
+        loadDeliveryTypes(selectedWarehouse);
         fetchDeliveryStats();
         if (activeTabId === typeId) {
           setActiveTabId('new');
@@ -572,8 +571,8 @@ const DeliveryType = () => {
 
 
   const handleSave = async () => {
-    if (!selectedDistrict) {
-      showNotification('Please select a district first', 'error');
+    if (!selectedWarehouse) {
+      showNotification('Please select a warehouse first', 'error');
       return;
     }
     if (!formData.name) {
@@ -587,17 +586,17 @@ const DeliveryType = () => {
         ...formData,
         state: selectedState,
         cluster: selectedCluster,
-        district: selectedDistrict
+        warehouse: selectedWarehouse
       };
 
       if (activeTabId === 'new') {
         await createDeliveryType(payload);
         showNotification('Delivery type created successfully', 'success');
-        loadDeliveryTypes(selectedDistrict);
+        loadDeliveryTypes(selectedWarehouse);
       } else {
         await updateDeliveryType(activeTabId, payload);
         showNotification('Delivery type updated successfully', 'success');
-        loadDeliveryTypes(selectedDistrict);
+        loadDeliveryTypes(selectedWarehouse);
       }
       fetchDeliveryStats();
     } catch (error) {
@@ -904,33 +903,33 @@ const DeliveryType = () => {
 
           {selectedCluster && (
             <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-              <h3 className="text-lg font-bold text-slate-800 mb-3">Select District</h3>
+              <h3 className="text-lg font-bold text-slate-800 mb-3">Select Warehouse</h3>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {districtOptions.length > 0 && (
+                {warehouseOptions.length > 0 && (
                   <div
-                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedDistrict === 'all'
+                    className={`border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedWarehouse === 'all'
                       ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
                       : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
-                    onClick={() => handleDistrictSelect('all', 'All Districts')}
+                    onClick={() => handleWarehouseSelect('all', 'All Warehouses')}
                   >
                     <div className="font-semibold text-sm">Select All</div>
-                    <div className="text-xs text-gray-400 mt-1">Apply to all districts</div>
+                    <div className="text-xs text-gray-400 mt-1">Apply to all warehouses</div>
                   </div>
                 )}
-                {districtOptions.map(district => (
+                {warehouseOptions.map(warehouse => (
                   <div
-                    key={district._id}
-                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedDistrict === district._id
+                    key={warehouse._id}
+                    className={`relative border rounded-md p-4 text-center cursor-pointer transition-colors shadow-sm ${selectedWarehouse === warehouse._id
                       ? 'bg-blue-50 border-blue-400 text-blue-800 ring-1 ring-blue-400'
                       : 'bg-white border-gray-200 hover:border-blue-300'
                       }`}
-                    onClick={() => handleDistrictSelect(district._id, district.name)}
+                    onClick={() => handleWarehouseSelect(warehouse._id, warehouse.name)}
                   >
                     <div className="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-orange-200 shadow-sm">
-                      {deliveryStats.district[district._id] || 0}
+                      {deliveryStats.warehouse[warehouse._id] || 0}
                     </div>
-                    <div className="font-semibold text-sm">{district.name}</div>
+                    <div className="font-semibold text-sm">{warehouse.name}</div>
                     <div className="text-xs text-gray-400 mt-1">{selectedClusterName}</div>
                   </div>
                 ))}
@@ -940,14 +939,14 @@ const DeliveryType = () => {
         </div>
       )}
 
-      {/* Main Configuration Content (Shown when district selected) */}
-      {selectedDistrict ? (
+      {/* Main Configuration Content (Shown when warehouse selected) */}
+      {selectedWarehouse ? (
         <div className="mt-8 animate-in fade-in duration-500">
           {/* Dynamic Tabs */}
           <div className="flex items-center space-x-4 mb-6 pb-2 overflow-x-auto justify-center">
-            {selectedAllDistricts ? (
+            {selectedAllWarehouses ? (
               <div className="text-slate-600 font-medium italic">
-                Creating delivery configuration for all selected districts at once.
+                Creating delivery configuration for all selected warehouses at once.
               </div>
             ) : (
               <>
@@ -1378,13 +1377,13 @@ const DeliveryType = () => {
                           { value: 'yes', label: 'Yes' },
                           { value: 'no', label: 'No' }
                         ]}
-                        value={formData.restrictions?.districts?.length > 0 ? { value: 'yes', label: 'Yes' } : { value: 'no', label: 'No' }}
+                        value={formData.restrictions?.warehouses?.length > 0 ? { value: 'yes', label: 'Yes' } : { value: 'no', label: 'No' }}
                         onChange={(opt) => {
                           setFormData(prev => ({
                             ...prev,
                             restrictions: {
                               ...prev.restrictions,
-                              districts: opt.value === 'yes' ? [selectedDistrict] : []
+                              warehouses: opt.value === 'yes' ? [selectedWarehouse] : []
                             }
                           }));
                         }}
@@ -1425,7 +1424,7 @@ const DeliveryType = () => {
                         menuPortalTarget={document.body}
                       />
                       <p className="text-[10px] text-gray-400 mt-1 italic">
-                        * Select specific districts where this delivery type is restricted or applicable.
+                        * Select specific warehouses where this delivery type is restricted or applicable.
                       </p>
                     </div>
                   </div>
@@ -1500,7 +1499,7 @@ const DeliveryType = () => {
         <div className="flex flex-col items-center justify-center h-64 bg-white rounded-lg border border-dashed border-gray-300 text-gray-400">
           <Truck size={48} className="text-gray-200 mb-4" />
           <p className="text-lg">Please select a Location Scope.</p>
-          <p className="text-sm font-medium mt-1 text-gray-300">Delivery configurations need a district or "all districts" scope to apply.</p>
+          <p className="text-sm font-medium mt-1 text-gray-300">Delivery configurations need a warehouse or "all warehouses" scope to apply.</p>
         </div>
       )}
 
