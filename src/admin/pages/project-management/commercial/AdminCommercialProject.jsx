@@ -111,13 +111,24 @@ import {
     FileText as FileTextIcon,
     FileUp as FileUpIcon,
     FileVideo as FileVideoIcon,
-    FileX as FileXIcon
+    FileX as FileXIcon,
+    List
 } from 'lucide-react';
 
+import { useLocation } from 'react-router-dom';
+
 import { projectAPI } from '../../../../api/api';
+import { projectApi as settingsApi } from '../../../../services/project/projectApi';
+import * as locationApi from '../../../../services/core/locationApi';
+import * as quoteApi from '../../../../services/quote/quoteApi';
 
 const AdminCommercialProject = () => {
     const navigate = useNavigate();
+    const location = useLocation();
+    const queryParams = new URLSearchParams(location.search);
+    const stateIdParam = queryParams.get('stateId');
+    const discomIdParam = queryParams.get('discomId');
+
     const [currentStep, setCurrentStep] = useState(1);
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -140,7 +151,11 @@ const AdminCommercialProject = () => {
         vendorAgreement: false,
         address: ''
     });
-    const totalSteps = 4;
+    const [journeyStages, setJourneyStages] = useState([]);
+    const [configSteps, setConfigSteps] = useState([]);
+    const [matchingConfig, setMatchingConfig] = useState(null);
+    const [matchingConfigs, setMatchingConfigs] = useState([]);
+    const totalSteps = configSteps.length || 4;
 
     // Timeline generation based on hardcoded layout request
     const getTimelineItems = (customer) => {
@@ -268,24 +283,123 @@ const AdminCommercialProject = () => {
     };
 
     useEffect(() => {
-        const fetchProjects = async () => {
+        const fetchInitialData = async () => {
             try {
-                const response = await projectAPI.getAll({ category: 'Commercial' });
-                if (response.success) {
-                    setProjects(response.data);
-                    if (response.data.length > 0) {
-                        setSelectedCustomer(response.data[0]);
+                // Fetch initial prerequisite data
+                const [projResponse, stagesData, allConfigs, statesData] = await Promise.all([
+                    projectAPI.getAll({ category: 'Commercial' }),
+                    settingsApi.getJourneyStages(),
+                    settingsApi.getConfigurations(),
+                    locationApi.getStates()
+                ]);
+
+                let filteredProjects = projResponse.success ? projResponse.data : [];
+
+                // Filter projects by state/discom if provided in URL
+                if (stateIdParam) {
+                    filteredProjects = filteredProjects.filter(p => p.state === stateIdParam || p.state?._id === stateIdParam);
+                }
+                // Note: project model might not have discom directly, but usually it's linked via customer mapping
+                // For now filtering by state is a good start as per requirements
+
+                setProjects(filteredProjects);
+                if (filteredProjects.length > 0) {
+                    setSelectedCustomer(filteredProjects[0]);
+                }
+
+                setJourneyStages(stagesData || []);
+
+                // 1. Determine State and DISCOM name from URL params OR first project
+                let stateName = '';
+                let discomName = '';
+
+                if (stateIdParam) {
+                    // locationApi.getStates returns the array directly (res.data.data)
+                    const sArr = Array.isArray(statesData) ? statesData : (statesData?.data || []);
+                    const stateObj = sArr.find(s => s._id === stateIdParam);
+                    if (stateObj) stateName = stateObj.name;
+                    
+                    // Resolve discomName from ID
+                    if (discomIdParam) {
+                        try {
+                            const dResponse = await quoteApi.getDiscomsByState(stateIdParam);
+                            const dArr = Array.isArray(dResponse) ? dResponse : (dResponse?.data || []);
+                            const discomObj = dArr.find(d => d._id === discomIdParam);
+                            if (discomObj) discomName = discomObj.name;
+                        } catch (err) {
+                            console.error("Error resolving discom name:", err);
+                        }
                     }
                 }
+
+                // Fallback to first project if params didn't yield names
+                if (!stateName && filteredProjects.length > 0) {
+                    stateName = filteredProjects[0].state?.name || '';
+                    discomName = filteredProjects[0].discom?.name || '';
+                }
+
+                // 2. Find ALL matching configurations
+                const foundConfigs = allConfigs.filter(cfg => {
+                    const val = cfg.configValue;
+                    if (!val) return false;
+
+                    const stateMatch = Array.isArray(val.currentState)
+                        ? val.currentState.includes(stateName)
+                        : val.currentState === stateName;
+
+                    const discomMatch = !discomName || (Array.isArray(val.currentDiscom)
+                        ? val.currentDiscom.includes(discomName)
+                        : val.currentDiscom === discomName);
+
+                    const categoryMatch = val.configCategory === 'Commercial' || val.configCategory === 'Mixed';
+                    const appliesToType = (val.allKeys || []).some(key => key.includes('Commercial')) || (cfg.configKey || '').includes('Commercial');
+
+                    return stateMatch && discomMatch && (categoryMatch || appliesToType);
+                });
+
+                if (foundConfigs.length > 0) {
+                    // Group by name and steps to avoid duplicates in display
+                    const uniqueGroups = {};
+                    foundConfigs.forEach(cfg => {
+                        const val = cfg.configValue;
+                        if (!val) return;
+                        const stepsKey = (val.selectedSteps || []).join('|');
+                        const uniqueKey = `${val.configName || 'unnamed'}-${stepsKey}`;
+                        
+                        if (!uniqueGroups[uniqueKey]) {
+                            uniqueGroups[uniqueKey] = cfg;
+                        } else {
+                            // Keep the newest one if multiple match
+                            const currentNewest = new Date(uniqueGroups[uniqueKey].createdAt || uniqueGroups[uniqueKey].updatedAt || 0);
+                            const thisOne = new Date(cfg.createdAt || cfg.updatedAt || 0);
+                            if (thisOne > currentNewest) {
+                                uniqueGroups[uniqueKey] = cfg;
+                            }
+                        }
+                    });
+
+                    const finalConfigs = Object.values(uniqueGroups);
+                    setMatchingConfigs(finalConfigs);
+                    
+                    // Use the newest one as per creation/update date
+                    const sorted = [...finalConfigs].sort((a,b) => new Date(b.createdAt || b.updatedAt) - new Date(a.createdAt || a.updatedAt));
+                    const latest = sorted[0];
+                    setMatchingConfig(latest);
+                    setConfigSteps(latest.configValue?.selectedSteps || []);
+                } else {
+                    setMatchingConfigs([]);
+                    setMatchingConfig(null);
+                    setConfigSteps([]);
+                }
             } catch (error) {
-                console.error('Error fetching commercial projects:', error);
+                console.error('Error fetching commercial initial data:', error);
             } finally {
                 setLoading(false);
             }
         };
 
-        fetchProjects();
-    }, []);
+        fetchInitialData();
+    }, [stateIdParam, discomIdParam]);
 
     const handleCustomerClick = (customer) => {
         setSelectedCustomer(customer);
@@ -505,9 +619,43 @@ const AdminCommercialProject = () => {
                             </div>
                         </div>
 
-                        <h5 className="font-bold mb-3 flex items-center">
-                            <User className="h-4 w-4 mr-2" /> Select Customer
+                        <h5 className="font-bold mb-3 flex items-center text-blue-600 uppercase text-xs tracking-wider">
+                            <Settings className="h-4 w-4 mr-2" /> Configuration
                         </h5>
+                        
+                        {matchingConfigs.length > 0 && (
+                            <div className="mb-4 space-y-2">
+                                <p className="text-[10px] font-black uppercase tracking-widest text-blue-400 px-1 mb-1 leading-none">
+                                    Matching Configs ({matchingConfigs.length})
+                                </p>
+                                {matchingConfigs.map((cfg) => (
+                                    <div 
+                                        key={cfg._id}
+                                        onClick={() => {
+                                            setMatchingConfig(cfg);
+                                            setConfigSteps(cfg.configValue?.selectedSteps || []);
+                                        }}
+                                        className={`px-3 py-2 rounded-lg cursor-pointer transition-all border ${
+                                            matchingConfig?._id === cfg._id 
+                                            ? 'bg-blue-600 border-blue-600 shadow-md' 
+                                            : 'bg-white border-gray-200 hover:border-blue-300'
+                                        }`}
+                                    >
+                                        <p className={`text-sm font-bold truncate ${matchingConfig?._id === cfg._id ? 'text-white' : 'text-blue-700'}`}>
+                                            {cfg.configValue?.configName || 'Unnamed Config'}
+                                        </p>
+                                        <div className="flex justify-between items-center mt-1">
+                                            <p className={`text-[10px] ${matchingConfig?._id === cfg._id ? 'text-blue-100' : 'text-gray-400'}`}>
+                                                {cfg.configValue?.selectedSteps?.length || 0} Steps
+                                            </p>
+                                            {matchingConfig?._id === cfg._id && (
+                                                <span className="text-[9px] bg-white/20 text-white px-1.5 py-0.5 rounded font-black uppercase tracking-tighter">Active</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
 
                         <div className="overflow-y-auto pr-2" style={{ maxHeight: 'calc(100vh - 250px)' }}>
                             {filteredCustomers.map((customer) => (
@@ -550,50 +698,63 @@ const AdminCommercialProject = () => {
                                 Customer Name: <span className="text-blue-600 font-bold">{selectedCustomer?.projectName || 'Select a Customer'}</span>
                             </p>
                             <hr className="mb-6" />
-
                             {/* Step Indicator */}
-                            <div className="step-indicator relative flex justify-between mb-8">
-                                <div className="absolute top-3 left-0 right-0 h-0.5 bg-gray-200 z-0"></div>
-                                {[1, 2, 3, 4].map((step) => (
-                                    <div
-                                        key={step}
-                                        onClick={() => handleStepClick(step)}
-                                        className={`step-indicator-item relative z-10 text-center flex-1 cursor-pointer ${getStepStatus(step)
-                                            }`}
-                                    >
-                                        <div
-                                            className={`step-circle w-8 h-8 rounded-full flex items-center justify-center mx-auto mb-1 font-bold transition-colors ${step < currentStep
-                                                ? 'bg-green-600 text-white'
-                                                : step === currentStep
-                                                    ? 'bg-blue-600 text-white'
-                                                    : 'bg-gray-200 text-gray-600'
-                                                }`}
-                                        >
-                                            {step}
-                                        </div>
-                                        <div
-                                            className={`step-label text-xs ${step === currentStep
-                                                ? 'text-blue-600 font-bold'
-                                                : step < currentStep
-                                                    ? 'text-green-600'
-                                                    : 'text-gray-500'
-                                                }`}
-                                        >
-                                            {step === 1 && 'Project SignUp'}
-                                            {step === 2 && 'Feasibility Approval'}
-                                            {step === 3 && 'Installation Status'}
-                                            {step === 4 && 'Meter Installation'}
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
+                            {(!matchingConfig && configSteps.length === 0) ? (
+                                <div className="p-8 text-center bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                                    <p className="text-gray-500 font-bold mb-2">No configuration available</p>
+                                    <p className="text-sm text-gray-400">Admin hasn't configured steps for this location.</p>
+                                </div>
+                            ) : (
+                                <div className="step-indicator relative flex justify-between mb-8">
+                                    <div className="absolute top-4 left-0 right-0 h-0.5 bg-gray-200 z-0"></div>
+                                    {(configSteps.length > 0 ? configSteps : [1, 2, 3, 4]).map((stepVal, idx) => {
+                                        const stepIndex = idx + 1;
+                                        const stepName = configSteps.length > 0 ? stepVal : (
+                                            journeyStages[idx]?.name || (
+                                                stepIndex === 1 ? 'Project SignUp' :
+                                                    stepIndex === 2 ? 'Feasibility Approval' :
+                                                        stepIndex === 3 ? 'Installation Status' :
+                                                            'Meter Installation'
+                                            )
+                                        );
+                                        return (
+                                            <div
+                                                key={idx}
+                                                onClick={() => handleStepClick(stepIndex)}
+                                                className="step-indicator-item relative z-10 text-center flex-1 cursor-pointer"
+                                            >
+                                                <div
+                                                    className={`step-circle w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 font-bold transition-all ${stepIndex < currentStep
+                                                        ? 'bg-green-500 text-white shadow-lg shadow-green-100'
+                                                        : stepIndex === currentStep
+                                                            ? 'bg-blue-600 text-white shadow-lg shadow-blue-100 scale-110'
+                                                            : 'bg-white border-2 border-gray-200 text-gray-400'
+                                                        }`}
+                                                >
+                                                    {stepIndex < currentStep ? (
+                                                        <Check className="h-5 w-5" />
+                                                    ) : (
+                                                        stepIndex
+                                                    )}
+                                                </div>
+                                                <p
+                                                    className={`text-xs font-bold ${stepIndex === currentStep ? 'text-blue-600' : 'text-gray-500'
+                                                        }`}
+                                                >
+                                                    {stepName}
+                                                </p>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            )}
 
                             {/* Wizard Steps */}
                             <div className="wizard-content">
                                 {/* Step 1: Project SignUp */}
                                 {currentStep === 1 && (
                                     <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Project SignUp</h5>
+                                        <h5 className="text-blue-600 font-semibold mb-4">{journeyStages[0]?.name || 'Project SignUp'}</h5>
 
                                         {!showProjectForm ? (
                                             <>
@@ -601,7 +762,7 @@ const AdminCommercialProject = () => {
                                                     onClick={() => setShowProjectForm(true)}
                                                     className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded mb-4 flex items-center"
                                                 >
-                                                    <UserPlus className="h-4 w-4 mr-2" /> Project SignUp
+                                                    <UserPlus className="h-4 w-4 mr-2" /> {journeyStages[0]?.name || 'Project SignUp'}
                                                 </button>
 
                                                 {/* Journey History */}
@@ -677,7 +838,7 @@ const AdminCommercialProject = () => {
                                                                 }`}
                                                             onClick={() => setActiveTab({ ...activeTab, step1: 'consumer' })}
                                                         >
-                                                            Consumer Registered
+                                                            {journeyStages[0]?.fields[0] || 'Consumer Registered'}
                                                         </button>
                                                         <button
                                                             className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step1 === 'application'
@@ -686,7 +847,7 @@ const AdminCommercialProject = () => {
                                                                 }`}
                                                             onClick={() => setActiveTab({ ...activeTab, step1: 'application' })}
                                                         >
-                                                            Application Submission
+                                                            {journeyStages[0]?.fields[1] || 'Application Submission'}
                                                         </button>
                                                     </div>
                                                 </div>
@@ -808,7 +969,7 @@ const AdminCommercialProject = () => {
                                 {/* Step 2: Feasibility Approval */}
                                 {currentStep === 2 && (
                                     <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Feasibility Approval</h5>
+                                        <h5 className="text-blue-600 font-semibold mb-4">{journeyStages[1]?.name || 'Feasibility Approval'}</h5>
                                         <div className="border-b border-gray-200 mb-4">
                                             <div className="flex">
                                                 <button
@@ -818,7 +979,7 @@ const AdminCommercialProject = () => {
                                                         }`}
                                                     onClick={() => setActiveTab({ ...activeTab, step2: 'feasibility' })}
                                                 >
-                                                    Feasibility
+                                                    {journeyStages[1]?.fields[0] || 'Feasibility'}
                                                 </button>
                                                 <button
                                                     className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step2 === 'meterCharge'
@@ -827,7 +988,7 @@ const AdminCommercialProject = () => {
                                                         }`}
                                                     onClick={() => setActiveTab({ ...activeTab, step2: 'meterCharge' })}
                                                 >
-                                                    Meter Charge Generation Paid (optional)
+                                                    {journeyStages[1]?.fields[1] || 'Meter Charge Generation Paid (optional)'}
                                                 </button>
                                             </div>
                                         </div>
@@ -871,45 +1032,21 @@ const AdminCommercialProject = () => {
                                 {/* Step 3: Installation Status */}
                                 {currentStep === 3 && (
                                     <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Installation Status</h5>
+                                        <h5 className="text-blue-600 font-semibold mb-4">{journeyStages[2]?.name || 'Installation Status'}</h5>
                                         <div className="border-b border-gray-200 mb-4 overflow-x-auto">
                                             <div className="flex whitespace-nowrap">
-                                                <button
-                                                    className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step3 === 'install0'
-                                                        ? 'border-b-2 border-blue-600 text-blue-600'
-                                                        : 'text-gray-500 hover:text-gray-700'
-                                                        }`}
-                                                    onClick={() => setActiveTab({ ...activeTab, step3: 'install0' })}
-                                                >
-                                                    Vendor Selection
-                                                </button>
-                                                <button
-                                                    className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step3 === 'install1'
-                                                        ? 'border-b-2 border-blue-600 text-blue-600'
-                                                        : 'text-gray-500 hover:text-gray-700'
-                                                        }`}
-                                                    onClick={() => setActiveTab({ ...activeTab, step3: 'install1' })}
-                                                >
-                                                    Work Start (vendor Agreement)
-                                                </button>
-                                                <button
-                                                    className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step3 === 'install2'
-                                                        ? 'border-b-2 border-blue-600 text-blue-600'
-                                                        : 'text-gray-500 hover:text-gray-700'
-                                                        }`}
-                                                    onClick={() => setActiveTab({ ...activeTab, step3: 'install2' })}
-                                                >
-                                                    Solar Installation Details
-                                                </button>
-                                                <button
-                                                    className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step3 === 'install3'
-                                                        ? 'border-b-2 border-blue-600 text-blue-600'
-                                                        : 'text-gray-500 hover:text-gray-700'
-                                                        }`}
-                                                    onClick={() => setActiveTab({ ...activeTab, step3: 'install3' })}
-                                                >
-                                                    PCR (vendor)
-                                                </button>
+                                                {(journeyStages[2]?.fields || ['Vendor Selection', 'Work Start (vendor Agreement)', 'Solar Installation Details', 'PCR (vendor)']).map((tab, index) => (
+                                                    <button
+                                                        key={index}
+                                                        className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step3 === `install${index}`
+                                                            ? 'border-b-2 border-blue-600 text-blue-600'
+                                                            : 'text-gray-500 hover:text-gray-700'
+                                                            }`}
+                                                        onClick={() => setActiveTab({ ...activeTab, step3: `install${index}` })}
+                                                    >
+                                                        {tab}
+                                                    </button>
+                                                ))}
                                             </div>
                                         </div>
 
@@ -984,7 +1121,7 @@ const AdminCommercialProject = () => {
                                 {/* Step 4: Meter Installation */}
                                 {currentStep === 4 && (
                                     <div className="wizard-step">
-                                        <h5 className="text-blue-600 font-semibold mb-4">Meter Installation</h5>
+                                        <h5 className="text-blue-600 font-semibold mb-4">{journeyStages[3]?.name || 'Meter Installation'}</h5>
                                         <div className="border-b border-gray-200 mb-4">
                                             <div className="flex">
                                                 <button
@@ -994,7 +1131,7 @@ const AdminCommercialProject = () => {
                                                         }`}
                                                     onClick={() => setActiveTab({ ...activeTab, step4: 'meterChange' })}
                                                 >
-                                                    Meter Change
+                                                    {journeyStages[3]?.fields[0] || 'Meter Change'}
                                                 </button>
                                                 <button
                                                     className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab.step4 === 'inspection'
@@ -1003,7 +1140,7 @@ const AdminCommercialProject = () => {
                                                         }`}
                                                     onClick={() => setActiveTab({ ...activeTab, step4: 'inspection' })}
                                                 >
-                                                    Inspection (Project Commissioning)
+                                                    {journeyStages[3]?.fields[1] || 'Inspection (Project Commissioning)'}
                                                 </button>
                                             </div>
                                         </div>

@@ -16,8 +16,11 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
-import { getProjectTypes } from '../../../../services/core/masterApi';
+import { getProjectTypes, getProjectCategoryMappings } from '../../../../services/core/masterApi';
 import { getCountries, getStates, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
+import { createDiscom, getDiscomsByState, getQuoteSettings } from '../../../../services/quote/quoteApi';
+import toast from 'react-hot-toast';
+import { Loader2 } from 'lucide-react';
 
 const ConfigurationSetting = () => {
   // State for location selection
@@ -26,12 +29,18 @@ const ConfigurationSetting = () => {
   const [selectedStates, setSelectedStates] = useState([]);
   const [selectedClusters, setSelectedClusters] = useState([]);
   const [selectedDistricts, setSelectedDistricts] = useState([]);
-  const [selectedDiscoms, setSelectedDiscoms] = useState([]);
+  const [selectedDiscoms, setSelectedDiscoms] = useState([]); // This will store DISCOM names
 
   const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [discoms, setDiscoms] = useState([]); // Dynamic discoms list
+
+  const [isAddingDiscom, setIsAddingDiscom] = useState(false);
+  const [newDiscomName, setNewDiscomName] = useState('');
+  const [newDiscomState, setNewDiscomState] = useState('');
+  const [isDiscomLoading, setIsDiscomLoading] = useState(false);
 
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
   const [stateSectionVisible, setStateSectionVisible] = useState(false);
@@ -42,20 +51,16 @@ const ConfigurationSetting = () => {
   // State for project type
   const [selectedProjectType, setSelectedProjectType] = useState('');
   const [projectTypes, setProjectTypes] = useState([]);
-  const [selectedRow, setSelectedRow] = useState('');
+  const [selectedRows, setSelectedRows] = useState([]);
+  const [configName, setConfigName] = useState('');
+  const [configCategory, setConfigCategory] = useState('Commercial');
+  const [tableCategoryFilter, setTableCategoryFilter] = useState('All');
 
   // State for step configuration
   const [allSteps, setAllSteps] = useState([]);
   const [selectedSteps, setSelectedSteps] = useState([]);
   const [draggedStep, setDraggedStep] = useState(null);
-
-  // Discoms (Static for now)
-  const discoms = [
-    { code: "PGVCL", name: "Paschim Gujarat Vij Company Limited" },
-    { code: "UGVCL", name: "Uttar Gujarat Vij Company Limited" },
-    { code: "DGVCL", name: "Dakshin Gujarat Vij Company Limited" },
-    { code: "MGVCL", name: "Madhya Gujarat Vij Company Limited" }
-  ];
+  const [allSavedConfigs, setAllSavedConfigs] = useState([]);
 
   // Initialize data
   useEffect(() => {
@@ -64,17 +69,45 @@ const ConfigurationSetting = () => {
 
   const loadInitialData = async () => {
     try {
-      const [fetchedCountries, fetchedProjectTypes, fetchedStages] = await Promise.all([
+      const [fetchedCountries, fetchedMappings, fetchedStages] = await Promise.all([
         getCountries(),
-        getProjectTypes(),
+        getProjectCategoryMappings(),
         projectApi.getJourneyStages()
       ]);
 
       setCountries(fetchedCountries || []);
-      setProjectTypes(Array.isArray(fetchedProjectTypes) ? fetchedProjectTypes : []);
-      setAllSteps(fetchedStages.map(s => s.name) || []);
+      // Mappings API returns { success: true, count: N, data: [] }
+      let mappings = fetchedMappings.success ? fetchedMappings.data : (Array.isArray(fetchedMappings) ? fetchedMappings : []);
 
-      // Load saved config
+      // Group mappings same as AddProjectCategory for better UI
+      const grouped = Object.values(mappings.reduce((acc, curr) => {
+        const key = `${curr.categoryId?._id || curr.categoryId}-${curr.subCategoryId?._id || curr.subCategoryId}-${curr.subProjectTypeId?._id || 'none'}-${curr.projectTypeFrom}-${curr.projectTypeTo}`;
+        if (!acc[key]) {
+          acc[key] = {
+            ...curr,
+            mappingIds: [curr._id],
+            clusters: curr.clusterId ? [curr.clusterId] : []
+          };
+        } else if (curr.clusterId && !acc[key].clusters.find(c => c._id === curr.clusterId._id)) {
+          acc[key].clusters.push(curr.clusterId);
+          acc[key].mappingIds.push(curr._id);
+        }
+        return acc;
+      }, {}));
+
+      // Filter out incomplete mappings (where category or subcategory name is missing)
+      const validMappings = grouped.filter(row =>
+        row.categoryId?.name &&
+        row.subCategoryId?.name
+      );
+
+      setProjectTypes(validMappings);
+      setAllSteps(fetchedStages || []);
+
+      // Load ALL saved configs for the summary table
+      await refreshSavedConfigs();
+
+      // Load saved config for current context if needed
       const savedConfig = await projectApi.getConfigurationByKey('projectConfiguration');
       if (savedConfig) {
         restoreConfiguration(savedConfig);
@@ -99,7 +132,8 @@ const ConfigurationSetting = () => {
       const configKey = `projectConfig_${type.replace(/\s+/g, '_')}`;
       const config = await projectApi.getConfigurationByKey(configKey);
       if (config) {
-        restoreConfiguration(config);
+        setSelectedSteps(config.selectedSteps || []);
+        if (config.configName) setConfigName(config.configName);
       } else {
         setSelectedSteps([]);
       }
@@ -126,7 +160,7 @@ const ConfigurationSetting = () => {
     setSelectedClusters([]);
     setSelectedDistricts([]);
     setSelectedDiscoms([]);
-    
+
     if (newSelected.length > 0) {
       setStateSectionVisible(true);
       // Fetch states for all selected countries
@@ -181,6 +215,9 @@ const ConfigurationSetting = () => {
         const stateIds = states.filter(s => newSelected.includes(s.name)).map(s => s._id);
         const clustersData = await Promise.all(stateIds.map(id => getClustersHierarchy(id)));
         setClusters(clustersData.flat());
+
+        // Also fetch DISCOMs for these states
+        fetchDiscoms(stateIds);
       } catch (e) { console.error(e); }
     } else {
       setClusterSectionVisible(false);
@@ -200,6 +237,9 @@ const ConfigurationSetting = () => {
       try {
         const clustersData = await Promise.all(states.map(s => getClustersHierarchy(s._id)));
         setClusters(clustersData.flat());
+
+        const stateIds = states.map(s => s._id);
+        fetchDiscoms(stateIds);
       } catch (e) { console.error(e); }
     }
   };
@@ -248,6 +288,59 @@ const ConfigurationSetting = () => {
     }
   };
 
+  const fetchDiscoms = async (stateIds) => {
+    if (!stateIds || stateIds.length === 0) {
+      setDiscoms([]);
+      return;
+    }
+    setIsDiscomLoading(true);
+    try {
+      const discomsData = await Promise.all(stateIds.map(id => getDiscomsByState(id)));
+      // Flatten and remove duplicates by name
+      const uniqueDiscoms = Array.from(new Map(discomsData.flat().map(item => [item._id, item])).values());
+      setDiscoms(uniqueDiscoms);
+    } catch (e) {
+      console.error("Error fetching discoms:", e);
+    } finally {
+      setIsDiscomLoading(false);
+    }
+  };
+
+  const handleAddDiscom = async () => {
+    if (!newDiscomName.trim()) {
+      toast.error("Please enter Discom name");
+      return;
+    }
+    if (!newDiscomState) {
+      toast.error("Please select a state for the new Discom");
+      return;
+    }
+
+    try {
+      setIsDiscomLoading(true);
+      const payload = {
+        name: newDiscomName,
+        state: newDiscomState,
+        projects: [] // Default empty projects as per model
+      };
+      const created = await createDiscom(payload);
+      toast.success("Discom added successfully!");
+
+      // Update local list
+      setDiscoms(prev => [...prev, created]);
+      setNewDiscomName('');
+      setIsAddingDiscom(false);
+
+      // Select it automatically
+      setSelectedDiscoms(prev => [...prev, created.name]);
+    } catch (error) {
+      console.error("Error adding discom:", error);
+      toast.error("Failed to add Discom");
+    } finally {
+      setIsDiscomLoading(false);
+    }
+  };
+
   // Handle district selection
   const handleDistrictSelect = (district) => {
     const name = district.name || district;
@@ -287,16 +380,16 @@ const ConfigurationSetting = () => {
     if (selectedDiscoms.length === discoms.length) {
       setSelectedDiscoms([]);
     } else {
-      setSelectedDiscoms(discoms.map(d => d.code));
+      setSelectedDiscoms(discoms.map(d => d.name));
     }
   };
 
   // Toggle step selection
-  const toggleStepSelection = (step) => {
-    if (selectedSteps.includes(step)) {
-      setSelectedSteps(selectedSteps.filter(s => s !== step));
+  const toggleStepSelection = (stepName) => {
+    if (selectedSteps.includes(stepName)) {
+      setSelectedSteps(selectedSteps.filter(s => s !== stepName));
     } else {
-      setSelectedSteps([...selectedSteps, step]);
+      setSelectedSteps([...selectedSteps, stepName]);
     }
   };
 
@@ -315,30 +408,116 @@ const ConfigurationSetting = () => {
 
   // Save configuration
   const saveConfiguration = async () => {
-    if (!selectedProjectType) {
-      alert('Please select a project type before saving');
+    if (selectedRows.length === 0) {
+      toast.error('Please select at least one project type before saving');
       return;
     }
 
-    const configuration = {
-      currentCountry: selectedCountries,
-      currentState: selectedStates,
-      currentCluster: selectedClusters,
-      currentDistrict: selectedDistricts,
-      currentDiscom: selectedDiscoms,
-      currentProjectType: selectedProjectType,
-      selectedSteps,
-      allSteps
-    };
+    if (!configName.trim()) {
+      toast.error('Please enter a configuration name');
+      return;
+    }
+
+    const toastId = toast.loading(`Saving configuration "${configName}"...`);
 
     try {
-      const configKey = `projectConfig_${selectedProjectType.replace(/\s+/g, '_')}`;
-      await projectApi.saveConfiguration(configKey, configuration);
-      alert(`Configuration for ${selectedProjectType} saved successfully!`);
+      const configuration = {
+        currentCountry: selectedCountries,
+        currentState: selectedStates,
+        currentCluster: selectedClusters,
+        currentDistrict: selectedDistricts,
+        currentDiscom: selectedDiscoms,
+        configName,
+        selectedSteps,
+        selectedRows: selectedRows, // Store which rows this config applies to
+        createdAt: new Date().toISOString() // Add timestamp for unique grouping
+      };
+
+      // Save for each selected project type
+      const savePromises = selectedRows.map(rowId => {
+        const row = projectTypes.find(pt => pt._id === rowId);
+        const category = row.categoryId?.name || row.category || '-';
+        const subCategory = row.subCategoryId?.name || row.subCategory || '-';
+        const range = `${row.projectTypeFrom} to ${row.projectTypeTo} kW`;
+        const subType = row.subProjectTypeId?.name || row.subProjectType || '-';
+        
+        // Use a consistent separator that we can split by in the table
+        configuration.configCategory = configCategory;
+        const typeKey = `${configCategory}_${row.categoryId?.name || row.category}_${row.subCategoryId?.name || row.subCategory}_${row.projectTypeFrom}_to_${row.projectTypeTo}_kW_${row.subProjectTypeId?.name || row.subProjectType || 'Any'}`;
+        const configKey = `projectConfig_${typeKey.replace(/\s+/g, '_')}`;
+        return projectApi.saveConfiguration(configKey, configuration);
+      });
+
+      await Promise.all(savePromises);
+      
+      // Refresh configurations list
+      await refreshSavedConfigs();
+      
+      toast.success(`Configuration "${configName}" saved successfully!`, { id: toastId });
+      
+      // Optional: Clear selection after save or keep it? 
+      // User might want to save same config for another set, but usually they're done.
+      // setSelectedRows([]);
+      // setConfigName('');
     } catch (error) {
       console.error(error);
-      alert('Failed to save configuration');
+      toast.error('Failed to save configuration', { id: toastId });
     }
+  };
+
+  const refreshSavedConfigs = async () => {
+    try {
+      const allConfigs = await projectApi.getConfigurations();
+      if (allConfigs && Array.isArray(allConfigs)) {
+        const filtered = allConfigs.filter(c => c.configKey && c.configKey.startsWith('projectConfig_'));
+        setAllSavedConfigs(filtered);
+      }
+    } catch (e) {
+      console.error("Error refreshing configs:", e);
+    }
+  };
+
+  const deleteSavedConfigs = async (configKeys, name) => {
+    if (!window.confirm(`Are you sure you want to delete "${name || 'this configuration'}"?${configKeys.length > 1 ? ` This will remove it from ${configKeys.length} project types.` : ''}`)) return;
+    
+    const toastId = toast.loading('Deleting configuration...');
+    try {
+      await Promise.all(configKeys.map(key => projectApi.deleteConfiguration(key)));
+      toast.success('Configuration deleted successfully', { id: toastId });
+      
+      // Refresh configurations list
+      await refreshSavedConfigs();
+    } catch (error) {
+      console.error(error);
+      toast.error('Failed to delete configuration', { id: toastId });
+    }
+  };
+
+  const editSavedConfig = (cfg) => {
+    // If it's a grouped config, cfg might be our custom object or the original
+    const val = cfg.configValue || {};
+    
+    // Set configuration name
+    if (val.configName) setConfigName(val.configName);
+    
+    // Set workflow steps
+    if (val.selectedSteps) setSelectedSteps(val.selectedSteps);
+    
+    // Set selected project types in the main table
+    if (val.selectedRows) {
+      setSelectedRows(val.selectedRows);
+    } else {
+      // Fallback: If selectedRows wasn't saved, try to find the row by configKey content
+      // The key was Category-Subcat-Range-Subtype
+      // This is less reliable but better than nothing
+      setSelectedRows([]); 
+    }
+    
+    // Smooth scroll to selection section
+    const el = document.getElementById('project-type-table');
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    
+    toast.success(`Loaded configuration: ${val.configName || 'Unnamed'}`);
   };
 
   // Handle drag start
@@ -396,9 +575,46 @@ const ConfigurationSetting = () => {
   };
 
   // Handle row selection
-  const handleRowSelect = (rowId, category, subcategory, type) => {
-    setSelectedRow(rowId);
-    setSelectedProjectType(type);
+  const handleRowSelect = (rowId) => {
+    let newSelectedRows = [];
+    if (selectedRows.includes(rowId)) {
+      newSelectedRows = selectedRows.filter(id => id !== rowId);
+    } else {
+      newSelectedRows = [...selectedRows, rowId];
+    }
+    setSelectedRows(newSelectedRows);
+
+    // If we just selected one row, maybe load its existing config?
+    if (newSelectedRows.length === 1) {
+      const row = projectTypes.find(pt => pt._id === newSelectedRows[0]);
+      const category = row.categoryId?.name || row.category || '-';
+      const subCategory = row.subCategoryId?.name || row.subCategory || '-';
+      const range = `${row.projectTypeFrom} to ${row.projectTypeTo} kW`;
+      const subType = row.subProjectTypeId?.name || row.subProjectType || '-';
+      const fullType = `${category}-${subCategory}-${range}${subType ? `-${subType}` : ''}`;
+      setSelectedProjectType(fullType);
+      fetchConfigForType(fullType);
+    }
+  };
+
+  const toggleAllRows = () => {
+    const visibleRows = projectTypes.filter(row => {
+      if (tableCategoryFilter === 'All') return true;
+      const catName = row.categoryId?.name || row.category || '';
+      const subCatName = row.subCategoryId?.name || row.subCategory || '';
+      return catName.includes(tableCategoryFilter) || subCatName.includes(tableCategoryFilter);
+    });
+
+    const visibleIds = visibleRows.map(r => r._id);
+    const allVisibleSelected = visibleIds.length > 0 && visibleIds.every(id => selectedRows.includes(id));
+
+    if (allVisibleSelected) {
+      // Remove visible rows from selection
+      setSelectedRows(selectedRows.filter(id => !visibleIds.includes(id)));
+    } else {
+      // Add all visible rows to selection (using Set to prevent duplicates)
+      setSelectedRows([...new Set([...selectedRows, ...visibleIds])]);
+    }
   };
 
   // Get location summary text
@@ -429,8 +645,58 @@ const ConfigurationSetting = () => {
 
   // Get project type label
   const getProjectTypeLabel = () => {
-    const type = projectTypes.find(pt => pt.value === selectedProjectType);
-    return type ? type.label : 'Not selected';
+    if (selectedRows.length === 0) return 'Not selected';
+    if (selectedRows.length === 1) {
+      const row = projectTypes.find(pt => pt._id === selectedRows[0]);
+      if (!row) return 'Not selected';
+      const category = row.categoryId?.name || row.category || '-';
+      const subCategory = row.subCategoryId?.name || row.subCategory || '-';
+      const range = `${row.projectTypeFrom} to ${row.projectTypeTo} kW`;
+      const subProjectType = row.subProjectTypeId?.name || row.subProjectType || '-';
+  
+      return `${category} - ${subCategory} - ${range} - ${subProjectType}`;
+    }
+    return `${selectedRows.length} project types selected`;
+  };
+
+  // Get grouped configurations for the table
+  const getGroupedConfigs = () => {
+    const groups = {};
+    
+    // Sort all configs by created date if possible (though we don't have it explicitly without updatedAt)
+    // We'll just group them
+    allSavedConfigs.forEach(cfg => {
+      const val = cfg.configValue || {};
+      const stepsKey = Array.isArray(val.selectedSteps) ? val.selectedSteps.join('|') : '';
+      // Group by name, steps AND createdAt to ensure separate saves are separate rows
+      const groupKey = `${val.configName || 'unnamed'}-${stepsKey}-${val.createdAt || cfg.updatedAt || cfg.configKey}`;
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          configName: val.configName || 'Unnamed Config',
+          selectedSteps: val.selectedSteps || [],
+          status: cfg.status || 'Active',
+          allKeys: [cfg.configKey],
+          appliedToLabels: [cfg.configKey.replace('projectConfig_', '').replace(/_/g, ' ')],
+          isMultiple: false,
+          configValue: val, // One representation of the config
+          createdAt: val.createdAt || cfg.updatedAt || ''
+        };
+      } else {
+        groups[groupKey].allKeys.push(cfg.configKey);
+        groups[groupKey].appliedToLabels.push(cfg.configKey.replace('projectConfig_', '').replace(/_/g, ' '));
+        groups[groupKey].isMultiple = true;
+      }
+    });
+    
+    // Final check for multiple based on selectedRows if available
+    Object.values(groups).forEach(g => {
+      if (g.configValue.selectedRows && g.configValue.selectedRows.length > 1) {
+        g.isMultiple = true;
+      }
+    });
+    
+    return Object.values(groups);
   };
 
   return (
@@ -636,43 +902,151 @@ const ConfigurationSetting = () => {
           <div className="bg-white rounded-xl shadow-sm mb-6">
             <div className="p-4 border-b flex justify-between items-center">
               <h3 className="text-lg font-semibold">Select DISCOM</h3>
-              <button
-                onClick={toggleAllDiscoms}
-                className="text-sm font-medium text-blue-600 hover:text-blue-800"
-              >
-                {selectedDiscoms.length === discoms.length ? 'Deselect All' : 'Select All'}
-              </button>
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => {
+                    setIsAddingDiscom(!isAddingDiscom);
+                    if (selectedStates.length > 0) {
+                      // Pre-select the first selected state if available
+                      const firstState = states.find(s => s.name === selectedStates[0]);
+                      if (firstState) setNewDiscomState(firstState._id);
+                    }
+                  }}
+                  className="flex items-center text-sm font-medium text-green-600 hover:text-green-800"
+                >
+                  <Plus className="w-4 h-4 mr-1" /> Add DISCOM
+                </button>
+                <button
+                  onClick={toggleAllDiscoms}
+                  className="text-sm font-medium text-blue-600 hover:text-blue-800"
+                >
+                  {selectedDiscoms.length === discoms.length && discoms.length > 0 ? 'Deselect All' : 'Select All'}
+                </button>
+              </div>
             </div>
             <div className="p-4 md:p-6">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                {discoms.map((discom) => (
-                  <div
-                    key={discom.code}
-                    onClick={() => handleDiscomSelect(discom.code)}
-                    className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDiscoms.includes(discom.code)
-                      ? 'border-blue-500 border-2 bg-blue-50'
-                      : 'border-gray-200 hover:border-blue-300'
-                      }`}
-                  >
-                    <h4 className={`font-bold ${selectedDiscoms.includes(discom.code) ? 'text-blue-700' : 'text-gray-800'}`}>{discom.code}</h4>
-                    <p className="text-gray-500 text-sm mt-1">{discom.name}</p>
+              {/* Add DISCOM Form */}
+              {isAddingDiscom && (
+                <div className="mb-6 bg-green-50 p-4 rounded-xl border border-green-200 animate-in fade-in slide-in-from-top-2 duration-300">
+                  <div className="flex flex-col md:flex-row gap-4 items-end">
+                    <div className="flex-1">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">Discom Name</label>
+                      <input
+                        type="text"
+                        value={newDiscomName}
+                        onChange={(e) => setNewDiscomName(e.target.value)}
+                        placeholder="Enter Discom Name"
+                        className="w-full h-11 px-4 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      />
+                    </div>
+                    <div className="w-full md:w-64">
+                      <label className="block text-xs font-bold text-gray-500 uppercase mb-2">State</label>
+                      <select
+                        value={newDiscomState}
+                        onChange={(e) => setNewDiscomState(e.target.value)}
+                        className="w-full h-11 px-4 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 outline-none"
+                      >
+                        <option value="">Select State</option>
+                        {states
+                          .filter(s => selectedStates.includes(s.name))
+                          .map(s => (
+                            <option key={s._id} value={s._id}>{s.name}</option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleAddDiscom}
+                        disabled={isDiscomLoading}
+                        className="h-11 px-6 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 transition-colors flex items-center disabled:opacity-50"
+                      >
+                        {isDiscomLoading ? <Loader2 className="w-5 h-5 animate-spin mr-2" /> : <Save className="w-5 h-5 mr-2" />}
+                        Save
+                      </button>
+                      <button
+                        onClick={() => setIsAddingDiscom(false)}
+                        className="h-11 px-4 bg-gray-200 text-gray-700 font-bold rounded-lg hover:bg-gray-300 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                    </div>
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+
+              {isDiscomLoading && discoms.length === 0 ? (
+                <div className="flex justify-center p-8">
+                  <Loader2 className="w-10 h-10 text-blue-500 animate-spin" />
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {discoms.length > 0 ? (
+                    discoms.map((discom) => (
+                      <div
+                        key={discom._id}
+                        onClick={() => handleDiscomSelect(discom.name)}
+                        className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDiscoms.includes(discom.name)
+                          ? 'border-blue-500 border-2 bg-blue-50'
+                          : 'border-gray-200 hover:border-blue-300'
+                          }`}
+                      >
+                        <h4 className={`font-bold ${selectedDiscoms.includes(discom.name) ? 'text-blue-700' : 'text-gray-800'}`}>{discom.name}</h4>
+                        <p className="text-gray-500 text-sm mt-1">
+                          {states.find(s => s._id === discom.state)?.name || 'State'}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="col-span-full py-12 text-center text-gray-500 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                      <p className="mb-2">No DISCOMs found for selected states.</p>
+                      <button
+                        onClick={() => setIsAddingDiscom(true)}
+                        className="text-blue-600 font-bold hover:underline"
+                      >
+                        Click here to add one
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </div>
 
       {/* Project Type Configuration */}
-      <div className="bg-white rounded-xl shadow-sm mb-6">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Project Type Configuration</h2>
+      <div id="project-type-table" className="bg-white rounded-xl shadow-sm mb-6">
+        <div className="p-4 border-b flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h2 className="text-lg font-semibold text-gray-800">Project Type Configuration</h2>
+          <div className="flex bg-gray-100 p-1 rounded-xl w-fit border border-gray-200 shadow-inner">
+            {['All', 'Commercial', 'Residential'].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => {
+                  setTableCategoryFilter(cat);
+                  if (cat !== 'All') setConfigCategory(cat);
+                }}
+                className={`px-5 py-2 rounded-lg text-sm font-bold transition-all duration-200 ${tableCategoryFilter === cat 
+                  ? 'bg-white text-blue-600 shadow-md ring-1 ring-black/5 scale-[1.02]' 
+                  : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'}`}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-50">
               <tr>
+                <th className="p-4 text-left">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                    checked={selectedRows.length === projectTypes.length && projectTypes.length > 0}
+                    onChange={toggleAllRows}
+                  />
+                </th>
                 <th className="p-4 text-left text-sm font-semibold text-gray-700">Category</th>
                 <th className="p-4 text-left text-sm font-semibold text-gray-700">Subcategory</th>
                 <th className="p-4 text-left text-sm font-semibold text-gray-700">Project Type</th>
@@ -682,47 +1056,47 @@ const ConfigurationSetting = () => {
               </tr>
             </thead>
             <tbody>
-              {projectTypes.map((row) => (
+              {projectTypes
+                .filter(row => {
+                  if (tableCategoryFilter === 'All') return true;
+                  const catName = row.categoryId?.name || row.category || '';
+                  const subCatName = row.subCategoryId?.name || row.subCategory || '';
+                  return catName.includes(tableCategoryFilter) || subCatName.includes(tableCategoryFilter);
+                })
+                .map((row) => (
                 <tr
                   key={row._id}
-                  className={`border-b hover:bg-gray-50 transition-colors ${selectedRow === row._id ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
+                  className={`border-b hover:bg-gray-50 transition-colors ${selectedRows.includes(row._id) ? 'bg-blue-50 border-l-4 border-l-blue-500' : ''
                     }`}
                 >
-                  <td className="p-4">{row.category || '-'}</td>
-                  <td className="p-4">{row.subCategory || '-'}</td>
-                  <td className="p-4">{row.projectType}</td>
-                  <td className="p-4">{row.subProjectType || '-'}</td>
                   <td className="p-4">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${row.status === 'Active'
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-yellow-100 text-yellow-800'
-                      }`}>
-                      {row.status || 'Active'}
-                    </span>
+                    <input 
+                      type="checkbox" 
+                      className="w-4 h-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      checked={selectedRows.includes(row._id)}
+                      onChange={() => handleRowSelect(row._id)}
+                    />
+                  </td>
+                  <td className="p-4 text-sm font-medium">{row.categoryId?.name || row.category || '-'}</td>
+                  <td className="p-4 text-sm text-blue-600">{row.subCategoryId?.name || row.subCategory || '-'}</td>
+                  <td className="p-4 text-sm font-semibold text-green-700">
+                    {row.projectTypeFrom} to {row.projectTypeTo} kW
+                  </td>
+                  <td className="p-4 text-sm">{row.subProjectTypeId?.name || row.subProjectType || '-'}</td>
+                  <td className="p-4">
+                    <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium">Active</span>
                   </td>
                   <td className="p-4">
                     <div className="flex space-x-2">
                       <button
-                        onClick={() => handleRowSelect(row._id, row.category, row.subCategory, row.projectType)}
-                        className="px-3 py-1 text-sm border border-blue-500 text-blue-500 rounded-lg hover:bg-blue-50 transition-colors">
-                        <Edit2 className="w-4 h-4 inline mr-1" />
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleRowSelect(row._id, row.category, row.subCategory, row.projectType)}
-                        className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center ${selectedRow === row._id
-                          ? 'bg-green-500 text-white'
-                          : 'border border-yellow-500 text-yellow-500 hover:bg-yellow-50'
+                        onClick={() => handleRowSelect(row._id)}
+                        className={`px-3 py-1 text-sm rounded-lg transition-colors flex items-center ${selectedRows.includes(row._id)
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'border border-blue-500 text-blue-500 hover:bg-blue-50'
                           }`}
                       >
-                        {selectedRow === row._id ? (
-                          <>
-                            <Check className="w-4 h-4 mr-1" />
-                            Selected
-                          </>
-                        ) : (
-                          'Select'
-                        )}
+                        {selectedRows.includes(row._id) ? <Check className="w-4 h-4 inline mr-1" /> : <Plus className="w-4 h-4 inline mr-1" />}
+                        {selectedRows.includes(row._id) ? 'Selected' : 'Select'}
                       </button>
                     </div>
                   </td>
@@ -742,25 +1116,50 @@ const ConfigurationSetting = () => {
           </span>
         </div>
         <div className="p-4 md:p-6">
-          {/* Project Type Selection */}
-          <div className="mb-6">
-            <label htmlFor="project-type" className="block text-sm font-medium text-gray-700 mb-2">
-              Select Project Type
+          {/* Configuration Name Input */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
+            <div>
+              <label className="block text-sm font-bold text-gray-700 uppercase mb-2">
+                Configuration Name
+              </label>
+              <input
+                type="text"
+                value={configName}
+                onChange={(e) => setConfigName(e.target.value)}
+                placeholder="e.g. Standard Warehouse Workflow"
+                className="w-full h-11 px-4 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-bold text-gray-700 uppercase mb-2 text-blue-600">
+                Selected Application Scope
+              </label>
+              <div className="h-11 px-4 bg-blue-50 border border-blue-200 rounded-lg flex items-center text-blue-700 font-medium">
+                {getProjectTypeLabel()}
+              </div>
+            </div>
+          </div>
+
+          <div className="mb-8">
+            <label className="block text-sm font-bold text-gray-700 uppercase mb-3">
+              Apply Configuration To Category
             </label>
-            <select
-              id="project-type"
-              value={selectedProjectType}
-              onChange={(e) => handleProjectTypeChange(e.target.value)}
-              className="w-full md:w-1/2 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="">-- Select Project Type --</option>
-              {projectTypes.map((type) => (
-                <option key={type._id} value={type.projectType || type.name}>
-                  {/* Adjust display logic based on actual API data structure */}
-                  {type.projectType || type.name} {type.subProjectType ? `- ${type.subProjectType}` : ''}
-                </option>
+            <div className="flex space-x-4">
+              {['Commercial', 'Residential'].map((cat) => (
+                <button
+                  key={cat}
+                  onClick={() => setConfigCategory(cat)}
+                  className={`flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all flex items-center justify-center ${configCategory === cat 
+                    ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100' 
+                    : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}
+                >
+                  <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${configCategory === cat ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`}>
+                    {configCategory === cat && <div className="w-2 h-2 rounded-full bg-white" />}
+                  </div>
+                  {cat}
+                </button>
               ))}
-            </select>
+            </div>
           </div>
 
           {/* Available Steps */}
@@ -772,32 +1171,35 @@ const ConfigurationSetting = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
             {allSteps.map((step, index) => (
               <div
-                key={step}
-                onClick={() => toggleStepSelection(step)}
-                className={`bg-white border rounded-xl p-4 cursor-pointer transition-all duration-300 ${selectedSteps.includes(step)
-                  ? 'border-blue-500 bg-blue-50'
-                  : 'border-gray-200 hover:border-blue-300 hover:shadow-md'
+                key={step._id || index}
+                onClick={() => toggleStepSelection(step.name)}
+                className={`bg-white border-2 rounded-xl p-4 cursor-pointer transition-all duration-300 relative group ${selectedSteps.includes(step.name)
+                  ? 'border-blue-500 bg-blue-50 shadow-md ring-2 ring-blue-50'
+                  : 'border-gray-100 hover:border-blue-300 hover:shadow-lg hover:-translate-y-1'
                   }`}
               >
                 <div className="flex items-center">
-                  <div className="w-8 h-8 rounded-full bg-blue-500 text-white flex items-center justify-center font-bold mr-3">
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black mr-4 transition-colors ${selectedSteps.includes(step.name) ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-500'}`}>
                     {index + 1}
                   </div>
                   <div className="flex-1">
-                    <h5 className="font-medium text-gray-800">{step}</h5>
+                    <h5 className={`font-bold uppercase tracking-tight ${selectedSteps.includes(step.name) ? 'text-blue-900' : 'text-gray-700'}`}>
+                      {step.name}
+                    </h5>
+                    <div className="flex flex-wrap gap-1 mt-1.5">
+                      {step.fields?.slice(0, 2).map((f, i) => (
+                        <span key={i} className="text-[10px] bg-white bg-opacity-50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 font-medium">
+                          {f}
+                        </span>
+                      ))}
+                      {(step.fields?.length || 0) > 2 && (
+                        <span className="text-[10px] text-blue-500 font-bold">+{step.fields.length - 2} more</span>
+                      )}
+                    </div>
                   </div>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      toggleStepSelection(step);
-                    }}
-                    className={`p-2 rounded-lg ${selectedSteps.includes(step)
-                      ? 'text-red-500 hover:bg-red-50'
-                      : 'text-blue-500 hover:bg-blue-50'
-                      }`}
-                  >
-                    {selectedSteps.includes(step) ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-                  </button>
+                  <div className={`w-6 h-6 rounded-full flex items-center justify-center transition-all ${selectedSteps.includes(step.name) ? 'bg-blue-100 text-blue-600 scale-110' : 'text-gray-300 group-hover:text-blue-400 rotate-90 group-hover:rotate-0'}`}>
+                    {selectedSteps.includes(step.name) ? <Check className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+                  </div>
                 </div>
               </div>
             ))}
@@ -868,42 +1270,147 @@ const ConfigurationSetting = () => {
         </div>
       </div>
 
-      {/* Summary */}
-      <div className="bg-white rounded-xl shadow-sm">
-        <div className="p-4 border-b">
-          <h2 className="text-lg font-semibold">Configuration Summary</h2>
+      {/* Saved Configurations Inventory */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-12">
+        <div className="px-6 py-4 bg-gray-50 border-b flex items-center justify-between">
+          <div className="flex items-center">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center mr-4">
+              <List className="w-6 h-6 text-blue-600" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-800">Saved Workflow Inventory</h2>
+              <p className="text-sm text-gray-500">Overview of all project-specific step configurations</p>
+            </div>
+          </div>
+          <span className="px-3 py-1 bg-blue-600 text-white rounded-full text-xs font-black uppercase tracking-widest">
+            {allSavedConfigs.length} Active Rules
+          </span>
         </div>
-        <div className="p-4 md:p-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div>
-              <div className="flex justify-between py-3 border-b">
-                <span className="font-semibold">Selected Location:</span>
-                <span>{getLocationSummary()}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b">
-                <span className="font-semibold">Selected Project Type:</span>
-                <span>{getProjectTypeLabel()}</span>
-              </div>
-            </div>
-            <div>
-              <div className="flex justify-between py-3 border-b">
-                <span className="font-semibold">Total Selected Steps:</span>
-                <span>{selectedSteps.length}</span>
-              </div>
-              <div className="flex justify-between py-3 border-b">
-                <span className="font-semibold">Status:</span>
-                <span className="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm font-medium">
-                  Active
-                </span>
-              </div>
-            </div>
-          </div>
-          <div className="mt-6">
-            <div className="font-semibold mb-2">Selected Steps:</div>
-            <div className="text-gray-500">
-              {selectedSteps.length > 0 ? selectedSteps.join(', ') : 'None'}
-            </div>
-          </div>
+        
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 text-left">
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b">Configuration Name</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b text-center">Category</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b">Applied To</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b text-center">DISCOM</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b text-center">Type</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b">Workflow Steps</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b text-center">Status</th>
+                <th className="px-6 py-4 text-xs font-black text-gray-500 uppercase tracking-widest border-b text-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {getGroupedConfigs().length === 0 ? (
+                <tr>
+                  <td colSpan="7" className="px-6 py-20 text-center">
+                    <div className="flex flex-col items-center opacity-30">
+                      <Cog className="w-16 h-16 mb-4 animate-[spin_10s_linear_infinite]" />
+                      <p className="text-lg font-bold">No saved workflows found</p>
+                      <p className="text-sm">Configurations will appear here once saved.</p>
+                    </div>
+                  </td>
+                </tr>
+              ) : (
+                getGroupedConfigs().map((cfg, idx) => {
+                  const val = cfg.configValue || {};
+                  const isMultiple = cfg.isMultiple;
+
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50 transition-colors group">
+                      <td className="px-6 py-5">
+                        <div className="font-black text-gray-800 text-md truncate max-w-[200px]" title={cfg.configName}>
+                          {cfg.configName}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        <span className={`px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          val.configCategory === 'Commercial' ? 'bg-blue-100 text-blue-700' : 
+                          val.configCategory === 'Residential' ? 'bg-green-100 text-green-700' :
+                          'bg-orange-100 text-orange-700'
+                        }`}>
+                          {val.configCategory || 'Mixed'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5">
+                          {isMultiple ? (
+                            <span className="text-sm font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded inline-block w-fit">
+                              {cfg.appliedToLabels.length} Project Types
+                            </span>
+                          ) : (
+                            <span className="text-sm font-medium text-gray-600">
+                              {cfg.appliedToLabels[0].includes(' - ') ? cfg.appliedToLabels[0].split(' - ').slice(1).join(' - ') : cfg.appliedToLabels[0]}
+                            </span>
+                          )}
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        <div className="flex flex-wrap justify-center gap-1 max-w-[150px] mx-auto">
+                          {Array.isArray(val.currentDiscom) && val.currentDiscom.length > 0 ? (
+                            val.currentDiscom.length > 1 ? (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-bold border border-gray-200" title={val.currentDiscom.join(', ')}>
+                                {val.currentDiscom.length} DISCOMs
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-[10px] font-bold border border-gray-200">
+                                {val.currentDiscom[0]}
+                              </span>
+                            )
+                          ) : (
+                            <span className="text-gray-400 text-xs italic">Global</span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        {isMultiple ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                            Multiple
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-bold bg-blue-100 text-blue-800 border border-blue-200">
+                            Single
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex flex-wrap gap-2">
+                          {(cfg.selectedSteps || []).map((step, sIdx) => (
+                            <span key={sIdx} className="inline-flex items-center px-2.5 py-1 rounded-md bg-white border border-gray-200 text-[11px] font-bold text-gray-600 shadow-sm">
+                              <span className="w-4 h-4 rounded-full bg-blue-500 text-white flex items-center justify-center text-[10px] mr-1.5">{sIdx + 1}</span>
+                              {step}
+                            </span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-6 py-5 text-center">
+                        <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-[11px] font-black uppercase tracking-widest ring-1 ring-green-200">
+                          {cfg.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-5">
+                        <div className="flex items-center justify-center space-x-2">
+                          <button
+                            onClick={() => editSavedConfig(cfg)}
+                            className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Edit Configuration"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => deleteSavedConfigs(cfg.allKeys, cfg.configName)}
+                            className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            title="Delete Configuration"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>

@@ -65,6 +65,11 @@ export const projectApi = {
         const response = await axios.post(`${API_URL}/config`, { configKey: key, configValue: value }, getAuthHeaders());
         return response.data;
     },
+    
+    deleteConfiguration: async (key) => {
+        const response = await axios.delete(`${API_URL}/config/${key}`, getAuthHeaders());
+        return response.data;
+    },
 
     // Project Documents
     getProjectDocuments: async (filters = {}) => {

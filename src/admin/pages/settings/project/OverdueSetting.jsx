@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Building, Filter, Save } from 'lucide-react';
+import { Home, Building, Filter, Save, ClipboardList } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
 import { 
   getCategories, 
@@ -30,78 +30,36 @@ export default function OverdueSetting() {
   const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
   const [availableSubProjectTypes, setAvailableSubProjectTypes] = useState([]);
 
+  // Dynamic journey stages from DB
+  const [journeyStages, setJourneyStages] = useState([]);
+
   // Process configuration state (Form Data)
-  const [processConfig, setProcessConfig] = useState({
-    projectSignup: { consumerRegistered: 3, applicationSubmission: 5 },
-    feasibilityApproval: { feasibilityCheck: 7, meterCharge: 2 },
-    installationStatus: { vendorSelection: 5, workStart: 3, solarInstallation: 10 },
-    meterInstallation: { meterChange: 3, meterInspection: 2 },
-    subsidy: { subsidyRequest: 5, subsidyDisbursal: 7 }
-  });
+  const [processConfig, setProcessConfig] = useState({});
 
-  // Default config for reset
-  const defaultConfig = {
-    projectSignup: { consumerRegistered: 3, applicationSubmission: 5 },
-    feasibilityApproval: { feasibilityCheck: 7, meterCharge: 2 },
-    installationStatus: { vendorSelection: 5, workStart: 3, solarInstallation: 10 },
-    meterInstallation: { meterChange: 3, meterInspection: 2 },
-    subsidy: { subsidyRequest: 5, subsidyDisbursal: 7 }
-  };
+  // Flag to check if config is being loaded to prevent overwriting with defaults
+  const [isConfigLoaded, setIsConfigLoaded] = useState(false);
 
-  // Dynamic Summary Data derived from allSettings
-  const getSummaryData = (subCat) => {
-    // Find setting for the current filters but specific subCategory (Residential/Commercial)
-    const setting = allSettings.find(s =>
-      s.category === category &&
-      s.subCategory?.toLowerCase() === subCat?.toLowerCase() &&
-      s.projectType === projectType &&
-      s.subProjectType === subProjectType
-    );
+  // Default values for new/unconfigured stages/fields
+  const DEFAULT_DAYS = 5;
 
-    if (setting && setting.processConfig) {
-      // Map nested processConfig to flat summary structure
-      // Note: Using optional chaining ?. to avoid crashes if keys are missing
-      const pc = setting.processConfig;
-      return {
-        consumerReg: pc.projectSignup?.consumerRegistered || 0,
-        appSubmit: pc.projectSignup?.applicationSubmission || 0,
-        feasibility: pc.feasibilityApproval?.feasibilityCheck || 0,
-        meterCharge: pc.feasibilityApproval?.meterCharge || 0,
-        vendorSelect: pc.installationStatus?.vendorSelection || 0,
-        workStart: pc.installationStatus?.workStart || 0,
-        installation: pc.installationStatus?.solarInstallation || 0,
-        meterChange: pc.meterInstallation?.meterChange || 0,
-        inspection: pc.meterInstallation?.meterInspection || 0,
-        subsidyReq: pc.subsidy?.subsidyRequest || 0,
-        subsidyDisb: pc.subsidy?.subsidyDisbursal || 0
-      };
-    }
-
-    // Return 0s or defaults if no setting found
-    return {
-      consumerReg: 0, appSubmit: 0, feasibility: 0, meterCharge: 0,
-      vendorSelect: 0, workStart: 0, installation: 0,
-      meterChange: 0, inspection: 0, subsidyReq: 0, subsidyDisb: 0
-    };
-  };
-
-  const residentialSummary = getSummaryData('Residential');
-  const commercialSummary = getSummaryData('Commercial');
+  // Summary data is now directly derived in the render section for Residential and Commercial cards
 
   // Fetch all master data and existing settings
   const fetchInitialData = async () => {
     try {
-      const [settings, cats, mappings, subPTs] = await Promise.all([
+      const [settings, cats, mappings, subPTs, stages] = await Promise.all([
         projectApi.getOverdueSettings(),
         getCategories(),
         getProjectCategoryMappings(),
-        getSubProjectTypes()
+        getSubProjectTypes(),
+        projectApi.getJourneyStages()
       ]);
       
       setAllSettings(settings || []);
       setMasterCategories(cats?.data || []);
       setProjectMappings(mappings?.data || []);
       setAllSubProjectTypes(subPTs?.data || []);
+      setJourneyStages(stages || []);
       
       // Also fetch all sub-categories for mapping
       const subCats = await getSubCategories();
@@ -111,6 +69,8 @@ export default function OverdueSetting() {
       toast.error('Failed to load configuration data');
     }
   };
+
+  const [summaryTab, setSummaryTab] = useState('residential');
 
   // Fetch only settings when needed
   const fetchSettings = async () => {
@@ -122,9 +82,9 @@ export default function OverdueSetting() {
     }
   };
 
-  // Effect to populate Form Data when filters or allSettings change
+  // Effect to populate Form Data when filters or allSettings/journeyStages change
   useEffect(() => {
-    if (category && subCategory && projectType && subProjectType) {
+    if (category && subCategory && projectType && subProjectType && journeyStages.length > 0) {
       const matchingSetting = allSettings.find(s =>
         s.category === category &&
         s.subCategory === subCategory &&
@@ -132,13 +92,24 @@ export default function OverdueSetting() {
         s.subProjectType === subProjectType
       );
 
-      if (matchingSetting && matchingSetting.processConfig) {
-        setProcessConfig(matchingSetting.processConfig);
-      } else {
-        setProcessConfig(defaultConfig);
-      }
+      const initialConfig = {};
+      
+      // Initialize with journey stages and fields
+      journeyStages.forEach(stage => {
+        initialConfig[stage.name] = {};
+        if (stage.fields && stage.fields.length > 0) {
+          stage.fields.forEach(field => {
+            // Check if we have a saved value, otherwise use DEFAULT_DAYS
+            const savedValue = matchingSetting?.processConfig?.[stage.name]?.[field];
+            initialConfig[stage.name][field] = savedValue !== undefined ? savedValue : DEFAULT_DAYS;
+          });
+        }
+      });
+
+      setProcessConfig(initialConfig);
+      setIsConfigLoaded(true);
     }
-  }, [allSettings, category, subCategory, projectType, subProjectType]);
+  }, [allSettings, category, subCategory, projectType, subProjectType, journeyStages]);
 
   // Initial fetch
   useEffect(() => {
@@ -217,7 +188,7 @@ export default function OverdueSetting() {
       };
 
       await projectApi.saveOverdueSetting(data);
-      alert(`${processKey.replace(/([A-Z])/g, ' $1')} settings saved!`);
+      alert(`${processKey} configuration saved successfully!`);
       // Refresh local data to update summary table
       fetchSettings();
     } catch (error) {
@@ -405,297 +376,202 @@ export default function OverdueSetting() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-200">
-                {/* Project Signup */}
-                <tr className="bg-gray-50">
-                  <td rowSpan="2" className="px-6 py-4 align-middle font-medium text-gray-900 border-r border-gray-200">
-                    Project Signup
-                  </td>
-                  <td className="px-6 py-4">Consumer Registered</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.projectSignup.consumerRegistered}
-                      onChange={(e) => handleProcessChange('projectSignup', 'consumerRegistered', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                  <td rowSpan="2" className="px-6 py-4 align-middle border-l border-gray-200">
-                    <button
-                      onClick={() => handleSaveProcess('projectSignup')}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
-                    >
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </button>
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Application Submission</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.projectSignup.applicationSubmission}
-                      onChange={(e) => handleProcessChange('projectSignup', 'applicationSubmission', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
-
-                {/* Feasibility Approval */}
-                <tr className="bg-gray-50">
-                  <td rowSpan="2" className="px-6 py-4 align-middle font-medium text-gray-900 border-r border-gray-200">
-                    Feasibility Approval
-                  </td>
-                  <td className="px-6 py-4">Feasibility Check</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.feasibilityApproval.feasibilityCheck}
-                      onChange={(e) => handleProcessChange('feasibilityApproval', 'feasibilityCheck', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                  <td rowSpan="2" className="px-6 py-4 align-middle border-l border-gray-200">
-                    <button
-                      onClick={() => handleSaveProcess('feasibilityApproval')}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
-                    >
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </button>
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Meter Charge</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.feasibilityApproval.meterCharge}
-                      onChange={(e) => handleProcessChange('feasibilityApproval', 'meterCharge', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
-
-                {/* Installation Status */}
-                <tr className="bg-gray-50">
-                  <td rowSpan="3" className="px-6 py-4 align-middle font-medium text-gray-900 border-r border-gray-200">
-                    Installation Status
-                  </td>
-                  <td className="px-6 py-4">Vendor Selection</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.installationStatus.vendorSelection}
-                      onChange={(e) => handleProcessChange('installationStatus', 'vendorSelection', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                  <td rowSpan="3" className="px-6 py-4 align-middle border-l border-gray-200">
-                    <button
-                      onClick={() => handleSaveProcess('installationStatus')}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
-                    >
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </button>
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Work Start</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.installationStatus.workStart}
-                      onChange={(e) => handleProcessChange('installationStatus', 'workStart', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Solar Installation</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.installationStatus.solarInstallation}
-                      onChange={(e) => handleProcessChange('installationStatus', 'solarInstallation', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
-
-                {/* Meter Installation */}
-                <tr className="bg-gray-50">
-                  <td rowSpan="2" className="px-6 py-4 align-middle font-medium text-gray-900 border-r border-gray-200">
-                    Meter Installation
-                  </td>
-                  <td className="px-6 py-4">Meter Change</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.meterInstallation.meterChange}
-                      onChange={(e) => handleProcessChange('meterInstallation', 'meterChange', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                  <td rowSpan="2" className="px-6 py-4 align-middle border-l border-gray-200">
-                    <button
-                      onClick={() => handleSaveProcess('meterInstallation')}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
-                    >
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </button>
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Meter Inspection</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.meterInstallation.meterInspection}
-                      onChange={(e) => handleProcessChange('meterInstallation', 'meterInspection', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
-
-                {/* Subsidy */}
-                <tr className="bg-gray-50">
-                  <td rowSpan="2" className="px-6 py-4 align-middle font-medium text-gray-900 border-r border-gray-200">
-                    Subsidy
-                  </td>
-                  <td className="px-6 py-4">Subsidy Request</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.subsidy.subsidyRequest}
-                      onChange={(e) => handleProcessChange('subsidy', 'subsidyRequest', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                  <td rowSpan="2" className="px-6 py-4 align-middle border-l border-gray-200">
-                    <button
-                      onClick={() => handleSaveProcess('subsidy')}
-                      className="inline-flex items-center px-3 py-1.5 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-blue-500"
-                    >
-                      <Save className="w-4 h-4 mr-1" />
-                      Save
-                    </button>
-                  </td>
-                </tr>
-                <tr className="bg-white">
-                  <td className="px-6 py-4">Subsidy Disbursal</td>
-                  <td className="px-6 py-4">
-                    <input
-                      type="number"
-                      className="w-24 px-3 py-1 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
-                      value={processConfig.subsidy.subsidyDisbursal}
-                      onChange={(e) => handleProcessChange('subsidy', 'subsidyDisbursal', e.target.value)}
-                      min="1"
-                    />
-                  </td>
-                </tr>
+                {journeyStages.map((stage, sIdx) => {
+                  const subProcesses = stage.fields && stage.fields.length > 0 ? stage.fields : [];
+                  const rowCount = Math.max(subProcesses.length, 1);
+                  
+                  return (
+                    <React.Fragment key={stage._id || sIdx}>
+                      {rowCount > 0 && (
+                        <tr className="bg-gray-50/50">
+                          <td rowSpan={rowCount} className="px-6 py-4 align-middle font-semibold text-[#0ea5e9] border-r border-gray-200 bg-white">
+                            {stage.name}
+                          </td>
+                          
+                          {/* First Sub-Process Row */}
+                          <td className="px-6 py-4 text-gray-700">
+                            {subProcesses[0] || <span className="text-gray-400 italic">No sub-processes</span>}
+                          </td>
+                          <td className="px-6 py-4">
+                            {subProcesses[0] && (
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="number"
+                                  className="w-20 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                  value={processConfig[stage.name]?.[subProcesses[0]] || ''}
+                                  onChange={(e) => handleProcessChange(stage.name, subProcesses[0], e.target.value)}
+                                  min="0"
+                                />
+                                <span className="text-xs text-gray-500 font-medium">Days</span>
+                              </div>
+                            )}
+                          </td>
+                          <td rowSpan={rowCount} className="px-6 py-4 align-middle border-l border-gray-100 bg-white">
+                            <button
+                              onClick={() => handleSaveProcess(stage.name)}
+                              className="inline-flex items-center px-4 py-2 bg-[#0ea5e9] text-white text-xs font-bold rounded-lg hover:bg-blue-600 transition-all shadow-sm hover:shadow-md active:scale-95"
+                            >
+                              <Save className="w-3.5 h-3.5 mr-1.5" />
+                              Save
+                            </button>
+                          </td>
+                        </tr>
+                      )}
+                      
+                      {/* Remaining Sub-Process Rows */}
+                      {subProcesses.slice(1).map((subProc, spIdx) => (
+                        <tr key={`${stage._id}-${spIdx}`} className="bg-white">
+                          <td className="px-6 py-4 text-gray-700">{subProc}</td>
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="number"
+                                className="w-20 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
+                                value={processConfig[stage.name]?.[subProc] || ''}
+                                onChange={(e) => handleProcessChange(stage.name, subProc, e.target.value)}
+                                min="0"
+                              />
+                              <span className="text-xs text-gray-500 font-medium">Days</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Summary Section */}
-        <div className="bg-white rounded-lg shadow-sm border border-gray-200">
-          <div className="px-6 py-4 border-b border-gray-200">
-            <h5 className="font-semibold text-gray-800 text-lg">Overdue Days Summary (Project Type Wise)</h5>
+        {/* Dynamic Summary Cards Section */}
+        <div className="space-y-6 mb-10">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-bold text-gray-800 flex items-center">
+              <Filter className="w-5 h-5 mr-2 text-blue-600" />
+              Overdue Configuration Summary
+            </h3>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th rowSpan="2" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider align-middle border-b border-gray-200">
-                    Project Type
-                  </th>
-                  <th colSpan="2" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    Project Signup
-                  </th>
-                  <th colSpan="2" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    Feasibility Approval
-                  </th>
-                  <th colSpan="3" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    Installation Status
-                  </th>
-                  <th colSpan="2" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    Meter Installation
-                  </th>
-                  <th colSpan="2" className="px-6 py-3 text-center text-xs font-medium text-gray-500 uppercase tracking-wider border-b border-gray-200">
-                    Subsidy
-                  </th>
-                </tr>
-                <tr>
-                  {/* Project Signup Subheaders */}
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Consumer Reg</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">App Submit</th>
 
-                  {/* Feasibility Approval Subheaders */}
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Feasibility</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Meter Charge</th>
+          {/* Large Navigation Buttons */}
+          <div className="flex space-x-4 mb-6">
+            <button
+              onClick={() => setSummaryTab('residential')}
+              className={`flex-1 flex items-center justify-center p-6 rounded-2xl transition-all duration-300 shadow-sm border-2 ${summaryTab === 'residential'
+                ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-md ring-4 ring-blue-50 ring-offset-0'
+                : 'bg-white border-gray-100 text-gray-500 hover:border-blue-200 hover:bg-gray-50 uppercase tracking-wider text-sm font-bold'
+                }`}
+            >
+              <div className={`p-3 rounded-xl mr-4 ${summaryTab === 'residential' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <Home className="w-6 h-6" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs uppercase font-bold opacity-60 mb-0.5">Project Category</div>
+                <div className="text-xl font-black">RESIDENTIAL PROJECTS</div>
+              </div>
+            </button>
 
-                  {/* Installation Status Subheaders */}
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Vendor Select</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Work Start</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Installation</th>
+            <button
+              onClick={() => setSummaryTab('commercial')}
+              className={`flex-1 flex items-center justify-center p-6 rounded-2xl transition-all duration-300 shadow-sm border-2 ${summaryTab === 'commercial'
+                ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-md ring-4 ring-emerald-50 ring-offset-0'
+                : 'bg-white border-gray-100 text-gray-500 hover:border-emerald-200 hover:bg-gray-50 uppercase tracking-wider text-sm font-bold'
+                }`}
+            >
+              <div className={`p-3 rounded-xl mr-4 ${summaryTab === 'commercial' ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
+                <Building className="w-6 h-6" />
+              </div>
+              <div className="text-left">
+                <div className="text-xs uppercase font-bold opacity-60 mb-0.5">Project Category</div>
+                <div className="text-xl font-black">COMMERCIAL PROJECTS</div>
+              </div>
+            </button>
+          </div>
 
-                  {/* Meter Installation Subheaders */}
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Meter Change</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Inspection</th>
+          {/* Table Summary Content */}
+          <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${summaryTab === 'residential' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'}`}>
+              <div className="flex items-center font-bold">
+                <ClipboardList className="w-5 h-5 mr-3" />
+                {summaryTab === 'residential' ? 'Residential' : 'Commercial'} Configuration Details
+              </div>
+              <span className="bg-white bg-opacity-20 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm ring-1 ring-white ring-opacity-30">
+                Displaying All Saved Rules
+              </span>
+            </div>
 
-                  {/* Subsidy Subheaders */}
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Request</th>
-                  <th className="px-4 py-2 text-xs font-medium text-gray-500 border-b border-gray-200">Disbursal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {/* Residential Row */}
-                <tr>
-                  <td className="px-6 py-4 font-medium text-gray-900">Residential</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.consumerReg}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.appSubmit}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.feasibility}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.meterCharge}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.vendorSelect}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.workStart}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.installation}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.meterChange}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.inspection}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.subsidyReq}</td>
-                  <td className="px-4 py-4 text-center">{residentialSummary.subsidyDisb}</td>
-                </tr>
-
-                {/* Commercial Row */}
-                <tr>
-                  <td className="px-6 py-4 font-medium text-gray-900">Commercial</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.consumerReg}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.appSubmit}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.feasibility}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.meterCharge}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.vendorSelect}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.workStart}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.installation}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.meterChange}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.inspection}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.subsidyReq}</td>
-                  <td className="px-4 py-4 text-center">{commercialSummary.subsidyDisb}</td>
-                </tr>
-              </tbody>
-            </table>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead>
+                  <tr className="bg-gray-50">
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-widest">Filters (Application To)</th>
+                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-600 uppercase tracking-widest">Journey Stages & Overdue Thresholds</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-100">
+                  {allSettings
+                    .filter(s => s.subCategory?.toLowerCase() === summaryTab)
+                    .map((config, cIdx) => (
+                      <tr key={config._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="px-6 py-6 align-top border-r border-gray-50 w-1/4">
+                          <div className="space-y-3">
+                            <div>
+                              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Category & Project Type</div>
+                              <div className="flex flex-wrap gap-2">
+                                <span className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-tight ${summaryTab === 'residential' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
+                                  {config.category}
+                                </span>
+                                <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded text-[11px] font-bold uppercase tracking-tight ring-1 ring-gray-200">
+                                  {config.projectType}
+                                </span>
+                              </div>
+                            </div>
+                            <div>
+                              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Sub Project Type</div>
+                              <div className="text-sm font-bold text-gray-800 bg-gray-50 p-2.5 rounded-lg border border-gray-100">
+                                {config.subProjectType}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-6">
+                          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                            {Object.entries(config.processConfig || {}).map(([stageName, subProcs], sIdx) => (
+                              <div key={sIdx} className="bg-white p-4 rounded-xl border border-gray-200 hover:border-blue-200 hover:shadow-md transition-all">
+                                <h6 className="text-[11px] font-black text-gray-800 uppercase tracking-widest border-b border-gray-100 pb-2 mb-3 flex items-center justify-between">
+                                  {stageName}
+                                  <span className="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                                </h6>
+                                <ul className="space-y-2.5">
+                                  {Object.entries(subProcs).map(([subProc, days], spIdx) => (
+                                    <li key={spIdx} className="flex justify-between items-center bg-gray-50 p-2 px-3 rounded-lg border border-gray-50 group hover:bg-white hover:border-gray-200 transition-all">
+                                      <span className="text-xs text-gray-600 font-medium truncate pr-4">{subProc}</span>
+                                      <span className={`text-[12px] font-black min-w-[36px] text-center px-1.5 py-1 rounded shadow-sm ${summaryTab === 'residential' ? 'bg-blue-500 text-white' : 'bg-emerald-500 text-white'}`}>
+                                        {days}d
+                                      </span>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  {allSettings.filter(s => s.subCategory?.toLowerCase() === summaryTab).length === 0 && (
+                    <tr>
+                      <td colSpan="2" className="px-6 py-20 text-center">
+                        <div className="flex flex-col items-center justify-center opacity-30">
+                          <ClipboardList className="w-16 h-16 mb-4" />
+                          <p className="text-lg font-bold">No configuration found for {summaryTab === 'residential' ? 'Residential' : 'Commercial'}</p>
+                          <p className="text-sm">Configurations will appear here after they are saved.</p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </div>

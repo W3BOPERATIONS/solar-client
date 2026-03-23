@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     Home,
     Building2,
@@ -9,9 +9,16 @@ import {
     Sun,
     Zap,
     Battery,
-    ArrowRight
+    ArrowRight,
+    MapPin,
+    CheckCircle,
+    Settings,
+    List
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useLocations } from '../../../../hooks/useLocations';
+import { getDiscomsByState } from '../../../../services/quote/quoteApi';
+import { projectApi } from '../../../../services/project/projectApi';
 
 const AdminProjectManagement = () => {
     const navigate = useNavigate();
@@ -23,8 +30,55 @@ const AdminProjectManagement = () => {
         subProjectType: ''
     });
 
+    // New location-based filters
+    const { states } = useLocations();
+    const [selectedStateId, setSelectedStateId] = useState('');
+    const [discoms, setDiscoms] = useState([]);
+    const [selectedDiscomId, setSelectedDiscomId] = useState('');
+    const [loadingDiscoms, setLoadingDiscoms] = useState(false);
+    const [allConfigs, setAllConfigs] = useState([]);
+    const [matchingConfig, setMatchingConfig] = useState(null);
+    const [matchingConfigs, setMatchingConfigs] = useState([]);
+
     // State for selected customer type
     const [selectedCustomerType, setSelectedCustomerType] = useState(null);
+
+    // Fetch all configs once
+    useEffect(() => {
+        const fetchConfigs = async () => {
+            try {
+                const data = await projectApi.getConfigurations();
+                setAllConfigs(data || []);
+            } catch (error) {
+                console.error("Error fetching configs:", error);
+            }
+        };
+        fetchConfigs();
+    }, []);
+
+    // Fetch discoms when state changes
+    useEffect(() => {
+        if (selectedStateId) {
+            const fetchDiscoms = async () => {
+                setLoadingDiscoms(true);
+                try {
+                    const response = await getDiscomsByState(selectedStateId);
+                    // Handle both raw array and { success: true, data: [] } formats
+                    const dArr = Array.isArray(response) ? response : (response?.data || []);
+                    setDiscoms(dArr);
+                } catch (error) {
+                    console.error("Error fetching discoms:", error);
+                } finally {
+                    setLoadingDiscoms(false);
+                }
+            };
+            fetchDiscoms();
+            setSelectedDiscomId(''); // Reset discom when state changes
+        } else {
+            setDiscoms([]);
+            setSelectedDiscomId('');
+        }
+    }, [selectedStateId]);
 
     // Filter options
     const filterOptions = {
@@ -75,8 +129,74 @@ const AdminProjectManagement = () => {
             projectType: '',
             subProjectType: ''
         });
+        setSelectedStateId('');
+        setSelectedDiscomId('');
         setSelectedCustomerType(null);
     };
+
+    // Find matching configuration
+    useEffect(() => {
+        if (selectedStateId && selectedDiscomId && selectedCustomerType) {
+            const sArr = Array.isArray(states) ? states : (states?.data || []);
+            const dArr = Array.isArray(discoms) ? discoms : (discoms?.data || []);
+            
+            const stateName = sArr.find(s => s._id === selectedStateId)?.name;
+            const discomName = dArr.find(d => d._id === selectedDiscomId)?.name;
+
+            if (stateName && discomName) {
+                const foundConfigs = allConfigs.filter(cfg => {
+                    const val = cfg.configValue;
+                    if (!val) return false;
+
+                    const stateMatch = Array.isArray(val.currentState) 
+                        ? val.currentState.includes(stateName)
+                        : val.currentState === stateName;
+                    
+                    const discomMatch = Array.isArray(val.currentDiscom)
+                        ? val.currentDiscom.includes(discomName)
+                        : val.currentDiscom === discomName;
+                    
+                    const categoryMatch = val.configCategory === selectedCustomerType;
+                    const appliesToType = (val.allKeys || []).some(key => key.includes(selectedCustomerType));
+                    const keyMatch = (cfg.configKey || '').includes(selectedCustomerType);
+
+                    return stateMatch && discomMatch && (categoryMatch || appliesToType || keyMatch);
+                });
+                
+                // Group by name and steps to avoid duplicates in display
+                const uniqueGroups = {};
+                foundConfigs.forEach(cfg => {
+                    const val = cfg.configValue;
+                    if (!val) return;
+                    const stepsKey = (val.selectedSteps || []).join('|');
+                    const uniqueKey = `${val.configName || 'unnamed'}-${stepsKey}`;
+                    
+                    if (!uniqueGroups[uniqueKey]) {
+                        uniqueGroups[uniqueKey] = cfg;
+                    } else {
+                        // Keep the newest one if multiple match
+                        const currentNewest = new Date(uniqueGroups[uniqueKey].createdAt || uniqueGroups[uniqueKey].updatedAt || 0);
+                        const thisOne = new Date(cfg.createdAt || cfg.updatedAt || 0);
+                        if (thisOne > currentNewest) {
+                            uniqueGroups[uniqueKey] = cfg;
+                        }
+                    }
+                });
+
+                const finalConfigs = Object.values(uniqueGroups);
+                setMatchingConfigs(finalConfigs);
+                if (finalConfigs.length > 0) {
+                    const sorted = [...finalConfigs].sort((a,b) => new Date(b.createdAt || b.updatedAt) - new Date(a.createdAt || a.updatedAt));
+                    setMatchingConfig(sorted[0]);
+                } else {
+                    setMatchingConfig(null);
+                }
+            }
+        } else {
+            setMatchingConfigs([]);
+            setMatchingConfig(null);
+        }
+    }, [selectedStateId, selectedDiscomId, selectedCustomerType, allConfigs, states, discoms]);
 
     // Handle customer type selection
     const handleCustomerTypeSelect = (type) => {
@@ -86,32 +206,129 @@ const AdminProjectManagement = () => {
     // Handle continue button click
     const handleContinue = () => {
         if (selectedCustomerType) {
+            const params = new URLSearchParams({
+                stateId: selectedStateId,
+                discomId: selectedDiscomId,
+                customerType: selectedCustomerType
+            }).toString();
+
             if (selectedCustomerType === 'Residential') {
-                navigate('/admin/residential-project');
+                navigate(`/admin/residential-project?${params}`);
             } else if (selectedCustomerType === 'Commercial') {
-                navigate('/admin/commercial-project');
+                navigate(`/admin/commercial-project?${params}`);
             }
         }
     };
 
     // Check if continue button should be enabled
-    const isContinueEnabled = selectedCustomerType !== null;
+    const isContinueEnabled = selectedCustomerType !== null && selectedStateId !== '' && selectedDiscomId !== '';
 
     return (
         <div className="min-h-screen bg-gray-50">
             <div className="container mx-auto px-4 py-6">
                 {/* Header */}
-                <div className="bg-white rounded-lg shadow-sm mb-6">
-                    <div className="p-4">
-                        <h4 className="text-blue-600 font-bold text-lg">Project Management</h4>
+                <div className="bg-white rounded-xl shadow-sm mb-6 border border-gray-100">
+                    <div className="p-4 flex justify-between items-center">
+                        <h4 className="text-blue-600 font-bold text-lg flex items-center gap-2">
+                            <Settings size={20} />
+                            Project Management
+                        </h4>
+                        {(selectedStateId || selectedDiscomId || selectedCustomerType) && (
+                            <button
+                                onClick={clearFilters}
+                                className="text-sm text-red-500 hover:text-red-600 font-medium flex items-center gap-1"
+                            >
+                                <X size={14} /> Clear All
+                            </button>
+                        )}
                     </div>
                 </div>
 
-                {/* Filter Section */}
+                {/* State Selection Section */}
+                <div className="mb-8">
+                    <h4 className="text-xl font-bold text-gray-700 mb-4 flex items-center">
+                        <MapPin className="mr-2 text-blue-500" size={24} />
+                        1. Select State
+                    </h4>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        {states.length > 0 ? (
+                            states.map((state, index) => (
+                                <div
+                                    key={state._id}
+                                    className={`cursor-pointer rounded-xl shadow-sm transition-all duration-300 transform hover:-translate-y-1 border-2 p-5 text-center ${selectedStateId === state._id
+                                        ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-md'
+                                        : 'border-gray-100 bg-white hover:border-blue-200'
+                                        }`}
+                                    onClick={() => setSelectedStateId(state._id)}
+                                >
+                                    <div className={`text-lg font-bold ${selectedStateId === state._id ? 'text-blue-600' : 'text-gray-700'}`}>
+                                        {state.name}
+                                    </div>
+                                    <div className={`mt-2 text-xs font-medium ${selectedStateId === state._id ? 'text-blue-500' : 'text-gray-400'}`}>
+                                        {selectedStateId === state._id ? (
+                                            <span className="flex items-center justify-center gap-1">
+                                                <CheckCircle size={12} /> Selected
+                                            </span>
+                                        ) : 'Click to select'}
+                                    </div>
+                                </div>
+                            ))
+                        ) : (
+                            <div className="col-span-full bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-500">
+                                No states available.
+                            </div>
+                        )}
+                    </div>
+                </div>
+
+                {/* Discom Selection Section */}
+                {selectedStateId && (
+                    <div className="mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+                        <h4 className="text-xl font-bold text-gray-700 mb-4 flex items-center">
+                            <Building2 className="mr-2 text-blue-500" size={24} />
+                            2. Select Discom
+                        </h4>
+                        {loadingDiscoms ? (
+                            <div className="flex justify-center p-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+                            </div>
+                        ) : discoms.length > 0 ? (
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                {discoms.map((discom) => (
+                                    <div
+                                        key={discom._id}
+                                        className={`cursor-pointer rounded-xl shadow-sm transition-all duration-300 transform hover:-translate-y-1 border-2 p-5 text-center ${selectedDiscomId === discom._id
+                                            ? 'border-blue-500 bg-blue-50 ring-2 ring-blue-100 shadow-md'
+                                            : 'border-gray-100 bg-white hover:border-blue-200'
+                                            }`}
+                                        onClick={() => setSelectedDiscomId(discom._id)}
+                                    >
+                                        <div className={`text-lg font-bold ${selectedDiscomId === discom._id ? 'text-blue-600' : 'text-gray-700'}`}>
+                                            {discom.name}
+                                        </div>
+                                        <div className={`mt-2 text-xs font-medium ${selectedDiscomId === discom._id ? 'text-blue-500' : 'text-gray-400'}`}>
+                                            {selectedDiscomId === discom._id ? (
+                                                <span className="flex items-center justify-center gap-1">
+                                                    <CheckCircle size={12} /> Selected
+                                                </span>
+                                            ) : 'Click to select'}
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="bg-orange-50 border border-orange-200 rounded-xl p-6 text-center text-orange-600 font-medium">
+                                No Discoms found for this state.
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Old Filter Section (Commented Out) */}
+                {/* 
                 <div className="bg-white rounded-lg shadow-sm mb-6">
                     <div className="p-6">
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                            {/* Category Filter */}
                             <div>
                                 <select
                                     name="category"
@@ -128,7 +345,6 @@ const AdminProjectManagement = () => {
                                 </select>
                             </div>
 
-                            {/* Sub-Category Filter */}
                             <div>
                                 <select
                                     name="subCategory"
@@ -145,7 +361,6 @@ const AdminProjectManagement = () => {
                                 </select>
                             </div>
 
-                            {/* Project Type Filter */}
                             <div>
                                 <select
                                     name="projectType"
@@ -162,7 +377,6 @@ const AdminProjectManagement = () => {
                                 </select>
                             </div>
 
-                            {/* Sub Project Type Filter */}
                             <div>
                                 <select
                                     name="subProjectType"
@@ -180,7 +394,6 @@ const AdminProjectManagement = () => {
                             </div>
                         </div>
 
-                        {/* Clear Filters Button */}
                         <div className="flex justify-end mt-4">
                             <button
                                 onClick={clearFilters}
@@ -192,11 +405,12 @@ const AdminProjectManagement = () => {
                         </div>
                     </div>
                 </div>
+                */}
 
                 {/* Customer Type Selection */}
-                <div className="text-center mt-8">
-                    <h3 className="text-blue-600 font-bold text-2xl mb-2">Select Customer Type</h3>
-                    <p className="text-gray-500 mb-6">Choose one to continue</p>
+                <div className={`text-center mt-8 transition-all duration-500 ${!selectedDiscomId ? 'opacity-50 pointer-events-none grayscale' : ''}`}>
+                    <h3 className="text-blue-600 font-bold text-2xl mb-2">3. Select Configuration Type</h3>
+                    <p className="text-gray-500 mb-6 font-medium">Choose between Residential or Commercial workflow</p>
 
                     <div className="flex flex-col md:flex-row justify-center gap-6 max-w-3xl mx-auto">
                         {/* Residential Card */}
@@ -248,15 +462,97 @@ const AdminProjectManagement = () => {
                     <button
                         onClick={handleContinue}
                         disabled={!isContinueEnabled}
-                        className={`mt-8 px-8 py-3 rounded-md text-white font-semibold text-lg flex items-center justify-center mx-auto transition-colors ${isContinueEnabled
-                            ? 'bg-blue-600 hover:bg-blue-700'
+                        className={`mt-12 px-10 py-4 rounded-xl text-white font-bold text-lg flex items-center justify-center mx-auto transition-all shadow-lg ${isContinueEnabled
+                            ? 'bg-blue-600 hover:bg-blue-700 hover:shadow-blue-200 transform hover:-translate-y-1'
                             : 'bg-gray-300 cursor-not-allowed'
                             }`}
                     >
-                        Continue
+                        Continue to Project Journey
                         <ArrowRight size={20} className="ml-2" />
                     </button>
                 </div>
+
+                {/* Workflow Data Section */}
+                {matchingConfig && (
+                    <div className="mt-12 animate-in zoom-in-95 duration-500">
+                        <div className="bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden">
+                            <div className="bg-blue-600 p-6 text-white">
+                                <div className="flex justify-between items-center">
+                                    <div>
+                                        <h3 className="text-xl font-bold flex items-center gap-2">
+                                            <List size={24} />
+                                            {matchingConfigs.length > 1 
+                                                ? `Available Workflow Configurations (${matchingConfigs.length})` 
+                                                : `Workflow Configuration: ${matchingConfig.configValue?.configName || 'Unnamed'}`
+                                            }
+                                        </h3>
+                                        <p className="text-blue-100 text-sm mt-1">
+                                            {matchingConfigs.length > 1 
+                                                ? `Viewing ${matchingConfig.configValue?.configName || 'Latest'} - Click to switch below`
+                                                : `Applied Workflow Steps for ${selectedCustomerType}`
+                                            }
+                                        </p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        {matchingConfigs.length > 1 && (
+                                            <select 
+                                                className="bg-white/10 border border-white/20 rounded px-2 py-1 text-xs font-bold outline-none cursor-pointer"
+                                                value={matchingConfig?._id}
+                                                onChange={(e) => setMatchingConfig(matchingConfigs.find(c => c._id === e.target.value))}
+                                            >
+                                                {matchingConfigs.map(c => (
+                                                    <option key={c._id} value={c._id} className="text-gray-800">{c.configValue?.configName || 'Unnamed'}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        <div className="bg-white/20 px-4 py-2 rounded-lg backdrop-blur-sm">
+                                            <span className="text-xs uppercase font-bold tracking-wider">Status</span>
+                                            <div className="text-sm font-bold flex items-center gap-1">
+                                                <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                                                Active
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-8">
+                                <div className="flex flex-wrap gap-4 items-center">
+                                    {(matchingConfig?.configValue?.selectedSteps || []).map((step, idx) => (
+                                        <React.Fragment key={idx}>
+                                            <div className="flex flex-col items-center group">
+                                                <div className="w-12 h-12 rounded-full bg-blue-50 border-2 border-blue-200 flex items-center justify-center text-blue-600 font-bold shadow-sm transition-all group-hover:scale-110 group-hover:bg-blue-600 group-hover:text-white group-hover:border-blue-600">
+                                                    {idx + 1}
+                                                </div>
+                                                <span className="mt-2 text-sm font-semibold text-gray-700">{step}</span>
+                                            </div>
+                                            {idx < matchingConfig.configValue.selectedSteps.length - 1 && (
+                                                <div className="h-0.5 w-8 bg-gray-200 hidden md:block mt-[-20px]"></div>
+                                            )}
+                                        </React.Fragment>
+                                    ))}
+                                    {matchingConfig.configValue?.selectedSteps?.length === 0 && (
+                                        <p className="text-gray-400 italic">No steps defined for this configuration.</p>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Fallback if no config found */}
+                {selectedDiscomId && selectedCustomerType && !matchingConfig && (
+                    <div className="mt-8 bg-amber-50 border border-amber-200 rounded-xl p-6 text-center animate-in fade-in duration-500">
+                        <p className="text-amber-700 font-medium">
+                            No custom workflow found for this selection. The default journey will be used.
+                        </p>
+                        <button 
+                            onClick={() => navigate('/admin/settings/project/configuration-setting')}
+                            className="text-blue-600 underline text-sm mt-2 hover:text-blue-800"
+                        >
+                            Configure Workflow Steps
+                        </button>
+                    </div>
+                )}
 
                 {/* Summary of Selections (Optional - for better UX) */}
                 {(filters.category || filters.subCategory || filters.projectType || filters.subProjectType || selectedCustomerType) && (
