@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { projectApi } from '../../../../services/project/projectApi';
-const getAllProjects = async () => ({ success: true, data: [] }); const getProjectStats = async () => ({ success: true, data: { stageCounts: {} } }); const createProject = async () => ({ success: false }); const updateProject = async () => ({ success: false }); const deleteProject = async () => ({ success: false }); const getProjectById = async () => ({ success: false });
+import {
+  getProjects,
+  getProjectStats
+} from '../../../../services/project/projectService';
+import toast from 'react-hot-toast';
 import {
   FileText,
   Cog,
@@ -22,40 +25,39 @@ import {
   UserCheck,
   Zap,
   DollarSign,
-  Shield
+  Shield,
+  Eye
 } from 'lucide-react';
+import { projectApi } from '../../../../services/project/projectApi';
 
 const DocumentationSetting = () => {
   const navigate = useNavigate();
-  // State for project settings
-  const [category, setCategory] = useState('');
-  const [subcategory, setSubcategory] = useState('');
-  const [projectType, setProjectType] = useState('');
-  const [subProjectType, setSubProjectType] = useState('');
+  // State for project settings (replaced with Config Selection)
+  const [selectedConfigId, setSelectedConfigId] = useState('');
+  const [allSavedConfigs, setAllSavedConfigs] = useState([]);
+  const [configDetails, setConfigDetails] = useState(null);
 
 
-  // Pre-defined suggestions for standard placeholders
-  const availableSuggestions = [
-    "Project Type", "Sub Project Type", "Date", "Company Name", "Client Name",
-    "Client Address", "Client Mobile", "Cluster", "Vendor Name", "Supervisor Name",
-    "Completion Date", "Approval Authority", "System Capacity", "Annual Production",
-    "Project Cost", "Subsidy Amount", "Subsidy Authority", "Installation Date",
-    "Warranty Period", "Maintenance Schedule", "Payment Terms", "Contract Duration"
-  ];
+  // Available suggestions - now strictly dynamic from the database (No hardcoded defaults)
+  const [availableSuggestions, setAvailableSuggestions] = useState([]);
 
   const dbFields = [
+    { label: 'Project ID', value: 'projectId' },
     { label: 'Project Name', value: 'projectName' },
     { label: 'Category', value: 'category' },
     { label: 'Project Type', value: 'projectType' },
     { label: 'Sub Project Type', value: 'subProjectType' },
-    { label: 'Total KW', value: 'totalKW' },
+    { label: 'Total KW (System Capacity)', value: 'totalKW' },
     { label: 'Client Name', value: 'authorizedPersonName' },
     { label: 'Client Mobile', value: 'mobile' },
     { label: 'Client Email', value: 'email' },
     { label: 'Client Address', value: 'address' },
     { label: 'Installation Date', value: 'installationDate' },
     { label: 'Consumer Number', value: 'consumerNumber' },
-    { label: 'Due Date', value: 'dueDate' }
+    { label: 'Due Date', value: 'dueDate' },
+    { label: 'Project Cost', value: 'totalAmount' },
+    { label: 'Commission', value: 'commission' },
+    { label: 'Project Status', value: 'status' }
   ];
 
   // State for workflow steps
@@ -70,6 +72,7 @@ const DocumentationSetting = () => {
   // State for placeholders (Dynamic from API)
   const [selectedPlaceholder, setSelectedPlaceholder] = useState('');
   const [placeholders, setPlaceholders] = useState([]); // Array of objects { _id, labelKey, labelValue, number }
+  const [allPlaceholders, setAllPlaceholders] = useState([]); // Global master list for filtering
   const [showModal, setShowModal] = useState(false);
   const [modalPlaceholder, setModalPlaceholder] = useState(null); // Object to edit
   const [modalValue, setModalValue] = useState('');
@@ -79,58 +82,144 @@ const DocumentationSetting = () => {
   const [allJourneyStages, setAllJourneyStages] = useState([]); // All available stages from DB
   const [isLoadingStats, setIsLoadingStats] = useState(false);
   const [templateContent, setTemplateContent] = useState('');
+  const [generatedContent, setGeneratedContent] = useState('');
+  const [showGeneratorModal, setShowGeneratorModal] = useState(false);
   const [isEditingTemplate, setIsEditingTemplate] = useState(true);
   const [selectedDbField, setSelectedDbField] = useState('');
   const [sampleProject, setSampleProject] = useState(null);
   const [isPreviewWithData, setIsPreviewWithData] = useState(false);
+  const [generationResult, setGenerationResult] = useState(null);
+  const [allGenerationResults, setAllGenerationResults] = useState({}); // Map: stepName -> result
+  const [stepDocCounts, setStepDocCounts] = useState({});
+  const [generatedDocCounts, setGeneratedDocCounts] = useState({});
+  const [selectedDocument, setSelectedDocument] = useState(null);
+
+  const DEFAULT_TEMPLATE = `For {{project_type}} - {{sub_project_type}}
+
+This agreement is made on {{date}} between {{company_name}} (hereinafter referred to as "the Company") and {{client_name}} (hereinafter referred to as "the Client").
+
+The Client, residing at {{client_address}} with contact number {{client_mobile}}, agrees to following terms and conditions for installation of a solar power system at their premises located in {{cluster}}.
+
+The project will be executed by {{vendor_name}} and supervised by {{supervisor_name}}. The estimated completion date is {{completion_date}}.
+
+All necessary approvals from {{approval_authority}} have been obtained. The system capacity is {{system_capacity}} kW with an estimated annual production of {{annual_production}} kWh.
+
+The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_amount}} approved by {{subsidy_authority}}.`;
+
+  const DEFAULT_SAMPLE_PROJECT = {
+    projectName: 'Raj Patel Solar House',
+    authorizedPersonName: 'Raj Patel',
+    consumerNumber: '1234567890',
+    mobile: '9876543210',
+    email: 'raj.patel@example.com',
+    address: '205, Green Valley, Ahmedabad, Gujarat',
+    installationDate: '25 Jan 2026',
+    totalKW: '5.0',
+    category: 'Solar Rooftop',
+    projectType: 'On-Grid',
+    subProjectType: 'Residential',
+    totalAmount: '2,50,000',
+    dueDate: '10 Feb 2026'
+  };
 
   // Initialize data
   useEffect(() => {
     loadInitialData();
+
+    // Restore generation history (counts)
+    const savedHistory = localStorage.getItem('generationHistory');
+    if (savedHistory) {
+      try {
+        setGeneratedDocCounts(JSON.parse(savedHistory));
+      } catch (e) {
+        console.error("Error loading generation history", e);
+      }
+    }
+
+    // Restore generation results per step (the summary cards)
+    const savedResults = localStorage.getItem('allGenerationResults');
+    if (savedResults) {
+      try {
+        const raw = JSON.parse(savedResults);
+        // Migrate legacy single-object format to new array-history format if needed
+        const migrated = {};
+        Object.keys(raw).forEach(key => {
+          if (raw[key]) {
+            migrated[key] = Array.isArray(raw[key]) ? raw[key] : [raw[key]];
+          }
+        });
+        setAllGenerationResults(migrated);
+      } catch (e) {
+        console.error("Error loading all generation results", e);
+      }
+    }
   }, []);
 
-  // Fetch stats and config when filters change
-  useEffect(() => {
-    if (category || projectType || subcategory || subProjectType) {
-      updateDynamicData();
-    }
-  }, [category, projectType, subcategory, subProjectType]);
 
-  const updateDynamicData = async () => {
+
+  useEffect(() => {
+    if (selectedConfigId) {
+      updateDynamicData(selectedConfigId);
+    }
+  }, [selectedConfigId, allSavedConfigs]);
+
+  // Derived state: Automatically update dropdown suggestions from ALL fetched placeholders
+  useEffect(() => {
+    const dbKeys = allPlaceholders ? [...new Set(allPlaceholders.map(p => p.labelKey))] : [];
+    setAvailableSuggestions(dbKeys.sort());
+  }, [allPlaceholders]);
+
+  // Re-run placeholder filtering whenever selectedStep changes
+  useEffect(() => {
+    if (selectedStep && allPlaceholders.length > 0) {
+      filterStepPlaceholders(allPlaceholders, selectedStep, selectedConfigId);
+    }
+  }, [selectedStep, selectedConfigId, allPlaceholders]);
+
+  const filterStepPlaceholders = (data, step, configId) => {
+    const stepName = step?.name || step?.title || '';
+    const filtered = data.filter(p =>
+      p.configId === configId && p.stepName === stepName
+    );
+    setPlaceholders(filtered);
+  };
+
+  const updateDynamicData = async (configId) => {
     try {
       setIsLoadingStats(true);
 
-      // 1. Update stats
-      const statsData = await getProjectStats({
-        category,
-        projectType,
-        subCategory: subcategory,
-        subProjectType
-      });
-      setStageCounts(statsData?.data?.stageCounts || {});
+      // 1. Fetch current config details
+      const configObj = allSavedConfigs.find(c => c.id === configId);
+      const config = configObj?.value;
+      setConfigDetails(config);
 
-      // 2. Update workflow steps based on project type config
-      if (projectType) {
-        const configKey = `projectConfig_${projectType.replace(/\s+/g, '_')}`;
-        const config = await projectApi.getConfigurationByKey(configKey);
+      // Update template counts for this config
+      fetchDocCounts(configObj?.key);
 
-        if (config && config.selectedSteps && config.selectedSteps.length > 0) {
-          const activeSteps = config.selectedSteps.map(name => {
-            const stage = allJourneyStages.find(s => s.name === name);
-            return stage || { title: name, name: name };
-          });
-          setWorkflowSteps(activeSteps);
-          // Only change selection if current isn't in new set? 
-          // For now, keep selection if same title exists
-          const currentTitle = selectedStep?.title || selectedStep?.name || selectedStep;
-          if (!(selectedStep && activeSteps.find(s => (s.title || s.name) === currentTitle))) {
-            if (activeSteps.length > 0) setSelectedStep(activeSteps[0]);
-          }
-        } else {
-          // No specific config for this type, use default all stages
-          setWorkflowSteps(allJourneyStages);
+      // 2. Update workflow steps based on config
+      if (config && config.selectedSteps && config.selectedSteps.length > 0) {
+        const activeSteps = config.selectedSteps.map(name => {
+          const stage = allJourneyStages.find(s => s.name === name || s.title === name);
+          return stage || { title: name, name: name };
+        });
+        setWorkflowSteps(activeSteps);
+
+        // Auto-select first step if none selected or current not in new set
+        const currentTitle = selectedStep?.title || selectedStep?.name || selectedStep;
+        if (!(selectedStep && activeSteps.find(s => (s.title || s.name) === currentTitle))) {
+          if (activeSteps.length > 0) setSelectedStep(activeSteps[0]);
         }
+      } else {
+        // No steps in config? show all stages as fallback
+        setWorkflowSteps(allJourneyStages);
       }
+
+      // 4. Update the actual placeholders list for the right sidebar
+      const stepName = selectedStep?.name || selectedStep?.title || '';
+      const allFetchedPlaceholders = await projectApi.getPlaceholders();
+      setAllPlaceholders(allFetchedPlaceholders); // Keep a master copy
+      filterStepPlaceholders(allFetchedPlaceholders, selectedStep, configId);
+
     } catch (error) {
       console.error("Error updating dynamic data", error);
     } finally {
@@ -138,29 +227,83 @@ const DocumentationSetting = () => {
     }
   };
 
+  const fetchDocCounts = async (configKey) => {
+    try {
+      const filters = configKey ? { configKey } : {};
+      const allDocs = await projectApi.getProjectDocuments(filters);
+      const counts = {};
+      allDocs.forEach(doc => {
+        counts[doc.stage] = (counts[doc.stage] || 0) + 1;
+      });
+      setStepDocCounts(counts);
+    } catch (e) {
+      console.error("Error fetching doc counts:", e);
+    }
+  };
+
+  const insertAtCursor = (text) => {
+    const textarea = document.getElementById('template-editor');
+    if (!textarea) return;
+
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const currentText = templateContent;
+    const newContent = currentText.substring(0, start) + text + currentText.substring(end);
+
+    setTemplateContent(newContent);
+
+    // Maintain focus and set cursor position after React update
+    setTimeout(() => {
+      textarea.focus();
+      const newCursorPos = start + text.length;
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+    }, 0);
+  };
+
   const loadInitialData = async () => {
     try {
-      const [stages, fetchedPlaceholders, statsData] = await Promise.all([
+      const [stages, fetchedPlaceholders, allConfigs] = await Promise.all([
         projectApi.getJourneyStages(),
         projectApi.getPlaceholders(),
-        getProjectStats({ category, projectType, subCategory: subcategory, subProjectType })
+        projectApi.getConfigurations()
       ]);
 
       setAllJourneyStages(stages);
+      setAllPlaceholders(fetchedPlaceholders);
       setPlaceholders(fetchedPlaceholders);
-      setStageCounts(statsData?.data?.stageCounts || {});
 
-      // Initially show all stages or filtered if defaults exist
+      // Fetch initial counts
+      fetchDocCounts();
+
+      // Group configurations to show unique entries by name in the dropdown
+      if (allConfigs && Array.isArray(allConfigs)) {
+        const uniqueConfigs = new Map();
+
+        allConfigs.forEach(c => {
+          if (!c.configKey) return;
+
+          const name = c.configValue?.configName || c.configKey.replace('projectConfig_', '').replace(/_/g, ' ');
+
+          // Use name as the key to ensure we don't show the same named config multiple times
+          // If multiple configs share a name, the map will store the latest one
+          uniqueConfigs.set(name, {
+            id: c._id,
+            key: c.configKey,
+            name: name,
+            value: c.configValue
+          });
+        });
+
+        const configList = Array.from(uniqueConfigs.values());
+        setAllSavedConfigs(configList);
+      }
+
+      // Initially show all stages as default
       setWorkflowSteps(stages);
       if (stages.length > 0) setSelectedStep(stages[0]);
 
-      // If there are default filters, trigger the update
-      if (projectType) {
-        updateDynamicData();
-      }
-
       // Fetch a sample project for preview
-      const sample = await getAllProjects({ limit: 1 });
+      const sample = await getProjects({ limit: 1 });
       if (sample && sample.success && sample.data && sample.data.length > 0) {
         setSampleProject(sample.data[0]);
       }
@@ -169,93 +312,114 @@ const DocumentationSetting = () => {
     }
   };
 
+  const handleConfigChange = (id) => {
+    setSelectedConfigId(id);
+  };
+
   // Fetch documents when step changes
   useEffect(() => {
-    if (selectedStep) {
-      fetchDocuments(selectedStep.name || selectedStep.title || selectedStep);
+    if (selectedStep && selectedConfigId) {
+      const stepName = selectedStep.name || selectedStep.title || selectedStep;
+      fetchDocuments(stepName);
+
+      // We don't necessarily need to set a single 'generationResult' state anymore
+      // since we render all results for the step from allGenerationResults map
     }
-  }, [selectedStep]);
+  }, [selectedStep, selectedConfigId, allGenerationResults]);
 
   const fetchDocuments = async (stageName) => {
     try {
       const docs = await projectApi.getProjectDocuments({ stage: stageName });
       setStepDocuments(docs);
       if (docs && docs.length > 0) {
-        setTemplateContent(docs[0].templateContent || '');
+        const firstDoc = docs[0];
+        setSelectedDocument(firstDoc);
+        setTemplateContent(firstDoc.templateContent || DEFAULT_TEMPLATE);
       } else {
-        setTemplateContent('');
+        setSelectedDocument(null);
+        setTemplateContent(DEFAULT_TEMPLATE);
       }
+      fetchDocCounts();
     } catch (error) { console.error(error); }
   };
 
   const handleSaveTemplate = async () => {
-    if (!selectedStep || stepDocuments.length === 0) return;
+    if (!selectedDocument) return;
     try {
-      const doc = stepDocuments[0];
-      await projectApi.updateProjectDocument(doc._id, {
-        ...doc,
+      await projectApi.updateProjectDocument(selectedDocument._id, {
+        ...selectedDocument,
         templateContent
       });
-      alert('Template saved successfully!');
-    } catch (error) { console.error(error); }
+      toast.success('Template saved successfully!');
+    } catch (error) { console.error(error); toast.error('Failed to save template'); }
   };
 
   const handleAddDocument = async () => {
     if (!newDocumentName.trim() || !selectedStep) return;
 
     try {
+      const currentConfig = allSavedConfigs.find(c => c.id === selectedConfigId);
       const newDoc = await projectApi.createProjectDocument({
         documentName: newDocumentName,
-        stage: selectedStep.name,
-        required: true, // Default to required?
-        category, subCategory: subcategory, projectType, subProjectType // Save filters if selected
+        stage: selectedStep.name || selectedStep.title,
+        templateContent: DEFAULT_TEMPLATE,
+        required: true,
+        category: configDetails?.configCategory || '',
+        configKey: currentConfig?.key || ''
       });
-      setStepDocuments([...stepDocuments, newDoc]);
+      const updatedDocs = [...stepDocuments, newDoc];
+      setStepDocuments(updatedDocs);
+      setSelectedDocument(newDoc);
+      setTemplateContent(DEFAULT_TEMPLATE);
       setNewDocumentName('');
       setIsAddingDocument(false);
-    } catch (error) { console.error(error); }
+      fetchDocCounts(currentConfig?.key);
+      toast.success('Document added successfully');
+    } catch (error) { console.error(error); toast.error('Failed to add document'); }
   };
 
   const handleDeleteDocument = async (id) => {
+    if (!confirm('Are you sure you want to delete this template?')) return;
     try {
       await projectApi.deleteProjectDocument(id);
-      setStepDocuments(stepDocuments.filter(d => d._id !== id));
-    } catch (error) { console.error(error); }
+      const remainingDocs = stepDocuments.filter(d => d._id !== id);
+      setStepDocuments(remainingDocs);
+      if (selectedDocument?._id === id) {
+        if (remainingDocs.length > 0) {
+          setSelectedDocument(remainingDocs[0]);
+          setTemplateContent(remainingDocs[0].templateContent || DEFAULT_TEMPLATE);
+        } else {
+          setSelectedDocument(null);
+          setTemplateContent(DEFAULT_TEMPLATE);
+        }
+      }
+      const currentConfig = allSavedConfigs.find(c => c.id === selectedConfigId);
+      fetchDocCounts(currentConfig?.key);
+      toast.success('Document deleted');
+    } catch (error) { console.error(error); toast.error('Failed to delete document'); }
   };
 
   const handleAddPlaceholderKey = async () => {
     if (!selectedPlaceholder) return;
 
-    // Logic for cursor insertion
-    const textarea = document.getElementById('template-editor');
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const text = templateContent;
-      const placeholder = `{{${selectedPlaceholder.replace(/\s+/g, '_').toLowerCase()}}}`;
-      const newContent = text.substring(0, start) + placeholder + text.substring(end);
-      setTemplateContent(newContent);
-
-      // Need to focus back and set cursor?
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + placeholder.length, start + placeholder.length);
-      }, 0);
-    }
-
     try {
-      // Also save the placeholder key if it doesn't exist? 
-      // User says: "From the Select Placeholder dropdown, user can select..."
-      // But we should also ensure the DB knows about this key.
+      const placeholder = `{{${selectedPlaceholder.replace(/\s+/g, '_').toLowerCase()}}}`;
+      insertAtCursor(placeholder);
+
       const existing = placeholders.find(p => p.labelKey === selectedPlaceholder);
       if (!existing) {
-        const newPh = await projectApi.savePlaceholder({
+        // Find matching DB field if any
+        const matchingDbField = dbFields.find(f => f.label.toLowerCase() === selectedPlaceholder.toLowerCase())?.value || '';
+        const matchingDbLabel = dbFields.find(f => f.label.toLowerCase() === selectedPlaceholder.toLowerCase())?.label || '';
+
+        const newPlaceholder = {
+          _id: Date.now().toString(),
           labelKey: selectedPlaceholder,
-          labelValue: '',
-          dbField: '', // User will set this later
+          dbField: matchingDbField,
+          labelValue: matchingDbLabel || 'Not set',
           number: placeholders.length + 1
-        });
-        setPlaceholders([...placeholders, newPh]);
+        };
+        setPlaceholders([...placeholders, newPlaceholder]);
       }
       setSelectedPlaceholder('');
     } catch (e) { console.error(e); }
@@ -293,6 +457,105 @@ const DocumentationSetting = () => {
     } catch (e) { console.error(e); }
   };
 
+  // Generate Document Logic
+
+
+  const handleGenerateDocument = () => {
+    if (!templateContent) {
+      toast.error("Please create a template first.");
+      return;
+    }
+
+    // Use sampleProject if it exists, otherwise use DEFAULT_SAMPLE_PROJECT fallback
+    const dataSource = sampleProject || DEFAULT_SAMPLE_PROJECT;
+
+    let finalContent = templateContent;
+    // Find all {{placeholder}} patterns
+    const regex = /\{\{([^{}]+)\}\}/g;
+    let match;
+    const placeholderKeys = [];
+    while ((match = regex.exec(templateContent)) !== null) {
+      placeholderKeys.push({ full: match[0], key: match[1] });
+    }
+
+    placeholderKeys.forEach(item => {
+      const phConfig = placeholders.find(p => p.labelKey.toLowerCase().replace(/\s+/g, '_') === item.key);
+      let replacement = item.full;
+      if (phConfig && phConfig.dbField && dataSource[phConfig.dbField]) {
+        replacement = phConfig.dbField.toLowerCase().includes('date')
+          ? new Date(dataSource[phConfig.dbField]).toLocaleDateString()
+          : dataSource[phConfig.dbField];
+      } else if (phConfig && phConfig.labelValue) {
+        replacement = phConfig.labelValue;
+      }
+      finalContent = finalContent.split(item.full).join(replacement);
+    });
+
+    setGeneratedContent(finalContent);
+
+    // Set generation result summary for the card
+    const result = {
+      name: stepDocuments[0]?.documentName || 'Unnamed Document',
+      date: new Date().toLocaleString(),
+      client: dataSource.authorizedPersonName || 'Not Set',
+      project: dataSource.projectName || 'Not Set',
+      content: finalContent
+    };
+    const stepName = selectedStep.name || selectedStep.title;
+    const compositeKey = `${selectedConfigId}_${stepName}`;
+
+    // Update step results map (scoped to config, as an array of history)
+    const existingResults = allGenerationResults[compositeKey] || [];
+    const updatedResults = { ...allGenerationResults, [compositeKey]: [result, ...existingResults] };
+    setAllGenerationResults(updatedResults);
+    localStorage.setItem('allGenerationResults', JSON.stringify(updatedResults));
+
+    setGenerationResult(result);
+
+    // Update real-time generation counts for steps (scoped to config)
+    const newDocCounts = { ...generatedDocCounts, [compositeKey]: (generatedDocCounts[compositeKey] || 0) + 1 };
+    setGeneratedDocCounts(newDocCounts);
+    localStorage.setItem('generationHistory', JSON.stringify(newDocCounts));
+
+    toast.success('Document generated successfully!');
+  };
+
+  const removeGenerationRecord = (compositeKey, index) => {
+    const list = [...(allGenerationResults[compositeKey] || [])];
+    list.splice(index, 1);
+    const updated = { ...allGenerationResults, [compositeKey]: list };
+    setAllGenerationResults(updated);
+    localStorage.setItem('allGenerationResults', JSON.stringify(updated));
+  };
+
+  const viewGeneratedDocument = () => {
+    if (!generatedContent) return;
+
+    const docWindow = window.open('', '_blank', 'width=900,height=800');
+    docWindow.document.write(`
+      <html>
+        <head>
+          <title>${generationResult?.name || 'Generated Document'}</title>
+          <style>
+            body { font-family: 'Inter', sans-serif; line-height: 1.8; color: #333; padding: 60px; max-width: 850px; margin: auto; background: #f4f7f6; }
+            .content { background: white; padding: 60px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); border-radius: 8px; min-height: 1000px; border-top: 5px solid #2563eb; }
+            h1 { text-align: center; color: #111; text-transform: uppercase; letter-spacing: 2px; border-bottom: 2px solid #eee; padding-bottom: 20px; }
+            p { margin-bottom: 25px; text-align: justify; }
+            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #777; border-top: 1px solid #eee; padding-top: 20px; }
+          </style>
+        </head>
+        <body>
+          <div class="content">
+            <h1>${generationResult?.name || 'Document'}</h1>
+            ${generatedContent.replace(/\n/g, '<br/>')}
+            <div class="footer">Generated via Solarkits ERP System</div>
+          </div>
+        </body>
+      </html>
+    `);
+    docWindow.document.close();
+  };
+
   const closeModal = () => {
     setShowModal(false);
     setModalPlaceholder(null);
@@ -300,7 +563,7 @@ const DocumentationSetting = () => {
     setSelectedDbField('');
   };
 
-  // Helper to render placeholder item
+  // Helper to render placeholder item for the preview mode
   const renderPlaceholder = (key) => {
     // Check if key is a placeholder in our list
     const placeholderName = key.toLowerCase().replace(/\s+/g, '_');
@@ -309,9 +572,15 @@ const DocumentationSetting = () => {
     let displayValue = `[${key}]`;
     let isReplaced = false;
 
-    if (isPreviewWithData && sampleProject) {
-      if (phConfig && phConfig.dbField) {
-        displayValue = sampleProject[phConfig.dbField] || phConfig.labelValue || `[Missing: ${phConfig.labelKey}]`;
+    if (isPreviewWithData) {
+      const dataSource = sampleProject || DEFAULT_SAMPLE_PROJECT;
+      if (phConfig && phConfig.dbField && dataSource[phConfig.dbField]) {
+        // Handle dates
+        if (phConfig.dbField.toLowerCase().includes('date') && dataSource[phConfig.dbField]) {
+          displayValue = new Date(dataSource[phConfig.dbField]).toLocaleDateString();
+        } else {
+          displayValue = dataSource[phConfig.dbField];
+        }
         isReplaced = true;
       } else if (phConfig && phConfig.labelValue) {
         displayValue = phConfig.labelValue;
@@ -320,13 +589,13 @@ const DocumentationSetting = () => {
     }
 
     return (
-      <span className={`inline-flex items-center space-x-1 border border-dashed rounded px-1 py-0.5 mx-1 text-sm
-        ${isReplaced ? 'border-green-500 bg-green-50 text-green-700' : 'border-yellow-500 bg-yellow-50/50 text-yellow-600'}`}>
+      <span className={`inline-flex items-center space-x-1 border border-solid rounded px-1.5 py-0.5 mx-1 shadow-sm
+        ${isReplaced ? 'bg-green-100 border-green-300 text-green-800' : 'bg-yellow-100 border-yellow-300 text-yellow-800'}`}>
         <span className={`flex items-center justify-center w-4 h-4 rounded-full text-white text-[10px] font-bold
-          ${isReplaced ? 'bg-green-500' : 'bg-[#0ea5e9]'}`}>
+          ${isReplaced ? 'bg-green-500' : 'bg-blue-500'}`}>
           {isReplaced ? '✓' : 'i'}
         </span>
-        <span className="font-medium">{displayValue}</span>
+        <span className="font-bold tracking-tight">{displayValue}</span>
       </span>
     );
   };
@@ -348,69 +617,28 @@ const DocumentationSetting = () => {
       </header>
 
       <div className="space-y-6">
-        {/* Project Settings Section */}
+        {/* Project Configuration Selection */}
         <div className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
           <div className="flex items-center space-x-2 mb-6 pb-4 border-b border-gray-100">
             <Cog className="w-5 h-5 text-blue-500" />
-            <h2 className="text-lg font-bold text-[#1e3a8a]">Project Settings</h2>
+            <h2 className="text-lg font-bold text-[#1e3a8a]">Project Configuration</h2>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-            {/* Row 1 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Category</label>
-              <select
-                value={category}
-                onChange={(e) => setCategory(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
-              >
-                <option value="">Select Category</option>
-                <option value="residential">Residential</option>
-                <option value="commercial">Commercial</option>
-                <option value="industrial">Industrial</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Project Type</label>
-              <select
-                value={projectType}
-                onChange={(e) => setProjectType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
-              >
-                <option value="">Select Project Type</option>
-                <option value="new-installation">New Installation</option>
-                <option value="upgrade">System Upgrade</option>
-                <option value="maintenance">Maintenance</option>
-              </select>
-            </div>
-
-            {/* Row 2 */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Subcategory</label>
-              <select
-                value={subcategory}
-                onChange={(e) => setSubcategory(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
-              >
-                <option value="">Select Subcategory</option>
-                <option value="solar">Solar Power</option>
-                <option value="wind">Wind Energy</option>
-                <option value="hydro">Hydro Power</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Sub Project Type</label>
-              <select
-                value={subProjectType}
-                onChange={(e) => setSubProjectType(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
-              >
-                <option value="">Select Sub Project Type</option>
-                <option value="rooftop">Rooftop Solar</option>
-                <option value="ground">Ground Mount</option>
-                <option value="hybrid">Hybrid System</option>
-              </select>
-            </div>
+          <div className="max-w-xl">
+            <label className="block text-sm font-medium text-gray-700 mb-2">Select Project Journey Configuration</label>
+            <select
+              value={selectedConfigId}
+              onChange={(e) => handleConfigChange(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 text-sm bg-white"
+            >
+              <option value="">Select Configuration</option>
+              {allSavedConfigs.map((cfg) => (
+                <option key={cfg.id} value={cfg.id}>{cfg.name}</option>
+              ))}
+            </select>
+            <p className="mt-2 text-xs text-gray-500">
+              Select a configuration from 'Project Management Configuration' module to load its specific workflow steps.
+            </p>
           </div>
         </div>
 
@@ -423,8 +651,10 @@ const DocumentationSetting = () => {
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4">
             {workflowSteps.map((step, index) => {
-              // Get actual count from stageCounts
-              const count = stageCounts[step.name] || 0;
+              // Get actual generation count for this step (scoped to active config)
+              const stepName = step.name || step.title;
+              const compositeKey = `${selectedConfigId}_${stepName}`;
+              const count = generatedDocCounts[compositeKey] || 0;
               return (
                 <div
                   key={step._id || step.title || index}
@@ -439,10 +669,8 @@ const DocumentationSetting = () => {
                     {step.title || step.name}
                   </div>
                   <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      const statusParam = step.title || step.name;
-                      navigate(`/admin/projects?status=${encodeURIComponent(statusParam)}`);
+                    onClick={() => {
+                      setSelectedStep(step);
                     }}
                     className="text-2xl font-black text-[#0ea5e9] hover:underline hover:scale-110 transition-transform"
                     title={`View all ${step.title || step.name} projects`}
@@ -455,45 +683,126 @@ const DocumentationSetting = () => {
           </div>
         </div>
 
-        {/* Document and Placeholder Side by Side */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Document and Placeholder Side by Side */}        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Document Preview Section */}
           <div className="lg:col-span-2">
             <div className="bg-white rounded-xl shadow-sm p-6 h-full flex flex-col">
-              <div className="flex items-center justify-between mb-6 pb-4 border-b">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6 pb-4 border-b">
                 <h2 className="text-xl font-semibold text-gray-800 flex items-center space-x-2">
                   <File className="w-5 h-5 text-blue-500" />
                   <span>Document Template Editor</span>
                 </h2>
-                <div className="flex space-x-2">
-                  {!isEditingTemplate && (
-                    <button
-                      onClick={() => setIsPreviewWithData(!isPreviewWithData)}
-                      className={`px-3 py-1 text-sm border rounded-lg flex items-center transition-colors
-                        ${isPreviewWithData ? 'bg-green-100 border-green-300 text-green-700' : 'border-gray-300 hover:bg-gray-50'}`}
-                    >
-                      {isPreviewWithData ? 'Using Sample Data' : 'Show Placeholders'}
-                    </button>
-                  )}
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    onClick={() => setIsPreviewWithData(!isPreviewWithData)}
+                    className={`px-3 py-1.5 text-sm rounded-lg flex items-center transition-all shadow-sm border
+                      ${isPreviewWithData ? 'bg-green-100 border-green-300 text-green-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
+                  >
+                    {isPreviewWithData ? 'Using Sample Data' : 'Show Placeholders'}
+                  </button>
                   <button
                     onClick={() => setIsEditingTemplate(!isEditingTemplate)}
-                    className="px-3 py-1 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center"
+                    className={`px-3 py-1.5 text-sm rounded-lg flex items-center transition-all shadow-sm border
+                      ${!isEditingTemplate ? 'bg-blue-50 border-blue-300 text-blue-700 font-bold' : 'bg-white border-gray-300 hover:bg-gray-50 text-gray-700'}`}
                   >
                     {isEditingTemplate ? 'Preview Mode' : 'Editor Mode'}
                   </button>
                   <button
                     onClick={handleSaveTemplate}
-                    disabled={stepDocuments.length === 0}
-                    className="px-4 py-1 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center"
+                    disabled={!selectedDocument}
+                    className="px-4 py-1.5 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center shadow-sm font-semibold transition-colors"
                   >
-                    <Save className="w-4 h-4 mr-1" />
+                    <Save className="w-4 h-4 mr-2" />
                     Save Template
                   </button>
                 </div>
               </div>
 
+              {/* Document Creation / Selection Information */}
+              {selectedStep && (stepDocuments.length === 0 || isAddingDocument) && (
+                <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-xl flex items-center justify-between">
+                  <div className="flex items-center space-x-3 text-yellow-700">
+                    <div className="bg-yellow-100 p-2 rounded-lg">
+                      <Plus className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="font-bold text-sm">Create New Template for {selectedStep.name || selectedStep.title}</p>
+                      <p className="text-xs">Enter a unique name for this document template.</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      className="px-3 py-2 text-sm border rounded-lg focus:ring-1 focus:ring-yellow-400"
+                      placeholder="Enter Document Name..."
+                      value={newDocumentName}
+                      onChange={(e) => setNewDocumentName(e.target.value)}
+                    />
+                    <button
+                      onClick={handleAddDocument}
+                      className="px-4 py-2 bg-[#0ea5e9] text-white rounded-lg text-sm font-bold hover:bg-[#0284c7] transition-colors"
+                    >
+                      Create
+                    </button>
+                    {isAddingDocument && (
+                      <button onClick={() => setIsAddingDocument(false)} className="p-2 text-gray-400 hover:text-gray-600">
+                        <X className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {selectedDocument && !isAddingDocument && (
+                <div className="mb-4 flex items-center justify-between p-4 bg-blue-50 border border-blue-100 rounded-xl">
+                  <div className="flex items-center space-x-3">
+                    <div className="p-2 bg-blue-500 rounded-lg text-white">
+                      <FileText className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] text-blue-600 uppercase font-black px-1 tracking-tighter">Current Context</p>
+                      <h3 className="text-sm font-bold text-gray-800">
+                        <span className="text-blue-600">Step:</span> {selectedStep?.name || selectedStep?.title || 'Unknown Step'}
+                        <span className="mx-2 text-gray-300">|</span>
+                        <span className="text-blue-600">Editing:</span> {selectedDocument?.documentName || 'New Template'}
+                      </h3>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Document List for switching between multiple templates */}
+              {selectedStep && stepDocuments.length > 0 && (
+                <div className="mb-6 flex flex-wrap gap-2 p-4 bg-gray-50 border border-gray-100 rounded-xl">
+                  <p className="w-full text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 px-1">Templates for {selectedStep.name || selectedStep.title}</p>
+                  {stepDocuments.map(doc => (
+                    <button
+                      key={doc._id}
+                      onClick={() => {
+                        setSelectedDocument(doc);
+                        setTemplateContent(doc.templateContent || DEFAULT_TEMPLATE);
+                      }}
+                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all
+                                ${selectedDocument?._id === doc._id
+                          ? 'bg-blue-600 text-white shadow-md'
+                          : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}
+                    >
+                      {doc.documentName}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => setIsAddingDocument(true)}
+                    className="px-4 py-2 rounded-lg text-sm font-bold text-blue-600 bg-white border border-dashed border-blue-300 hover:bg-blue-50 transition-colors flex items-center gap-1"
+                  >
+                    <Plus className="w-4 h-4" />
+                    New Template
+                  </button>
+                </div>
+              )}
+
               <div className="flex-1 min-h-[500px] flex flex-col">
-                <div className="mb-2 text-xs text-gray-500 italic">
+                <div className="mb-2 text-xs text-gray-500 italic flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
                   Note: Use placeholders like {"{{client_name}}"} which will be replaced during generation.
                 </div>
                 {isEditingTemplate ? (
@@ -501,18 +810,32 @@ const DocumentationSetting = () => {
                     id="template-editor"
                     value={templateContent}
                     onChange={(e) => setTemplateContent(e.target.value)}
-                    className="w-full flex-1 p-6 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none leading-relaxed"
+                    className="w-full flex-1 p-8 bg-gray-50 border border-gray-200 rounded-lg font-mono text-sm focus:outline-none focus:ring-1 focus:ring-blue-500 resize-none leading-relaxed shadow-inner"
                     placeholder="Enter document template content here..."
                   />
                 ) : (
-                  <div className="w-full flex-1 p-8 bg-gray-50 border border-gray-200 rounded-lg overflow-auto">
-                    <div className="max-w-[800px] mx-auto bg-white p-10 shadow-sm min-h-full whitespace-pre-wrap leading-loose text-sm text-gray-800">
+                  <div className="w-full flex-1 p-8 bg-gray-100 border border-gray-200 rounded-lg overflow-auto">
+                    <div className="max-w-[800px] mx-auto bg-white p-12 shadow-md min-h-full whitespace-pre-wrap leading-loose text-sm text-gray-800 border-t-4 border-blue-500 relative">
+                      <button
+                        onClick={() => handleDeleteDocument(selectedDocument?._id)}
+                        className="absolute top-4 right-4 p-2 text-gray-400 hover:text-red-500 transition-colors"
+                        title="Delete Template"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                      <div className="mb-8 text-center">
+                        <p className="text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em] mb-1">
+                          {selectedStep?.name || selectedStep?.title}
+                        </p>
+                        <h3 className="text-xl font-bold uppercase tracking-widest text-gray-900">{selectedDocument?.documentName || 'Document Preview'}</h3>
+                        <div className="w-16 h-1 bg-blue-500 mx-auto mt-2"></div>
+                      </div>
                       {templateContent.split(/(\{\{[^{}]+\}\})/).map((part, i) => {
                         if (part.startsWith('{{') && part.endsWith('}}')) {
-                          const key = part.slice(2, -2).toUpperCase().replace(/_/g, ' ');
-                          return renderPlaceholder(key);
+                          const keyName = part.slice(2, -2).toUpperCase().replace(/_/g, ' ');
+                          return <React.Fragment key={`placeholder-${i}`}>{renderPlaceholder(keyName)}</React.Fragment>;
                         }
-                        return part;
+                        return <span key={`text-${i}`}>{part}</span>;
                       })}
                     </div>
                   </div>
@@ -571,7 +894,7 @@ const DocumentationSetting = () => {
                       <div className="flex-1">
                         <div className="font-medium text-sm text-gray-800">{p.labelKey}</div>
                         <div className="text-xs text-blue-600 truncate">
-                          {p.labelValue || 'Not set'}
+                          {p.dbField ? `Linked to: ${dbFields.find(f => f.value === p.dbField)?.label || p.dbField}` : (p.labelValue || 'Static Value')}
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -597,13 +920,78 @@ const DocumentationSetting = () => {
               </div>
 
               {/* Footer Button */}
-              <div className="flex justify-end mt-4 pt-4 border-t border-gray-100">
+              <div className="flex-1 mt-6 flex flex-col items-center justify-start space-y-4">
                 <button
-                  className="px-6 py-2 bg-[#22c55e] text-white rounded-md hover:bg-[#16a34a] transition-colors flex items-center shadow-sm text-sm font-semibold"
+                  onClick={handleGenerateDocument}
+                  disabled={!selectedStep || stepDocuments.length === 0}
+                  className={`w-full py-4 px-6 rounded-xl font-bold flex items-center justify-center space-x-2 shadow-lg transition-all transform hover:scale-[1.02]
+                    ${(!selectedStep || stepDocuments.length === 0)
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                      : 'bg-green-600 hover:bg-green-700 text-white active:scale-95'}`}
                 >
-                  <FileText className="w-4 h-4 mr-2" />
-                  Generate Document
+                  <FileText className="w-5 h-5" />
+                  <span>Generate Final Document</span>
                 </button>
+                {/* Generation History Sidebar */}
+                <div className="w-full space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                  {(selectedStep && selectedConfigId) && (() => {
+                    const records = allGenerationResults[`${selectedConfigId}_${selectedStep.name || selectedStep.title}`];
+                    const historyArray = Array.isArray(records) ? records : (records ? [records] : []);
+                    return historyArray.map((res, idx) => (
+                      <div key={idx} className="w-full bg-white border border-green-200 rounded-xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+                        <div className="bg-green-50 px-4 py-2 border-b border-green-100 flex items-center justify-between">
+                          <div className="flex items-center text-green-700 text-[11px] font-bold uppercase tracking-wider">
+                            <Check className="w-3.5 h-3.5 mr-1.5" />
+                            Generated Record #{(historyArray.length - idx)}
+                          </div>
+                          <button
+                            onClick={() => removeGenerationRecord(`${selectedConfigId}_${selectedStep.name || selectedStep.title}`, idx)}
+                            className="text-green-600 hover:text-red-600 transition-colors"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </div>
+                        <div className="p-4 space-y-3">
+                          <div className="flex justify-between items-start">
+                            <div>
+                              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Document</p>
+                              <p className="text-sm font-semibold text-gray-800">{res.name}</p>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-[10px] text-gray-500 uppercase font-bold tracking-wider">Date</p>
+                              <p className="text-xs text-gray-800">{res.date}</p>
+                            </div>
+                          </div>
+                          <div className="pt-2 border-t border-gray-50">
+                            <div className="flex items-center gap-2 mb-1">
+                              <div className="w-1.5 h-1.5 bg-green-500 rounded-full"></div>
+                              <p className="text-xs text-gray-600">Client: <span className="font-bold">{res.client}</span></p>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <div className="w-1.5 h-1.5 bg-blue-500 rounded-full"></div>
+                              <p className="text-xs text-gray-600">Project: <span className="font-bold truncate max-w-[120px] inline-block align-bottom">{res.project}</span></p>
+                            </div>
+                          </div>
+                          <button
+                            onClick={() => {
+                              setGenerationResult(res);
+                              if (res.content) setGeneratedContent(res.content);
+                              viewGeneratedDocument();
+                            }}
+                            className="w-full py-2 px-3 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-50 transition-colors flex items-center justify-center space-x-2"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                            <span>View Full Document (Popup)</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  })()}
+                </div>
+
+                <p className="text-xs text-gray-400 text-center px-4">
+                  Note: Generating final document will replace all placeholders and open a printable view.
+                </p>
               </div>
             </div>
           </div>
@@ -691,6 +1079,46 @@ const DocumentationSetting = () => {
               >
                 <Save className="w-4 h-4" />
                 <span>Save Changes</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Generator Preview Modal */}
+      {showGeneratorModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b">
+              <div className="flex items-center space-x-2">
+                <FileText className="w-6 h-6 text-green-500" />
+                <h3 className="text-xl font-bold text-gray-800">Generated Document Preview</h3>
+              </div>
+              <button
+                onClick={() => setShowGeneratorModal(false)}
+                className="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-8 bg-gray-100">
+              <div className="max-w-[700px] mx-auto bg-white p-12 shadow-sm whitespace-pre-wrap leading-relaxed text-gray-800 border min-h-full">
+                {generatedContent}
+              </div>
+            </div>
+
+            <div className="p-6 border-t bg-white flex justify-end space-x-3">
+              <button
+                onClick={() => window.print()}
+                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700"
+              >
+                Print Document
+              </button>
+              <button
+                onClick={() => setShowGeneratorModal(false)}
+                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
+              >
+                Close Preview
               </button>
             </div>
           </div>
