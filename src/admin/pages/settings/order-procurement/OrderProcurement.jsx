@@ -18,6 +18,9 @@ import {
   getSkus,
   getProjectCategoryMappings
 } from '../../../../services/settings/orderProcurementSettingApi';
+import { locationAPI } from '../../../../api/api';
+import inventoryApi from '../../../../services/inventory/inventoryApi';
+import { masterApi } from '../../../../api/masterApi';
 
 export default function OrderProcurement() {
   // Data State
@@ -34,10 +37,17 @@ export default function OrderProcurement() {
   const [supplierTypes, setSupplierTypes] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
   const [formProjectRanges, setFormProjectRanges] = useState([]);
+  const [countries, setCountries] = useState([]);
+  const [states, setStates] = useState([]);
+  const [clusters, setClusters] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
 
   // Form Dep Dropdowns
   const [formSubCategories, setFormSubCategories] = useState([]);
   const [formSubProjectTypes, setFormSubProjectTypes] = useState([]);
+  const [formStates, setFormStates] = useState([]);
+  const [formClusters, setFormClusters] = useState([]);
+  const [formWarehouses, setFormWarehouses] = useState([]);
 
   // UI State
   const [loading, setLoading] = useState(true);
@@ -49,12 +59,17 @@ export default function OrderProcurement() {
     category: '',
     subCategory: '',
     projectType: '',
-    subProjectType: ''
+    subProjectType: '',
+    state: '',
+    cluster: '',
+    warehouse: ''
   });
 
   // Filter Dropdowns
   const [filterSubCategories, setFilterSubCategories] = useState([]);
   const [filterSubProjectTypes, setFilterSubProjectTypes] = useState([]);
+  const [filterClusters, setFilterClusters] = useState([]);
+  const [filterWarehouses, setFilterWarehouses] = useState([]);
 
   // Current Setting Form Data
   const initialFormState = {
@@ -64,10 +79,13 @@ export default function OrderProcurement() {
     subProjectType: '',
     product: '',
     brand: '',
-    paymentType: 'None',
+    paymentType: [],
     skus: [],
     skuSelectionOption: 'ComboKit',
-    skuItems: [{ minRange: '', maxRange: '', assignModules: [], supplierType: [] }]
+    skuItems: [{ minRange: '', maxRange: '', assignModules: [], supplierType: [] }],
+    state: '',
+    cluster: '',
+    warehouse: ''
   };
   const [formData, setFormData] = useState(initialFormState);
 
@@ -118,6 +136,14 @@ export default function OrderProcurement() {
       setSubCategories(allSubCatData?.data || []);
       setSubProjectTypes(allSubPTypeData?.data || []);
       setProjectMappings(mappingData?.data || []);
+
+      const countryRes = await masterApi.getCountries();
+      setCountries(countryRes?.data || []);
+      if (countryRes?.data?.length > 0) {
+        const stateRes = await masterApi.getStates({ countryId: countryRes.data[0]._id });
+        setStates(stateRes?.data || []);
+        setFormStates(stateRes?.data || []);
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load initial data");
@@ -141,6 +167,15 @@ export default function OrderProcurement() {
     }
     if (filters.subProjectType) {
       result = result.filter(s => (s.subProjectType?.name || s.subProjectType) === filters.subProjectType);
+    }
+    if (filters.state) {
+      result = result.filter(s => (s.state?._id || s.state) === filters.state);
+    }
+    if (filters.cluster) {
+      result = result.filter(s => (s.cluster?._id || s.cluster) === filters.cluster);
+    }
+    if (filters.warehouse) {
+      result = result.filter(s => (s.warehouse?._id || s.warehouse) === filters.warehouse);
     }
 
     setFilteredSettings(result);
@@ -189,7 +224,34 @@ export default function OrderProcurement() {
     }
   };
 
-  // Form Handlers
+  const handleFilterStateChange = async (e) => {
+    const stateId = e.target.value;
+    setFilters(prev => ({ ...prev, state: stateId, cluster: '', warehouse: '' }));
+    setFilterClusters([]);
+    setFilterWarehouses([]);
+    if (stateId) {
+      try {
+        const res = await locationAPI.getAllClusters({ stateId });
+        setFilterClusters(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to load clusters for filter", err);
+      }
+    }
+  };
+
+  const handleFilterClusterChange = async (e) => {
+    const clusterId = e.target.value;
+    setFilters(prev => ({ ...prev, cluster: clusterId, warehouse: '' }));
+    setFilterWarehouses([]);
+    if (clusterId) {
+      try {
+        const res = await inventoryApi.getAllWarehouses({ cluster: clusterId });
+        setFilterWarehouses(res.data?.data || []);
+      } catch (err) {
+        console.error("Failed to load warehouses for filter", err);
+      }
+    }
+  };
   const handleCategoryChange = async (e) => {
     const catName = e.target.value;
     setFormData(prev => ({ ...prev, category: catName, subCategory: '', projectType: '', subProjectType: '' }));
@@ -247,7 +309,36 @@ export default function OrderProcurement() {
     }
   };
 
-  // SKU Items Logic
+  const handleStateChange = async (e) => {
+    const stateId = e.target.value;
+    setFormData(prev => ({ ...prev, state: stateId, cluster: '', warehouse: '' }));
+    setFormClusters([]);
+    setFormWarehouses([]);
+    if (stateId) {
+      try {
+        const res = await locationAPI.getAllClusters({ stateId });
+        setFormClusters(res.data?.data || []);
+      } catch (err) {
+        toast.error("Failed to load clusters");
+      }
+    }
+  };
+
+  const handleClusterChange = async (e) => {
+    const clusterId = e.target.value;
+    setFormData(prev => ({ ...prev, cluster: clusterId, warehouse: '' }));
+    setFormWarehouses([]);
+    if (clusterId) {
+      try {
+        const res = await inventoryApi.getAllWarehouses({ cluster: clusterId });
+        setFormWarehouses(res.data?.data || []);
+      } catch (err) {
+        toast.error("Failed to load warehouses");
+      }
+    }
+  };
+
+  // Form Handlers
   const handleSkuItemChange = (index, field, value) => {
     const newItems = [...formData.skuItems];
     newItems[index][field] = value;
@@ -282,7 +373,7 @@ export default function OrderProcurement() {
       subProjectType: sptName,
       product: setting.product?._id || setting.product,
       brand: setting.brand?._id || setting.brand,
-      paymentType: setting.paymentType || 'None',
+      paymentType: Array.isArray(setting.paymentType) ? setting.paymentType : (setting.paymentType && setting.paymentType !== 'None' ? [setting.paymentType] : []),
       skus: setting.skus?.map(s => s._id || s) || [],
       skuSelectionOption: setting.skuSelectionOption || 'ComboKit',
       skuItems: setting.skuItems.map(i => ({
@@ -292,8 +383,24 @@ export default function OrderProcurement() {
         supplierType: Array.isArray(i.supplierType) ? i.supplierType.map(s => s._id || s) : (i.supplierType ? [i.supplierType._id || i.supplierType] : []),
         _id: i._id
       })),
-      _id: setting._id
+      _id: setting._id,
+      state: setting.state?._id || setting.state || '',
+      cluster: setting.cluster?._id || setting.cluster || '',
+      warehouse: setting.warehouse?._id || setting.warehouse || ''
     });
+
+    // Load dependent location dropdowns
+    if (setting.state) {
+      const stateId = setting.state?._id || setting.state;
+      const res = await locationAPI.getAllClusters({ stateId });
+      setFormClusters(res.data?.data || []);
+      
+      if (setting.cluster) {
+        const clusterId = setting.cluster?._id || setting.cluster;
+        const whRes = await inventoryApi.getAllWarehouses({ cluster: clusterId });
+        setFormWarehouses(whRes.data?.data || []);
+      }
+    }
 
     // Load dependent dropdowns for form
     const selCat = categories.find(c => c.name === catName);
@@ -370,6 +477,8 @@ export default function OrderProcurement() {
     setFormSubProjectTypes([]);
     setFormProjectRanges([]);
     setIsEdit(false);
+    setFormClusters([]);
+    setFormWarehouses([]);
   };
 
   return (
@@ -430,6 +539,35 @@ export default function OrderProcurement() {
             <option value="">Filter by Sub-Project type</option>
             {filterSubProjectTypes.map(p => <option key={p._id} value={p.name}>{p.name}</option>)}
           </select>
+
+          <select
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.state}
+            onChange={handleFilterStateChange}
+          >
+            <option value="">Filter by State</option>
+            {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+          </select>
+
+          <select
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.cluster}
+            onChange={handleFilterClusterChange}
+            disabled={!filters.state}
+          >
+            <option value="">Filter by Cluster</option>
+            {filterClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+
+          <select
+            className="p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            value={filters.warehouse}
+            onChange={(e) => setFilters(prev => ({ ...prev, warehouse: e.target.value }))}
+            disabled={!filters.cluster}
+          >
+            <option value="">Filter by Warehouse</option>
+            {filterWarehouses.map(w => <option key={w._id} value={w._id}>{w.name}</option>)}
+          </select>
         </div>
 
         <div className="flex w-full justify-between items-center mt-2">
@@ -466,6 +604,9 @@ export default function OrderProcurement() {
                 <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Sub category</th>
                 <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Project type</th>
                 <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Sub Project type</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">State</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Cluster</th>
+                <th className="px-4 py-3 font-medium border-b border-[#4791d9]">Warehouse</th>
                 <th className="px-4 py-3 font-medium border-b border-[#4791d9] text-center">action</th>
               </tr>
             </thead>
@@ -477,6 +618,9 @@ export default function OrderProcurement() {
                   <td className="px-4 py-3 text-gray-600">{setting.subCategory?.name || setting.subCategory || 'N/A'}</td>
                   <td className="px-4 py-3 text-gray-600">{setting.projectType?.name || setting.projectType || 'N/A'}</td>
                   <td className="px-4 py-3 text-gray-600">{setting.subProjectType?.name || setting.subProjectType || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.state?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.cluster?.name || 'N/A'}</td>
+                  <td className="px-4 py-3 text-gray-600">{setting.warehouse?.name || 'N/A'}</td>
                   <td className="px-4 py-3 text-center flex justify-center gap-3">
                     <button
                       onClick={() => handleEdit(setting)}
@@ -615,6 +759,47 @@ export default function OrderProcurement() {
                   </div>
                 </div>
 
+                {/* Location Selection: State, Cluster, Warehouse */}
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase font-medium text-gray-600 mb-1.5">State</label>
+                    <select
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.state}
+                      onChange={handleStateChange}
+                    >
+                      <option value="">Select State</option>
+                      {formStates.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase font-medium text-gray-600 mb-1.5">Cluster</label>
+                    <select
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.cluster}
+                      onChange={handleClusterChange}
+                      disabled={!formData.state}
+                    >
+                      <option value="">Select Cluster</option>
+                      {formClusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+                    </select>
+                  </div>
+
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-gray-500 uppercase font-medium text-gray-600 mb-1.5">Warehouse</label>
+                    <select
+                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
+                      value={formData.warehouse}
+                      onChange={e => setFormData({ ...formData, warehouse: e.target.value })}
+                      disabled={!formData.cluster}
+                    >
+                      <option value="">Select Warehouse</option>
+                      {formWarehouses.map(w => <option key={w._id} value={w._id}>{w.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+
                 {/* SKUs and Payment Type block */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-start mt-8">
                   <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm">
@@ -653,17 +838,19 @@ export default function OrderProcurement() {
 
                   <div className="border border-gray-200 rounded-lg p-4 bg-white shadow-sm h-full">
                     <label className="block font-medium text-blue-600 mb-4">Payment Type</label>
-                    <select
+                    <Select
+                      isMulti
                       required
-                      className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-100 focus:border-blue-400"
-                      value={formData.paymentType}
-                      onChange={e => setFormData({ ...formData, paymentType: e.target.value })}
-                    >
-                      <option value="None">Payment Type</option>
-                      <option value="Cash">Cash</option>
-                      <option value="Loan">Loan</option>
-                      <option value="EMI">EMI</option>
-                    </select>
+                      placeholder="Select Payment Type"
+                      className="text-sm"
+                      options={[
+                        { label: 'Cash', value: 'Cash' },
+                        { label: 'Loan', value: 'Loan' },
+                        { label: 'EMI', value: 'EMI' }
+                      ]}
+                      value={(formData.paymentType || []).map(val => ({ label: val, value: val }))}
+                      onChange={(selected) => setFormData({ ...formData, paymentType: selected ? selected.map(o => o.value) : [] })}
+                    />
                     <p className="mt-4 text-xs text-gray-400 italic">
                       * Payment Type is selected once per SKU selection. It applies to all rows below.
                     </p>

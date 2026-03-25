@@ -22,7 +22,8 @@ import {
   CheckCircle,
   DollarSign,
   Settings,
-  AlertCircle
+  AlertCircle,
+  Zap
 } from 'lucide-react';
 
 export default function PlaceholderNameSetting() {
@@ -64,6 +65,16 @@ export default function PlaceholderNameSetting() {
     "Warranty Period", "Maintenance Schedule", "Payment Terms", "Contract Duration",
     "Admin Phone", "Admin Email", "Admin Address", "Client City", "Client State", "Project ID", "Application Number"
   ]);
+
+  const quickKeywords = [
+    { label: 'Name', icon: <User className="w-4 h-4" />, color: 'bg-blue-50 text-blue-600 border-blue-200' },
+    { label: 'Mobile', icon: <Phone className="w-4 h-4" />, color: 'bg-green-50 text-green-600 border-green-200' },
+    { label: 'Email', icon: <FileText className="w-4 h-4" />, color: 'bg-purple-50 text-purple-600 border-purple-200' },
+    { label: 'Address', icon: <MapPin className="w-4 h-4" />, color: 'bg-orange-50 text-orange-600 border-orange-200' },
+    { label: 'Date', icon: <Calendar className="w-4 h-4" />, color: 'bg-red-50 text-red-600 border-red-200' },
+    { label: 'Cost', icon: <DollarSign className="w-4 h-4" />, color: 'bg-emerald-50 text-emerald-600 border-emerald-200' },
+    { label: 'Capacity', icon: <Zap className="w-4 h-4" />, color: 'bg-yellow-50 text-yellow-600 border-yellow-200' },
+  ];
 
   const dbFields = [
     { label: 'Project ID', value: 'projectId' },
@@ -188,36 +199,23 @@ export default function PlaceholderNameSetting() {
     }
   };
 
-  const handleAddPlaceholder = async () => {
-    if ((!selectedPlaceholder && !isAddingNew) || (isAddingNew && !placeholderKey)) {
-      alert('Please enter or select a placeholder key');
-      return;
-    }
+  const handleAddPlaceholderByValue = (value) => {
+    if (!value) return;
+    processPlaceholderSearch(value);
+  };
 
+  const processPlaceholderSearch = (searchVal) => {
     const stepName = selectedStep?.name || selectedStep?.title || '';
     if (!stepName) {
       alert('Please select a project management step card first');
       return;
     }
 
-    // If adding a NEW custom placeholder, keep the modal flow for detailed entry
-    if (isAddingNew) {
-      if (placeholders.find(p => p.labelKey === placeholderKey)) {
-        alert('Placeholder key already exists');
-        return;
-      }
-      setEditingPlaceholder(null);
-      setPlaceholderValue('');
-      setPlaceholderNumber(placeholders.length + 1);
-      setIsModalOpen(true);
-      return;
-    }
-
     // --- ENHANCED SEMANTIC MATCHING LOGIC ---
     // 1. Extract the core keyword (last word)
-    const words = selectedPlaceholder.trim().toLowerCase().split(/\s+/);
+    const words = searchVal.trim().toLowerCase().split(/\s+/);
     const primaryKeyword = words[words.length - 1];
-    setCurrentKeyword(selectedPlaceholder.split(' ').pop()); // For UI display
+    setCurrentKeyword(searchVal.split(' ').pop()); // For UI display
 
     // 2. Define deep semantic field-type synonyms for broader matching
     const semanticSynonyms = {
@@ -263,7 +261,7 @@ export default function PlaceholderNameSetting() {
     const uniqueMatches = matches.filter(m => !existingKeys.has(m));
 
     if (uniqueMatches.length === 0) {
-      alert(`No additional placeholders found matching keyword Cluster "${primaryKeyword}" for this step.`);
+      alert(`No additional placeholders found matching keyword Cluster "${primaryKeyword}" for this step. All relevant fields might already be added.`);
       return;
     }
 
@@ -271,6 +269,35 @@ export default function PlaceholderNameSetting() {
     setMatchingSuggestions(uniqueMatches);
     setFinalSelectedKey(uniqueMatches[0]);
     setShowSelectionModal(true);
+  };
+
+  const handleAddPlaceholder = async () => {
+    if ((!selectedPlaceholder && !isAddingNew) || (isAddingNew && !placeholderKey)) {
+      alert('Please enter or select a placeholder key');
+      return;
+    }
+
+    const stepName = selectedStep?.name || selectedStep?.title || '';
+    if (!stepName) {
+      alert('Please select a project management step card first');
+      return;
+    }
+
+    // If adding a NEW custom placeholder, keep the modal flow for detailed entry
+    if (isAddingNew) {
+      const exists = placeholders.find(p => p.labelKey === placeholderKey && p.stepName === stepName);
+      if (exists) {
+        alert('Placeholder key already exists for this step');
+        return;
+      }
+      setEditingPlaceholder(null);
+      setPlaceholderValue('');
+      setPlaceholderNumber(placeholders.length + 1);
+      setIsModalOpen(true);
+      return;
+    }
+
+    processPlaceholderSearch(selectedPlaceholder);
   };
 
   const handleFinalAdd = async () => {
@@ -442,55 +469,96 @@ export default function PlaceholderNameSetting() {
             </div>
 
             {/* Add Placeholder Form */}
-            <div className="bg-gray-50 rounded-lg p-4 mb-6">
-              <label className="block text-sm font-medium text-gray-700 mb-3">
-                Add New Placeholder
-              </label>
-              <div className="flex flex-col sm:flex-row gap-3">
-                <div className="flex-grow">
-                  <div className="flex gap-2 mb-2">
-                    <button
-                      onClick={() => setIsAddingNew(false)}
-                      className={`px-3 py-1 rounded text-sm ${!isAddingNew ? 'bg-blue-100 text-blue-700' : 'bg-gray-200'}`}
-                    >Select Existing</button>
-                    <button
-                      onClick={() => setIsAddingNew(true)}
-                      className={`px-3 py-1 rounded text-sm ${isAddingNew ? 'bg-blue-100 text-blue-700' : 'bg-gray-200'}`}
-                    >Create Custom</button>
+              <div className="bg-gray-50 rounded-2xl p-6 mb-8 border border-gray-100 shadow-sm">
+                <div className="flex flex-col space-y-6">
+                  {/* Quick Pick Keywords */}
+                  <div>
+                    <label className="block text-[11px] font-black text-gray-400 uppercase tracking-widest mb-3 px-1">
+                      Quick Keyword Suggestion
+                    </label>
+                    <div className="flex flex-wrap gap-2">
+                      {quickKeywords.map((kw, i) => (
+                        <button
+                          key={i}
+                          onClick={() => {
+                            setSelectedPlaceholder(kw.label);
+                            // Auto trigger search if selected
+                            setTimeout(() => handleAddPlaceholderByValue(kw.label), 10);
+                          }}
+                          className={`flex items-center space-x-2 px-4 py-2 rounded-xl border text-sm font-bold transition-all hover:scale-105 active:scale-95 shadow-sm ${kw.color}`}
+                        >
+                          {kw.icon}
+                          <span>{kw.label}</span>
+                        </button>
+                      ))}
+                    </div>
                   </div>
 
-                  {!isAddingNew ? (
-                    <select
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      value={selectedPlaceholder}
-                      onChange={(e) => setSelectedPlaceholder(e.target.value)}
-                    >
-                      <option value="">Select placeholder to add</option>
-                      {availableSuggestions.map((placeholder, index) => (
-                        <option key={index} value={placeholder}>
-                          {placeholder}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <input
-                      type="text"
-                      className="block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                      placeholder="Enter custom placeholder key"
-                      value={placeholderKey}
-                      onChange={(e) => setPlaceholderKey(e.target.value)}
-                    />
-                  )}
+                  {/* Search/Select Area */}
+                  <div className="flex flex-col sm:flex-row gap-4">
+                    <div className="flex-grow">
+                      <div className="flex gap-2 mb-3">
+                        <button
+                          onClick={() => setIsAddingNew(false)}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all
+                            ${!isAddingNew ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white text-gray-400 border border-gray-100'}`}
+                        >Search & Link</button>
+                        <button
+                          onClick={() => setIsAddingNew(true)}
+                          className={`px-4 py-1.5 rounded-lg text-xs font-black uppercase tracking-wider transition-all
+                            ${isAddingNew ? 'bg-blue-600 text-white shadow-lg shadow-blue-100' : 'bg-white text-gray-400 border border-gray-100'}`}
+                        >Create Custom</button>
+                      </div>
+
+                      {!isAddingNew ? (
+                        <div className="relative group">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Filter className="h-4 w-4 text-gray-400" />
+                          </div>
+                          <select
+                            className="block w-full pl-11 pr-10 py-4 border-2 border-gray-100 bg-white rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold appearance-none cursor-pointer"
+                            value={selectedPlaceholder}
+                            onChange={(e) => setSelectedPlaceholder(e.target.value)}
+                          >
+                            <option value="">Search or select placeholder context...</option>
+                            {availableSuggestions.map((placeholder, index) => (
+                              <option key={index} value={placeholder}>
+                                {placeholder}
+                              </option>
+                            ))}
+                          </select>
+                          <div className="absolute inset-y-0 right-0 pr-4 flex items-center pointer-events-none">
+                            <Search className="h-4 w-4 text-gray-400" />
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="relative">
+                          <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                            <Plus className="h-4 w-4 text-blue-500" />
+                          </div>
+                          <input
+                            type="text"
+                            className="block w-full pl-11 pr-4 py-4 border-2 border-gray-100 bg-white rounded-2xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none transition-all text-sm font-bold placeholder-gray-300"
+                            placeholder="Type custom placeholder name (e.g. Roof Direction)"
+                            value={placeholderKey}
+                            onChange={(e) => setPlaceholderKey(e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                    
+                    <div className="flex items-end">
+                      <button
+                        onClick={handleAddPlaceholder}
+                        className="w-full sm:w-auto inline-flex items-center justify-center px-8 py-4 bg-blue-600 text-white text-sm font-black rounded-2xl hover:bg-blue-700 focus:outline-none transition-all shadow-xl shadow-blue-200 group h-[56px]"
+                      >
+                        {isAddingNew ? <Plus className="w-5 h-5 mr-2 group-hover:rotate-90 transition-transform" /> : <Search className="w-5 h-5 mr-2" />}
+                        {isAddingNew ? 'Create' : 'Find Matches'}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <button
-                  onClick={handleAddPlaceholder}
-                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 mt-auto"
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add
-                </button>
               </div>
-            </div>
 
             {/* Placeholder List */}
             <div className="max-h-[500px] overflow-y-auto mb-6">

@@ -100,7 +100,6 @@ const DeliveryType = () => {
   const [allClustersForState, setAllClustersForState] = useState([]);
 
 
-  // Master Dictionaries for Dropdowns
   const [masterData, setMasterData] = useState({
     categories: [],
     subCategories: [],
@@ -108,6 +107,7 @@ const DeliveryType = () => {
     projectTypes: [],
     mappings: []
   });
+  const [allProcurementSettings, setAllProcurementSettings] = useState([]);
 
   // Initial Fetch
   useEffect(() => {
@@ -154,30 +154,7 @@ const DeliveryType = () => {
       try {
         const res = await getAllOrderProcurementSettings();
         if (res.success && res.data) {
-          const options = [];
-          res.data.forEach(item => {
-            // A setting has multiple ranges (skuItems)
-            item.skuItems.forEach(skuItem => {
-              // Robustly extract login types from supplierType (which could be an array, object, or ID)
-              let loginTypes = "No Login Type";
-
-              if (skuItem.supplierType && Array.isArray(skuItem.supplierType)) {
-                const names = skuItem.supplierType
-                  .map(st => st.loginTypeName || st.name || st.loginAccessType || (typeof st === 'string' ? null : "N/A"))
-                  .filter(Boolean);
-                if (names.length > 0) loginTypes = names.join(', ');
-              } else if (skuItem.supplierType && typeof skuItem.supplierType === 'object') {
-                loginTypes = skuItem.supplierType.loginTypeName || skuItem.supplierType.name || skuItem.supplierType.loginAccessType || "No Login Type";
-              }
-
-              const label = `${item.category?.name || item.category} - ${item.subCategory?.name || item.subCategory} (${item.projectType?.name || item.projectType}) | ${skuItem.comboKit?.solarkitName || "No Kit"} | ${loginTypes}`;
-              options.push({
-                value: `${item._id}_${skuItem._id}`, // Combination ID
-                label: label
-              });
-            });
-          });
-          setProcurementOptions(options);
+          setAllProcurementSettings(res.data);
         }
       } catch (error) {
         console.error("Failed to fetch procurement settings", error);
@@ -242,6 +219,67 @@ const DeliveryType = () => {
     const subCatName = m.subCategoryId?.name || (typeof m.subCategoryId === 'string' ? m.subCategoryId : null);
     return catName && subCatName;
   });
+
+  // Filter Procurement Options by Location
+  useEffect(() => {
+    if (!allProcurementSettings.length) return;
+
+    let activeCombinations = [];
+
+    if (selectedCluster && selectedCluster !== 'all') {
+      // Find mappings for specific cluster
+      activeCombinations = masterData.mappings
+        .filter(m => (m.clusterId?._id || m.clusterId) === selectedCluster)
+        .map(m => {
+          const ptRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+          return `${m.categoryId?.name || m.categoryId}|${m.subCategoryId?.name || m.subCategoryId}|${ptRange}|${m.subProjectTypeId?.name || m.subProjectTypeId || 'none'}`;
+        });
+    } else if (selectedState && selectedState !== 'all') {
+      // Find mappings for whole state
+      activeCombinations = masterData.mappings
+        .filter(m => (m.stateId?._id || m.stateId) === selectedState)
+        .map(m => {
+          const ptRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+          return `${m.categoryId?.name || m.categoryId}|${m.subCategoryId?.name || m.subCategoryId}|${ptRange}|${m.subProjectTypeId?.name || m.subProjectTypeId || 'none'}`;
+        });
+    }
+
+    const options = [];
+    allProcurementSettings.forEach(item => {
+      // Check if this setting matches any active mapping for the selected location
+      const itemCat = item.category?.name || item.category;
+      const itemSubCat = item.subCategory?.name || item.subCategory;
+      const itemPt = item.projectType?.name || item.projectType;
+      const itemSubPt = item.subProjectType?.name || item.subProjectType || 'none';
+
+      const comboKey = `${itemCat}|${itemSubCat}|${itemPt}|${itemSubPt}`;
+
+      // Only show if it matches an active mapping in the selected cluster/state OR if no cluster/state is selected yet
+      const isRelevant = !selectedState || activeCombinations.includes(comboKey);
+
+      if (isRelevant) {
+        item.skuItems.forEach(skuItem => {
+          let loginTypes = "No Login Type";
+          if (skuItem.supplierType && Array.isArray(skuItem.supplierType)) {
+            const names = skuItem.supplierType
+              .map(st => st.loginTypeName || st.name || st.loginAccessType || (typeof st === 'string' ? null : "N/A"))
+              .filter(Boolean);
+            if (names.length > 0) loginTypes = names.join(', ');
+          } else if (skuItem.supplierType && typeof skuItem.supplierType === 'object') {
+            loginTypes = skuItem.supplierType.loginTypeName || skuItem.supplierType.name || skuItem.supplierType.loginAccessType || "No Login Type";
+          }
+
+          const label = `${itemCat} - ${itemSubCat} (${itemPt}) | No Kit | ${loginTypes}`;
+          options.push({
+            value: `${item._id}_${skuItem._id}`,
+            label: label
+          });
+        });
+      }
+    });
+
+    setProcurementOptions(options);
+  }, [selectedState, selectedCluster, allProcurementSettings, masterData.mappings]);
 
 
   const loadDeliveryTypes = async (warehouseId) => {

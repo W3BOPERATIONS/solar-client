@@ -22,6 +22,9 @@ import {
   getAllManufacturers
 } from '../../../../services/brand/brandApi';
 import {
+  getSupplierTypes
+} from '../../../../services/vendor/vendorApi';
+import {
   getCategories,
   getSubCategories,
   getProjectTypes,
@@ -52,6 +55,7 @@ const BrandSupplierOverview = () => {
   const [showManufactures, setShowManufactures] = useState(false);
 
   const [supplierTypes, setSupplierTypes] = useState([]);
+  const [masterSupplierTypes, setMasterSupplierTypes] = useState([]);
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -167,7 +171,8 @@ const BrandSupplierOverview = () => {
         subCatResp,
         ptResp,
         subPtResp,
-        mappingResp
+        mappingResp,
+        supplierTypeResp
       ] = await Promise.all([
         getAllSuppliers(),
         getAllManufacturers(),
@@ -178,7 +183,8 @@ const BrandSupplierOverview = () => {
         getSubCategories(),
         getProjectTypes(),
         getSubProjectTypes(),
-        getProjectCategoryMappings()
+        getProjectCategoryMappings(),
+        getSupplierTypes()
       ]);
 
       setSuppliers(Array.isArray(suppliersData) ? suppliersData : (suppliersData?.data || []));
@@ -203,6 +209,9 @@ const BrandSupplierOverview = () => {
       setMasterProjectTypes(derivedProjectTypes);
       setMasterSubProjectTypes(Array.isArray(subPtResp) ? subPtResp : (subPtResp?.data || []));
       setMasterProjectMappings(mappings);
+      
+      const supTypes = supplierTypeResp?.data || (Array.isArray(supplierTypeResp) ? supplierTypeResp : []);
+      setMasterSupplierTypes(supTypes);
 
     } catch (error) {
       console.error('Error fetching initial data:', error);
@@ -795,7 +804,7 @@ const BrandSupplierOverview = () => {
           {/* Supplier Type */}
           <FilterDropdown
             label="Supplier Type"
-            options={['Dealer', 'Distributor']}
+            options={masterSupplierTypes.map(t => t.loginTypeName).filter(Boolean).sort()}
             selectedValues={supplierTypes}
             onSelect={(val) => {
               const newTypes = supplierTypes.includes(val)
@@ -805,6 +814,21 @@ const BrandSupplierOverview = () => {
             }}
             isOpen={openDropdown === 'type'}
             onToggle={() => setOpenDropdown(openDropdown === 'type' ? null : 'type')}
+          />
+
+          {/* Order Procurement (repurposed from Procurement Types) */}
+          <FilterDropdown
+            label="Order Procurement"
+            options={[...new Set(masterSupplierTypes.map(t => t.assignModules).filter(Boolean))].sort()}
+            selectedValues={procurementTypes}
+            onSelect={(val) => {
+              const newTypes = procurementTypes.includes(val)
+                ? procurementTypes.filter(t => t !== val)
+                : [...procurementTypes, val];
+              setProcurementTypes(newTypes);
+            }}
+            isOpen={openDropdown === 'procurementType'}
+            onToggle={() => setOpenDropdown(openDropdown === 'procurementType' ? null : 'procurementType')}
           />
 
           {/* Helper function for dynamic options */}
@@ -911,20 +935,7 @@ const BrandSupplierOverview = () => {
                   onToggle={() => setOpenDropdown(openDropdown === 'subProjectType' ? null : 'subProjectType')}
                 />
 
-                {/* Procurement Types */}
-                <FilterDropdown
-                  label="Procurement Types"
-                  options={getDynamicOptions('procurementType', { supplierTypes })}
-                  selectedValues={procurementTypes}
-                  onSelect={(val) => {
-                    const newTypes = procurementTypes.includes(val)
-                      ? procurementTypes.filter(c => c !== val)
-                      : [...procurementTypes, val];
-                    setProcurementTypes(newTypes);
-                  }}
-                  isOpen={openDropdown === 'procurementType'}
-                  onToggle={() => setOpenDropdown(openDropdown === 'procurementType' ? null : 'procurementType')}
-                />
+                {/* Procurement Types removed here as it was moved up and renamed */}
               </>
             );
           })()}
@@ -1022,8 +1033,10 @@ const BrandSupplierOverview = () => {
                 <div>
                   <label className="block text-sm font-medium">Type*</label>
                   <select className="w-full border p-2 rounded" value={modalForm.type} onChange={e => setModalForm({ ...modalForm, type: e.target.value })}>
-                    <option value="Dealer">Dealer</option>
-                    <option value="Distributor">Distributor</option>
+                    <option value="">Select Type</option>
+                    {masterSupplierTypes.map(t => (
+                      <option key={t._id} value={t.loginTypeName}>{t.loginTypeName}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -1113,11 +1126,12 @@ const BrandSupplierOverview = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Procurement Type</label>
+                  <label className="block text-sm font-medium">Order Procurement</label>
                   <select className="w-full border p-2 rounded" value={modalForm.procurementType} onChange={e => setModalForm({ ...modalForm, procurementType: e.target.value })}>
-                    <option value="">Select Type</option>
-                    <option value="Direct">Direct</option>
-                    <option value="Indirect">Indirect</option>
+                    <option value="">Select Order Procurement</option>
+                    {[...new Set(masterSupplierTypes.map(t => t.assignModules).filter(Boolean))].sort().map(module => (
+                      <option key={module} value={module}>{module}</option>
+                    ))}
                   </select>
                 </div>
               </div>
