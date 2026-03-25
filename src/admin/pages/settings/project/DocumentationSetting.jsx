@@ -93,6 +93,8 @@ const DocumentationSetting = () => {
   const [stepDocCounts, setStepDocCounts] = useState({});
   const [generatedDocCounts, setGeneratedDocCounts] = useState({});
   const [selectedDocument, setSelectedDocument] = useState(null);
+  const [isGeneratorEditing, setIsGeneratorEditing] = useState(false);
+  const [activeEditRecord, setActiveEditRecord] = useState(null); // { key, index }
 
   const DEFAULT_TEMPLATE = `For {{project_type}} - {{sub_project_type}}
 
@@ -325,7 +327,7 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
       // We don't necessarily need to set a single 'generationResult' state anymore
       // since we render all results for the step from allGenerationResults map
     }
-  }, [selectedStep, selectedConfigId, allGenerationResults]);
+  }, [selectedStep, selectedConfigId]);
 
   const fetchDocuments = async (stageName) => {
     try {
@@ -495,7 +497,8 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
 
     // Set generation result summary for the card
     const result = {
-      name: stepDocuments[0]?.documentName || 'Unnamed Document',
+      name: selectedDocument?.documentName || 'Unnamed Document',
+
       date: new Date().toLocaleString(),
       client: dataSource.authorizedPersonName || 'Not Set',
       project: dataSource.projectName || 'Not Set',
@@ -517,7 +520,26 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
     setGeneratedDocCounts(newDocCounts);
     localStorage.setItem('generationHistory', JSON.stringify(newDocCounts));
 
+    // Open modal immediately for preview/edit
+    setActiveEditRecord({ key: compositeKey, index: 0 }); // Newest is at index 0
+    setIsGeneratorEditing(false);
+    setShowGeneratorModal(true);
+
     toast.success('Document generated successfully!');
+  };
+
+  const saveGeneratedEdit = () => {
+    if (!activeEditRecord) return;
+    const { key, index } = activeEditRecord;
+    const list = [...(allGenerationResults[key] || [])];
+    if (list[index]) {
+      list[index].content = generatedContent;
+      const updated = { ...allGenerationResults, [key]: list };
+      setAllGenerationResults(updated);
+      localStorage.setItem('allGenerationResults', JSON.stringify(updated));
+      setIsGeneratorEditing(false);
+      toast.success('Document updated successfully!');
+    }
   };
 
   const removeGenerationRecord = (compositeKey, index) => {
@@ -526,6 +548,12 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
     const updated = { ...allGenerationResults, [compositeKey]: list };
     setAllGenerationResults(updated);
     localStorage.setItem('allGenerationResults', JSON.stringify(updated));
+
+    // Update session counts
+    const newDocCounts = { ...generatedDocCounts, [compositeKey]: list.length };
+    setGeneratedDocCounts(newDocCounts);
+    localStorage.setItem('generationHistory', JSON.stringify(newDocCounts));
+    toast.success('Record removed');
   };
 
   const viewGeneratedDocument = () => {
@@ -776,19 +804,33 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
                 <div className="mb-6 flex flex-wrap gap-2 p-4 bg-gray-50 border border-gray-100 rounded-xl">
                   <p className="w-full text-[10px] text-gray-500 uppercase font-bold tracking-widest mb-2 px-1">Templates for {selectedStep.name || selectedStep.title}</p>
                   {stepDocuments.map(doc => (
-                    <button
-                      key={doc._id}
-                      onClick={() => {
-                        setSelectedDocument(doc);
-                        setTemplateContent(doc.templateContent || DEFAULT_TEMPLATE);
-                      }}
-                      className={`px-4 py-2 rounded-lg text-sm font-semibold transition-all
-                                ${selectedDocument?._id === doc._id
-                          ? 'bg-blue-600 text-white shadow-md'
-                          : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}
-                    >
-                      {doc.documentName}
-                    </button>
+                    <div key={doc._id} className="relative group">
+                      <button
+                        onClick={() => {
+                          setSelectedDocument(doc);
+                          setTemplateContent(doc.templateContent || DEFAULT_TEMPLATE);
+                        }}
+                        className={`px-4 py-2 pr-10 rounded-lg text-sm font-semibold transition-all relative
+                                  ${selectedDocument?._id === doc._id
+                            ? 'bg-blue-600 text-white shadow-md'
+                            : 'bg-white text-gray-700 border border-gray-200 hover:border-blue-300 hover:bg-blue-50'}`}
+                      >
+                        {doc.documentName}
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteDocument(doc._id);
+                        }}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-md transition-all
+                          ${selectedDocument?._id === doc._id 
+                            ? 'text-blue-100 hover:text-white hover:bg-blue-500' 
+                            : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                        title="Delete Template"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   ))}
                   <button
                     onClick={() => setIsAddingDocument(true)}
@@ -935,7 +977,8 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
                 {/* Generation History Sidebar */}
                 <div className="w-full space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                   {(selectedStep && selectedConfigId) && (() => {
-                    const records = allGenerationResults[`${selectedConfigId}_${selectedStep.name || selectedStep.title}`];
+                    const compositeKey = `${selectedConfigId}_${selectedStep.name || selectedStep.title}`;
+                    const records = allGenerationResults[compositeKey];
                     const historyArray = Array.isArray(records) ? records : (records ? [records] : []);
                     return historyArray.map((res, idx) => (
                       <div key={idx} className="w-full bg-white border border-green-200 rounded-xl overflow-hidden shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
@@ -945,7 +988,7 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
                             Generated Record #{(historyArray.length - idx)}
                           </div>
                           <button
-                            onClick={() => removeGenerationRecord(`${selectedConfigId}_${selectedStep.name || selectedStep.title}`, idx)}
+                            onClick={() => removeGenerationRecord(compositeKey, idx)}
                             className="text-green-600 hover:text-red-600 transition-colors"
                           >
                             <X className="w-4 h-4" />
@@ -972,17 +1015,45 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
                               <p className="text-xs text-gray-600">Project: <span className="font-bold truncate max-w-[120px] inline-block align-bottom">{res.project}</span></p>
                             </div>
                           </div>
-                          <button
-                            onClick={() => {
-                              setGenerationResult(res);
-                              if (res.content) setGeneratedContent(res.content);
-                              viewGeneratedDocument();
-                            }}
-                            className="w-full py-2 px-3 border border-blue-200 text-blue-600 rounded-lg text-xs font-bold hover:bg-blue-50 transition-colors flex items-center justify-center space-x-2"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            <span>View Full Document (Popup)</span>
-                          </button>
+                          <div className="grid grid-cols-2 gap-2">
+                            <button
+                              onClick={() => {
+                                setGenerationResult(res);
+                                if (res.content) setGeneratedContent(res.content);
+                                setActiveEditRecord({ key: compositeKey, index: idx });
+                                setIsGeneratorEditing(true); // Direct to edit
+                                setShowGeneratorModal(true);
+                              }}
+                              className="py-2 px-3 border border-blue-200 text-blue-600 rounded-lg text-[10px] font-bold hover:bg-blue-50 transition-colors flex items-center justify-center space-x-1"
+                            >
+                              <Edit className="w-3 h-3" />
+                              <span>Edit</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setGenerationResult(res);
+                                if (res.content) setGeneratedContent(res.content);
+                                setActiveEditRecord({ key: compositeKey, index: idx });
+                                setIsGeneratorEditing(false); // Just view
+                                setShowGeneratorModal(true);
+                              }}
+                              className="py-2 px-3 border border-green-200 text-green-600 rounded-lg text-[10px] font-bold hover:bg-green-50 transition-colors flex items-center justify-center space-x-1"
+                            >
+                              <Eye className="w-3 h-3" />
+                              <span>View</span>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setGenerationResult(res);
+                                if (res.content) setGeneratedContent(res.content);
+                                viewGeneratedDocument();
+                              }}
+                              className="col-span-2 py-1 px-3 border border-gray-200 text-gray-500 rounded-lg text-[10px] font-bold hover:bg-gray-50 transition-colors flex items-center justify-center space-x-1"
+                            >
+                              <FileText className="w-3 h-3" />
+                              <span>Print Original</span>
+                            </button>
+                          </div>
                         </div>
                       </div>
                     ))
@@ -1090,8 +1161,10 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
           <div className="bg-white rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
             <div className="flex justify-between items-center p-6 border-b">
               <div className="flex items-center space-x-2">
-                <FileText className="w-6 h-6 text-green-500" />
-                <h3 className="text-xl font-bold text-gray-800">Generated Document Preview</h3>
+                <FileText className={`w-6 h-6 ${isGeneratorEditing ? 'text-blue-500' : 'text-green-500'}`} />
+                <h3 className="text-xl font-bold text-gray-800">
+                  {isGeneratorEditing ? 'Edit Generated Document' : 'Generated Document Preview'}
+                </h3>
               </div>
               <button
                 onClick={() => setShowGeneratorModal(false)}
@@ -1101,25 +1174,79 @@ The total project cost is {{project_cost}}, with a subsidy amount of {{subsidy_a
               </button>
             </div>
 
-            <div className="flex-1 overflow-auto p-8 bg-gray-100">
-              <div className="max-w-[700px] mx-auto bg-white p-12 shadow-sm whitespace-pre-wrap leading-relaxed text-gray-800 border min-h-full">
-                {generatedContent}
-              </div>
+            <div className="flex-1 overflow-auto p-8 bg-gray-100 custom-scrollbar">
+              {isGeneratorEditing ? (
+                <div className="max-w-[800px] mx-auto bg-white shadow-lg min-h-full">
+                   <textarea
+                    value={generatedContent}
+                    onChange={(e) => setGeneratedContent(e.target.value)}
+                    className="w-full min-h-[600px] p-12 border-none focus:ring-0 leading-relaxed text-gray-800 text-sm font-light leading-relaxed resize-none bg-yellow-50/10"
+                    placeholder="Refine the generated document content here..."
+                   />
+                </div>
+              ) : (
+                <div className="max-w-[700px] mx-auto bg-white p-12 shadow-sm whitespace-pre-wrap leading-relaxed text-gray-800 border min-h-full animate-in zoom-in-95 duration-300">
+                  {generatedContent}
+                </div>
+              )}
             </div>
 
-            <div className="p-6 border-t bg-white flex justify-end space-x-3">
-              <button
-                onClick={() => window.print()}
-                className="px-6 py-2 border border-gray-300 rounded-lg hover:bg-gray-50 font-medium text-gray-700"
-              >
-                Print Document
-              </button>
-              <button
-                onClick={() => setShowGeneratorModal(false)}
-                className="px-6 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 font-medium"
-              >
-                Close Preview
-              </button>
+            <div className="p-6 border-t bg-white flex justify-between items-center sm:px-12">
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setIsGeneratorEditing(!isGeneratorEditing)}
+                  className={`px-4 py-2 rounded-lg font-bold flex items-center gap-2 transition-all ${isGeneratorEditing 
+                    ? 'bg-blue-50 text-blue-600 border border-blue-200' 
+                    : 'bg-white text-gray-700 border border-gray-300 hover:bg-gray-50'}`}
+                >
+                  {isGeneratorEditing ? <Eye size={18} /> : <Edit size={18} />}
+                  {isGeneratorEditing ? 'Read Mode' : 'Edit Mode'}
+                </button>
+              </div>
+
+              <div className="flex items-center space-x-3">
+                <button
+                  onClick={() => {
+                    const docWindow = window.open('', '_blank', 'width=900,height=800');
+                    docWindow.document.write(`
+                      <html>
+                        <head>
+                          <title>${generationResult?.name || 'Document'}</title>
+                          <style>
+                            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #111; padding: 50px; }
+                            .doc-container { max-width: 800px; margin: auto; white-space: pre-wrap; }
+                            h1 { text-align: center; margin-bottom: 40px; border-bottom: 2px solid #333; padding-bottom: 20px; }
+                          </style>
+                        </head>
+                        <body>
+                          <h1>${generationResult?.name}</h1>
+                          <div class="doc-container">${generatedContent}</div>
+                        </body>
+                      </html>
+                    `);
+                    docWindow.print();
+                    docWindow.document.close();
+                  }}
+                  className="px-6 py-2 border border-blue-500 text-blue-600 rounded-lg hover:bg-blue-50 font-bold flex items-center gap-2"
+                >
+                  <FileText size={18} /> Print
+                </button>
+                {isGeneratorEditing ? (
+                  <button
+                    onClick={saveGeneratedEdit}
+                    className="px-8 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-transform"
+                  >
+                    <Save size={18} /> Save & Finalize
+                  </button>
+                ) : (
+                  <button
+                    onClick={() => setShowGeneratorModal(false)}
+                    className="px-8 py-2 bg-gray-900 text-white rounded-lg hover:bg-black font-bold"
+                  >
+                    Close Preview
+                  </button>
+                )}
+              </div>
             </div>
           </div>
         </div>

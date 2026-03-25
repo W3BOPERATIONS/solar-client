@@ -19,6 +19,8 @@ import { useNavigate } from 'react-router-dom';
 import { useLocations } from '../../../../hooks/useLocations';
 import { getDiscomsByState } from '../../../../services/quote/quoteApi';
 import { projectApi } from '../../../../services/project/projectApi';
+import { getSubCategories } from '../../../../services/core/masterApi';
+
 
 const AdminProjectManagement = () => {
     const navigate = useNavigate();
@@ -42,18 +44,25 @@ const AdminProjectManagement = () => {
 
     // State for selected customer type
     const [selectedCustomerType, setSelectedCustomerType] = useState(null);
+    const [masterSubCategories, setMasterSubCategories] = useState([]);
+
 
     // Fetch all configs once
     useEffect(() => {
-        const fetchConfigs = async () => {
+        const fetchInitialData = async () => {
             try {
-                const data = await projectApi.getConfigurations();
-                setAllConfigs(data || []);
+                const [configData, subCatsData] = await Promise.all([
+                    projectApi.getConfigurations(),
+                    getSubCategories()
+                ]);
+                setAllConfigs(configData || []);
+                setMasterSubCategories(subCatsData?.data || (Array.isArray(subCatsData) ? subCatsData : []));
             } catch (error) {
-                console.error("Error fetching configs:", error);
+                console.error("Error fetching initial data:", error);
             }
         };
-        fetchConfigs();
+        fetchInitialData();
+
     }, []);
 
     // Fetch discoms when state changes
@@ -212,13 +221,15 @@ const AdminProjectManagement = () => {
                 customerType: selectedCustomerType
             }).toString();
 
-            if (selectedCustomerType === 'Residential') {
-                navigate(`/admin/residential-project?${params}`);
-            } else if (selectedCustomerType === 'Commercial') {
-                navigate(`/admin/commercial-project?${params}`);
-            }
+            // Determine route based on type
+            const pathName = (selectedCustomerType.toLowerCase() === 'residential' || selectedCustomerType.toLowerCase() === 'commercial')
+                ? `${selectedCustomerType.toLowerCase()}-project`
+                : 'residential-project'; // Defaulting to residential journey for others
+
+            navigate(`/admin/${pathName}?${params}`);
         }
     };
+
 
     // Check if continue button should be enabled
     const isContinueEnabled = selectedCustomerType !== null && selectedStateId !== '' && selectedDiscomId !== '';
@@ -412,51 +423,35 @@ const AdminProjectManagement = () => {
                     <h3 className="text-blue-600 font-bold text-2xl mb-2">3. Select Configuration Type</h3>
                     <p className="text-gray-500 mb-6 font-medium">Choose between Residential or Commercial workflow</p>
 
-                    <div className="flex flex-col md:flex-row justify-center gap-6 max-w-3xl mx-auto">
-                        {/* Residential Card */}
-                        <div
-                            onClick={() => handleCustomerTypeSelect('Residential')}
-                            className={`flex-1 cursor-pointer transition-all ${filters.subCategory === 'Commercial' ? 'hidden' : 'block'
-                                }`}
-                        >
-                            <div
-                                className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Residential'
-                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
-                                    }`}
-                            >
-                                <Home
-                                    size={56}
-                                    className={`mx-auto mb-3 ${selectedCustomerType === 'Residential' ? 'text-blue-500' : 'text-blue-400'
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
+                        {masterSubCategories.map((sub) => {
+                            const isSelected = selectedCustomerType === sub.name;
+                            const Icon = sub.name === 'Residential' ? Home : (sub.name === 'Commercial' ? Building2 : Factory);
+                            
+                            return (
+                                <div
+                                    key={sub._id}
+                                    onClick={() => handleCustomerTypeSelect(sub.name)}
+                                    className={`cursor-pointer transition-all duration-300 transform rounded-2xl shadow-sm border-2 p-6 text-center ${isSelected
+                                        ? 'border-blue-500 bg-blue-50 ring-4 ring-blue-50 scale-[1.05] shadow-xl'
+                                        : 'border-gray-100 bg-white hover:border-blue-300 hover:shadow-lg'
                                         }`}
-                                />
-                                <h4 className="font-bold text-xl mb-2">Residential</h4>
-                                <p className="text-gray-500 text-sm">For personal, non-commercial use</p>
-                            </div>
-                        </div>
-
-                        {/* Commercial Card */}
-                        <div
-                            onClick={() => handleCustomerTypeSelect('Commercial')}
-                            className={`flex-1 cursor-pointer transition-all ${filters.subCategory === 'Residential' ? 'hidden' : 'block'
-                                }`}
-                        >
-                            <div
-                                className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Commercial'
-                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
-                                    }`}
-                            >
-                                <Building2
-                                    size={56}
-                                    className={`mx-auto mb-3 ${selectedCustomerType === 'Commercial' ? 'text-blue-500' : 'text-blue-400'
-                                        }`}
-                                />
-                                <h4 className="font-bold text-xl mb-2">Commercial</h4>
-                                <p className="text-gray-500 text-sm">For business and commercial purposes</p>
-                            </div>
-                        </div>
+                                >
+                                    <div className={`w-16 h-16 mx-auto mb-4 border rounded-full flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 text-white border-blue-600' : 'bg-blue-50 text-blue-500 border-blue-100'}`}>
+                                        <Icon size={32} />
+                                    </div>
+                                    <h4 className={`font-black text-lg mb-1 ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
+                                        {sub.name}
+                                    </h4>
+                                    <p className="text-gray-400 text-xs font-medium truncate">
+                                        {sub.name === 'Residential' ? 'For personal use' : 
+                                         sub.name === 'Commercial' ? 'For business use' : 'Standard journey'}
+                                    </p>
+                                </div>
+                            );
+                        })}
                     </div>
+
 
                     {/* Continue Button */}
                     <button

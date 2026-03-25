@@ -91,7 +91,29 @@ import {
     FolderSync,
     FolderTree,
     FolderUp,
-    FolderX
+    FolderX,
+    Building2,
+    Factory,
+    Warehouse,
+    Store,
+    Briefcase,
+    FileBarChart,
+    FileSpreadsheet as FileSpreadsheetIcon,
+    FileSignature as FileSignatureIcon,
+    FileCheck as FileCheckIcon,
+    FileClock as FileClockIcon,
+    FileCog as FileCogIcon,
+    FileDiff as FileDiffIcon,
+    FileDigit as FileDigitIcon,
+    FileImage as FileImageIcon,
+    FileOutput as FileOutputIcon,
+    FilePlus as FilePlusIcon,
+    FileSearch as FileSearchIcon,
+    FileText as FileTextIcon,
+    FileUp as FileUpIcon,
+    FileVideo as FileVideoIcon,
+    FileX as FileXIcon,
+    List
 } from 'lucide-react';
 
 import { projectAPI } from '../../../../api/api';
@@ -111,7 +133,9 @@ const AdminResidentialProject = () => {
     const [selectedCustomer, setSelectedCustomer] = useState(null);
     const [searchTerm, setSearchTerm] = useState('');
     const [showProjectForm, setShowProjectForm] = useState(false);
-    const [activeTab, setActiveTab] = useState('consumer');
+    const [activeTab, setActiveTab] = useState({
+        dynamic: 0 // Index of the active form for dynamic steps
+    });
     const [files, setFiles] = useState({});
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -504,10 +528,152 @@ const AdminResidentialProject = () => {
         return icons[iconName] || <FileText className={className} />;
     };
 
-    const FileUpload = ({ id, label, field, accept = ".pdf,.doc,.docx,.jpg,.jpeg,.png" }) => (
+    // Helper for rendering dynamic inputs
+    const renderDynamicInput = (input, formIndex, inputIndex) => {
+        const fieldKey = `dynamic_${currentStep}_${formIndex}_${inputIndex}`;
+        
+        switch (input.type) {
+            case 'textarea':
+                return (
+                    <div className="mb-4">
+                        <label className="block font-bold mb-1 text-sm">{input.label}</label>
+                        <textarea
+                            className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder={`Enter ${input.label}`}
+                            rows={4}
+                        />
+                    </div>
+                );
+            case 'upload':
+                return (
+                    <FileUpload 
+                        id={fieldKey} 
+                        label={input.label} 
+                        field={fieldKey} 
+                        showLabel={true}
+                    />
+                );
+            case 'download':
+                return (
+                    <div className="flex justify-between items-center p-4 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                        <div>
+                            <p className="font-bold text-blue-900">{input.label}</p>
+                            <p className="text-xs text-blue-600">Available for reference</p>
+                        </div>
+                        <ActionButtons showView={true} />
+                    </div>
+                );
+            case 'select':
+                return (
+                    <div className="mb-4">
+                        <label className="block font-bold mb-1 text-sm">{input.label}</label>
+                        <select className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none bg-white">
+                            <option value="">Select Option</option>
+                            {input.options?.map((opt, i) => (
+                                <option key={i} value={opt}>{opt}</option>
+                            ))}
+                        </select>
+                    </div>
+                );
+            case 'date':
+                return (
+                    <div className="mb-4">
+                        <label className="block font-bold mb-1 text-sm">{input.label}</label>
+                        <div className="relative">
+                            <input
+                                type="date"
+                                className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                            />
+                        </div>
+                    </div>
+                );
+            default:
+                return (
+                    <div className="mb-4">
+                        <label className="block font-bold mb-1 text-sm">{input.label}</label>
+                        <input
+                            type="text"
+                            className="w-full border border-gray-300 rounded px-3 py-2 focus:ring-2 focus:ring-blue-500 outline-none"
+                            placeholder={`Enter ${input.label}`}
+                        />
+                    </div>
+                );
+        }
+    };
+
+    const renderDynamicStepContent = (stepName) => {
+        const stage = journeyStages.find(s => s.name === stepName);
+        
+        if (!stage || !stage.fields || stage.fields.length === 0) {
+            return (
+                <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                    <FileWarningIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                    <h3 className="text-lg font-medium text-gray-500">No Forms Configured</h3>
+                    <p className="text-gray-400">This step doesn't have any dynamic forms yet.</p>
+                </div>
+            );
+        }
+
+        const activeFormIndex = activeTab.dynamic || 0;
+        const currentForm = stage.fields[activeFormIndex] || stage.fields[0];
+
+        return (
+            <div className="wizard-step">
+                <h5 className="text-blue-600 font-bold uppercase tracking-widest text-[11px] mb-4 flex items-center gap-2">
+                    <Activity size={14} /> {stage.name} Stage
+                </h5>
+
+                {/* Form Tabs */}
+                {stage.fields.length > 1 && (
+                    <div className="border-b border-gray-200 mb-6 overflow-x-auto">
+                        <div className="flex whitespace-nowrap">
+                            {stage.fields.map((form, idx) => (
+                                <button
+                                    key={idx}
+                                    className={`py-3 px-6 font-bold text-sm transition-all border-b-2 ${
+                                        activeFormIndex === idx
+                                        ? 'border-b-blue-600 text-blue-600'
+                                        : 'border-b-transparent text-gray-400 hover:text-gray-600'
+                                    }`}
+                                    onClick={() => setActiveTab({ ...activeTab, dynamic: idx })}
+                                >
+                                    {form.name}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                <div className="bg-white p-2">
+                    <div className="flex justify-between items-center mb-6">
+                        <h4 className="text-lg font-bold text-gray-800">{currentForm?.name}</h4>
+                        <span className="text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded font-black uppercase">
+                            {currentForm?.inputs?.length || 0} Actions
+                        </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-2">
+                        {currentForm?.inputs?.map((input, idx) => (
+                            <div key={idx} className={input.type === 'textarea' ? 'md:col-span-2' : ''}>
+                                {renderDynamicInput(input, activeFormIndex, idx)}
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="mt-8 flex justify-center border-t pt-6">
+                        <button className="bg-blue-600 hover:bg-blue-700 text-white px-10 py-3 rounded font-bold transition-all flex items-center gap-2">
+                            <Check size={18} /> Update {currentForm?.name}
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    const FileUpload = ({ id, label, field, accept = ".pdf,.doc,.docx,.jpg,.jpeg,.png", showLabel = true }) => (
         <div className="border rounded p-3 mb-3 bg-gray-50">
-            {label && <div className="font-bold mb-2">{label}</div>}
-            <div className="text-gray-500 text-xs mb-3">Supported formats: PDF, DOC, JPG, PNG (Max size: 5MB)</div>
+            {showLabel && label && <div className="font-bold mb-2">{label}</div>}
+            {showLabel && <div className="text-gray-500 text-xs mb-3">Supported formats: PDF, DOC, JPG, PNG (Max size: 5MB)</div>}
             <div className="flex items-center border border-gray-300 rounded bg-white p-2">
                 <div className="flex-grow text-gray-500 italic">
                     {getFileDisplayName(field)}
@@ -546,7 +712,7 @@ const AdminResidentialProject = () => {
                             <div className="text-gray-500 text-xs">Supports PDF, DOC, JPG, PNG, Max 5MB</div>
                         </td>
                         <td className="border border-gray-300 px-4 py-3">
-                            <FileUpload id={doc.id} field={doc.field} />
+                            <FileUpload id={doc.id} field={doc.field} showLabel={false} />
                         </td>
                     </tr>
                 ))}
@@ -723,26 +889,30 @@ const AdminResidentialProject = () => {
 
                             {/* Wizard Steps */}
                             <div className="wizard-content">
-                                {currentStep === 1 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-lg mb-4">{journeyStages[0]?.name || 'Project SignUp'}</h5>
+                                {(() => {
+                                    const stepIndex = currentStep;
+                                    const stage = journeyStages[stepIndex - 1];
+                                    const stepName = configSteps[stepIndex - 1] || (typeof stage === 'object' ? stage?.name : stage);
+                                    const isFirstStep = stepIndex === 1;
+                                    
+                                    if (configSteps.length === 0) {
+                                        return (
+                                            <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed border-gray-300">
+                                                <FileWarningIcon className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                                                <h3 className="text-lg font-medium text-gray-500">No Content Found</h3>
+                                                <p className="text-gray-400">Please select a project with a valid configuration.</p>
+                                            </div>
+                                        );
+                                    }
 
-                                        {!showProjectForm ? (
-                                            <>
-                                                <button
-                                                    onClick={() => setShowProjectForm(true)}
-                                                    className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-4 py-2 rounded text-[13px] mb-8 flex items-center shadow-sm"
-                                                >
-                                                    <UserPlus className="h-4 w-4 mr-2" /> Project SignUp
-                                                </button>
-
-                                                {/* Journey History */}
-                                                <div className="mt-4">
-                                                    <div className="flex items-center mb-6">
-                                                        <RefreshCw className="h-4 w-4 text-gray-800 mr-2 font-bold" />
-                                                        <h6 className="font-bold text-[13px] text-gray-900">Application Journey History</h6>
-                                                    </div>
-
+                                    return (
+                                        <div className="space-y-6">
+                                            {/* Specialized content for Step 1 (Timeline) */}
+                                            {isFirstStep && (
+                                                <div className="wizard-step bg-white border border-gray-100 rounded-xl p-6 shadow-sm mb-6">
+                                                    <h5 className="text-blue-600 font-bold uppercase tracking-widest text-[11px] mb-6 flex items-center gap-2">
+                                                        <Activity size={14} /> Application Journey History
+                                                    </h5>
                                                     <div className="timeline relative pl-2">
                                                         <div className="absolute top-2 bottom-0 left-[19px] w-[1px] bg-gray-300"></div>
                                                         <ul className="space-y-0">
@@ -789,584 +959,13 @@ const AdminResidentialProject = () => {
                                                         </ul>
                                                     </div>
                                                 </div>
-                                            </>
-                                        ) : (
-                                            <div className="mt-4 border-t pt-4">
-                                                <button
-                                                    onClick={() => setShowProjectForm(false)}
-                                                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded mb-4 flex items-center"
-                                                >
-                                                    <ChevronLeft className="h-4 w-4 mr-2" /> Back to Journey
-                                                </button>
-
-                                                {/* Step 1 Tabs */}
-                                                <div className="border-b border-gray-200 mb-4">
-                                                    <div className="flex">
-                                                        <button
-                                                            className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'consumer'
-                                                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                                                : 'text-gray-500 hover:text-gray-700'
-                                                                }`}
-                                                            onClick={() => setActiveTab('consumer')}
-                                                        >
-                                                            {journeyStages[0]?.fields[0] || 'Consumer Registered'}
-                                                        </button>
-                                                        <button
-                                                            className={`py-2 px-4 font-medium text-sm focus:outline-none ${activeTab === 'application'
-                                                                ? 'border-b-2 border-blue-600 text-blue-600'
-                                                                : 'text-gray-500 hover:text-gray-700'
-                                                                }`}
-                                                            onClick={() => setActiveTab('application')}
-                                                        >
-                                                            {journeyStages[0]?.fields[1] || 'Application Submission'}
-                                                        </button>
-                                                    </div>
-                                                </div>
-
-                                                {/* Consumer Registration Form */}
-                                                {activeTab === 'consumer' && (
-                                                    <div>
-                                                        <h4 className="text-blue-600 font-semibold mb-4">Consumer Registration Form</h4>
-                                                        <div className="space-y-4">
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Name (As per Electricity Bill)</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Consumer Name"
-                                                                    value={formData.consumerName}
-                                                                    onChange={(e) => setFormData({ ...formData, consumerName: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Number (As per Electricity Bill)</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Consumer Number"
-                                                                    value={formData.consumerNumber}
-                                                                    onChange={(e) => setFormData({ ...formData, consumerNumber: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Authorized Person Name</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Authorized Person Name"
-                                                                    value={formData.authorizedPersonName}
-                                                                    onChange={(e) => setFormData({ ...formData, authorizedPersonName: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Mobile Number</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Mobile Number"
-                                                                    value={formData.mobileNumber}
-                                                                    onChange={(e) => setFormData({ ...formData, mobileNumber: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Email Id</label>
-                                                                <input
-                                                                    type="email"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Email Id"
-                                                                    value={formData.emailId}
-                                                                    onChange={(e) => setFormData({ ...formData, emailId: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div>
-                                                                <label className="block font-bold mb-1">Consumer Address</label>
-                                                                <input
-                                                                    type="text"
-                                                                    className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                                                    placeholder="Address"
-                                                                    value={formData.address}
-                                                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                                                />
-                                                            </div>
-                                                            <div className="flex items-center">
-                                                                <input
-                                                                    type="checkbox"
-                                                                    className="h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                                                    checked={formData.vendorAgreement}
-                                                                    onChange={(e) => setFormData({ ...formData, vendorAgreement: e.target.checked })}
-                                                                />
-                                                                <label className="ml-2 text-sm">
-                                                                    I agree to the <a href="#" className="text-blue-600 hover:underline">Vendor Agreement</a> terms and conditions
-                                                                </label>
-                                                            </div>
-                                                            <div>
-                                                                <button
-                                                                    onClick={handleRegister}
-                                                                    className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded"
-                                                                >
-                                                                    Register
-                                                                </button>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Application Submission Form */}
-                                                {activeTab === 'application' && (
-                                                    <div>
-                                                        <h4 className="text-blue-600 font-semibold mb-4">Application Submission Form</h4>
-                                                        <FileUpload
-                                                            id="appAckInput"
-                                                            label="Application Acknowledgement"
-                                                            field="appAck"
-                                                        />
-                                                        <FileUpload
-                                                            id="eTokenInput"
-                                                            label="E-Token"
-                                                            field="eToken"
-                                                        />
-                                                        <div className="text-center mt-4">
-                                                            <button className="bg-yellow-500 hover:bg-yellow-600 text-white px-6 py-2 font-bold rounded">
-                                                                SUBMIT APPLICATION
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        )}
-                                    </div >
-                                )}
-
-                                {/* Step 2: Feasibility Approval */}
-                                {currentStep === 2 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">{journeyStages[1]?.name || 'Feasibility Approval'}</h5>
-
-                                        <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
-                                            <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc] flex-wrap">
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'feasibility'
-                                                        ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('feasibility')}
-                                                >
-                                                    {journeyStages[1]?.fields[0] || 'Feasibility'}
-                                                </button>
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'meterCharge'
-                                                        ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('meterCharge')}
-                                                >
-                                                    {journeyStages[1]?.fields[1] || 'Meter Charge Generation Paid (optional)'}
-                                                </button>
-                                            </div>
-
-                                            <div className="p-6 pb-10">
-                                                {/* Feasibility Form */}
-                                                {activeTab === 'feasibility' && (
-                                                    <div>
-                                                        <div className="font-bold text-[#1e293b] text-[16px] mb-1">Feasibility Form</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">Feasibility Letter (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Meter Charge Form */}
-                                                {activeTab === 'meterCharge' && (
-                                                    <div>
-                                                        <div className="font-bold text-[#1e293b] text-[16px] mb-1">Meter Charge Generation Form</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">Meter Charge Payment Receipt (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Step 3: Installation Status */}
-                                {currentStep === 3 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">{journeyStages[2]?.name || 'Installation Status'}</h5>
-
-                                        <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
-                                            <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc] flex-wrap">
-                                                {(journeyStages[2]?.fields || ['Vendor Selection', 'Work Start (vendor Agreement)', 'Solar Installation Details', 'PCR (vendor)']).map((tab, index) => (
-                                                    <button
-                                                        key={index}
-                                                        className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === `install${index}`
-                                                            ? 'bg-white text-gray-800 border-b-0 -mb-[1px] relative z-10'
-                                                            : 'text-gray-500 hover:text-gray-800 border-b border-transparent'
-                                                            } ${activeTab === `install${index}` ? `${index === 0 ? 'border-r border-[#7dd3fc]' : 'border-x border-[#7dd3fc]'}` : 'border-x border-transparent'}`}
-                                                        onClick={() => setActiveTab(`install${index}`)}
-                                                    >
-                                                        {tab}
-                                                    </button>
-                                                ))}
-                                            </div>
-
-                                            <div className="p-6 pb-10">
-                                                {/* Vendor Selection */}
-                                                {activeTab === 'install0' && (
-                                                    <div>
-                                                        <div className="font-bold text-gray-800 text-[16px] mb-1">Vendor Selection</div>
-                                                        <div className="text-gray-500 text-[12px] mb-4">Screenshot of Vendor Selected (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Work Start Form */}
-                                                {activeTab === 'install1' && (
-                                                    <div>
-                                                        <h6 className="font-bold text-[16px] text-[#1e293b] mb-4">Certificate of Support (Vendor Agreement) Form</h6>
-
-                                                        <div className="border border-[#7dd3fc] rounded overflow-hidden">
-                                                            <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
-                                                                <div className="w-1/2 p-3.5 border-r border-white/30">DOCUMENT TYPE</div>
-                                                                <div className="w-1/2 p-3.5">UPLOAD DOCUMENT</div>
-                                                            </div>
-                                                            <div className="flex flex-col">
-                                                                {[
-                                                                    { title: 'Vendor Agreement', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Email ID', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Meter Charge Receipt', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Bank Details(Cancelled Cheque/Bank Passbook with Clear Photo)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: "Panel Number Photo's", desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Inverter Serial Number Photo', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Customer Site Photo(Geo Tagged)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Application Acknowledgement (Registration Letter)', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' }
-                                                                ].map((doc, idx, arr) => (
-                                                                    <div key={idx} className={`flex items-center bg-white ${idx !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
-                                                                        <div className="w-1/2 p-4 border-r border-gray-200">
-                                                                            <div className="text-[14px] text-gray-800 font-medium mb-0.5">{doc.title}</div>
-                                                                            <div className="text-[11px] text-gray-400">{doc.desc}</div>
-                                                                        </div>
-                                                                        <div className="w-1/2 p-4">
-                                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white">
-                                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Solar Installation Details */}
-                                                {activeTab === 'install2' && (
-                                                    <div>
-                                                        <h6 className="font-bold text-[16px] text-[#1e293b] mb-4">Solar Installation Details Form</h6>
-
-                                                        <div className="border border-[#7dd3fc] rounded overflow-hidden">
-                                                            <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
-                                                                <div className="w-1/2 p-3.5 border-r border-white/30">DOCUMENT TYPE</div>
-                                                                <div className="w-1/2 p-3.5">UPLOAD DOCUMENT</div>
-                                                            </div>
-                                                            <div className="flex flex-col">
-                                                                {[
-                                                                    { title: 'Customer Bank Details Uploaded on National Portal Screenshot', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' },
-                                                                    { title: 'Installation Stage Completed by CP Screenshot', desc: 'Supports PDF, DOC, JPG, PNG, Max 5MB' }
-                                                                ].map((doc, idx, arr) => (
-                                                                    <div key={idx} className={`flex items-center bg-white ${idx !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
-                                                                        <div className="w-1/2 p-4 border-r border-gray-200">
-                                                                            <div className="text-[14px] text-gray-800 font-medium mb-0.5">{doc.title}</div>
-                                                                            <div className="text-[11px] text-gray-400">{doc.desc}</div>
-                                                                        </div>
-                                                                        <div className="w-1/2 p-4">
-                                                                            <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white">
-                                                                                <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                                                <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[13px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                                            </div>
-                                                                        </div>
-                                                                    </div>
-                                                                ))}
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* PCR Vendor */}
-                                                {activeTab === 'install3' && (
-                                                    <div>
-                                                        <div className="font-medium text-gray-800 text-[16px] mb-1">PCR (vendor)</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">PCR Report from Vendor (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-200 rounded overflow-hidden shadow-sm mt-8 mb-6">
-                                                            <div className="flex bg-[#6bb0f5] text-white font-semibold text-[13px] uppercase">
-                                                                <div className="w-3/4 p-4">DOCUMENT TYPE</div>
-                                                                <div className="w-1/4 p-4">ACTIONS</div>
-                                                            </div>
-                                                            <div className="flex items-center bg-white p-5 border-t border-gray-200">
-                                                                <div className="w-3/4">
-                                                                    <div className="text-[15px] text-[#1e293b] font-bold mb-1">Installation Proof</div>
-                                                                    <div className="text-[13px] text-gray-500">(In app Project Completion Report will Generate)</div>
-                                                                </div>
-                                                                <div className="w-1/4 flex space-x-2">
-                                                                    <button className="bg-[#22c55e] hover:bg-green-600 text-white px-3.5 py-1.5 rounded text-[13px] font-bold flex items-center transition-colors cursor-pointer">
-                                                                        <Download className="w-4 h-4 mr-1.5" /> Download
-                                                                    </button>
-                                                                    <button className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-3.5 py-1.5 rounded text-[13px] font-bold flex items-center transition-colors cursor-pointer">
-                                                                        <Eye className="w-4 h-4 mr-1.5" /> View
-                                                                    </button>
-                                                                </div>
-                                                            </div>
-                                                        </div>
-
-                                                        <div className="text-center">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                CONFIRM COMPLETION
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Step 4: Meter Installation */}
-                                {currentStep === 4 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">{journeyStages[3]?.name || 'Meter Installation'}</h5>
-
-                                        <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
-                                            <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc]">
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'meterChange'
-                                                        ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('meterChange')}
-                                                >
-                                                    {journeyStages[3]?.fields[0] || 'Meter Change fill Submit And Meter Install'}
-                                                </button>
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'inspection'
-                                                        ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('inspection')}
-                                                >
-                                                    {journeyStages[3]?.fields[1] || 'Inspection (Project Commissioning)'}
-                                                </button>
-                                            </div>
-
-                                            <div className="p-6 pb-10">
-                                                {/* Meter Change Form */}
-                                                {activeTab === 'meterChange' && (
-                                                    <div>
-                                                        <div className="border border-[#7dd3fc] rounded overflow-hidden shadow-sm">
-                                                            <table className="min-w-full text-[13px]">
-                                                                <thead className="bg-[#6bb0f5] text-white">
-                                                                    <tr>
-                                                                        <th className="px-5 py-3.5 text-left w-3/4 font-semibold uppercase border-r border-white/30">DOCUMENT TYPE</th>
-                                                                        <th className="px-5 py-3.5 text-left w-1/4 font-semibold uppercase">ACTIONS</th>
-                                                                    </tr>
-                                                                </thead>
-                                                                <tbody className="bg-white">
-                                                                    {[
-                                                                        'Application Acknowledgement',
-                                                                        'Meter Charge Receipt',
-                                                                        'Net Meter Agreement',
-                                                                        'Custom Signed Adhar Card',
-                                                                        '2 Witness ID Proof',
-                                                                        'Tax Invoice',
-                                                                        'Cancel Letter',
-                                                                        'DCR Letter',
-                                                                        'Customer Site Photo'
-                                                                    ].map((doc, index, arr) => (
-                                                                        <tr key={index} className={`hover:bg-gray-50 ${index !== arr.length - 1 ? 'border-b border-gray-200' : ''}`}>
-                                                                            <td className="px-5 py-4 text-[#1e293b] font-medium border-r border-gray-200">{doc}</td>
-                                                                            <td className="px-5 py-4">
-                                                                                <div className="flex space-x-2">
-                                                                                    <button className="bg-[#22c55e] hover:bg-green-600 text-white px-3.5 py-1.5 rounded text-[12px] font-bold flex items-center transition-colors cursor-pointer">
-                                                                                        <Download className="w-3.5 h-3.5 mr-1" /> Download
-                                                                                    </button>
-                                                                                    <button className="bg-[#0ea5e9] hover:bg-blue-600 text-white px-3.5 py-1.5 rounded text-[12px] font-bold flex items-center transition-colors cursor-pointer">
-                                                                                        <Eye className="w-3.5 h-3.5 mr-1" /> View
-                                                                                    </button>
-                                                                                </div>
-                                                                            </td>
-                                                                        </tr>
-                                                                    ))}
-                                                                </tbody>
-                                                            </table>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Inspection Form */}
-                                                {activeTab === 'inspection' && (
-                                                    <div>
-                                                        <div className="font-medium text-[#1e293b] text-[16px] mb-1">Inspection (Project Commissioning)</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">Inspection Report (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Step 5: Subsidy */}
-                                {currentStep === 5 && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">{journeyStages[4]?.name || 'Subsidy'}</h5>
-
-                                        <div className="border border-[#7dd3fc] rounded-[4px] bg-white shadow-sm overflow-hidden">
-                                            <div className="bg-[#f0f9ff] flex border-b border-[#7dd3fc]">
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'subsidyRequest'
-                                                        ? 'bg-white text-gray-800 border-r border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('subsidyRequest')}
-                                                >
-                                                    {journeyStages[4]?.fields[0] || 'Subsidy Request'}
-                                                </button>
-                                                <button
-                                                    className={`py-3.5 px-6 font-medium text-[14px] focus:outline-none transition-colors ${activeTab === 'subsidyDisbursal'
-                                                        ? 'bg-white text-gray-800 border-x border-[#7dd3fc] border-b-0 -mb-[1px] relative z-10'
-                                                        : 'text-gray-500 hover:text-gray-800 border-x border-transparent'
-                                                        }`}
-                                                    onClick={() => setActiveTab('subsidyDisbursal')}
-                                                >
-                                                    {journeyStages[4]?.fields[1] || 'Subsidy Disbursal'}
-                                                </button>
-                                            </div>
-
-                                            <div className="p-6 pb-10">
-                                                {/* Subsidy Request Form */}
-                                                {activeTab === 'subsidyRequest' && (
-                                                    <div>
-                                                        <div className="font-bold text-[#1e293b] text-[16px] mb-1">Subsidy Request</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">Subsidy Requested Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* Subsidy Disbursal Form */}
-                                                {activeTab === 'subsidyDisbursal' && (
-                                                    <div>
-                                                        <div className="font-bold text-[#1e293b] text-[16px] mb-1">Subsidy Disbursal</div>
-                                                        <div className="text-gray-500 text-[13px] mb-4">Subsidy Disbursed Screenshot (Supports PDF, DOC, JPG, PNG, Max 5MB)</div>
-
-                                                        <div className="border border-gray-300 rounded flex justify-between items-center p-1.5 bg-white mb-6">
-                                                            <span className="text-gray-400 italic text-[14px] pl-3">No file selected</span>
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-5 py-1.5 rounded text-[14px] font-medium transition-colors cursor-pointer">Browse</button>
-                                                        </div>
-
-                                                        <div className="text-center mt-8">
-                                                            <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                                SUBMIT
-                                                            </button>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
-
-                                {/* Dynamic Steps for currentStep > 5 */}
-                                {currentStep > 5 && journeyStages[currentStep - 1] && (
-                                    <div className="wizard-step">
-                                        <h5 className="text-[#0ea5e9] font-bold text-[20px] mb-4">{journeyStages[currentStep - 1].name}</h5>
-                                        <div className="bg-white border border-[#7dd3fc] rounded p-6 shadow-sm">
-                                            {journeyStages[currentStep - 1].fields && journeyStages[currentStep - 1].fields.length > 0 ? (
-                                                <div className="space-y-6">
-                                                    <p className="text-gray-600 mb-4">Please upload the required documents for this stage:</p>
-                                                    {journeyStages[currentStep - 1].fields.map((field, idx) => (
-                                                        <FileUpload
-                                                            key={idx}
-                                                            id={`dynamic-${currentStep}-${idx}`}
-                                                            label={field}
-                                                            field={`dynamic_${currentStep}_${idx}`}
-                                                        />
-                                                    ))}
-                                                    <div className="text-center mt-8">
-                                                        <button className="bg-[#f59e0b] hover:bg-yellow-600 text-white px-8 py-2.5 font-bold rounded shadow-sm text-[13px] cursor-pointer">
-                                                            SUBMIT DOCUMENTS
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <div className="text-center py-12 text-gray-400">
-                                                    <FileText className="w-16 h-16 mx-auto mb-4 opacity-20" />
-                                                    <p>No specific fields defined for this stage.</p>
-                                                    <p className="text-xs">You can add fields in the Journey Stage Setting page.</p>
-                                                </div>
                                             )}
+
+                                            {/* Render Dynamic Content for ALL Steps */}
+                                            {renderDynamicStepContent(stepName)}
                                         </div>
-                                    </div>
-                                )}
+                                    );
+                                })()}
                             </div>
 
                             {/* Navigation Buttons */}

@@ -22,8 +22,13 @@ import {
   getAllManufacturers
 } from '../../../../services/brand/brandApi';
 import {
-  getSupplierTypes
+  getSupplierTypes,
+  createSupplierType,
+  updateSupplierType,
+  deleteSupplierType,
+  getSupplierVendorPlans
 } from '../../../../services/vendor/vendorApi';
+
 import {
   getCategories,
   getSubCategories,
@@ -47,15 +52,17 @@ const BrandSupplierOverview = () => {
   const [selectedDistricts, setSelectedDistricts] = useState(new Set());
   const [selectedCities, setSelectedCities] = useState(new Set());
   const [selectedManufactures, setSelectedManufactures] = useState(new Set());
-  
+
   const [showStates, setShowStates] = useState(false);
   const [showClusters, setShowClusters] = useState(false);
   const [showDistricts, setShowDistricts] = useState(false);
   const [showCities, setShowCities] = useState(false);
   const [showManufactures, setShowManufactures] = useState(false);
 
-  const [supplierTypes, setSupplierTypes] = useState([]);
+  const [supplyTypes, setSupplyTypes] = useState([]);
+  const [masterLoginTypes, setMasterLoginTypes] = useState([]);
   const [masterSupplierTypes, setMasterSupplierTypes] = useState([]);
+
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -162,8 +169,8 @@ const BrandSupplierOverview = () => {
     setIsLoading(true);
     try {
       const [
-        suppliersData, 
-        manuData, 
+        suppliersData,
+        manuData,
         countryResp,
         stateResp,
         prodResp,
@@ -172,7 +179,8 @@ const BrandSupplierOverview = () => {
         ptResp,
         subPtResp,
         mappingResp,
-        supplierTypeResp
+        supplierTypeResp,
+        loginTypesResp
       ] = await Promise.all([
         getAllSuppliers(),
         getAllManufacturers(),
@@ -184,34 +192,40 @@ const BrandSupplierOverview = () => {
         getProjectTypes(),
         getSubProjectTypes(),
         getProjectCategoryMappings(),
-        getSupplierTypes()
+        getSupplierTypes(),
+        getSupplierVendorPlans({ fetchAllNames: true })
       ]);
+
 
       setSuppliers(Array.isArray(suppliersData) ? suppliersData : (suppliersData?.data || []));
       setManufacturers(Array.isArray(manuData) ? manuData : (manuData?.data || []));
-      
+
       const countries = Array.isArray(countryResp) ? countryResp : (countryResp?.data || []);
       setAllCountries(countries);
-      
+
       const st = Array.isArray(stateResp) ? stateResp : (stateResp?.data || []);
       setAllStates(st);
 
       setMasterProducts(prodResp?.data || (Array.isArray(prodResp) ? prodResp : []));
       setMasterCategories(catResp?.data || (Array.isArray(catResp) ? catResp : []));
       setMasterSubCategories(subCatResp?.data || (Array.isArray(subCatResp) ? subCatResp : []));
-      
+
       // Derive unique project types from mappings (e.g., "3 to 30 kW")
       const mappings = Array.isArray(mappingResp) ? mappingResp : (mappingResp?.data || []);
-      const derivedProjectTypes = mappings.length > 0 
+      const derivedProjectTypes = mappings.length > 0
         ? Array.from(new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))).filter(Boolean).sort()
         : (Array.isArray(ptResp) ? ptResp.map(p => (typeof p === 'object' ? p.name : p)) : (ptResp?.data?.map(p => p.name) || []));
 
       setMasterProjectTypes(derivedProjectTypes);
       setMasterSubProjectTypes(Array.isArray(subPtResp) ? subPtResp : (subPtResp?.data || []));
       setMasterProjectMappings(mappings);
-      
+
       const supTypes = supplierTypeResp?.data || (Array.isArray(supplierTypeResp) ? supplierTypeResp : []);
       setMasterSupplierTypes(supTypes);
+
+      const loginTypes = loginTypesResp?.data || (Array.isArray(loginTypesResp) ? loginTypesResp : []);
+      setMasterLoginTypes(loginTypes);
+
 
     } catch (error) {
       console.error('Error fetching initial data:', error);
@@ -355,7 +369,8 @@ const BrandSupplierOverview = () => {
       if (!selectedManufactures.has(manuName)) return false;
     }
 
-    if (supplierTypes.length > 0 && !supplierTypes.includes(supplier.type)) return false;
+    if (supplyTypes.length > 0 && !supplyTypes.includes(supplier.type)) return false;
+
     if (products.length > 0 && !products.includes(supplier.product)) return false;
     if (categories.length > 0 && !categories.includes(supplier.category)) return false;
     if (subCategories.length > 0 && !subCategories.includes(supplier.subCategory)) return false;
@@ -610,7 +625,7 @@ const BrandSupplierOverview = () => {
     setModalForm({ ...modalForm, category: catName, subCategory: '', projectType: '', subProjectType: '' });
     setModalSubCategories([]);
     setModalProjectTypes([]);
-    
+
     if (catName) {
       const selCat = masterCategories.find(c => c.name === catName);
       if (selCat) {
@@ -801,20 +816,21 @@ const BrandSupplierOverview = () => {
       <div className="bg-white rounded-lg shadow-sm p-6 mb-6 border border-gray-200">
         <h2 className="text-lg font-semibold mb-4 border-l-4 border-blue-500 pl-3">Filter Section</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Supplier Type */}
+          {/* Supply Type */}
           <FilterDropdown
-            label="Supplier Type"
-            options={masterSupplierTypes.map(t => t.loginTypeName).filter(Boolean).sort()}
-            selectedValues={supplierTypes}
+            label="Supply Type"
+            options={masterLoginTypes.sort()}
+            selectedValues={supplyTypes}
             onSelect={(val) => {
-              const newTypes = supplierTypes.includes(val)
-                ? supplierTypes.filter(t => t !== val)
-                : [...supplierTypes, val];
-              setSupplierTypes(newTypes);
+              const newTypes = supplyTypes.includes(val)
+                ? supplyTypes.filter(t => t !== val)
+                : [...supplyTypes, val];
+              setSupplyTypes(newTypes);
             }}
             isOpen={openDropdown === 'type'}
             onToggle={() => setOpenDropdown(openDropdown === 'type' ? null : 'type')}
           />
+
 
           {/* Order Procurement (repurposed from Procurement Types) */}
           <FilterDropdown
@@ -844,8 +860,9 @@ const BrandSupplierOverview = () => {
                     if (selectedDistricts.size > 0 && !selectedDistricts.has(s.district?._id || s.district)) return false;
 
                     // Filter by ALL other advanced filters except the current one
-                    if (currentFilters.supplierTypes?.length > 0 && !currentFilters.supplierTypes.includes(s.type)) return false;
+                    if (currentFilters.supplyTypes?.length > 0 && !currentFilters.supplyTypes.includes(s.type)) return false;
                     if (field !== 'product' && products.length > 0 && !products.includes(s.product)) return false;
+
                     if (field !== 'category' && categories.length > 0 && !categories.includes(s.category)) return false;
                     if (field !== 'subCategory' && subCategories.length > 0 && !subCategories.includes(s.subCategory)) return false;
                     if (field !== 'projectType' && projectTypes.length > 0 && !projectTypes.includes(s.projectType)) return false;
@@ -941,11 +958,12 @@ const BrandSupplierOverview = () => {
           })()}
         </div>
         {/* Reset All Filters Button */}
-        {(supplierTypes.length > 0 || products.length > 0 || categories.length > 0 || subCategories.length > 0 || projectTypes.length > 0 || subProjectTypes.length > 0 || procurementTypes.length > 0) && (
+        {(supplyTypes.length > 0 || products.length > 0 || categories.length > 0 || subCategories.length > 0 || projectTypes.length > 0 || subProjectTypes.length > 0 || procurementTypes.length > 0) && (
           <div className="mt-6 flex justify-end">
             <button
               onClick={() => {
-                setSupplierTypes([]);
+                setSupplyTypes([]);
+
                 setProducts([]);
                 setCategories([]);
                 setSubCategories([]);
@@ -980,11 +998,12 @@ const BrandSupplierOverview = () => {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-blue-50 sticky top-0 z-0">
               <tr>
-                {['Type', 'Name', 'State', 'Cluster', 'District', 'City', 'Manufacture', 'Product', 'Category', 'Sub Category', 'Project Type', 'Sub Project Type', 'Procurement Type', 'Action'].map(h => (
+                {['Supply Type', 'Name', 'State', 'Cluster', 'District', 'City', 'Manufacture', 'Product', 'Category', 'Sub Category', 'Project Type', 'Sub Project Type', 'Order Procurement', 'Action'].map(h => (
                   <th key={h} className="px-6 py-3 text-left text-xs font-medium text-gray-700 uppercase whitespace-nowrap">{h}</th>
                 ))}
               </tr>
             </thead>
+
             <tbody className="bg-white divide-y divide-gray-200">
               {filteredSuppliers.length > 0 ? (
                 filteredSuppliers.map(supplier => (
@@ -1031,14 +1050,15 @@ const BrandSupplierOverview = () => {
             <form onSubmit={handleModalSubmit} className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium">Type*</label>
+                  <label className="block text-sm font-medium">Supply Type*</label>
                   <select className="w-full border p-2 rounded" value={modalForm.type} onChange={e => setModalForm({ ...modalForm, type: e.target.value })}>
-                    <option value="">Select Type</option>
-                    {masterSupplierTypes.map(t => (
-                      <option key={t._id} value={t.loginTypeName}>{t.loginTypeName}</option>
+                    <option value="">Select Supply Type</option>
+                    {masterLoginTypes.map(name => (
+                      <option key={name} value={name}>{name}</option>
                     ))}
                   </select>
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium">Name*</label>
                   <input type="text" className="w-full border p-2 rounded" value={modalForm.name} onChange={e => setModalForm({ ...modalForm, name: e.target.value })} required />

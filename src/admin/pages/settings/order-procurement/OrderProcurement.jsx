@@ -18,7 +18,9 @@ import {
   getSkus,
   getProjectCategoryMappings
 } from '../../../../services/settings/orderProcurementSettingApi';
+import { getSupplierVendorPlans } from '../../../../services/vendor/vendorApi';
 import { locationAPI } from '../../../../api/api';
+
 import inventoryApi from '../../../../services/inventory/inventoryApi';
 import { masterApi } from '../../../../api/masterApi';
 
@@ -41,6 +43,8 @@ export default function OrderProcurement() {
   const [states, setStates] = useState([]);
   const [clusters, setClusters] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
+  const [loginTypes, setLoginTypes] = useState([]);
+
 
   // Form Dep Dropdowns
   const [formSubCategories, setFormSubCategories] = useState([]);
@@ -137,13 +141,20 @@ export default function OrderProcurement() {
       setSubProjectTypes(allSubPTypeData?.data || []);
       setProjectMappings(mappingData?.data || []);
 
-      const countryRes = await masterApi.getCountries();
+      const [countryRes, loginTypesRes] = await Promise.all([
+        masterApi.getCountries(),
+        getSupplierVendorPlans({ fetchAllNames: true })
+      ]);
+
       setCountries(countryRes?.data || []);
+      setLoginTypes(loginTypesRes?.data || []);
+
       if (countryRes?.data?.length > 0) {
         const stateRes = await masterApi.getStates({ countryId: countryRes.data[0]._id });
         setStates(stateRes?.data || []);
         setFormStates(stateRes?.data || []);
       }
+
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load initial data");
@@ -394,7 +405,7 @@ export default function OrderProcurement() {
       const stateId = setting.state?._id || setting.state;
       const res = await locationAPI.getAllClusters({ stateId });
       setFormClusters(res.data?.data || []);
-      
+
       if (setting.cluster) {
         const clusterId = setting.cluster?._id || setting.cluster;
         const whRes = await inventoryApi.getAllWarehouses({ cluster: clusterId });
@@ -480,6 +491,44 @@ export default function OrderProcurement() {
     setFormClusters([]);
     setFormWarehouses([]);
   };
+
+  const getDynamicLoginTypeOptions = (itemIndex) => {
+    const { category, subCategory, projectType } = formData;
+    if (!category || !subCategory || !projectType) return [];
+
+    let filtered = supplierTypes.filter(s =>
+      (Array.isArray(s.category) ? s.category.includes(category) : s.category === category) &&
+      (Array.isArray(s.subCategory) ? s.subCategory.includes(subCategory) : s.subCategory === subCategory) &&
+      (Array.isArray(s.projectType) ? s.projectType.includes(projectType) : s.projectType === projectType)
+    );
+
+    // Also filter by row's selected Supply Types (assignModules)
+    const rowModules = formData.skuItems[itemIndex].assignModules;
+    if (rowModules && rowModules.length > 0) {
+      filtered = filtered.filter(s => rowModules.includes(s.assignModules));
+    }
+
+    return filtered.map(s => ({
+      label: s.loginTypeName || s.name,
+      value: s._id
+    }));
+  };
+
+  const getDynamicSupplyTypeOptions = () => {
+    const { category, subCategory, projectType } = formData;
+    if (!category || !subCategory || !projectType) return [];
+
+    const filtered = supplierTypes.filter(s =>
+      (Array.isArray(s.category) ? s.category.includes(category) : s.category === category) &&
+      (Array.isArray(s.subCategory) ? s.subCategory.includes(subCategory) : s.subCategory === subCategory) &&
+      (Array.isArray(s.projectType) ? s.projectType.includes(projectType) : s.projectType === projectType)
+    );
+
+    const modules = [...new Set(filtered.map(s => s.assignModules).filter(m => m))];
+    return modules.map(m => ({ label: m, value: m }));
+  };
+
+
 
   return (
     <div className="container px-4 py-8 mx-auto">
@@ -864,7 +913,7 @@ export default function OrderProcurement() {
                   {/* Table headers for dynamic rows */}
                   <div className="flex mb-2">
                     <div className="w-[30%] text-[13px] font-medium text-gray-600">Range (kW)</div>
-                    <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Assign Modules</div>
+                    <div className="w-[30%] text-[13px] font-medium text-gray-600 ml-4">Supply Types</div>
                     <div className="w-[35%] text-[13px] font-medium text-gray-600 ml-4">Login Type</div>
                     <div className="w-10"></div>
                   </div>
@@ -898,13 +947,17 @@ export default function OrderProcurement() {
                           <Select
                             isMulti
                             required
-                            placeholder="Select Modules"
+                            placeholder="Select Supply Types"
                             className="text-sm"
-                            options={[...new Set(supplierTypes.map(s => s.assignModules).filter(m => m))].map(m => ({ label: m, value: m }))}
+                            options={getDynamicSupplyTypeOptions()}
+                            noOptionsMessage={() => (!formData.category || !formData.subCategory || !formData.projectType)
+                              ? "Please select Category, Sub-Category and Range first"
+                              : "No matching supply types found"}
                             value={(item.assignModules || []).map(mVal => ({ label: mVal, value: mVal }))}
                             onChange={(selected) => handleSkuItemChange(index, 'assignModules', selected ? selected.map(o => o.value) : [])}
                           />
                         </div>
+
 
                         <div className="w-[35%]">
                           <Select
@@ -912,7 +965,10 @@ export default function OrderProcurement() {
                             required
                             placeholder="Select Login Types"
                             className="text-sm"
-                            options={supplierTypes.map(s => ({ label: s.loginTypeName || s.name, value: s._id }))}
+                            options={getDynamicLoginTypeOptions(index)}
+                            noOptionsMessage={() => (!formData.category || !formData.subCategory || !formData.projectType)
+                              ? "Please select Category, Sub-Category and Range first"
+                              : "No matching login types found for current configuration"}
                             value={(item.supplierType || []).map(sId => {
                               const s = supplierTypes.find(x => x._id === sId);
                               return { label: s?.loginTypeName || s?.name || sId, value: sId };
@@ -920,6 +976,7 @@ export default function OrderProcurement() {
                             onChange={(selected) => handleSkuItemChange(index, 'supplierType', selected ? selected.map(o => o.value) : [])}
                           />
                         </div>
+
 
                         <div className="w-10 flex justify-center">
                           {formData.skuItems.length > 1 && (

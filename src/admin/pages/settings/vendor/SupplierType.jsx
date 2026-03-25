@@ -607,12 +607,16 @@ export default function SupplierType() {
                   {/* Create Row */}
                   <tr className="bg-[#f8f9fc] border-b border-gray-200">
                     <td className="p-3 border-r border-gray-200">
-                      <input
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500"
-                        placeholder="Enter Login Type name"
+                      <select
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
                         value={formData.loginTypeName}
                         onChange={e => setFormData({ ...formData, loginTypeName: e.target.value })}
-                      />
+                      >
+                        <option value="">Select Login Type</option>
+                        {loginTypes.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
                     </td>
                     <td className="p-3 border-r border-gray-200 min-w-[200px]">
                       <div className="relative">

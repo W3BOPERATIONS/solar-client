@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Building, Filter, Save, ClipboardList } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
-import { 
-  getCategories, 
-  getSubCategories, 
-  getProjectCategoryMappings, 
-  getSubProjectTypes 
+import {
+  getCategories,
+  getSubCategories,
+  getProjectCategoryMappings,
+  getSubProjectTypes
 } from '../../../../services/settings/orderProcurementSettingApi';
 import { toast } from 'react-hot-toast';
 
@@ -18,13 +18,13 @@ export default function OverdueSetting() {
   // Process configuration state
   // Store all fetched settings to derive summary and form data without re-fetching
   const [allSettings, setAllSettings] = useState([]);
-  
+
   // Master Data State
   const [masterCategories, setMasterCategories] = useState([]);
   const [allSubCategories, setAllSubCategories] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
   const [allSubProjectTypes, setAllSubProjectTypes] = useState([]);
-  
+
   // Filter Dropdown Options
   const [availableSubCategories, setAvailableSubCategories] = useState([]);
   const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
@@ -54,13 +54,13 @@ export default function OverdueSetting() {
         getSubProjectTypes(),
         projectApi.getJourneyStages()
       ]);
-      
+
       setAllSettings(settings || []);
       setMasterCategories(cats?.data || []);
       setProjectMappings(mappings?.data || []);
       setAllSubProjectTypes(subPTs?.data || []);
       setJourneyStages(stages || []);
-      
+
       // Also fetch all sub-categories for mapping
       const subCats = await getSubCategories();
       setAllSubCategories(subCats?.data || []);
@@ -70,7 +70,16 @@ export default function OverdueSetting() {
     }
   };
 
-  const [summaryTab, setSummaryTab] = useState('residential');
+  const [summaryTab, setSummaryTab] = useState('');
+
+  // Set default summary tab once sub-categories are loaded
+  useEffect(() => {
+    if (!summaryTab && allSubCategories.length > 0) {
+      const defaultTab = allSubCategories.find(s => s.name === 'Residential') || allSubCategories[0];
+      setSummaryTab(defaultTab.name.toLowerCase());
+    }
+  }, [allSubCategories]);
+
 
   // Fetch only settings when needed
   const fetchSettings = async () => {
@@ -93,15 +102,16 @@ export default function OverdueSetting() {
       );
 
       const initialConfig = {};
-      
+
       // Initialize with journey stages and fields
       journeyStages.forEach(stage => {
         initialConfig[stage.name] = {};
         if (stage.fields && stage.fields.length > 0) {
           stage.fields.forEach(field => {
             // Check if we have a saved value, otherwise use DEFAULT_DAYS
-            const savedValue = matchingSetting?.processConfig?.[stage.name]?.[field];
-            initialConfig[stage.name][field] = savedValue !== undefined ? savedValue : DEFAULT_DAYS;
+            const fieldName = typeof field === 'string' ? field : field.name;
+            const savedValue = matchingSetting?.processConfig?.[stage.name]?.[fieldName];
+            initialConfig[stage.name][fieldName] = savedValue !== undefined ? savedValue : DEFAULT_DAYS;
           });
         }
       });
@@ -124,7 +134,7 @@ export default function OverdueSetting() {
     setSubProjectType('');
     setAvailableSubCategories([]);
     setAvailableProjectTypes([]);
-    
+
     if (catName) {
       const selCat = masterCategories.find(c => c.name === catName);
       if (selCat) {
@@ -143,15 +153,15 @@ export default function OverdueSetting() {
     setProjectType('');
     setSubProjectType('');
     setAvailableProjectTypes([]);
-    
+
     if (category && subCatName) {
       const selCat = masterCategories.find(c => c.name === category);
       const selSubCat = allSubCategories.find(sc => sc.name === subCatName);
-      
+
       if (selCat && selSubCat) {
         const ranges = projectMappings
-          .filter(m => 
-            (m.categoryId?._id || m.categoryId) === selCat._id && 
+          .filter(m =>
+            (m.categoryId?._id || m.categoryId) === selCat._id &&
             (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id
           )
           .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
@@ -165,7 +175,7 @@ export default function OverdueSetting() {
     setProjectType(ptName);
     setSubProjectType('');
     setAvailableSubProjectTypes([]);
-    
+
     if (ptName) {
       // Find if this is a master range or just show all sub-project types
       setAvailableSubProjectTypes(allSubProjectTypes);
@@ -310,47 +320,30 @@ export default function OverdueSetting() {
         </div>
 
         {/* Project Type Selection */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          {/* Residential Card */}
-          <div 
-            onClick={() => handleSubCategoryChange('Residential')}
-            className={`rounded-lg shadow-sm border transition-all cursor-pointer ${
-              subCategory?.toLowerCase() === 'residential' 
-                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' 
-                : 'bg-white border-gray-200 hover:shadow-md hover:border-blue-300'
-            }`}
-          >
-            <div className="p-8 text-center">
-              <Home className={`w-16 h-16 mx-auto mb-4 transition-colors ${
-                subCategory?.toLowerCase() === 'residential' ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-              <h4 className={`text-xl font-semibold mb-2 transition-colors ${
-                subCategory?.toLowerCase() === 'residential' ? 'text-blue-700' : 'text-gray-800'
-              }`}>Residential</h4>
-              <p className="text-gray-500">Manage residential solar projects</p>
-            </div>
-          </div>
-
-          {/* Commercial Card */}
-          <div 
-            onClick={() => handleSubCategoryChange('Commercial')}
-            className={`rounded-lg shadow-sm border transition-all cursor-pointer ${
-              subCategory?.toLowerCase() === 'commercial' 
-                ? 'bg-blue-50 border-blue-500 ring-1 ring-blue-500' 
-                : 'bg-white border-gray-200 hover:shadow-md hover:border-blue-300'
-            }`}
-          >
-            <div className="p-8 text-center">
-              <Building className={`w-16 h-16 mx-auto mb-4 transition-colors ${
-                subCategory?.toLowerCase() === 'commercial' ? 'text-blue-600' : 'text-gray-400'
-              }`} />
-              <h4 className={`text-xl font-semibold mb-2 transition-colors ${
-                subCategory?.toLowerCase() === 'commercial' ? 'text-blue-700' : 'text-gray-800'
-              }`}>Commercial</h4>
-              <p className="text-gray-500">Manage commercial solar projects</p>
-            </div>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
+          {allSubCategories.map((sub) => {
+            const isSelected = subCategory?.toLowerCase() === sub.name.toLowerCase();
+            const Icon = sub.name === 'Residential' ? Home : (sub.name === 'Commercial' ? Building : ClipboardList);
+            
+            return (
+              <div
+                key={sub._id}
+                onClick={() => handleSubCategoryChange(sub.name)}
+                className={`rounded-xl shadow-sm border transition-all cursor-pointer p-6 text-center ${isSelected
+                    ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-200 scale-[1.02]'
+                    : 'bg-white border-gray-200 hover:shadow-lg hover:border-blue-300 hover:-translate-y-1'
+                  }`}
+              >
+                <Icon className={`w-12 h-12 mx-auto mb-3 transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-400'}`} />
+                <h4 className={`text-lg font-bold mb-1 transition-colors ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>
+                  {sub.name}
+                </h4>
+                <p className="text-xs text-gray-500 font-medium">Manage {sub.name.toLowerCase()} solar projects</p>
+              </div>
+            );
+          })}
         </div>
+
 
         {/* Process Configuration */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 mb-8">
@@ -379,7 +372,7 @@ export default function OverdueSetting() {
                 {journeyStages.map((stage, sIdx) => {
                   const subProcesses = stage.fields && stage.fields.length > 0 ? stage.fields : [];
                   const rowCount = Math.max(subProcesses.length, 1);
-                  
+
                   return (
                     <React.Fragment key={stage._id || sIdx}>
                       {rowCount > 0 && (
@@ -387,10 +380,10 @@ export default function OverdueSetting() {
                           <td rowSpan={rowCount} className="px-6 py-4 align-middle font-semibold text-[#0ea5e9] border-r border-gray-200 bg-white">
                             {stage.name}
                           </td>
-                          
+
                           {/* First Sub-Process Row */}
                           <td className="px-6 py-4 text-gray-700">
-                            {subProcesses[0] || <span className="text-gray-400 italic">No sub-processes</span>}
+                            {typeof subProcesses[0] === 'object' ? subProcesses[0]?.name : subProcesses[0] || <span className="text-gray-400 italic">No sub-processes</span>}
                           </td>
                           <td className="px-6 py-4">
                             {subProcesses[0] && (
@@ -398,8 +391,8 @@ export default function OverdueSetting() {
                                 <input
                                   type="number"
                                   className="w-20 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                                  value={processConfig[stage.name]?.[subProcesses[0]] || ''}
-                                  onChange={(e) => handleProcessChange(stage.name, subProcesses[0], e.target.value)}
+                                  value={processConfig[stage.name]?.[typeof subProcesses[0] === 'object' ? subProcesses[0].name : subProcesses[0]] || ''}
+                                  onChange={(e) => handleProcessChange(stage.name, typeof subProcesses[0] === 'object' ? subProcesses[0].name : subProcesses[0], e.target.value)}
                                   min="0"
                                 />
                                 <span className="text-xs text-gray-500 font-medium">Days</span>
@@ -417,18 +410,18 @@ export default function OverdueSetting() {
                           </td>
                         </tr>
                       )}
-                      
+
                       {/* Remaining Sub-Process Rows */}
                       {subProcesses.slice(1).map((subProc, spIdx) => (
                         <tr key={`${stage._id}-${spIdx}`} className="bg-white">
-                          <td className="px-6 py-4 text-gray-700">{subProc}</td>
+                          <td className="px-6 py-4 text-gray-700">{typeof subProc === 'object' ? subProc.name : subProc}</td>
                           <td className="px-6 py-4">
                             <div className="flex items-center space-x-2">
                               <input
                                 type="number"
                                 className="w-20 px-3 py-1.5 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all font-medium"
-                                value={processConfig[stage.name]?.[subProc] || ''}
-                                onChange={(e) => handleProcessChange(stage.name, subProc, e.target.value)}
+                                value={processConfig[stage.name]?.[typeof subProc === 'object' ? subProc.name : subProc] || ''}
+                                onChange={(e) => handleProcessChange(stage.name, typeof subProc === 'object' ? subProc.name : subProc, e.target.value)}
                                 min="0"
                               />
                               <span className="text-xs text-gray-500 font-medium">Days</span>
@@ -454,47 +447,42 @@ export default function OverdueSetting() {
           </div>
 
           {/* Large Navigation Buttons */}
-          <div className="flex space-x-4 mb-6">
-            <button
-              onClick={() => setSummaryTab('residential')}
-              className={`flex-1 flex items-center justify-center p-6 rounded-2xl transition-all duration-300 shadow-sm border-2 ${summaryTab === 'residential'
-                ? 'bg-blue-50 border-blue-500 text-blue-700 shadow-md ring-4 ring-blue-50 ring-offset-0'
-                : 'bg-white border-gray-100 text-gray-500 hover:border-blue-200 hover:bg-gray-50 uppercase tracking-wider text-sm font-bold'
-                }`}
-            >
-              <div className={`p-3 rounded-xl mr-4 ${summaryTab === 'residential' ? 'bg-blue-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                <Home className="w-6 h-6" />
-              </div>
-              <div className="text-left">
-                <div className="text-xs uppercase font-bold opacity-60 mb-0.5">Project Category</div>
-                <div className="text-xl font-black">RESIDENTIAL PROJECTS</div>
-              </div>
-            </button>
+          <div className="flex flex-wrap gap-4 mb-6">
+            {allSubCategories.map((sub) => {
+              const isActive = summaryTab === sub.name.toLowerCase();
+              const Icon = sub.name === 'Residential' ? Home : (sub.name === 'Commercial' ? Building : ClipboardList);
+              const activeColorClass = sub.name === 'Residential' ? 'blue' : (sub.name === 'Commercial' ? 'emerald' : 'indigo');
 
-            <button
-              onClick={() => setSummaryTab('commercial')}
-              className={`flex-1 flex items-center justify-center p-6 rounded-2xl transition-all duration-300 shadow-sm border-2 ${summaryTab === 'commercial'
-                ? 'bg-emerald-50 border-emerald-500 text-emerald-700 shadow-md ring-4 ring-emerald-50 ring-offset-0'
-                : 'bg-white border-gray-100 text-gray-500 hover:border-emerald-200 hover:bg-gray-50 uppercase tracking-wider text-sm font-bold'
-                }`}
-            >
-              <div className={`p-3 rounded-xl mr-4 ${summaryTab === 'commercial' ? 'bg-emerald-500 text-white' : 'bg-gray-100 text-gray-400'}`}>
-                <Building className="w-6 h-6" />
-              </div>
-              <div className="text-left">
-                <div className="text-xs uppercase font-bold opacity-60 mb-0.5">Project Category</div>
-                <div className="text-xl font-black">COMMERCIAL PROJECTS</div>
-              </div>
-            </button>
+              return (
+                <button
+                  key={sub._id}
+                  onClick={() => setSummaryTab(sub.name.toLowerCase())}
+                  className={`flex items-center min-w-[240px] p-4 rounded-2xl transition-all duration-300 shadow-sm border-2 ${isActive
+                    ? `bg-${activeColorClass}-50 border-${activeColorClass}-500 text-${activeColorClass}-700 shadow-md ring-4 ring-${activeColorClass}-50`
+                    : 'bg-white border-gray-100 text-gray-500 hover:border-blue-200 hover:bg-gray-50'
+                    }`}
+                >
+                  <div className={`p-2 rounded-lg mr-3 ${isActive ? `bg-${activeColorClass}-500 text-white` : 'bg-gray-100 text-gray-400'}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                  <div className="text-left">
+                    <div className="text-[10px] uppercase font-bold opacity-60 mb-0.5">Project Category</div>
+                    <div className="text-sm font-black uppercase">{sub.name} PROJECTS</div>
+                  </div>
+                </button>
+              );
+            })}
           </div>
+
 
           {/* Table Summary Content */}
           <div className="bg-white rounded-2xl shadow-xl border border-gray-200 overflow-hidden">
-            <div className={`px-6 py-4 border-b flex items-center justify-between ${summaryTab === 'residential' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'}`}>
-              <div className="flex items-center font-bold">
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${['residential', 'commercial'].includes(summaryTab) ? (summaryTab === 'residential' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white') : 'bg-indigo-600 text-white'}`}>
+              <div className="flex items-center font-bold capitalize">
                 <ClipboardList className="w-5 h-5 mr-3" />
-                {summaryTab === 'residential' ? 'Residential' : 'Commercial'} Configuration Details
+                {summaryTab} Configuration Details
               </div>
+
               <span className="bg-white bg-opacity-20 px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-widest backdrop-blur-sm shadow-sm ring-1 ring-white ring-opacity-30">
                 Displaying All Saved Rules
               </span>
@@ -518,9 +506,10 @@ export default function OverdueSetting() {
                             <div>
                               <div className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1">Category & Project Type</div>
                               <div className="flex flex-wrap gap-2">
-                                <span className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-tight ${summaryTab === 'residential' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100'}`}>
+                                <span className={`px-2.5 py-1 rounded text-[11px] font-bold uppercase tracking-tight ${['residential', 'commercial'].includes(summaryTab) ? (summaryTab === 'residential' ? 'bg-blue-50 text-blue-700 ring-1 ring-blue-100' : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100') : 'bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100'}`}>
                                   {config.category}
                                 </span>
+
                                 <span className="px-2.5 py-1 bg-gray-100 text-gray-700 rounded text-[11px] font-bold uppercase tracking-tight ring-1 ring-gray-200">
                                   {config.projectType}
                                 </span>

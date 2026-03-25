@@ -16,13 +16,17 @@ import {
   ChevronDown
 } from 'lucide-react';
 import { projectApi } from '../../../../services/project/projectApi';
-import { getProjectTypes, getProjectCategoryMappings } from '../../../../services/core/masterApi';
+import { getProjectTypes, getProjectCategoryMappings, getSubCategories } from '../../../../services/core/masterApi';
+import { useNavigate } from 'react-router-dom';
+
 import { getCountries, getStates, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 import { createDiscom, getDiscomsByState, getQuoteSettings } from '../../../../services/quote/quoteApi';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 
 const ConfigurationSetting = () => {
+  const navigate = useNavigate();
+
   // State for location selection
   // State for location selection
   const [selectedCountries, setSelectedCountries] = useState([]);
@@ -41,6 +45,8 @@ const ConfigurationSetting = () => {
   const [newDiscomName, setNewDiscomName] = useState('');
   const [newDiscomState, setNewDiscomState] = useState('');
   const [isDiscomLoading, setIsDiscomLoading] = useState(false);
+  const [masterSubCategories, setMasterSubCategories] = useState([]);
+
 
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
   const [stateSectionVisible, setStateSectionVisible] = useState(false);
@@ -69,11 +75,13 @@ const ConfigurationSetting = () => {
 
   const loadInitialData = async () => {
     try {
-      const [fetchedCountries, fetchedMappings, fetchedStages] = await Promise.all([
+      const [fetchedCountries, fetchedMappings, fetchedStages, fetchedSubCats] = await Promise.all([
         getCountries(),
         getProjectCategoryMappings(),
-        projectApi.getJourneyStages()
+        projectApi.getJourneyStages(),
+        getSubCategories()
       ]);
+
 
       setCountries(fetchedCountries || []);
       // Mappings API returns { success: true, count: N, data: [] }
@@ -103,6 +111,8 @@ const ConfigurationSetting = () => {
 
       setProjectTypes(validMappings);
       setAllSteps(fetchedStages || []);
+      setMasterSubCategories(fetchedSubCats?.data || (Array.isArray(fetchedSubCats) ? fetchedSubCats : []));
+
 
       // Load ALL saved configs for the summary table
       await refreshSavedConfigs();
@@ -1141,26 +1151,36 @@ const ConfigurationSetting = () => {
           </div>
 
           <div className="mb-8">
-            <label className="block text-sm font-bold text-gray-700 uppercase mb-3">
-              Apply Configuration To Category
-            </label>
-            <div className="flex space-x-4">
-              {['Commercial', 'Residential'].map((cat) => (
-                <button
-                  key={cat}
-                  onClick={() => setConfigCategory(cat)}
-                  className={`flex-1 py-3 px-4 rounded-xl font-bold border-2 transition-all flex items-center justify-center ${configCategory === cat 
-                    ? 'border-blue-500 bg-blue-50 text-blue-700 ring-2 ring-blue-100' 
-                    : 'border-gray-100 bg-white text-gray-500 hover:border-gray-200'}`}
-                >
-                  <div className={`w-5 h-5 rounded-full border-2 mr-3 flex items-center justify-center ${configCategory === cat ? 'border-blue-500 bg-blue-500' : 'border-gray-300'}`}>
-                    {configCategory === cat && <div className="w-2 h-2 rounded-full bg-white" />}
-                  </div>
-                  {cat}
-                </button>
-              ))}
+            <div className="flex justify-between items-center mb-3">
+              <label className="block text-sm font-bold text-gray-700 uppercase">
+                Apply Configuration To Sub-Category
+              </label>
+              <button
+                onClick={() => navigate('/admin/settings/product/add_project_type')}
+                className="text-xs font-bold text-blue-600 hover:text-blue-800 flex items-center bg-blue-50 px-2 py-1 rounded"
+              >
+                <Plus className="w-3 h-3 mr-1" /> Add More / Manage
+              </button>
             </div>
+            <div className="relative group">
+              <select
+                value={configCategory}
+                onChange={(e) => setConfigCategory(e.target.value)}
+                className="w-full h-12 px-4 bg-white border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition-all appearance-none font-bold text-gray-700"
+              >
+                <option value="">Select Sub-Category (Scope)</option>
+                {/* Always include the defaults if not present, then add master data */}
+                {['Commercial', 'Residential', ...new Set(masterSubCategories.map(s => s.name).filter(n => n !== 'Commercial' && n !== 'Residential'))].sort().map((cat) => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
+              <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400 group-hover:text-blue-500 transition-colors">
+                <ChevronDown className="w-5 h-5" />
+              </div>
+            </div>
+            <p className="text-xs text-gray-400 mt-2 italic font-medium"> This label helps identify the configuration in the summary table below.</p>
           </div>
+
 
           {/* Available Steps */}
           <h4 className="text-md font-semibold mb-3">Available Project Steps</h4>
@@ -1189,7 +1209,7 @@ const ConfigurationSetting = () => {
                     <div className="flex flex-wrap gap-1 mt-1.5">
                       {step.fields?.slice(0, 2).map((f, i) => (
                         <span key={i} className="text-[10px] bg-white bg-opacity-50 px-1.5 py-0.5 rounded border border-gray-200 text-gray-500 font-medium">
-                          {f}
+                          {typeof f === 'object' ? f.name : f}
                         </span>
                       ))}
                       {(step.fields?.length || 0) > 2 && (
