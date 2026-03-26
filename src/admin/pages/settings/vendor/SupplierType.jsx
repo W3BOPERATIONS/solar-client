@@ -49,8 +49,7 @@ export default function SupplierType() {
     subCategories: [],
     projectTypes: [],
     subTypes: [],
-    assignModules: '',
-    loginAccessType: '',
+    assignModules: [],
     orderTat: '10 Days',
     modulesTasks: []
   });
@@ -395,7 +394,6 @@ export default function SupplierType() {
         projectType: formData.projectTypes,
         subType: formData.subTypes,
         assignModules: formData.assignModules,
-        loginAccessType: formData.loginAccessType,
         orderTat: formData.orderTat,
         modulesTasks: formData.modulesTasks,
         countryId: selectedLocation.country === 'all' ? null : selectedLocation.country,
@@ -408,7 +406,7 @@ export default function SupplierType() {
       if (res.success) {
         toast.success('Supplier type created/updated successfully');
         setFormData({
-          loginTypeName: '', categories: [], subCategories: [], projectTypes: [], subTypes: [], assignModules: '', loginAccessType: '', orderTat: '10 Days', modulesTasks: []
+          loginTypeName: '', categories: [], subCategories: [], projectTypes: [], subTypes: [], assignModules: [], orderTat: '10 Days', modulesTasks: []
         });
         fetchTypes();
       }
@@ -597,7 +595,6 @@ export default function SupplierType() {
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Sub Type</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Modules Tasks</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Assign Modules</th>
-                    <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Suppliers Type OF Login</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Order TAT setting</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Set Modules</th>
                     <th className="p-3 text-sm font-semibold text-center whitespace-nowrap">Create</th>
@@ -770,28 +767,37 @@ export default function SupplierType() {
                       -
                     </td>
                     <td className="p-3 border-r border-gray-200">
-                      <select
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.assignModules}
-                        onChange={e => setFormData({ ...formData, assignModules: e.target.value })}
-                      >
-                        <option value="">Select Modules For Assigning</option>
-                        <option value="Bidding">Bidding</option>
-                        <option value="P.O Order">P.O Order</option>
-                        <option value="Customize Kit Supply">Customize Kit Supply</option>
-                      </select>
-                    </td>
-                    <td className="p-3 border-r border-gray-200">
-                      <select
-                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={formData.loginAccessType}
-                        onChange={e => setFormData({ ...formData, loginAccessType: e.target.value })}
-                      >
-                        <option value="">Select Type of login</option>
-                        {loginTypes.map(name => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                      </select>
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'assignModules' ? null : 'assignModules')}
+                          className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[34px]"
+                        >
+                          {formData.assignModules.length === 0 ? (
+                            <span className="text-gray-400">Select Modules</span>
+                          ) : (
+                            formData.assignModules.map(mod => (
+                              <span key={mod} className="bg-cyan-100 text-cyan-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {mod} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('assignModules', mod); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'assignModules' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {['Bidding', 'P.O Order', 'Customize Kit Supply', 'Supply Contract'].map(mod => (
+                              <label key={mod} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                <input
+                                  type="checkbox"
+                                  className="mr-2 h-3.5 w-3.5"
+                                  checked={formData.assignModules.includes(mod)}
+                                  onChange={() => handleToggleOption('assignModules', mod)}
+                                />
+                                <span className="text-xs text-gray-700">{mod}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </td>
                     <td className="p-3 border-r border-gray-200">
                       <input
@@ -864,8 +870,17 @@ export default function SupplierType() {
                             )) : '-'}
                           </div>
                         </td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.assignModules || '-'}</td>
-                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.loginAccessType || '-'}</td>
+                        <td className="p-3 border-r border-gray-100 text-sm text-gray-600">
+                          <div className="flex flex-wrap gap-1">
+                            {Array.isArray(type.assignModules) ? (
+                              type.assignModules.map(mod => (
+                                <span key={mod} className="bg-cyan-50 text-cyan-600 px-1.5 py-0.5 rounded text-[10px]">{mod}</span>
+                              ))
+                            ) : (
+                              type.assignModules || '-'
+                            )}
+                          </div>
+                        </td>
                         <td className="p-3 border-r border-gray-100 text-sm text-gray-600">{type.orderTat || '-'}</td>
                         <td className="p-3 border-r border-gray-100 text-center">
                           <button
