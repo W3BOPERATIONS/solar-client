@@ -10,6 +10,7 @@ export const useLocations = () => {
   const [districts, setDistricts] = useState([]);
   const [cities, setCities] = useState([]);
 
+  const [selectedCountry, setSelectedCountry] = useState('');
   const [selectedState, setSelectedState] = useState('');
   const [selectedCluster, setSelectedCluster] = useState('');
   const [selectedDistrict, setSelectedDistrict] = useState('');
@@ -18,11 +19,7 @@ export const useLocations = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load basic data on mount
-  useEffect(() => {
-    fetchCountries();
-    fetchStates();
-  }, []);
+  // --- Fetch Functions ---
 
   const fetchCountries = useCallback(async () => {
     try {
@@ -36,40 +33,6 @@ export const useLocations = () => {
       setLoading(false);
     }
   }, []);
-
-  // Update Clusters when State changes
-  useEffect(() => {
-    if (selectedState) {
-      fetchClusters(selectedState);
-    } else {
-      setClusters([]);
-    }
-    // Only reset children if the parent actually changed (avoid infinite loops/unnecessary resets)
-    setSelectedCluster('');
-    setSelectedDistrict('');
-    setSelectedCity('');
-  }, [selectedState]);
-
-  // Update Districts when Cluster changes
-  useEffect(() => {
-    if (selectedCluster) {
-      fetchDistricts(selectedCluster);
-    } else {
-      setDistricts([]);
-    }
-    setSelectedDistrict('');
-    setSelectedCity('');
-  }, [selectedCluster]);
-
-  // Update Cities when District changes
-  useEffect(() => {
-    if (selectedDistrict) {
-      fetchCities(selectedDistrict);
-    } else {
-      setCities([]);
-    }
-    setSelectedCity('');
-  }, [selectedDistrict]);
 
   const fetchStates = useCallback(async (params = {}) => {
     try {
@@ -159,12 +122,69 @@ export const useLocations = () => {
     }
   }, [selectedDistrict]);
 
+
+  // --- side effects ---
+
+  // Load basic data on mount
+  useEffect(() => {
+    fetchCountries();
+  }, [fetchCountries]);
+
+  // Update States when Country changes
+  useEffect(() => {
+    if (selectedCountry) {
+      fetchStates({ countryId: selectedCountry });
+    } else {
+      setStates([]);
+    }
+    setSelectedState('');
+    setSelectedCluster('');
+    setSelectedDistrict('');
+    setSelectedCity('');
+  }, [selectedCountry, fetchStates]);
+
+  // Update Clusters when State changes
+  useEffect(() => {
+    if (selectedState) {
+      fetchClusters(selectedState);
+    } else {
+      setClusters([]);
+    }
+    // Only reset children if the parent actually changed
+    setSelectedCluster('');
+    setSelectedDistrict('');
+    setSelectedCity('');
+  }, [selectedState, fetchClusters]);
+
+  // Update Districts when Cluster changes
+  useEffect(() => {
+    if (selectedCluster) {
+      fetchDistricts(selectedCluster);
+    } else {
+      setDistricts([]);
+    }
+    setSelectedDistrict('');
+    setSelectedCity('');
+  }, [selectedCluster, fetchDistricts]);
+
+  // Update Cities when District changes
+  useEffect(() => {
+    if (selectedDistrict) {
+      fetchCities(selectedDistrict);
+    } else {
+      setCities([]);
+    }
+    setSelectedCity('');
+  }, [selectedDistrict, fetchCities]);
+
   return {
     countries,
     states,
     clusters,
     districts,
     cities,
+    selectedCountry,
+    setSelectedCountry,
     selectedState,
     setSelectedState,
     selectedCluster,

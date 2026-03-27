@@ -1,5 +1,5 @@
 // Location data
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { Eye, EyeOff, ClipboardList, Layers, Zap } from 'lucide-react';
 import Chart from 'chart.js/auto';
 import { useLocations } from '../../../hooks/useLocations';
@@ -11,10 +11,13 @@ import { getAllManufacturers } from '../../../services/brand/brandApi';
 export default function AddInventory() {
   // Location hook
   const {
+    countries,
     states,
     clusters,
     districts,
     cities,
+    selectedCountry,
+    setSelectedCountry,
     selectedState,
     setSelectedState,
     selectedCluster,
@@ -96,6 +99,36 @@ export default function AddInventory() {
   // Refs
   const chartRef = useRef(null);
   const chartInstance = useRef(null);
+
+  // --- Compute Warehouse Counts by Location ---
+  const warehouseCounts = useMemo(() => {
+    const counts = {
+      countries: {},
+      states: {},
+      clusters: {},
+      districts: {},
+      cities: {}
+    };
+
+    if (!Array.isArray(warehousesList)) return counts;
+
+    warehousesList.forEach(w => {
+      // Safely handle both populated and ID forms
+      const countryId = w.state?.country?._id || w.state?.country;
+      const stateId = w.state?._id || w.state;
+      const clusterId = w.cluster?._id || w.cluster;
+      const districtId = w.district?._id || w.district;
+      const cityId = w.city?._id || w.city;
+
+      if (countryId) counts.countries[String(countryId)] = (counts.countries[String(countryId)] || 0) + 1;
+      if (stateId) counts.states[String(stateId)] = (counts.states[String(stateId)] || 0) + 1;
+      if (clusterId) counts.clusters[String(clusterId)] = (counts.clusters[String(clusterId)] || 0) + 1;
+      if (districtId) counts.districts[String(districtId)] = (counts.districts[String(districtId)] || 0) + 1;
+      if (cityId) counts.cities[String(cityId)] = (counts.cities[String(cityId)] || 0) + 1;
+    });
+
+    return counts;
+  }, [warehousesList]);
 
   // Fetch Initial Data
   useEffect(() => {
@@ -418,6 +451,7 @@ export default function AddInventory() {
 
   // Reset location selection
   const handleResetLocation = () => {
+    setSelectedCountry('');
     setSelectedState('');
     setSelectedCluster('');
     setSelectedDistrict('');
@@ -435,8 +469,8 @@ export default function AddInventory() {
       return;
     }
 
-    if (!selectedState || !selectedCluster || !selectedDistrict || !selectedCity) {
-      showToast('Please select a valid location (State, Cluster, District, City)', 'error');
+    if (!selectedCountry || !selectedState || !selectedCluster || !selectedDistrict || !selectedCity) {
+      showToast('Please select a valid location (Country, State, Cluster, District, City)', 'error');
       return;
     }
 
@@ -456,6 +490,7 @@ export default function AddInventory() {
 
     const payload = {
       warehouse: form.warehouse,
+      country: selectedCountry,
       state: selectedState,
       cluster: selectedCluster,
       district: selectedDistrict,
@@ -754,22 +789,27 @@ export default function AddInventory() {
       {/* Location Selection Section */}
       <div className={`location-section transition-all duration-500 overflow-hidden ${locationCardsVisible ? 'max-h-[1000px] opacity-100' : 'max-h-0 opacity-0 m-0 p-0'
         }`}>
-        {/* State Selection */}
+        {/* Country Selection */}
         <div className="mb-4">
-          <h4 className="mb-3 text-lg font-medium">Select State</h4>
+          <h4 className="mb-3 text-lg font-medium">Select Country</h4>
           <div className="row grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 my-4">
-            {states.map((state) => (
-              <div className="col mb-3" key={state._id}>
+            {countries.map((country) => (
+              <div className="col mb-3" key={country._id}>
                 <div
-                  className={`card h-full shadow text-center cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg border rounded-lg ${selectedState === state._id
+                  className={`card h-full shadow text-center cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg border rounded-lg ${selectedCountry === country._id
                     ? 'border-2 border-blue-500 bg-blue-50'
                     : 'border-gray-200 hover:border-blue-300'
                     }`}
-                  onClick={() => setSelectedState(state._id)}
+                  onClick={() => setSelectedCountry(country._id)}
                 >
-                  <div className="card-body p-4">
-                    <h5 className="card-title font-bold text-lg">{state.name}</h5>
-                    <p className="text-gray-600 mb-0">{state.code}</p>
+                  <div className="card-body p-4 text-center relative">
+                    {warehouseCounts.countries[country._id] > 0 && (
+                      <span className="absolute top-2 right-2 bg-blue-100 text-blue-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-blue-200 shadow-sm">
+                        {warehouseCounts.countries[country._id]} Warehouse
+                      </span>
+                    )}
+                    <h5 className="card-title font-bold text-lg">{country.name}</h5>
+                    <p className="text-xs text-gray-500 uppercase tracking-widest">{country.code}</p>
                   </div>
                 </div>
               </div>
@@ -777,17 +817,50 @@ export default function AddInventory() {
           </div>
         </div>
 
+        {/* State Selection */}
+        {selectedCountry && (
+          <div className="mb-4 transition-all duration-300">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-lg font-medium">Select State</h4>
+              <button
+                onClick={handleResetLocation}
+                className="text-xs text-blue-600 hover:text-blue-800 font-semibold uppercase tracking-wider"
+              >
+                Reset All Selection
+              </button>
+            </div>
+            <div className="row grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 my-4">
+              {states.map((state) => (
+                <div className="col mb-3" key={state._id}>
+                  <div
+                    className={`card h-full shadow text-center cursor-pointer transition-all duration-300 hover:scale-[1.02] hover:shadow-lg border rounded-lg ${selectedState === state._id
+                      ? 'border-2 border-blue-500 bg-blue-50'
+                      : 'border-gray-200 hover:border-blue-300'
+                      }`}
+                    onClick={() => setSelectedState(state._id)}
+                  >
+                    <div className="card-body p-4 relative">
+                      {warehouseCounts.states[state._id] > 0 && (
+                        <span className="absolute top-2 right-2 bg-green-100 text-green-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-green-200 shadow-sm">
+                          {warehouseCounts.states[state._id]} Warehouse
+                        </span>
+                      )}
+                      <h5 className="card-title font-bold text-lg">{state.name}</h5>
+                      <p className="text-gray-600 mb-0">{state.code}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {states.length === 0 && <p className="col-span-4 text-center py-8 text-gray-400 italic">No states found for selected country.</p>}
+            </div>
+          </div>
+        )}
+
         {/* Cluster Selection */}
         {selectedState && (
           <div className={`cluster-section transition-all duration-500 overflow-hidden`}>
             <div className="flex justify-between items-center mb-3">
               <h4 className="text-lg font-medium">Select Cluster</h4>
-              <button
-                onClick={handleResetLocation}
-                className="text-sm text-blue-600 hover:text-blue-800"
-              >
-                Reset Selection
-              </button>
             </div>
             <div className="row grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 my-4">
               {clusters.map((cluster) => (
@@ -799,13 +872,19 @@ export default function AddInventory() {
                       }`}
                     onClick={() => setSelectedCluster(cluster._id)}
                   >
-                    <div className="card-body p-4">
+                    <div className="card-body p-4 relative">
+                      {warehouseCounts.clusters[cluster._id] > 0 && (
+                        <span className="absolute top-2 right-2 bg-purple-100 text-purple-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-purple-200 shadow-sm">
+                          {warehouseCounts.clusters[cluster._id]} Warehouse
+                        </span>
+                      )}
                       <h6 className="card-title font-bold">{cluster.name}</h6>
                       {/* <p className="text-gray-600 mb-0">{currentState}</p> */}
                     </div>
                   </div>
                 </div>
               ))}
+              {clusters.length === 0 && <p className="col-span-4 text-center py-8 text-gray-400 italic">No clusters found for selected state.</p>}
             </div>
           </div>
         )}
@@ -824,12 +903,18 @@ export default function AddInventory() {
                       }`}
                     onClick={() => setSelectedDistrict(district._id)}
                   >
-                    <div className="card-body p-4">
+                    <div className="card-body p-4 relative">
+                      {warehouseCounts.districts[district._id] > 0 && (
+                        <span className="absolute top-2 right-2 bg-orange-100 text-orange-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-orange-200 shadow-sm">
+                          {warehouseCounts.districts[district._id]} Warehouse
+                        </span>
+                      )}
                       <h6 className="card-title font-bold">{district.name}</h6>
                     </div>
                   </div>
                 </div>
               ))}
+              {districts.length === 0 && <p className="col-span-4 text-center py-8 text-gray-400 italic">No districts found for selected cluster.</p>}
             </div>
           </div>
         )}
@@ -848,12 +933,18 @@ export default function AddInventory() {
                       }`}
                     onClick={() => setSelectedCity(city._id)}
                   >
-                    <div className="card-body p-4">
+                    <div className="card-body p-4 relative">
+                      {warehouseCounts.cities[city._id] > 0 && (
+                        <span className="absolute top-2 right-2 bg-indigo-100 text-indigo-700 text-[10px] font-bold px-1.5 py-0.5 rounded-full border border-indigo-200 shadow-sm">
+                          {warehouseCounts.cities[city._id]} Warehouse
+                        </span>
+                      )}
                       <h6 className="card-title font-bold">{city.name}</h6>
                     </div>
                   </div>
                 </div>
               ))}
+              {cities.length === 0 && <p className="col-span-4 text-center py-8 text-gray-400 italic">No cities found for selected district.</p>}
             </div>
           </div>
         )}

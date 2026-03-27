@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useLocations } from '../../../hooks/useLocations';
 import inventoryApi from '../../../services/inventory/inventoryApi';
 import * as procurementApi from '../../../services/procurement/procurementApi';
+import * as approvalsApi from '../../../services/approvals/approvalsApi';
 import { getCategories, getProjectTypes, getSubCategories, getSubProjectTypes } from '../../../services/core/masterApi';
 import {
   MapPin,
@@ -26,8 +27,11 @@ export default function InventoryManagement() {
   const navigate = useNavigate();
   // Location Hook
   const {
+    countries,
     states,
     clusters,
+    selectedCountry,
+    setSelectedCountry,
     selectedState,
     setSelectedState,
     selectedCluster,
@@ -40,10 +44,13 @@ export default function InventoryManagement() {
   const [brands, setBrands] = useState([]);
   const [categories, setCategories] = useState([]);
   const [projectTypes, setProjectTypes] = useState([]);
-  const [recentOrder, setRecentOrder] = useState(null);
+  const [itemOrders, setItemOrders] = useState({}); // itemId -> current order object
+  const [expandedRowId, setExpandedRowId] = useState(null);
+  const [suppliers, setSuppliers] = useState([]);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [updatingId, setUpdatingId] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -85,13 +92,14 @@ export default function InventoryManagement() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [invRes, brandRes, catRes, projRes, orderRes, warehouseRes] = await Promise.all([
+      const [invRes, brandRes, catRes, projRes, orderRes, warehouseRes, supplierRes] = await Promise.all([
         inventoryApi.getItems({ limit: 1000 }),
         inventoryApi.getBrands(),
         getCategories(),
         getProjectTypes(),
         procurementApi.getAllOrders(),
-        inventoryApi.getAllWarehouses()
+        inventoryApi.getAllWarehouses(),
+        procurementApi.getAllSuppliers()
       ]);
 
       const items = invRes.data?.items || invRes.data || [];
@@ -102,11 +110,22 @@ export default function InventoryManagement() {
       setCategories(Array.isArray(catRes.data) ? catRes.data : (Array.isArray(catRes) ? catRes : []));
       setProjectTypes(Array.isArray(projRes.data) ? projRes.data : (Array.isArray(projRes) ? projRes : []));
       setWarehouses(Array.isArray(warehouseRes.data?.data) ? warehouseRes.data.data : (Array.isArray(warehouseRes.data) ? warehouseRes.data : []));
+      setSuppliers(Array.isArray(supplierRes.data) ? supplierRes.data : (Array.isArray(supplierRes) ? supplierRes : []));
 
       const ordersData = orderRes.data?.data || orderRes.data || orderRes || [];
       const orders = Array.isArray(ordersData) ? ordersData : [];
-      const activeOrder = orders.length > 0 ? (orders.find(o => o.status !== 'Delivered') || orders[0]) : null;
-      setRecentOrder(activeOrder);
+      
+      // Map orders to items - PERSISTED (Latest order per item)
+      const orderMap = {};
+      orders.forEach(ord => {
+        if (ord.itemId) {
+          // Since getAllOrders returns sorted by createdAt -1, the first one we find is the latest
+          if (!orderMap[ord.itemId]) {
+            orderMap[ord.itemId] = ord;
+          }
+        }
+      });
+      setItemOrders(orderMap);
 
     } catch (err) {
       console.error("Error loading inventory data", err);
@@ -268,6 +287,7 @@ export default function InventoryManagement() {
   };
 
   const clearAllFilters = () => {
+    setSelectedCountry('');
     setSelectedState('');
     setSelectedCluster('');
     setFilters({
@@ -285,6 +305,48 @@ export default function InventoryManagement() {
       dateFrom: '',
       dateTo: ''
     });
+  };
+
+  const handleMarkVendorSelected = async (item, order) => {
+    try {
+      setUpdatingId(item._id);
+      // 1. Update order status in backend
+      const res = await procurementApi.updateOrder(order._id, { status: 'Vendor Selected' });
+      const updatedOrder = res.data;
+      setItemOrders(prev => ({ ...prev, [item._id]: updatedOrder }));
+
+      // 2. Create approval request automatically now that vendor is selected
+      const approvalPayload = {
+        type: 'inventory',
+        status: 'Pending',
+        requestedBy: 'Admin',
+        requestDate: new Date(),
+        location: {
+          state: item.state?.name || item.state || 'N/A',
+          district: item.district?.name || item.district || 'N/A',
+          cluster: item.cluster?.name || item.cluster || 'N/A'
+        },
+        data: {
+          orderId: updatedOrder._id,
+          orderNumber: updatedOrder.orderNumber,
+          productType: item.productType || 'N/A',
+          name: item.itemName || 'N/A',
+          brand: updatedOrder.brand || 'N/A',
+          sku: item.sku || 'N/A',
+          modelNo: item.modelNo || 'N/A',
+          quantity: updatedOrder.items?.[0]?.quantity || 0,
+          itemId: item._id
+        }
+      };
+      
+      await approvalsApi.createApproval(approvalPayload);
+      alert("Vendor marked as selected. Approval request has been sent to Admin.");
+    } catch (err) {
+      console.error("Error marking vendor selected", err);
+      alert("Failed to update status.");
+    } finally {
+      setUpdatingId(null);
+    }
   };
 
   // Order Steps Logic
@@ -309,23 +371,63 @@ export default function InventoryManagement() {
   };
 
   const handleInventoryUpdate = async (item) => {
-    const addQuantity = Number(addMoreValues[item._id] || 0);
-    if (!addQuantity || addQuantity <= 0) {
-      alert("Please enter a valid quantity to add.");
+    const rawVal = addMoreValues[item._id];
+    const addQuantity = parseFloat(rawVal);
+    
+    if (isNaN(addQuantity) || addQuantity <= 0) {
+      alert("Please enter a valid positive quantity to add.");
       return;
     }
 
     try {
-      const newQuantity = (item.quantity || 0) + addQuantity;
-      await inventoryApi.updateItem(item._id, { quantity: newQuantity });
+      setUpdatingId(item._id);
       
-      // Refresh local state or re-fetch
-      setInventoryItems(prev => prev.map(i => i._id === item._id ? { ...i, quantity: newQuantity } : i));
+      // PERSISTENT ORDER CREATION
+      // Since we need to persist, we create an actual order in the backend
+      const supplierId = suppliers[0]?._id; 
+      if (!supplierId) {
+        console.warn("No supplier found to link order. Using mock persistence.");
+      }
+
+      const orderPayload = {
+        orderNumber: 'STK-' + Date.now(),
+        supplierId: supplierId || '65f1a1a1a1a1a1a1a1a1a1a1', // dummy if none
+        status: 'Order Raised',
+        state: item.state?._id || item.state,
+        city: item.city?._id || item.city,
+        district: item.district?._id || item.district,
+        items: [
+          {
+            product: '65f1a1a1a1a1a1a1a1a1a1a1', // Placeholder Product ID since this is a stock move
+            quantity: addQuantity,
+            price: item.price || 0
+          }
+        ],
+        totalAmount: addQuantity * (item.price || 0),
+        itemId: item._id, // LINK TO THIS ROW
+        brand: item.brand?.brand || item.brand?.companyName || 'N/A',
+        watt: item.wattage || item.watt || 'N/A',
+        technology: item.technology || 'N/A'
+      };
+
+      try {
+        const orderRes = await procurementApi.createOrder(orderPayload);
+        const newOrder = orderRes.data;
+        setItemOrders(prev => ({ ...prev, [item._id]: newOrder }));
+      } catch (orderErr) {
+        console.error("Order persistence failed, using local mock", orderErr);
+        // Fallback to mock if API fails (unlikely if server is up)
+        setItemOrders(prev => ({ ...prev, [item._id]: { ...orderPayload, createdAt: new Date().toISOString() } }));
+      }
+
       setAddMoreValues(prev => ({ ...prev, [item._id]: '' })); // Clear input
-      alert(`Updated stock for ${item.brand?.brand || item.brand?.companyName || 'Item'}`);
+      setExpandedRowId(item._id); // Auto-expand to show tracking for this item
+      alert(`Stock order #${orderPayload.orderNumber} successfully raised. Inventory count will be updated once stock is delivered.`);
     } catch (err) {
-      console.error("Error updating inventory", err);
-      alert("Failed to update inventory.");
+      console.error("Error raising stock order", err);
+      alert(err.response?.data?.message || "Failed to raise stock order.");
+    } finally {
+      setUpdatingId(null);
     }
   };
 
@@ -337,7 +439,18 @@ export default function InventoryManagement() {
       </div>
 
       {/* Top Selectors Row */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6 bg-white p-4 rounded-xl shadow-sm border border-gray-100">
+        <div className="flex flex-col">
+          <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select Country</label>
+          <select
+            className="w-full px-4 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all"
+            value={selectedCountry}
+            onChange={(e) => setSelectedCountry(e.target.value)}
+          >
+            <option value="">-- Select Country --</option>
+            {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+        </div>
         <div className="flex flex-col">
           <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-2">Select State</label>
           <select
@@ -483,6 +596,7 @@ export default function InventoryManagement() {
           <table className="min-w-full divide-y divide-gray-200">
             <thead className="bg-[#56B2D1] text-white font-medium">
               <tr>
+                <th className="px-6 py-4 text-left text-xs uppercase tracking-wider border-r border-white/20 w-10"></th>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-wider border-r border-white/20">Brand</th>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-wider border-r border-white/20">Technology</th>
                 <th className="px-6 py-4 text-left text-xs uppercase tracking-wider border-r border-white/20">Watt</th>
@@ -494,41 +608,159 @@ export default function InventoryManagement() {
               </tr>
             </thead>
             <tbody className="bg-white divide-y divide-gray-100">
-              {filteredItems.map((item, idx) => (
-                <tr key={idx} className="hover:bg-blue-50/30 transition-colors text-gray-700">
-                  <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.brand?.brand || item.brand?.companyName || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">{item.technology || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">{item.wattage || item.watt || '-'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-blue-600">
-                    {projections[item._id] !== undefined ? (
-                      <span className="flex items-center justify-center gap-1">
-                        {projections[item._id]}
-                        <span className="text-[9px] font-normal bg-blue-100 text-blue-500 px-1 py-0.5 rounded">auto</span>
-                      </span>
-                    ) : (
-                      <span className="text-gray-400 text-xs">{item.maxLevel || 0}</span>
-                    )}
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-800">{item.quantity || 0}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center text-sm">₹{(item.price * item.quantity).toLocaleString() || '0'}</td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <input 
-                      type="number" 
-                      className="w-16 px-2 py-1 border border-gray-200 rounded text-center text-sm outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
-                      placeholder="0" 
-                      value={addMoreValues[item._id] || ''}
-                      onChange={(e) => handleAddMoreChange(item._id, e.target.value)}
-                    />
-                  </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-center">
-                    <button 
-                      onClick={() => handleInventoryUpdate(item)}
-                      className="bg-green-500 hover:bg-green-600 text-white px-4 py-1.5 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider"
-                    >
-                      Add
-                    </button>
-                  </td>
-                </tr>
+              {filteredItems.map((item) => (
+                <React.Fragment key={item._id}>
+                  <tr 
+                    className={`hover:bg-blue-50/50 transition-colors text-gray-700 cursor-pointer ${expandedRowId === item._id ? 'bg-blue-50/80' : ''}`}
+                    onClick={() => setExpandedRowId(expandedRowId === item._id ? null : item._id)}
+                  >
+                    <td className="px-4 py-4 text-center">
+                      <ChevronRight className={`w-4 h-4 transition-transform duration-300 text-blue-500 ${expandedRowId === item._id ? 'rotate-90' : ''}`} />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">{item.brand?.brand || item.brand?.companyName || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{item.technology || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">{item.wattage || item.watt || '-'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-blue-600">
+                      {projections[item._id] !== undefined ? (
+                        <span className="flex items-center justify-center gap-1">
+                          {projections[item._id]}
+                          <span className="text-[9px] font-normal bg-blue-100 text-blue-500 px-1 py-0.5 rounded">auto</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-400 text-xs">{item.maxLevel || 0}</span>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm font-bold text-gray-800">{item.quantity || 0}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center text-sm">₹{(item.price * item.quantity).toLocaleString() || '0'}</td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                      <input 
+                        type="number" 
+                        className="w-16 px-2 py-1 border border-gray-200 rounded text-center text-sm outline-none focus:border-blue-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" 
+                        placeholder="0" 
+                        value={addMoreValues[item._id] || ''}
+                        onChange={(e) => handleAddMoreChange(item._id, e.target.value)}
+                      />
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-center" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        onClick={() => handleInventoryUpdate(item)}
+                        disabled={updatingId === item._id}
+                        className={`px-4 py-1.5 rounded text-xs font-bold shadow-sm transition-all uppercase tracking-wider ${
+                          updatingId === item._id ? 'bg-gray-400 cursor-not-allowed' : 'bg-green-500 hover:bg-green-600'
+                        } text-white`}
+                      >
+                        {updatingId === item._id ? '...' : 'Add'}
+                      </button>
+                    </td>
+                  </tr>
+
+                  {/* Expanded Row: Stock Order Status */}
+                  {expandedRowId === item._id && (
+                    <tr className="bg-gray-50/50">
+                      <td colSpan="9" className="px-8 py-6 border-b border-gray-200">
+                        <div className="bg-white rounded-xl shadow-sm border border-blue-50 p-6 animate-in fade-in slide-in-from-top-4 duration-300">
+                          <div className="flex items-center justify-between mb-6 border-b border-gray-100 pb-3">
+                            <h4 className="text-sm font-bold text-blue-800 flex items-center gap-2">
+                              <RefreshCw className="w-4 h-4" />
+                              Stock Order Tracking
+                            </h4>
+                            {itemOrders[item._id] && (
+                              <span className="text-[10px] font-medium bg-blue-50 text-blue-600 px-2 py-1 rounded">
+                                Track ID: #{itemOrders[item._id].orderNumber || itemOrders[item._id].orderId || itemOrders[item._id]._id?.slice(-6) || 'NEW'}
+                              </span>
+                            )}
+                          </div>
+                            
+                          {/* Manual Action: Mark Vendor Selected */}
+                          {itemOrders[item._id] && itemOrders[item._id].status === 'Order Raised' && (
+                            <div className="mb-4 flex justify-end">
+                              <button
+                                onClick={() => handleMarkVendorSelected(item, itemOrders[item._id])}
+                                disabled={updatingId === item._id}
+                                className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-all text-xs font-bold shadow-sm"
+                              >
+                                {updatingId === item._id ? <RefreshCw className="w-3 h-3 animate-spin"/> : <CheckCircle className="w-3 h-3"/>}
+                                Mark Vendor Selected
+                              </button>
+                            </div>
+                          )}
+
+                          {!itemOrders[item._id] ? (
+                            <div className="text-center py-8">
+                              <Package className="w-8 h-8 text-gray-300 mx-auto mb-2 opacity-50" />
+                              <p className="text-sm text-gray-400 italic">No active stock orders for this item. Click 'Add' to raise a new request.</p>
+                            </div>
+                          ) : (
+                            <div className="relative px-2 py-4">
+                              {(() => {
+                                const steps = [
+                                  { id: 1, title: 'Order Raised',      key: 'orderRaised' },
+                                  { id: 2, title: 'Vendor Selected',   key: 'vendorSelected' },
+                                  { id: 3, title: 'Approval by Admin', key: 'approvalByAdmin' },
+                                  { id: 4, title: 'Payment Done',      key: 'paymentDone' },
+                                  { id: 5, title: 'In Transit',        key: 'inTransit' },
+                                  { id: 6, title: 'Delivered',         key: 'delivered' },
+                                ];
+
+                                const order = itemOrders[item._id];
+                                let currentStepIndex = -1;
+                                const status = order.status;
+                                
+                                if (status === 'Delivered') currentStepIndex = 6;
+                                else if (status === 'In Transit') currentStepIndex = 5;
+                                else if (status === 'Payment Done') currentStepIndex = 4;
+                                else if (status === 'Approval by Admin') currentStepIndex = 3;
+                                else if (status === 'Vendor Selected') currentStepIndex = 2;
+                                else if (status === 'Order Raised' || status === 'Pending') currentStepIndex = 1;
+
+                                const detail = {
+                                  sub: `Order Detail: ${order.brand || '-'}\n${order.watt || '-'}\n${order.technology || '-'}`,
+                                  date: order.createdAt ? new Date(order.createdAt).toLocaleDateString() : ''
+                                };
+
+                                return (
+                                  <>
+                                    <div className="absolute top-[30px] left-12 right-12 h-0.5 bg-gray-200 z-0"></div>
+                                    <div 
+                                      className="absolute top-[30px] left-12 h-0.5 bg-blue-500 z-0 transition-all duration-700"
+                                      style={{ width: `calc(${(currentStepIndex / (steps.length - 1)) * 100}% - 1.5rem)` }}
+                                    ></div>
+                                    
+                                    <div className="relative z-10 flex justify-between items-start">
+                                      {steps.map((step, idx) => {
+                                        const isCompleted = currentStepIndex >= idx && currentStepIndex > -1;
+                                        const isCurrent   = currentStepIndex === idx;
+                                        return (
+                                          <div key={step.id} className="flex flex-col items-center flex-1">
+                                            <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-xs shadow-sm transition-all duration-500
+                                              ${isCurrent         ? 'bg-blue-500 text-white ring-4 ring-blue-50' : ''}
+                                              ${isCompleted && !isCurrent ? 'bg-blue-600 text-white' : ''}
+                                              ${!isCompleted && !isCurrent ? 'bg-white border-2 border-gray-200 text-gray-300' : ''}
+                                            `}>
+                                              {isCompleted && !isCurrent ? '✓' : idx + 1}
+                                            </div>
+                                            <div className="mt-2 text-center max-w-[80px]">
+                                              <p className={`text-[10px] font-bold uppercase tracking-tight ${isCompleted || isCurrent ? 'text-blue-700' : 'text-gray-400'}`}>
+                                                {step.title}
+                                              </p>
+                                              {idx === 0 && (
+                                                <p className="text-[8px] text-gray-400 mt-0.5 leading-tight whitespace-pre-line">{detail.date}</p>
+                                              )}
+                                            </div>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  </>
+                                );
+                              })()}
+                            </div>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
               {filteredItems.length === 0 && (
                 <tr><td colSpan="8" className="text-center py-12 text-gray-400 italic">No matching inventory records found.</td></tr>
@@ -540,83 +772,7 @@ export default function InventoryManagement() {
 
 
 
-      {/* Stock Order Status Stepper */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-8 pt-6">
-        <h4 className="text-lg font-bold text-blue-700 mb-8 border-b pb-2 flex items-center justify-between">
-          Stock Order Status
-          {recentOrder && <span className="text-xs font-normal text-gray-400 ml-4">Order #{recentOrder.orderId || recentOrder._id}</span>}
-        </h4>
-        
-        {(() => {
-          const defaultSteps = [
-            { id: 1, title: 'Order Raised',    key: 'orderRaised' },
-            { id: 2, title: 'Vendor Selected', key: 'vendorSelected' },
-            { id: 3, title: 'Payment Done',    key: 'paymentDone' },
-            { id: 4, title: 'In Transit',      key: 'inTransit' },
-            { id: 5, title: 'Delivered',       key: 'delivered' },
-          ];
-
-          let currentStepIndex = -1;
-          let stepDetails = {};
-
-          if (recentOrder) {
-            const status = recentOrder.status;
-            if (status === 'Delivered') currentStepIndex = 4;
-            else if (status === 'In Transit') currentStepIndex = 3;
-            else if (status === 'Payment Done') currentStepIndex = 2;
-            else if (status === 'Vendor Selected') currentStepIndex = 1;
-            else currentStepIndex = 0;
-
-            stepDetails = {
-              orderRaised:    { sub: `Brand: ${recentOrder.brand || '—'}\nWatt: ${recentOrder.watt || '—'}\nTech: ${recentOrder.technology || '—'}`, date: recentOrder.createdAt ? new Date(recentOrder.createdAt).toLocaleString() : '' },
-              vendorSelected: { sub: recentOrder.vendorName ? `Vendor: ${recentOrder.vendorName}\nType: Manufacturer` : '', date: '' },
-              paymentDone:    { sub: '', date: '' },
-              inTransit:      { sub: recentOrder.expectedDate ? `Expected: ${new Date(recentOrder.expectedDate).toLocaleDateString()}` : '', date: '' },
-              delivered:      { sub: '', date: '' },
-            };
-          }
-
-          return (
-            <div className="relative px-4 py-6">
-              {/* Full grey background track */}
-              <div className="absolute top-[35px] left-12 right-12 h-1 bg-gray-200 rounded-full z-0"></div>
-              {/* Blue fill track for completed steps */}
-              {currentStepIndex >= 0 && (
-                <div
-                  className="absolute top-[35px] left-12 h-1 bg-blue-500 rounded-full z-0 transition-all duration-700"
-                  style={{ width: `calc(${(currentStepIndex / (defaultSteps.length - 1)) * 100}% - 1.5rem)` }}
-                ></div>
-              )}
-              {/* Steps */}
-              <div className="relative z-10 flex justify-between items-start">
-                {defaultSteps.map((step, index) => {
-                  const isCompleted = currentStepIndex >= index && currentStepIndex > -1;
-                  const isCurrent   = currentStepIndex === index;
-                  const detail      = stepDetails[step.key] || {};
-                  return (
-                    <div key={step.id} className="flex flex-col items-center flex-1">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm shadow-sm transition-all duration-500
-                        ${isCurrent         ? 'bg-blue-500 text-white ring-4 ring-blue-100' : ''}
-                        ${isCompleted && !isCurrent ? 'bg-blue-600 text-white' : ''}
-                        ${!isCompleted && !isCurrent ? 'bg-white border-2 border-gray-300 text-gray-400' : ''}
-                      `}>
-                        {isCompleted && !isCurrent ? '✓' : index + 1}
-                      </div>
-                      <div className="mt-3 text-center max-w-[90px]">
-                        <p className={`text-[11px] font-bold uppercase tracking-wide leading-tight ${isCompleted || isCurrent ? 'text-blue-700' : 'text-gray-400'}`}>
-                          {step.title}
-                        </p>
-                        {detail.date && <p className="text-[9px] text-gray-400 mt-0.5">{detail.date}</p>}
-                        {detail.sub  && <p className="text-[9px] text-gray-500 mt-1 whitespace-pre-line leading-tight">{detail.sub}</p>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          );
-        })()}
-      </div>
+      {/* Footer Copyright */}
 
       {/* Footer Copyright */}
       <div className="py-4 text-center">

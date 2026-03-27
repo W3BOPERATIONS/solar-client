@@ -38,6 +38,7 @@ import {
   getProjectCategoryMappings
 } from '../../../../services/settings/orderProcurementSettingApi';
 import * as locationApi from '../../../../services/core/locationApi';
+import Select from 'react-select';
 
 const BrandSupplierOverview = () => {
   // --- Data State ---
@@ -104,7 +105,7 @@ const BrandSupplierOverview = () => {
     subCategory: '',
     projectType: '',
     subProjectType: '',
-    procurementType: '',
+    procurementType: [],
     contact: '',
     email: ''
   });
@@ -376,7 +377,7 @@ const BrandSupplierOverview = () => {
     if (subCategories.length > 0 && !subCategories.includes(supplier.subCategory)) return false;
     if (projectTypes.length > 0 && !projectTypes.includes(supplier.projectType)) return false;
     if (subProjectTypes.length > 0 && !subProjectTypes.includes(supplier.subProjectType)) return false;
-    if (procurementTypes.length > 0 && !procurementTypes.includes(supplier.procurementType)) return false;
+    if (procurementTypes.length > 0 && !procurementTypes.some(t => Array.isArray(supplier.procurementType) ? supplier.procurementType.includes(t) : supplier.procurementType === t)) return false;
 
     return true;
   });
@@ -462,7 +463,7 @@ const BrandSupplierOverview = () => {
       subCategory: '',
       projectType: '',
       subProjectType: '',
-      procurementType: '',
+      procurementType: [],
       contact: '',
       email: ''
     });
@@ -494,7 +495,7 @@ const BrandSupplierOverview = () => {
       subCategory: supplier.subCategory,
       projectType: supplier.projectType,
       subProjectType: supplier.subProjectType,
-      procurementType: supplier.procurementType,
+      procurementType: Array.isArray(supplier.procurementType) ? supplier.procurementType : (supplier.procurementType ? [supplier.procurementType] : []),
       contact: supplier.contact || '',
       email: supplier.email || ''
     });
@@ -867,7 +868,7 @@ const BrandSupplierOverview = () => {
                     if (field !== 'subCategory' && subCategories.length > 0 && !subCategories.includes(s.subCategory)) return false;
                     if (field !== 'projectType' && projectTypes.length > 0 && !projectTypes.includes(s.projectType)) return false;
                     if (field !== 'subProjectType' && subProjectTypes.length > 0 && !subProjectTypes.includes(s.subProjectType)) return false;
-                    if (field !== 'procurementType' && procurementTypes.length > 0 && !procurementTypes.includes(s.procurementType)) return false;
+                    if (field !== 'procurementType' && procurementTypes.length > 0 && !procurementTypes.some(t => Array.isArray(s.procurementType) ? s.procurementType.includes(t) : s.procurementType === t)) return false;
 
                     return true;
                   })
@@ -1020,7 +1021,7 @@ const BrandSupplierOverview = () => {
                     <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.subCategory || '-'}</td>
                     <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.projectType || '-'}</td>
                     <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.subProjectType || '-'}</td>
-                    <td className="px-6 py-4 text-sm whitespace-nowrap">{supplier.procurementType || '-'}</td>
+                    <td className="px-6 py-4 text-sm whitespace-nowrap">{Array.isArray(supplier.procurementType) ? supplier.procurementType.join(', ') : (supplier.procurementType || '-')}</td>
                     <td className="px-6 py-4 text-sm flex gap-2">
                       <button onClick={() => handleEdit(supplier)} className="text-blue-600 hover:bg-blue-50 p-1 rounded"><Edit2 size={16} /></button>
                       <button onClick={() => handleDelete(supplier._id)} className="text-red-600 hover:bg-red-50 p-1 rounded"><Trash2 size={16} /></button>
@@ -1146,13 +1147,18 @@ const BrandSupplierOverview = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">Order Procurement</label>
-                  <select className="w-full border p-2 rounded" value={modalForm.procurementType} onChange={e => setModalForm({ ...modalForm, procurementType: e.target.value })}>
-                    <option value="">Select Order Procurement</option>
-                    {[...new Set(masterSupplierTypes.map(t => t.assignModules).filter(Boolean))].sort().map(module => (
-                      <option key={module} value={module}>{module}</option>
-                    ))}
-                  </select>
+                  <label className="block text-sm font-medium mb-1">Order Procurement</label>
+                  <Select
+                    isMulti
+                    className="text-sm"
+                    placeholder="Select Order Procurement"
+                    options={[...new Set(masterSupplierTypes.map(t => t.assignModules).filter(Boolean))].sort().map(module => ({
+                      label: module,
+                      value: module
+                    }))}
+                    value={(modalForm.procurementType || []).map(val => ({ label: val, value: val }))}
+                    onChange={(selected) => setModalForm({ ...modalForm, procurementType: selected ? selected.map(o => o.value) : [] })}
+                  />
                 </div>
               </div>
 

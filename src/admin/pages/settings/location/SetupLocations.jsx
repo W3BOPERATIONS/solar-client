@@ -11,7 +11,9 @@ import {
   X,
   AlertCircle,
   Loader2,
-  Upload
+  Upload,
+  Download,
+  Package
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -378,7 +380,13 @@ export default function SetupLocations() {
         if (pendingCities.length > 0) {
           // Bulk Create
           const response = await locationAPI.bulkCreateCities({ cities: pendingCities });
-          setSuccess(response.data.message || `${pendingCities.length} Cities imported successfully!`);
+          const { summary } = response.data;
+          
+          let msg = `Bulk Upload Complete!`;
+          if (summary) {
+            msg = `✅ ${summary.added} added, ⏭️ ${summary.skipped} skipped (duplicates or existing). Total processed: ${summary.total}`;
+          }
+          setSuccess(msg);
           loadCities({ stateId: formData.state });
         } else {
           // Single Create/Update
@@ -484,9 +492,26 @@ export default function SetupLocations() {
             };
           });
 
+          // 1. FILTER INTERNAL DUPLICATES (Local to Excel File)
+          const uniqueExcelCities = [];
+          const excelSeen = new Set();
+          let internalDuplicates = 0;
+
+          newCities.forEach(city => {
+            const key = `${city.name.toLowerCase()}-${(city.pincodes || []).sort().join(',')}`;
+            if (!excelSeen.has(key)) {
+              excelSeen.add(key);
+              uniqueExcelCities.push(city);
+            } else {
+              internalDuplicates++;
+            }
+          });
+
           // Store for preview instead of immediate upload
-          setPendingCities(newCities);
-          setSuccess(`Excel parsed successfully! Review ${newCities.length} cities below.`);
+          setPendingCities(uniqueExcelCities);
+          let parseMsg = `Excel parsed! Found ${uniqueExcelCities.length} unique cities.`;
+          if (internalDuplicates > 0) parseMsg += ` (${internalDuplicates} duplicates in file ignored)`;
+          setSuccess(parseMsg);
 
         } catch (err) {
           setError(err.message || 'Error processing Excel file. Make sure it has "City Name" and "Pincodes" columns.');
@@ -517,10 +542,20 @@ export default function SetupLocations() {
     });
     setPendingCities([]);
     setNameError('');
-    setEditingId(null);
-    setShowForm(false);
     setSelectedMasterId(''); // Reset selected master ID
     setPincodeStr(''); // Reset pincode string
+  };
+
+  const downloadSampleExcel = () => {
+    const data = [
+      { 'City Name': 'Surat', 'Pincodes': '395007, 395008' },
+      { 'City Name': 'Ahmedabad', 'Pincodes': '380001, 380002' },
+      { 'City Name': 'Mumbai', 'Pincodes': '400001' }
+    ];
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Cities Sample");
+    XLSX.writeFile(workbook, "cities_upload_sample.xlsx");
   };
 
   const getDisplayData = () => {
@@ -781,20 +816,28 @@ export default function SetupLocations() {
                     </div>
                   ) : (
                     <>
-                      <div className="flex gap-4 items-center p-4 bg-orange-50 border border-orange-200 rounded-lg mt-4">
-                        <div className="flex-1">
-                          <label className="font-semibold text-gray-800 block text-lg mb-1 flex items-center gap-2">
-                            <Upload size={20} className="text-orange-500" /> Bulk Upload Cities
-                          </label>
-                          <p className="text-sm text-gray-600 mb-2">Upload Excel to import cities as <b>{formData.areaType}</b>. Needs "City Name" and "Pincodes" columns.</p>
+                        <div className="flex gap-4 items-center p-6 bg-orange-50/50 border border-orange-200 rounded-2xl mt-4 shadow-sm">
+                          <div className="flex-1">
+                            <label className="font-bold text-orange-900 block text-xl mb-1 flex items-center gap-2">
+                              <Upload size={24} className="text-orange-500" /> Bulk Upload Cities
+                            </label>
+                            <p className="text-sm text-orange-700/80 mb-2">Upload Excel to import cities as <b className="text-orange-900">{formData.areaType}</b>.</p>
+                            <button
+                              type="button"
+                              onClick={downloadSampleExcel}
+                              className="text-orange-600 hover:text-orange-800 text-xs font-bold flex items-center gap-1 underline decoration-2 underline-offset-4"
+                            >
+                              <Download size={12} /> Download Sample File
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-2">
+                            <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-orange-400 text-orange-600 rounded-xl font-bold hover:bg-orange-50 cursor-pointer shadow-sm transition-all disabled:opacity-50">
+                              {uploadingExcel ? <Loader2 size={20} className="animate-spin" /> : <Package size={18} />}
+                              {uploadingExcel ? 'Processing...' : 'Choose Excel File'}
+                              <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" disabled={uploadingExcel || editingId} />
+                            </label>
+                          </div>
                         </div>
-                        <div>
-                          <label className="inline-flex items-center justify-center gap-2 px-6 py-3 bg-white border-2 border-orange-400 text-orange-600 rounded-xl font-bold hover:bg-orange-50 cursor-pointer shadow-sm transition-all disabled:opacity-50">
-                            {uploadingExcel ? <Loader2 size={20} className="animate-spin" /> : 'Choose Excel File'}
-                            <input type="file" accept=".xlsx, .xls, .csv" onChange={handleFileUpload} className="hidden" disabled={uploadingExcel || editingId} />
-                          </label>
-                        </div>
-                      </div>
 
                       <div className="relative flex py-3 items-center">
                         <div className="flex-grow border-t border-gray-300"></div>

@@ -57,6 +57,16 @@ export default function SupplierType() {
   const [openSelect, setOpenSelect] = useState(null);
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [tempModules, setTempModules] = useState([]);
+  const [editFormData, setEditFormData] = useState({
+    loginTypeName: '',
+    categories: [],
+    subCategories: [],
+    projectTypes: [],
+    subTypes: [],
+    assignModules: [],
+    orderTat: '',
+    modulesTasks: []
+  });
   const [editingTypeId, setEditingTypeId] = useState(null); // null = creating, id = editing existing row
 
 
@@ -69,23 +79,42 @@ export default function SupplierType() {
 
   const handleOpenEditTaskModal = (type) => {
     setEditingTypeId(type._id);
-    setTempModules(Array.isArray(type.modulesTasks) ? type.modulesTasks : []);
+    setEditFormData({
+      loginTypeName: type.loginTypeName || '',
+      categories: Array.isArray(type.category) ? type.category : (type.category ? [type.category] : []),
+      subCategories: Array.isArray(type.subCategory) ? type.subCategory : (type.subCategory ? [type.subCategory] : []),
+      projectTypes: Array.isArray(type.projectType) ? type.projectType : (type.projectType ? [type.projectType] : []),
+      subTypes: Array.isArray(type.subType) ? type.subType : (type.subType ? [type.subType] : []),
+      assignModules: Array.isArray(type.assignModules) ? type.assignModules : (type.assignModules ? [type.assignModules] : []),
+      orderTat: type.orderTat || '10 Days',
+      modulesTasks: Array.isArray(type.modulesTasks) ? type.modulesTasks : []
+    });
     setShowTaskModal(true);
   };
 
   const handleSaveTasks = async () => {
     if (editingTypeId) {
-      // Update existing supplier type
+      // Update existing supplier type (all fields)
       try {
-        await updateSupplierType(editingTypeId, { modulesTasks: tempModules });
-        toast.success('Tasks updated successfully');
+        const payload = {
+          loginTypeName: editFormData.loginTypeName,
+          category: editFormData.categories,
+          subCategory: editFormData.subCategories,
+          projectType: editFormData.projectTypes,
+          subType: editFormData.subTypes,
+          assignModules: editFormData.assignModules,
+          orderTat: editFormData.orderTat,
+          modulesTasks: editFormData.modulesTasks
+        };
+        await updateSupplierType(editingTypeId, payload);
+        toast.success('Supplier Type updated successfully');
         fetchTypes();
       } catch (error) {
-        console.error('Error updating tasks:', error);
-        toast.error('Failed to update tasks');
+        console.error('Error updating supplier type:', error);
+        toast.error('Failed to update supplier type');
       }
     } else {
-      // New row
+      // New row - only tasks come from modal
       setFormData(prev => ({ ...prev, modulesTasks: tempModules }));
     }
     setShowTaskModal(false);
@@ -93,13 +122,23 @@ export default function SupplierType() {
   };
 
   const handleToggleTempModule = (name) => {
-    setTempModules(prev =>
-      prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]
-    );
+    if (editingTypeId) {
+      setEditFormData(prev => ({
+        ...prev,
+        modulesTasks: prev.modulesTasks.includes(name)
+          ? prev.modulesTasks.filter(m => m !== name)
+          : [...prev.modulesTasks, name]
+      }));
+    } else {
+      setTempModules(prev =>
+        prev.includes(name) ? prev.filter(m => m !== name) : [...prev, name]
+      );
+    }
   };
 
-  const handleToggleOption = (field, value) => {
-    setFormData(prev => {
+  const handleToggleOption = (field, value, isEdit = false) => {
+    const setState = isEdit ? setEditFormData : setFormData;
+    setState(prev => {
       const current = prev[field] || [];
       const isSelected = current.includes(value);
       const updated = isSelected
@@ -110,9 +149,6 @@ export default function SupplierType() {
 
       // If categories changed, clear dependent fields to avoid invalid combinations
       if (field === 'categories' && isSelected) {
-        // If we removed a category, we might want to filter out orphaned subcategories, 
-        // but for simplicity and better UX, we'll clear them if they were dependent.
-        // Actually, clearing everything below is safer when mappings change.
         nextState.subCategories = [];
         nextState.projectTypes = [];
         nextState.subTypes = [];
@@ -918,10 +954,10 @@ export default function SupplierType() {
 
       {showTaskModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black bg-opacity-50">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-xl overflow-hidden animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-lg shadow-xl w-full max-w-4xl overflow-hidden animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
-              <h2 className="text-xl font-bold text-gray-800">Select Modules</h2>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-[#f8f9fa]">
+              <h2 className="text-xl font-bold text-[#14233c]">{editingTypeId ? 'Edit Supplier Type' : 'Select Modules Tasks'}</h2>
               <button
                 onClick={() => setShowTaskModal(false)}
                 className="text-gray-400 hover:text-gray-600 transition-colors"
@@ -931,38 +967,249 @@ export default function SupplierType() {
             </div>
 
             {/* Modal Body */}
-            <div className="p-8">
-              <p className="text-sm font-semibold text-gray-600 mb-5">Select Modules:</p>
-              <div className="space-y-3">
-                {AVAILABLE_MODULES.map((module) => (
-                  <label key={module} className="flex items-center group cursor-pointer w-fit">
-                    <input
-                      type="checkbox"
-                      className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                      checked={tempModules.includes(module)}
-                      onChange={() => handleToggleTempModule(module)}
-                    />
-                    <span className="ml-3 text-sm text-gray-700 group-hover:text-blue-600 transition-colors font-medium">
-                      {module}
-                    </span>
-                  </label>
-                ))}
+            <div className="p-8 max-h-[70vh] overflow-y-auto">
+              {editingTypeId ? (
+                <div className="grid grid-cols-2 gap-8 mb-8">
+                  {/* Left Column: Basic Info */}
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Type Of Login</label>
+                      <select
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
+                        value={editFormData.loginTypeName}
+                        onChange={e => setEditFormData({ ...editFormData, loginTypeName: e.target.value })}
+                      >
+                        <option value="">Select Login Type</option>
+                        {loginTypes.map(name => (
+                          <option key={name} value={name}>{name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'editCat' ? null : 'editCat')}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[38px]"
+                        >
+                          {editFormData.categories.length === 0 ? (
+                            <span className="text-gray-400">Select Categories</span>
+                          ) : (
+                            editFormData.categories.map(name => (
+                              <span key={name} className="bg-blue-100 text-blue-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('categories', name, true); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'editCat' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.categories.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">No categories found</div>
+                            ) : (
+                              masterLists.categories.map(cat => (
+                                <label key={cat._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={editFormData.categories.includes(cat.name)}
+                                    onChange={() => handleToggleOption('categories', cat.name, true)}
+                                  />
+                                  <span className="text-xs text-gray-700">{cat.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Sub Category</label>
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'editSubCat' ? null : 'editSubCat')}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[38px]"
+                        >
+                          {editFormData.subCategories.length === 0 ? (
+                            <span className="text-gray-400">Select Sub Categories</span>
+                          ) : (
+                            editFormData.subCategories.map(name => (
+                              <span key={name} className="bg-green-100 text-green-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('subCategories', name, true); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'editSubCat' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.subCategories.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">Select Category first</div>
+                            ) : (
+                              masterLists.subCategories.map(sub => (
+                                <label key={sub._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={editFormData.subCategories.includes(sub.name)}
+                                    onChange={() => handleToggleOption('subCategories', sub.name, true)}
+                                  />
+                                  <span className="text-xs text-gray-700">{sub.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-2">Assign Modules</label>
+                      <div className="grid grid-cols-1 gap-2.5 p-3 bg-gray-50 rounded-lg border border-gray-200">
+                        {['Bidding', 'P.O Order', 'Customize Kit Supply', 'Supply Contract'].map(mod => (
+                          <label key={mod} className="flex items-center group cursor-pointer">
+                            <input
+                              type="checkbox"
+                              className="h-4 w-4 text-cyan-600 border-gray-300 rounded focus:ring-cyan-500 cursor-pointer"
+                              checked={editFormData.assignModules.includes(mod)}
+                              onChange={() => handleToggleOption('assignModules', mod, true)}
+                            />
+                            <span className="ml-3 text-sm text-gray-700 group-hover:text-cyan-600 transition-colors font-medium">
+                              {mod}
+                            </span>
+                          </label>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Right Column: Project Info & TAT */}
+                  <div className="space-y-5">
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Project Type</label>
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'editProj' ? null : 'editProj')}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[38px]"
+                        >
+                          {editFormData.projectTypes.length === 0 ? (
+                            <span className="text-gray-400">Select Project Types</span>
+                          ) : (
+                            editFormData.projectTypes.map(name => (
+                              <span key={name} className="bg-orange-100 text-orange-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('projectTypes', name, true); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'editProj' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.projectTypes.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">Select Category & Sub Category first</div>
+                            ) : (
+                              masterLists.projectTypes.map(proj => (
+                                <label key={proj.id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={editFormData.projectTypes.includes(proj.name)}
+                                    onChange={() => handleToggleOption('projectTypes', proj.name, true)}
+                                  />
+                                  <span className="text-xs text-gray-700">{proj.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Sub Type</label>
+                      <div className="relative">
+                        <div
+                          onClick={() => setOpenSelect(openSelect === 'editSubType' ? null : 'editSubType')}
+                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded bg-white cursor-pointer flex flex-wrap gap-1 min-h-[38px]"
+                        >
+                          {editFormData.subTypes.length === 0 ? (
+                            <span className="text-gray-400">Select Sub Types</span>
+                          ) : (
+                            editFormData.subTypes.map(name => (
+                              <span key={name} className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.5 rounded flex items-center gap-1">
+                                {name} <X size={10} onClick={(e) => { e.stopPropagation(); handleToggleOption('subTypes', name, true); }} />
+                              </span>
+                            ))
+                          )}
+                        </div>
+                        {openSelect === 'editSubType' && (
+                          <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-48 overflow-y-auto">
+                            {masterLists.subProjectTypes.length === 0 ? (
+                              <div className="p-2 text-xs text-gray-500">Select Project Type first</div>
+                            ) : (
+                              masterLists.subProjectTypes.map(sub => (
+                                <label key={sub._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
+                                  <input
+                                    type="checkbox"
+                                    className="mr-2 h-3.5 w-3.5"
+                                    checked={editFormData.subTypes.includes(sub.name)}
+                                    onChange={() => handleToggleOption('subTypes', sub.name, true)}
+                                  />
+                                  <span className="text-xs text-gray-700">{sub.name}</span>
+                                </label>
+                              ))
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Order TAT setting</label>
+                      <input
+                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
+                        value={editFormData.orderTat}
+                        onChange={e => setEditFormData({ ...editFormData, orderTat: e.target.value })}
+                        placeholder="e.g. 10 Days"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="pt-4 border-t border-gray-100">
+                <p className="text-sm font-bold text-gray-700 mb-5">Assign Tasks To Modules:</p>
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                  {AVAILABLE_MODULES.map((module) => (
+                    <label key={module} className="flex items-center group cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors border border-gray-100">
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
+                        checked={(editingTypeId ? editFormData.modulesTasks : tempModules).includes(module)}
+                        onChange={() => handleToggleTempModule(module)}
+                      />
+                      <span className="ml-3 text-xs text-gray-700 group-hover:text-blue-600 transition-colors font-medium">
+                        {module}
+                      </span>
+                    </label>
+                  ))}
+                </div>
               </div>
             </div>
 
             {/* Modal Footer */}
-            <div className="flex items-center justify-end gap-3 p-4 bg-gray-50 border-t border-gray-100 mt-4">
+            <div className="flex items-center justify-end gap-3 p-6 bg-[#f8f9fa] border-t border-gray-100">
               <button
                 onClick={() => setShowTaskModal(false)}
-                className="px-6 py-2 text-sm font-bold text-white bg-[#7a8698] rounded hover:bg-[#6c7a8d] transition-colors shadow-sm"
+                className="px-6 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded hover:bg-gray-50 transition-colors shadow-sm"
               >
-                Close
+                Cancel
               </button>
               <button
                 onClick={handleSaveTasks}
-                className="px-6 py-2 text-sm font-bold text-white bg-[#0076a8] rounded hover:bg-blue-700 transition-colors shadow-sm"
+                className="px-8 py-2.5 text-sm font-bold text-white bg-[#0076a8] rounded hover:bg-blue-700 transition-colors shadow-sm"
               >
-                Save Selection
+                {editingTypeId ? 'Save Changes' : 'Save Selection'}
               </button>
             </div>
           </div>
