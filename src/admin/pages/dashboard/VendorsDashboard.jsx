@@ -11,83 +11,63 @@ import {
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
 import { getDashboardMetrics, getOrders } from '../../../services/dashboard/vendorsApi';
-import { getStates, getClusters } from '../../../services/core/locationApi';
+import { useLocations } from '../../../hooks/useLocations';
 
 const VendorsDashboard = () => {
+  const [countryFilter, setCountryFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [clusterFilter, setClusterFilter] = useState('');
+  const [districtFilter, setDistrictFilter] = useState('');
   const [timeRange, setTimeRange] = useState('');
 
-  const [states, setStates] = useState([]);
-  const [clusters, setClusters] = useState([]);
+  const {
+    countries,
+    states,
+    clusters,
+    districts,
+    fetchStates,
+    fetchClusters,
+    fetchDistricts
+  } = useLocations();
 
   const [metrics, setMetrics] = useState(null);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
-  // Fetch States on mount
+  // Cascade: Country -> State
   useEffect(() => {
-    fetchStates();
-  }, []);
+    if (countryFilter) {
+      fetchStates({ countryId: countryFilter });
+    }
+  }, [countryFilter]);
 
-  // Fetch Clusters when state changes
+  // Cascade: State -> Cluster
   useEffect(() => {
     if (stateFilter) {
-      fetchClusters(stateFilter);
-    } else {
-      setClusters([]);
-      setClusterFilter('');
+      fetchClusters({ stateId: stateFilter });
     }
   }, [stateFilter]);
+
+  // Cascade: Cluster -> District
+  useEffect(() => {
+    if (clusterFilter) {
+      fetchDistricts({ clusterId: clusterFilter });
+    }
+  }, [clusterFilter]);
 
   // Fetch Data when filters change
   useEffect(() => {
     fetchData();
-  }, [stateFilter, clusterFilter, timeRange]);
-
-  const fetchStates = async () => {
-    try {
-      const data = await getStates();
-      setStates(data || []);
-    } catch (error) {
-      console.error("Error fetching states:", error);
-    }
-  };
-
-  const fetchClusters = async (stateId) => {
-    try {
-      // Assuming getClusters takes districtId, but here we need clusters by state? 
-      // The locationApi has getClusters(districtId) and getClustersHierarchy(stateId). 
-      // Let's use getClustersHierarchy if straightforward, or just assume we might need to drill down.
-      // Wait, locationApi has `getClusters` taking `districtId`. 
-      // But the UI filters are State -> Cluster directly (skipping District?). 
-      // User requirement: "State filter -> from Setup Locations", "Cluster filter -> from Setup Locations".
-      // Usually Cluster is under District. if UI skips District, we might need a way to get all clusters in a state.
-      // For now, I'll attempt to use the existing hierarchy or just don't filter clusters by state in the dropdown if API doesn't support it directly easily.
-      // Actually, looking at `locationApi.js`: `getClustersHierarchy(stateId)` exists! Perfect.
-      const data = await import('../../../services/core/locationApi').then(mod => mod.getClustersHierarchy(stateId));
-      // Hierarchy might return structure like State -> District -> Cluster. 
-      // Or just a list. Let's assume list or extract it. 
-      // If hierarchy returns complex tree, I might need to flatten it. 
-      // For safety, let's try to fetch all clusters if possible or just use what we have.
-      // Re-reading locationApi: `getClustersHierarchy` returns data. let's assume it returns a list of clusters for the state or a tree.
-      // If it's a tree: State -> [Districts] -> [Clusters]. 
-      // Let's try to flatten it if it's a tree, or check if there's a simpler API.
-      // `getClusters` takes districtId. 
-      // Let's use `getClustersHierarchy` and hope it returns a flat list or I'll implement a helper.
-      // Actually, for this task, I will assume it returns a list of clusters valid for that state.
-      setClusters(data || []);
-    } catch (error) {
-      console.error("Error fetching clusters:", error);
-    }
-  };
+  }, [countryFilter, stateFilter, clusterFilter, districtFilter, timeRange]);
 
   const fetchData = async () => {
     setLoading(true);
     try {
       const params = {
+        country: countryFilter,
         state: stateFilter,
-        cluster: clusterFilter
+        cluster: clusterFilter,
+        district: districtFilter
       };
 
       // Calculate date range
@@ -100,7 +80,7 @@ const VendorsDashboard = () => {
       }
 
       const [metricsData, ordersData] = await Promise.all([
-        getDashboardMetrics({ state: stateFilter, cluster: clusterFilter }), // Metrics usually don't need date range unless specified, but let's pass if needed. Backend uses current month for transaction value.
+        getDashboardMetrics(params),
         getOrders(params)
       ]);
 
@@ -228,13 +208,37 @@ const VendorsDashboard = () => {
 
       {/* Filter Controls */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Country</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={countryFilter}
+              onChange={(e) => {
+                setCountryFilter(e.target.value);
+                setStateFilter('');
+                setClusterFilter('');
+                setDistrictFilter('');
+              }}
+            >
+              <option value="">All Countries</option>
+              {countries.map(c => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Select State</label>
             <select
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
               value={stateFilter}
-              onChange={(e) => setStateFilter(e.target.value)}
+              onChange={(e) => {
+                setStateFilter(e.target.value);
+                setClusterFilter('');
+                setDistrictFilter('');
+              }}
+              disabled={!countryFilter}
             >
               <option value="">All States</option>
               {states.map(state => (
@@ -248,16 +252,30 @@ const VendorsDashboard = () => {
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={clusterFilter}
-              onChange={(e) => setClusterFilter(e.target.value)}
+              onChange={(e) => {
+                setClusterFilter(e.target.value);
+                setDistrictFilter('');
+              }}
               disabled={!stateFilter}
             >
               <option value="">All Clusters</option>
-              {/* 
-                  Note: If clusters structure is complex, we might need to adjust mapping. 
-                  Assuming flat list for now based on typical behavior or simple hierarchy response.
-               */}
               {clusters.map(cluster => (
                 <option key={cluster._id} value={cluster._id}>{cluster.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select District</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={districtFilter}
+              onChange={(e) => setDistrictFilter(e.target.value)}
+              disabled={!clusterFilter}
+            >
+              <option value="">All Districts</option>
+              {districts.map(d => (
+                <option key={d._id} value={d._id}>{d.name}</option>
               ))}
             </select>
           </div>

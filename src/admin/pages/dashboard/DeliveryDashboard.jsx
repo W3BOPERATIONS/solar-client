@@ -34,8 +34,9 @@ export default function DeliveryDashboard() {
   const [activeKitTab, setActiveKitTab] = useState('kit');
 
   // Dynamic Location Data
-  const { states, clusters, districts, fetchStates, fetchClusters, fetchDistricts } = useLocations();
+  const { countries, states, clusters, districts, fetchStates, fetchClusters, fetchDistricts } = useLocations();
   const [filters, setFilters] = useState({
+    country: '',
     state: '',
     cluster: '',
     district: '',
@@ -58,18 +59,18 @@ export default function DeliveryDashboard() {
 
         // Prepare query params
         const params = {};
-        if (filters.state) params.state = states.find(s => s.name === filters.state)?._id || filters.state; // Try to resolve Name to ID if needed, or assume ID
-        // Note: useLocations usually returns objects. If filters are IDs, pass directly.
-        // Assuming filters are IDs from the select inputs below.
-        Object.keys(filters).forEach(key => {
-          if (filters[key]) params[key] = filters[key];
-        });
+        if (filters.country) params.country = filters.country;
+        if (filters.state) params.state = filters.state;
+        if (filters.cluster) params.cluster = filters.cluster;
+        if (filters.district) params.district = filters.district;
+        if (filters.deliveryType) params.deliveryType = filters.deliveryType;
+        if (filters.category) params.category = filters.category;
+        if (filters.timeline) params.timeline = filters.timeline;
 
         const res = await dashboardAPI.getDelivery(params);
         if (res.data.success) {
           setData(res.data.dashboard);
-          console.log('✅ Locations loaded dynamically from DB (confirmed via API response)');
-          console.log('📊 Chart updated with real DB data', res.data.dashboard.chart);
+          console.log('✅ Dashboard data loaded with ID-based filters');
         }
       } catch (e) {
         console.error('Failed to load dashboard:', e);
@@ -82,16 +83,18 @@ export default function DeliveryDashboard() {
   }, [filters]);
 
   const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
-
     // Cascading Logic
-    if (key === 'state') {
+    if (key === 'country') {
+      fetchStates({ countryId: value });
+      setFilters(prev => ({ ...prev, country: value, state: '', cluster: '', district: '' }));
+    } else if (key === 'state') {
       fetchClusters({ stateId: value });
       setFilters(prev => ({ ...prev, state: value, cluster: '', district: '' }));
-    }
-    if (key === 'cluster') {
+    } else if (key === 'cluster') {
       fetchDistricts({ clusterId: value });
       setFilters(prev => ({ ...prev, cluster: value, district: '' }));
+    } else {
+      setFilters(prev => ({ ...prev, [key]: value }));
     }
   };
 
@@ -150,7 +153,22 @@ export default function DeliveryDashboard() {
 
       {/* Filters */}
       <div className="space-y-4 mb-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-4">
+          {/* Country */}
+          <div className="relative">
+            <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <select
+              className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+              value={filters.country}
+              onChange={(e) => handleFilterChange('country', e.target.value)}
+            >
+              <option value="">All Countries</option>
+              {countries.map(c => (
+                <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* State */}
           <div className="relative">
             <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -158,6 +176,7 @@ export default function DeliveryDashboard() {
               className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
               value={filters.state}
               onChange={(e) => handleFilterChange('state', e.target.value)}
+              disabled={!filters.country}
             >
               <option value="">All States</option>
               {states.map(state => (

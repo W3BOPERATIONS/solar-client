@@ -64,9 +64,9 @@ export default function OrganizationChart() {
       ]);
 
       setCountries(countriesRes || []);
-      setDepartments(deptData || []);
-      setStatsData(statsRes.data?.data || []);
-      setChartData(chartRes.data?.data || []);
+      setDepartments(deptData.data || []);
+      setStatsData(statsRes.data?.data || statsRes.data || []);
+      setChartData(chartRes.data?.data || chartRes.data || []);
 
       // Default to first country if available
       if (countriesRes && countriesRes.length > 0) {

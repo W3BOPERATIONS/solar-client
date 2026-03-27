@@ -146,6 +146,24 @@ export default function SupplierType() {
         : [...current, value];
 
       let nextState = { ...prev, [field]: updated };
+ 
+      // Auto-assign tasks based on module selection
+      if (field === 'assignModules') {
+        const dependentTasks = {
+          'Bidding': 'Order Management(Bidding)'
+        };
+        const taskName = dependentTasks[value];
+        if (taskName) {
+          const currentTasks = prev.modulesTasks || [];
+          if (updated.includes(value)) {
+            if (!currentTasks.includes(taskName)) {
+              nextState.modulesTasks = [...currentTasks, taskName];
+            }
+          } else {
+            nextState.modulesTasks = currentTasks.filter(t => t !== taskName);
+          }
+        }
+      }
 
       // If categories changed, clear dependent fields to avoid invalid combinations
       if (field === 'categories' && isSelected) {
@@ -158,7 +176,7 @@ export default function SupplierType() {
       } else if (field === 'projectTypes' && isSelected) {
         nextState.subTypes = [];
       }
-
+ 
       return nextState;
     });
   };
@@ -631,7 +649,7 @@ export default function SupplierType() {
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Sub Type</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Modules Tasks</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Assign Modules</th>
-                    <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">Order TAT setting</th>
+                    <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap">No. of Days</th>
                     <th className="p-3 text-sm font-semibold border-r border-[#3a4752] whitespace-nowrap text-center">Set Modules</th>
                     <th className="p-3 text-sm font-semibold text-center whitespace-nowrap">Create</th>
                   </tr>
@@ -837,9 +855,11 @@ export default function SupplierType() {
                     </td>
                     <td className="p-3 border-r border-gray-200">
                       <input
-                        className="w-full px-3 py-1.5 text-sm border border-transparent bg-transparent outline-none text-gray-700"
+                        type="text"
                         value={formData.orderTat}
                         onChange={e => setFormData({ ...formData, orderTat: e.target.value })}
+                        className="w-full px-3 py-1.5 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
+                        placeholder="e.g. 10"
                       />
                     </td>
                     <td className="p-3 border-r border-gray-200 text-center">
@@ -983,6 +1003,9 @@ export default function SupplierType() {
                         {loginTypes.map(name => (
                           <option key={name} value={name}>{name}</option>
                         ))}
+                        {editFormData.loginTypeName && !loginTypes.includes(editFormData.loginTypeName) && (
+                          <option value={editFormData.loginTypeName}>{editFormData.loginTypeName}</option>
+                        )}
                       </select>
                     </div>
 
@@ -1165,12 +1188,13 @@ export default function SupplierType() {
                     </div>
 
                     <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Order TAT setting</label>
+                      <label className="block text-sm font-bold text-gray-700 mb-1.5">No. of Days</label>
                       <input
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={editFormData.orderTat}
+                        type="number"
+                        className="w-full px-3 py-2 text-sm border border-gray-100 rounded outline-none focus:border-blue-500 bg-gray-50 font-bold text-gray-800"
+                        value={(editFormData.orderTat || "").toString().replace(/[^0-9]/g, '')}
                         onChange={e => setEditFormData({ ...editFormData, orderTat: e.target.value })}
-                        placeholder="e.g. 10 Days"
+                        placeholder="50"
                       />
                     </div>
                   </div>
@@ -1180,19 +1204,23 @@ export default function SupplierType() {
               <div className="pt-4 border-t border-gray-100">
                 <p className="text-sm font-bold text-gray-700 mb-5">Assign Tasks To Modules:</p>
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  {AVAILABLE_MODULES.map((module) => (
-                    <label key={module} className="flex items-center group cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors border border-gray-100">
-                      <input
-                        type="checkbox"
-                        className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                        checked={(editingTypeId ? editFormData.modulesTasks : tempModules).includes(module)}
-                        onChange={() => handleToggleTempModule(module)}
-                      />
-                      <span className="ml-3 text-xs text-gray-700 group-hover:text-blue-600 transition-colors font-medium">
-                        {module}
-                      </span>
-                    </label>
-                  ))}
+                  {AVAILABLE_MODULES.map((module) => {
+                    const isAutoAssigned = module === 'Order Management(Bidding)' && (editingTypeId ? editFormData.assignModules : formData.assignModules).includes('Bidding');
+                    return (
+                      <label key={module} className={`flex items-center group cursor-pointer p-2 rounded hover:bg-gray-50 transition-colors border border-gray-100 ${isAutoAssigned ? 'opacity-70 bg-gray-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          className="h-4 w-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer disabled:cursor-not-allowed"
+                          checked={(editingTypeId ? editFormData.modulesTasks : tempModules).includes(module)}
+                          onChange={() => !isAutoAssigned && handleToggleTempModule(module)}
+                          disabled={isAutoAssigned}
+                        />
+                        <span className={`ml-3 text-xs group-hover:text-blue-600 transition-colors font-medium ${isAutoAssigned ? 'text-blue-600 font-bold italic' : 'text-gray-700'}`}>
+                          {module} {isAutoAssigned && '(Auto)'}
+                        </span>
+                      </label>
+                    );
+                  })}
                 </div>
               </div>
             </div>

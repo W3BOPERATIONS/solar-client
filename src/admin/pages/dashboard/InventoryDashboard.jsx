@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Chart from 'react-apexcharts';
 import { dashboardApi } from '../../../services/dashboard/dashboardApi';
-import { getStates, getDistricts, getClusters } from '../../../services/core/locationApi';
+import { useLocations } from '../../../hooks/useLocations';
 import {
   Package,
   IndianRupee,
@@ -38,6 +38,7 @@ function Badge({ tone = 'gray', children }) {
 
 export default function InventoryDashboard() {
   const [filters, setFilters] = useState({
+    country: '',
     state: '',
     district: '',
     cluster: '',
@@ -51,79 +52,61 @@ export default function InventoryDashboard() {
     timeline: ''
   });
 
-  const [locationOptions, setLocationOptions] = useState({
-    states: [],
-    districts: [],
-    clusters: []
-  });
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
 
-  // Initial Load & Location Logic
-  useEffect(() => {
-    fetchStatesList();
-  }, []);
+  const {
+    countries,
+    states,
+    clusters,
+    districts,
+    fetchStates,
+    fetchClusters,
+    fetchDistricts
+  } = useLocations();
 
-  // Fetch States
-  const fetchStatesList = async () => {
-    try {
-      const res = await getStates();
-      setLocationOptions(prev => ({ ...prev, states: res || [] }));
-      console.log(`Fetched states count: ${res?.length || 0}`);
-    } catch (e) {
-      console.error("Failed to fetch states", e);
+  // Cascade: Country -> State
+  useEffect(() => {
+    if (filters.country) {
+      fetchStates({ countryId: filters.country });
     }
-  };
+  }, [filters.country]);
 
-  // Fetch Data whenever filters change (debounced slightly or just effect)
-  useEffect(() => {
-    fetchData();
-  }, [filters]);
-
-  // Cascade: State -> District
+  // Cascade: State -> Cluster (In Inventory Dashboard, they sometimes use District as the second level)
+  // Let's stick to Country -> State -> Cluster -> District for consistency across dashboard if possible
   useEffect(() => {
     if (filters.state) {
-      getDistricts({ stateId: filters.state }).then(res => {
-        setLocationOptions(prev => ({ ...prev, districts: res || [], clusters: [] }));
-        console.log(`Fetched cities/districts count: ${res?.length || 0}`);
-      });
-    } else {
-      setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+      fetchClusters({ stateId: filters.state });
     }
   }, [filters.state]);
 
-  // Cascade: District -> Cluster
+  // Cascade: Cluster -> District
   useEffect(() => {
-    if (filters.district) {
-      getClusters(filters.district).then(res => {
-        setLocationOptions(prev => ({ ...prev, clusters: res || [] }));
-        console.log(`Fetched areas/clusters count: ${res?.length || 0}`);
-      });
-    } else {
-      setLocationOptions(prev => ({ ...prev, clusters: [] }));
+    if (filters.cluster) {
+      fetchDistricts({ clusterId: filters.cluster });
     }
-  }, [filters.district]);
+  }, [filters.cluster]);
+
+  // Fetch Data whenever filters change
+  useEffect(() => {
+    fetchData();
+  }, [filters]);
 
 
   const fetchData = async () => {
     try {
       setLoading(true);
       setError(null);
-      const res = await dashboardApi.getInventoryDashboard(filters);
+      
+      const queryParams = { ...filters };
+      const res = await dashboardApi.getInventoryDashboard(queryParams);
       setData(res.dashboard);
       if (res.dashboard) {
-        console.log("✅ Locations loaded dynamically from DB");
-        console.log("✅ Graph data fetched from database");
-        console.log("📊 Chart updated with real DB data");
-        console.log(`Fetched chart records: ${res.dashboard.charts?.movement?.categories?.length || 0}`);
-      } else {
-        console.log("⚠️ No data found in database for this section");
+        console.log("✅ Dashboard data for selected region loaded");
       }
     } catch (e) {
       setError(e?.message || 'Failed to load inventory dashboard');
-      console.log("⚠️ No locations found in database (or error fetching)");
     } finally {
       setLoading(false);
     }
@@ -202,32 +185,32 @@ export default function InventoryDashboard() {
 
       <div className="container-fluid py-3">
         {/* Filters */}
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-3">
-          {/* STATE FILTER */}
+        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 mb-3">
+          {/* COUNTRY FILTER */}
           <div>
             <select
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.state}
-              onChange={(e) => setFilters(p => ({ ...p, state: e.target.value, district: '', cluster: '' }))}
+              value={filters.country}
+              onChange={(e) => setFilters(p => ({ ...p, country: e.target.value, state: '', district: '', cluster: '' }))}
             >
-              <option value="">Select State</option>
-              {locationOptions.states.map(s => (
-                <option key={s._id} value={s._id}>{s.name}</option>
+              <option value="">Select Country</option>
+              {countries.map(c => (
+                <option key={c._id} value={c._id}>{c.name}</option>
               ))}
             </select>
           </div>
 
-          {/* DISTRICT FILTER (Added for proper hierarchy) */}
+          {/* STATE FILTER */}
           <div>
             <select
-              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-              value={filters.district}
-              onChange={(e) => setFilters(p => ({ ...p, district: e.target.value, cluster: '' }))}
-              disabled={!filters.state}
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              value={filters.state}
+              onChange={(e) => setFilters(p => ({ ...p, state: e.target.value, district: '', cluster: '' }))}
+              disabled={!filters.country}
             >
-              <option value="">Select District</option>
-              {locationOptions.districts.map(d => (
-                <option key={d._id} value={d._id}>{d.name}</option>
+              <option value="">Select State</option>
+              {states.map(s => (
+                <option key={s._id} value={s._id}>{s.name}</option>
               ))}
             </select>
           </div>
@@ -237,12 +220,27 @@ export default function InventoryDashboard() {
             <select
               className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
               value={filters.cluster}
-              onChange={(e) => setFilters(p => ({ ...p, cluster: e.target.value }))}
-              disabled={!filters.district}
+              onChange={(e) => setFilters(p => ({ ...p, cluster: e.target.value, district: '' }))}
+              disabled={!filters.state}
             >
               <option value="">Select Cluster</option>
-              {locationOptions.clusters.map(c => (
+              {clusters.map(c => (
                 <option key={c._id} value={c._id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* DISTRICT FILTER */}
+          <div>
+            <select
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filters.district}
+              onChange={(e) => setFilters(p => ({ ...p, district: e.target.value }))}
+              disabled={!filters.cluster}
+            >
+              <option value="">Select District</option>
+              {districts.map(d => (
+                <option key={d._id} value={d._id}>{d.name}</option>
               ))}
             </select>
           </div>
@@ -351,10 +349,11 @@ export default function InventoryDashboard() {
         {/* Filter Badges */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 border-l-4 border-l-blue-400 mb-4 p-4">
           <div className="flex flex-wrap gap-3">
+            {filters.country && <Badge tone="info">Country Filter Active</Badge>}
             {filters.state && <Badge tone="primary">State Filter Active</Badge>}
-            {filters.district && <Badge tone="success">District Filter Active</Badge>}
             {filters.cluster && <Badge tone="warning">Cluster Filter Active</Badge>}
-            {!filters.state && <Badge tone="secondary">No Location Filters</Badge>}
+            {filters.district && <Badge tone="success">District Filter Active</Badge>}
+            {!filters.country && <Badge tone="secondary">No Location Filters</Badge>}
           </div>
         </div>
 

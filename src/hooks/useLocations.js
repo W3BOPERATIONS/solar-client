@@ -132,10 +132,11 @@ export const useLocations = () => {
 
   // Update States when Country changes
   useEffect(() => {
-    if (selectedCountry) {
+    if (selectedCountry && selectedCountry !== 'all') {
       fetchStates({ countryId: selectedCountry });
     } else {
-      setStates([]);
+      // If no country selected, fetch all states (hierarchy)
+      fetchStates();
     }
     setSelectedState('');
     setSelectedCluster('');

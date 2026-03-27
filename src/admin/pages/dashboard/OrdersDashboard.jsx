@@ -2,7 +2,8 @@
 
 import React, { useEffect, useMemo, useState } from 'react';
 import { orderAPI } from '../../../api/api';
-const salesSettingsService = { getBundles: async () => [], createBundle: async () => ({}), updateBundle: async () => ({}), deleteBundle: async () => ({}), getAmcPrices: async () => [], createAmcPrice: async () => ({}), updateAmcPrice: async () => ({}), deleteAmcPrice: async () => ({}), getOffers: async () => [], createOffer: async () => ({}), updateOffer: async () => ({}), deleteOffer: async () => ({}), getPrices: async () => [], createPrice: async () => ({}), updatePrice: async () => ({}), deletePrice: async () => ({}) }; // Import new service
+import salesSettingsService from '../../../services/settings/salesSettingsApi';
+import * as masterApi from '../../../services/core/masterApi';
 import Chart from 'react-apexcharts';
 import {
   Package,
@@ -56,6 +57,13 @@ export default function OrdersDashboard() {
   });
 
   const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  
+  // Master Data States
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [allMappings, setAllMappings] = useState([]);
 
   const [filters, setFilters] = useState({
     country: '',
@@ -108,14 +116,19 @@ export default function OrdersDashboard() {
         setLoading(true);
         setError(null);
 
-        // Parallel fetch for Orders and Sales Stats
-        const [ordersRes, statsRes] = await Promise.all([
+        const [ordersRes, statsRes, ptRes, catRes, mappingRes] = await Promise.all([
           orderAPI.getAll({}),
-          salesSettingsService.getDashboardStats()
+          salesSettingsService.getDashboardStats(),
+          masterApi.getProjectTypes(),
+          masterApi.getCategories(),
+          masterApi.getProjectCategoryMappings({ status: true })
         ]);
-
+ 
         setOrders(ordersRes.data.orders || ordersRes.data || []);
-        setSalesStats(statsRes); // Set sales stats
+        setSalesStats(statsRes);
+        setProjectTypes(ptRes.data || []);
+        setCategories(catRes.data || []);
+        setAllMappings(mappingRes.data || []);
 
       } catch (e) {
         setError(e?.message || 'Failed to load data');
@@ -125,8 +138,6 @@ export default function OrdersDashboard() {
       }
     };
     load();
-    const interval = setInterval(load, 15000);
-    return () => clearInterval(interval);
   }, [filters]);
 
   // Calculate Avg Margin
@@ -140,8 +151,71 @@ export default function OrdersDashboard() {
     orderCategoriesMap[cat] = (orderCategoriesMap[cat] || 0) + 1;
   });
   const orderChartLabels = Object.keys(orderCategoriesMap).length > 0 ? Object.keys(orderCategoriesMap) : ['No Data'];
-  const orderChartSeries = Object.keys(orderCategoriesMap).length > 0 ? Object.values(orderCategoriesMap) : [1];
+  // Fetch Sub Project Types when Project Type changes
+  useEffect(() => {
+    const fetchSubProjectTypes = async () => {
+      if (filters.projectType) {
+        try {
+          const res = await masterApi.getSubProjectTypes(filters.projectType);
+          setSubProjectTypes(res.data || []);
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setSubProjectTypes([]);
+      }
+    };
+    fetchSubProjectTypes();
+  }, [filters.projectType]);
+ 
+  // Fetch Sub Categories when Category or Project Type changes
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      if (filters.category) {
+        try {
+          const res = await masterApi.getSubCategories(filters.projectType, filters.category);
+          setSubCategories(res.data || []);
+        } catch (e) {
+          console.error(e);
+        }
+      } else {
+        setSubCategories([]);
+      }
+    };
+    fetchSubCategories();
+  }, [filters.category, filters.projectType]);
 
+  // Unique data from mappings for those specific ranges in the dropdown
+  const mappingOptions = (() => {
+    let filtered = allMappings;
+    if (filters.state) filtered = filtered.filter(m => m.stateId === filters.state);
+    if (filters.cluster) filtered = filtered.filter(m => m.clusterId === filters.cluster);
+    if (filters.category) filtered = filtered.filter(m => m.categoryId === filters.category);
+    if (filters.subCategory) filtered = filtered.filter(m => m.subCategoryId === filters.subCategory);
+
+    const uniqueRanges = [];
+    const uniqueSubTypes = [];
+    const rangeKeys = new Set();
+    const subTypeKeys = new Set();
+
+    filtered.forEach(m => {
+       const rangeLabel = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+       if (!rangeKeys.has(rangeLabel)) {
+         rangeKeys.add(rangeLabel);
+         uniqueRanges.push({ id: rangeLabel, name: rangeLabel });
+       }
+       
+       if (m.subProjectTypeId && !subTypeKeys.has(m.subProjectTypeId?._id)) {
+          subTypeKeys.add(m.subProjectTypeId?._id);
+          uniqueSubTypes.push({ _id: m.subProjectTypeId?._id, name: m.subProjectTypeId?.name || 'On-Grid' });
+       }
+    });
+
+    return { ranges: uniqueRanges, subTypes: uniqueSubTypes };
+  })();
+
+  const orderChartSeries = Object.keys(orderCategoriesMap).length > 0 ? Object.values(orderCategoriesMap) : [1];
+  
   // Chart configurations
   const ordersChartOptions = {
     series: orderChartSeries,
@@ -369,18 +443,16 @@ export default function OrdersDashboard() {
             <option value="Q1">Q1</option>
             <option value="Q2">Q2</option>
           </select>
-        </div>
-
-        {/* Category Filter */}
+        </div>        {/* Category Filter */}
         <div className="relative">
           <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
             value={filters.category}
-            onChange={(e) => setFilters(p => ({ ...p, category: e.target.value }))}
+            onChange={(e) => setFilters(p => ({ ...p, category: e.target.value, subCategory: '' }))}
           >
-            <option value="" disabled className="text-gray-400">Select Category</option>
-            <option value="solarpanel">Solar</option>
+            <option value="">Select Category</option>
+            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
 
@@ -388,25 +460,28 @@ export default function OrdersDashboard() {
         <div className="relative">
           <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
-            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm disabled:opacity-50"
             value={filters.subCategory}
             onChange={(e) => setFilters(p => ({ ...p, subCategory: e.target.value }))}
+            disabled={!filters.category || subCategories.length === 0}
           >
-            <option value="" disabled className="text-gray-400">Select Sub Category</option>
-            <option value="residential">Residential</option>
+            <option value="">Select Sub Category</option>
+            {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
           </select>
-        </div>
-
-        {/* Project Type */}
+        </div>        {/* Project Type */}
         <div className="relative">
           <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
             value={filters.projectType}
-            onChange={(e) => setFilters(p => ({ ...p, projectType: e.target.value }))}
+            onChange={(e) => setFilters(p => ({ ...p, projectType: e.target.value, subType: '' }))}
           >
-            <option value="" disabled className="text-gray-400">Select Project Type</option>
-            <option value="above3kw">Above 3KW</option>
+            <option value="">Select Project Type</option>
+            {mappingOptions.ranges.length > 0 ? (
+                mappingOptions.ranges.map(r => <option key={r.id} value={r.id}>{r.name}</option>)
+            ) : (
+                projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)
+            )}
           </select>
         </div>
 
@@ -414,12 +489,17 @@ export default function OrdersDashboard() {
         <div className="relative">
           <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
-            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm disabled:opacity-50"
             value={filters.subType}
             onChange={(e) => setFilters(p => ({ ...p, subType: e.target.value }))}
+            disabled={!filters.projectType && !filters.category}
           >
-            <option value="" disabled>Select Sub Type</option>
-            <option>On-Grid</option>
+            <option value="">Select Sub Type</option>
+            {mappingOptions.subTypes.length > 0 ? (
+                mappingOptions.subTypes.map(spt => <option key={spt._id} value={spt._id}>{spt.name}</option>)
+            ) : (
+                subProjectTypes.map(spt => <option key={spt._id} value={spt._id}>{spt.name}</option>)
+            )}
           </select>
         </div>
       </div>

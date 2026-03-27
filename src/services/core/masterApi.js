@@ -113,23 +113,18 @@ export const getCategories = async () => {
     }
 };
 
-export const getSubCategories = async (projectTypeId, categoryId) => {
+export const getSubCategories = async (params) => {
     try {
-        let url = '/masters/sub-categories?';
-        if (projectTypeId) url += `projectTypeId=${projectTypeId}&`;
-        if (categoryId) url += `categoryId=${categoryId}`;
-        const res = await api.get(url);
+        const res = await api.get('/masters/sub-categories', { params });
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;
     }
 };
 
-export const getSubProjectTypes = async (projectTypeId) => {
+export const getSubProjectTypes = async (params) => {
     try {
-        let url = '/masters/sub-project-types?';
-        if (projectTypeId) url += `projectTypeId=${projectTypeId}`;
-        const res = await api.get(url);
+        const res = await api.get('/masters/sub-project-types', { params });
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;

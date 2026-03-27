@@ -6,7 +6,8 @@ import {
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
 import performanceApi from '../../../../services/performance/performanceApi';
-import * as locationApi from '../../../../services/core/locationApi';
+import { useLocations } from '../../../../hooks/useLocations';
+import * as masterApi from '../../../../services/core/masterApi';
 
 // Google Maps Script Loader
 const loadGoogleMapsScript = (callback) => {
@@ -31,13 +32,26 @@ const loadGoogleMapsScript = (callback) => {
 };
 
 export default function FranchiseDashboard() {
+  const [selectedCountry, setSelectedCountry] = useState(null);
   const [selectedState, setSelectedState] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
   const [selectedDistrict, setSelectedDistrict] = useState(null);
+  const [selectedCluster, setSelectedCluster] = useState(null);
 
-  const [states, setStates] = useState([]);
-  const [clusters, setClusters] = useState([]);
-  const [districts, setDistricts] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+
+  const {
+    countries,
+    states,
+    clusters,
+    districts,
+    fetchStates,
+    fetchDistricts,
+    fetchClusters
+  } = useLocations();
+
   const [performanceData, setPerformanceData] = useState(null);
   const [loading, setLoading] = useState(false);
 
@@ -148,45 +162,97 @@ export default function FranchiseDashboard() {
   };
 
   useEffect(() => {
-    fetchStates();
+    const loadMasterData = async () => {
+      try {
+        const [catRes, sptRes, mapRes] = await Promise.all([
+          masterApi.getCategories(),
+          masterApi.getSubProjectTypes(),
+          masterApi.getProjectCategoryMappings()
+        ]);
+        setCategories(catRes.data || []);
+        setSubProjectTypes(sptRes.data || []);
+        
+        // Extract unique project type ranges from mappings
+        if (mapRes.data) {
+          const ranges = mapRes.data.map(m => ({
+            id: m._id,
+            name: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`,
+            categoryId: m.categoryId?._id || m.categoryId,
+            subCategoryId: m.subCategoryId?._id || m.subCategoryId
+          }));
+          // For initially loading all, we might want unique range strings
+          const uniqueRanges = Array.from(new Set(ranges.map(r => r.name)))
+            .map(name => ranges.find(r => r.name === name));
+          setProjectTypes(uniqueRanges);
+        }
+      } catch (err) {
+        console.error('Error loading master data:', err);
+      }
+    };
+    loadMasterData();
     fetchPerformance();
-  }, [filters]);
+  }, []);
+
+  // Update Project Types when Category/SubCategory changes to filter valid ranges
+  useEffect(() => {
+    const fetchFilteredProjectTypes = async () => {
+      try {
+        const params = {};
+        if (filters.category) params.categoryId = filters.category;
+        if (filters.subCategory) params.subCategoryId = filters.subCategory;
+        
+        const res = await masterApi.getProjectCategoryMappings(params);
+        if (res.data) {
+          const ranges = res.data.map(m => ({
+            id: m._id,
+            name: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`
+          }));
+          // Unique by name
+          const uniqueRanges = Array.from(new Set(ranges.map(r => r.name)))
+            .map(name => ({ name }));
+          setProjectTypes(uniqueRanges);
+        }
+      } catch (err) {
+        console.error('Error filtering project types:', err);
+      }
+    };
+    fetchFilteredProjectTypes();
+  }, [filters.category, filters.subCategory]);
 
   useEffect(() => {
-    fetchPerformance();
-  }, [selectedState, selectedCluster, selectedDistrict]);
+    const fetchSubCats = async () => {
+      if (!filters.category) {
+        setSubCategories([]);
+        return;
+      }
+      try {
+        const res = await masterApi.getSubCategories({ categoryId: filters.category });
+        setSubCategories(res.data || []);
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+      }
+    };
+    fetchSubCats();
+  }, [filters.category]);
 
-  const fetchStates = async () => {
-    try {
-      const statesData = await locationApi.getStates();
-      setStates(statesData);
-    } catch (err) {
-      console.error('Error fetching states:', err);
-    }
-  };
+  // Cascade Effects
+  useEffect(() => {
+    if (selectedCountry) fetchStates({ countryId: selectedCountry._id });
+  }, [selectedCountry]);
 
-  const fetchClusters = async (districtId) => {
-    try {
-      const data = await locationApi.getClusters(districtId);
-      setClusters(data);
-    } catch (err) {
-      console.error('Error fetching clusters:', err);
-    }
-  };
+  useEffect(() => {
+    if (selectedState) fetchDistricts({ stateId: selectedState._id });
+  }, [selectedState]);
 
-  const fetchDistrictsByState = async (stateId) => {
-    try {
-      const data = await locationApi.getDistricts({ stateId });
-      setDistricts(data);
-    } catch (err) {
-      console.error('Error fetching districts:', err);
-    }
-  };
+  useEffect(() => {
+    if (selectedDistrict) fetchClusters({ districtId: selectedDistrict._id });
+  }, [selectedDistrict]);
 
   const fetchPerformance = async () => {
     setLoading(true);
     try {
       const params = {
+        countryId: selectedCountry?._id,
         stateId: selectedState?._id,
         clusterId: selectedCluster?._id,
         districtId: selectedDistrict?._id,
@@ -362,6 +428,7 @@ export default function FranchiseDashboard() {
   };
 
   const handleResetFilters = () => {
+    setSelectedCountry(null);
     setSelectedState(null);
     setSelectedDistrict(null);
     setSelectedCluster(null);
@@ -396,15 +463,34 @@ export default function FranchiseDashboard() {
 
       {/* First Filters Section */}
       <div className="mb-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-3">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3 mb-3">
+          <div>
+            <select
+              value={selectedCountry?._id || ''}
+              onChange={(e) => {
+                const c = countries.find(ct => ct._id === e.target.value);
+                setSelectedCountry(c || null);
+                setSelectedState(null);
+                setSelectedDistrict(null);
+                setSelectedCluster(null);
+              }}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="" disabled>Select Country</option>
+              {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+            </select>
+          </div>
           <div>
             <select
               value={selectedState?._id || ''}
               onChange={(e) => {
                 const s = states.find(st => st._id === e.target.value);
-                if (s) handleStateSelect(s);
+                setSelectedState(s || null);
+                setSelectedDistrict(null);
+                setSelectedCluster(null);
               }}
-              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              disabled={!selectedCountry}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
             >
               <option value="" disabled>Select State</option>
               {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
@@ -415,8 +501,10 @@ export default function FranchiseDashboard() {
               value={selectedDistrict?._id || ''}
               onChange={(e) => {
                 const d = districts.find(ds => ds._id === e.target.value);
-                if (d) handleDistrictSelect(d);
+                setSelectedDistrict(d || null);
+                setSelectedCluster(null);
               }}
+              disabled={!selectedState}
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="" disabled>Select District</option>
@@ -428,8 +516,9 @@ export default function FranchiseDashboard() {
               value={selectedCluster?._id || ''}
               onChange={(e) => {
                 const c = clusters.find(cl => cl._id === e.target.value);
-                if (c) setSelectedCluster(c);
+                setSelectedCluster(c || null);
               }}
+              disabled={!selectedDistrict}
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="" disabled>Select Cluster</option>
@@ -452,7 +541,7 @@ export default function FranchiseDashboard() {
             <select
               value={filters.franchiseeType}
               onChange={(e) => handleFilterChange('franchiseeType', e.target.value)}
-              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all" disabled>Partner Type</option>
               <option value="startup">Start Up(Dealer)</option>
@@ -471,8 +560,7 @@ export default function FranchiseDashboard() {
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Categories</option>
-              <option>Solar Rooftop</option>
-              <option>Solar Pump</option>
+              {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
             </select>
           </div>
           <div>
@@ -482,8 +570,7 @@ export default function FranchiseDashboard() {
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Sub Categories</option>
-              <option>Residential</option>
-              <option>Commercial</option>
+              {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
             </select>
           </div>
           <div>
@@ -493,8 +580,7 @@ export default function FranchiseDashboard() {
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Project Type</option>
-              <option>3kw - 5kw</option>
-              <option>5kw - 10kw</option>
+              {projectTypes.map((pt, idx) => <option key={idx} value={pt.name}>{pt.name}</option>)}
             </select>
           </div>
           <div>
@@ -504,9 +590,7 @@ export default function FranchiseDashboard() {
               className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="">All Sub Project</option>
-              <option>OnGrid</option>
-              <option>OffGrid</option>
-              <option>Hybrid</option>
+              {subProjectTypes.map(st => <option key={st._id} value={st._id}>{st.name}</option>)}
             </select>
           </div>
         </div>
@@ -678,8 +762,7 @@ export default function FranchiseDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Categories</option>
-            <option>Solar Rooftop</option>
-            <option>Solar Pump</option>
+            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
         <div>
@@ -689,8 +772,7 @@ export default function FranchiseDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Sub Categories</option>
-            <option>Residential</option>
-            <option>Commercial</option>
+            {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
           </select>
         </div>
         <div>
@@ -700,8 +782,7 @@ export default function FranchiseDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Project Type</option>
-            <option>3kw - 5kw</option>
-            <option>5kw - 10kw</option>
+            {projectTypes.map((pt, idx) => <option key={idx} value={pt.name}>{pt.name}</option>)}
           </select>
         </div>
         <div>
@@ -711,9 +792,7 @@ export default function FranchiseDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Sub Project</option>
-            <option>OnGrid</option>
-            <option>OffGrid</option>
-            <option>Hybrid</option>
+            {subProjectTypes.map(st => <option key={st._id} value={st._id}>{st.name}</option>)}
           </select>
         </div>
         <div>

@@ -8,7 +8,8 @@ import {
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
 import performanceApi from '../../../../services/performance/performanceApi';
-import * as locationApi from '../../../../services/core/locationApi';
+import { useLocations } from '../../../../hooks/useLocations';
+import * as masterApi from '../../../../services/core/masterApi';
 
 // Google Maps Script Loader
 const loadGoogleMapsScript = (callback) => {
@@ -33,6 +34,25 @@ const loadGoogleMapsScript = (callback) => {
 };
 
 export default function DealerDashboard() {
+  const [selectedCountry, setSelectedCountry] = useState(null);
+  const [selectedState, setSelectedState] = useState(null);
+  const [selectedDistrict, setSelectedDistrict] = useState(null);
+  const [selectedCluster, setSelectedCluster] = useState(null);
+
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+
+  const {
+    countries,
+    states,
+    clusters,
+    districts,
+    fetchStates,
+    fetchDistricts,
+    fetchClusters
+  } = useLocations();
+
   const [showOrderModal, setShowOrderModal] = useState(false);
   const [timeline, setTimeline] = useState('30');
   const [filters, setFilters] = useState({
@@ -45,13 +65,6 @@ export default function DealerDashboard() {
 
   const [performanceData, setPerformanceData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [states, setStates] = useState([]);
-  const [districts, setDistricts] = useState([]);
-  const [clusters, setClusters] = useState([]);
-
-  const [selectedState, setSelectedState] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
 
   const mapRef = useRef(null);
   const chart1Ref = useRef(null);
@@ -63,80 +76,80 @@ export default function DealerDashboard() {
   const clusterChartInstance = useRef(null);
 
   useEffect(() => {
-    fetchLocations();
-    fetchPerformance();
-    console.log("✅ Admin connected to Dealer data");
+    // Auto-refresh removed as requested
+  }, []);
 
-    // Set up Automatic re-fetch system (15s polling)
-    const interval = setInterval(() => {
-      fetchPerformance();
-    }, 15000);
+  // Cascade Effects
+  useEffect(() => {
+    if (selectedCountry) fetchStates({ countryId: selectedCountry._id });
+  }, [selectedCountry]);
 
-    return () => clearInterval(interval);
-  }, [filters, selectedState, selectedDistrict, selectedCluster]);
+  useEffect(() => {
+    if (selectedState) fetchDistricts({ stateId: selectedState._id });
+  }, [selectedState]);
 
-  const fetchLocations = async () => {
-    try {
-      const res = await locationApi.getStates();
-      setStates(res || []); // locationApi.getStates() likely returns the array directly now
-      console.log("✅ Locations loaded dynamically from DB");
-    } catch (error) {
-      console.error('Error fetching locations:', error);
-    }
-  };
-
-  const handleStateSelect = async (state) => {
-    setSelectedState(state);
-    setSelectedDistrict(null);
-    setSelectedCluster(null);
-    setDistricts([]);
-    setClusters([]);
-    try {
-      const res = await locationApi.getDistricts({ stateId: state._id });
-      setDistricts(res || []);
-      console.log("✅ Districts loaded dynamically from DB");
-    } catch (error) {
-      console.error('Error fetching districts:', error);
-    }
-  };
-
-  const handleDistrictSelect = async (district) => {
-    setSelectedDistrict(district);
-    setSelectedCluster(null);
-    setClusters([]);
-    try {
-      const res = await locationApi.getClusters(district._id);
-      setClusters(res || []);
-      console.log("✅ Clusters loaded dynamically from DB");
-    } catch (error) {
-      console.error('Error fetching clusters:', error);
-    }
-  };
+  useEffect(() => {
+    if (selectedDistrict) fetchClusters({ districtId: selectedDistrict._id });
+  }, [selectedDistrict]);
 
   const fetchPerformance = async () => {
     setLoading(true);
     try {
       const params = {
+        countryId: selectedCountry?._id,
         stateId: selectedState?._id,
         districtId: selectedDistrict?._id,
         clusterId: selectedCluster?._id,
-        ...filters
+        ...filters,
+        timeline
       };
       const res = await performanceApi.getDealerPerformance(params);
       setPerformanceData(res);
-
-      if (!res || res.summary?.totalRecords === 0) {
-        console.log("⚠️ No dealer data found in DB");
-      } else {
-        console.log("🔄 Real-time Dealer update received");
-        console.log("📊 Admin dashboard synced with Dealer DB");
-      }
     } catch (error) {
       console.error('Error fetching performance:', error);
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        const [catRes, mapRes] = await Promise.all([
+          masterApi.getCategories(),
+          masterApi.getProjectCategoryMappings()
+        ]);
+        setCategories(catRes.data || []);
+        if (mapRes.data) {
+          const ranges = mapRes.data.map(m => ({
+            name: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`
+          }));
+          const uniqueRanges = Array.from(new Set(ranges.map(r => r.name))).map(name => ({ name }));
+          setProjectTypes(uniqueRanges);
+        }
+      } catch (err) {
+        console.error('Error loading master data:', err);
+      }
+    };
+    loadMasterData();
+    fetchPerformance();
+  }, [selectedCountry, selectedState, selectedDistrict, selectedCluster, filters, timeline]);
+
+  useEffect(() => {
+    const fetchSubCats = async () => {
+      if (!filters.category) {
+        setSubCategories([]);
+        return;
+      }
+      try {
+        const res = await masterApi.getSubCategories({ categoryId: filters.category });
+        setSubCategories(res.data || []);
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+      }
+    };
+    fetchSubCats();
+  }, [filters.category]);
 
   useEffect(() => {
     if (performanceData) {
@@ -293,14 +306,33 @@ export default function DealerDashboard() {
       </div>
 
       {/* Filters - Row 1 */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4">
+        <div>
+          <select
+            value={selectedCountry?._id || ''}
+            onChange={(e) => {
+              const c = countries.find(ct => ct._id === e.target.value);
+              setSelectedCountry(c || null);
+              setSelectedState(null);
+              setSelectedDistrict(null);
+              setSelectedCluster(null);
+            }}
+            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+          >
+            <option value="" disabled>Select Country</option>
+            {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+        </div>
         <div>
           <select
             value={selectedState?._id || ''}
             onChange={(e) => {
-              const state = states.find(s => s._id === e.target.value);
-              if (state) handleStateSelect(state);
+              const s = states.find(st => st._id === e.target.value);
+              setSelectedState(s || null);
+              setSelectedDistrict(null);
+              setSelectedCluster(null);
             }}
+            disabled={!selectedCountry}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="" disabled>Select State</option>
@@ -311,9 +343,11 @@ export default function DealerDashboard() {
           <select
             value={selectedDistrict?._id || ''}
             onChange={(e) => {
-              const district = districts.find(d => d._id === e.target.value);
-              if (district) handleDistrictSelect(district);
+              const d = districts.find(ds => ds._id === e.target.value);
+              setSelectedDistrict(d || null);
+              setSelectedCluster(null);
             }}
+            disabled={!selectedState}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="" disabled>Select District</option>
@@ -324,9 +358,10 @@ export default function DealerDashboard() {
           <select
             value={selectedCluster?._id || ''}
             onChange={(e) => {
-              const cluster = clusters.find(c => c._id === e.target.value);
-              if (cluster) setSelectedCluster(cluster);
+              const c = clusters.find(cl => cl._id === e.target.value);
+              setSelectedCluster(c || null);
             }}
+            disabled={!selectedDistrict}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="" disabled>Select Cluster</option>
@@ -355,8 +390,7 @@ export default function DealerDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Categories</option>
-            <option value="Solar Rooftop">Solar Rooftop</option>
-            <option value="Solar Pump">Solar Pump</option>
+            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
         <div>
@@ -366,8 +400,7 @@ export default function DealerDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">All Sub Categories</option>
-            <option value="Residential">Residential</option>
-            <option value="Industrial">Industrial</option>
+            {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
           </select>
         </div>
         <div>
@@ -377,8 +410,7 @@ export default function DealerDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="">Project Type</option>
-            <option value="3kw-5kw">3kw - 5kw</option>
-            <option value="5kw-10kw">5kw - 10kw</option>
+            {projectTypes.map((pt, idx) => <option key={idx} value={pt.name}>{pt.name}</option>)}
           </select>
         </div>
         <div>

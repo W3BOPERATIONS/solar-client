@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Plus, ChevronDown, Trash2, X, Eye, EyeOff } from 'lucide-react';
+import Select from 'react-select';
 import toast from 'react-hot-toast';
 import { locationAPI } from '../../../../api/api';
 import {
@@ -7,6 +8,7 @@ import {
   saveInstallerVendorPlan,
   deleteInstallerVendorPlan
 } from '../../../../services/vendor/vendorApi';
+import { getSubCategories } from '../../../../services/core/masterApi';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
   <div
@@ -30,6 +32,7 @@ export default function InstallerVendors() {
   const [plans, setPlans] = useState(["Starter Plan", "Silver Plan", "Gold Plan", "Platinum Plan"]);
   const [allFetchedPlans, setAllFetchedPlans] = useState([]); // Array of all saved plan objects
   const [globalPlanNames, setGlobalPlanNames] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
 
   // Location Hierarchy State
   const [locationData, setLocationData] = useState({
@@ -53,19 +56,29 @@ export default function InstallerVendors() {
     projectTypes: [],
     subscription: "0",
     paymentMethods: [],
-    teams: { residential: 0, commercial: 0 },
+    teams: {},
     rates: {
       resOnGrid: "0", resOffGrid: "0",
       comOnGrid: "0", comOffGrid: "0"
     },
-    weeklyKWAssign: { residential: "0", commercial: "0" }
+    weeklyKWAssign: {}
   });
 
   const [planSettings, setPlanSettings] = useState({});
 
   useEffect(() => {
     fetchGlobalNames();
+    fetchSubCategories();
   }, []);
+
+  const fetchSubCategories = async () => {
+    try {
+      const res = await getSubCategories({ silent: true });
+      if (res.data) setSubCategories(res.data);
+    } catch (err) {
+      console.error('Failed to fetch sub-categories', err);
+    }
+  };
 
   const fetchGlobalNames = async () => {
     try {
@@ -539,7 +552,7 @@ export default function InstallerVendors() {
                 <div className="grid grid-cols-3 gap-x-12 gap-y-10">
                   {/* Row 1 */}
                   <div>
-                    <h5 className="font-bold text-gray-800 mb-4 text-base">Signup Requirements</h5>
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">App Signup Requirements</h5>
                     <div className="space-y-3">
                       {["Aadhar Card", "PAN Card", "GST Number", "Electronic Licence"].map(item => (
                         <label key={item} className="flex items-center gap-3 cursor-pointer">
@@ -557,34 +570,118 @@ export default function InstallerVendors() {
 
                   <div>
                     <h5 className="font-bold text-gray-800 mb-4 text-base">Coverage</h5>
-                    <div className="relative">
-                      <select
-                        value={planSettings[activePlan].coverage}
-                        onChange={(e) => handleInputChange('coverage', e.target.value)}
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                      >
-                        <option>1 District</option>
-                        <option>2 Districts</option>
-                        <option>3 Districts</option>
-                      </select>
-                      <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                    <div className="space-y-4 bg-gray-50/50 p-4 rounded-lg border border-gray-100">
+                      {/* Selection Type Radio Buttons */}
+                      <div className="flex items-center gap-8 mb-2">
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <input
+                            type="radio"
+                            name={`coverageType-${activePlan}`}
+                            value="single"
+                            checked={!planSettings[activePlan].coverage?.includes(',')}
+                            onChange={() => {
+                              const currentVal = planSettings[activePlan].coverage || '';
+                              const newVal = currentVal.includes(',') ? currentVal.split(',')[0].trim() : currentVal;
+                              handleInputChange('coverage', newVal);
+                            }}
+                            className="w-4 h-4 accent-blue-600 cursor-pointer shadow-sm transition-transform group-hover:scale-110"
+                          />
+                          <span className="text-sm font-semibold text-gray-700 tracking-tight">Single District</span>
+                        </label>
+                        <label className="flex items-center gap-3 cursor-pointer group">
+                          <input
+                            type="radio"
+                            name={`coverageType-${activePlan}`}
+                            value="multiple"
+                            checked={planSettings[activePlan].coverage?.includes(',')}
+                            onChange={() => {
+                              if (!planSettings[activePlan].coverage?.includes(',')) {
+                                handleInputChange('coverage', (planSettings[activePlan].coverage || '') + ', ');
+                              }
+                            }}
+                            className="w-4 h-4 accent-blue-600 cursor-pointer shadow-sm transition-transform group-hover:scale-110"
+                          />
+                          <span className="text-sm font-semibold text-gray-700 tracking-tight">Multiple District</span>
+                        </label>
+                      </div>
+
+                      {/* Input based on selection */}
+                      {!planSettings[activePlan].coverage?.includes(',') ? (
+                        <div className="relative">
+                          <select
+                            value={planSettings[activePlan].coverage}
+                            onChange={(e) => handleInputChange('coverage', e.target.value)}
+                            className="w-full px-4 py-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
+                          >
+                            <option value="">Select District</option>
+                            {locationData.districts.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}
+                          </select>
+                          <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none" size={16} />
+                        </div>
+                      ) : (
+                        <div className="react-select-container">
+                          <Select
+                            isMulti
+                            options={locationData.districts.map(d => ({ value: d.name, label: d.name }))}
+                            value={(planSettings[activePlan].coverage || '').split(',').filter(x => x.trim()).map(x => ({ value: x.trim(), label: x.trim() }))}
+                            onChange={(selected) => {
+                              const newVal = (selected || []).map(s => s.value).join(', ');
+                              // Always ensure at least a comma to maintain "multiple" mode if selected
+                              const persistedVal = newVal.includes(',') ? newVal : (newVal + ', ');
+                              handleInputChange('coverage', persistedVal);
+                            }}
+                            className="text-sm"
+                            styles={{
+                              control: (base) => ({
+                                ...base,
+                                borderRadius: '0.5rem',
+                                borderColor: '#d1d5db',
+                                minHeight: '40px',
+                                boxShadow: 'none',
+                                '&:hover': { borderColor: '#d1d5db' }
+                              })
+                            }}
+                            placeholder="Select Districts..."
+                          />
+                        </div>
+                      )}
                     </div>
                   </div>
 
                   <div>
-                    <h5 className="font-bold text-gray-800 mb-4 text-base">Project Types</h5>
-                    <div className="space-y-3">
-                      {["Residential", "Commercial", "Street Light", "Solar Pump"].map(item => (
-                        <label key={item} className="flex items-center gap-3 cursor-pointer">
+                    <h5 className="font-bold text-gray-800 mb-4 text-base flex justify-between items-center">
+                      Project Types
+                      {subCategories.length > 0 && (
+                        <label className="flex items-center gap-2 cursor-pointer font-normal text-xs text-blue-600 hover:text-blue-800">
                           <input
                             type="checkbox"
-                            checked={planSettings[activePlan].projectTypes.includes(item)}
-                            onChange={() => handleCheckboxToggle('projectTypes', item)}
-                            className="w-4 h-4 accent-green-600 rounded"
+                            checked={subCategories.length > 0 && subCategories.every(item => planSettings[activePlan].projectTypes.includes(item.name))}
+                            onChange={(e) => {
+                              const allNames = e.target.checked ? subCategories.map(s => s.name) : [];
+                              handleInputChange('projectTypes', allNames);
+                            }}
+                            className="w-3 h-3 accent-blue-600 rounded"
                           />
-                          <span className="text-gray-700 text-sm">{item}</span>
+                          Select All
                         </label>
-                      ))}
+                      )}
+                    </h5>
+                    <div className="space-y-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar bg-gray-50/50 p-3 rounded-lg border border-gray-100">
+                      {subCategories.length > 0 ? (
+                        subCategories.map(item => (
+                          <label key={item._id} className="flex items-center gap-3 cursor-pointer group py-1.5 hover:bg-white/50 px-2 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={planSettings[activePlan].projectTypes.includes(item.name)}
+                              onChange={() => handleCheckboxToggle('projectTypes', item.name)}
+                              className="w-4 h-4 accent-green-600 rounded cursor-pointer shadow-sm"
+                            />
+                            <span className="text-gray-700 text-sm font-medium group-hover:text-gray-900 transition-colors">{item.name}</span>
+                          </label>
+                        ))
+                      ) : (
+                        <p className="text-gray-400 text-xs italic p-4 text-center">No project types found</p>
+                      )}
                     </div>
                   </div>
 
@@ -616,33 +713,32 @@ export default function InstallerVendors() {
                     </div>
                   </div>
 
-                  <div>
+                  <div className="col-span-1">
                     <h5 className="font-bold text-gray-800 mb-4 text-base">Team Allocation</h5>
-                    <div className="flex flex-wrap items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-600 text-sm">Residential</span>
-                        <input
-                          type="number"
-                          value={planSettings[activePlan].teams.residential}
-                          onChange={(e) => handleInputChange('teams', parseInt(e.target.value) || 0, 'residential')}
-                          className="w-16 px-2 py-2 border border-blue-200 rounded text-center text-sm font-medium"
-                        />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-gray-600 text-sm">Commercial</span>
-                        <input
-                          type="number"
-                          value={planSettings[activePlan].teams.commercial}
-                          onChange={(e) => handleInputChange('teams', parseInt(e.target.value) || 0, 'commercial')}
-                          className="w-16 px-2 py-2 border border-blue-200 rounded text-center text-sm font-medium"
-                        />
-                      </div>
+                    <div className="space-y-3 bg-blue-50/30 p-4 rounded-xl border border-blue-100">
+                      {(planSettings[activePlan]?.projectTypes || []).length > 0 ? (
+                        planSettings[activePlan].projectTypes.map((type) => (
+                          <div key={type} className="flex items-center justify-between gap-4 py-1.5 border-b border-blue-50 last:border-0 hover:bg-blue-50/50 px-2 rounded transition-all">
+                            <span className="text-gray-700 text-sm font-semibold truncate title-capitalize">{type}</span>
+                            <div className="flex items-center bg-white rounded-lg border border-blue-200 shadow-sm px-1">
+                              <input
+                                type="number"
+                                value={planSettings[activePlan].teams?.[type] || 0}
+                                onChange={(e) => handleInputChange('teams', parseInt(e.target.value) || 0, type)}
+                                className="w-16 py-1.5 bg-transparent text-center text-sm font-bold text-blue-700 outline-none"
+                              />
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-gray-400 text-xs italic p-4 text-center">Select Project Types first</p>
+                      )}
                     </div>
                   </div>
 
                   {/* Row 3 */}
                   <div className="col-span-1">
-                    <h5 className="font-bold text-gray-800 mb-3 text-base">Rate Setting</h5>
+                    <h5 className="font-bold text-gray-800 mb-3 text-base">Installer Rate Setting</h5>
                     <div className="space-y-4">
                       <div>
                         <p className="text-gray-700 font-medium text-sm mb-3">Residential (Per KW)</p>
@@ -694,28 +790,28 @@ export default function InstallerVendors() {
                   </div>
 
                   <div className="col-span-2">
-                    <h5 className="font-bold text-gray-800 mb-6 text-base">Weekly KW Assign</h5>
-                    <div className="space-y-8 pl-4">
-                      <div className="flex items-center gap-4">
-                        <span className="w-56 text-gray-600 text-sm">Residential(25Kw * 1Team)</span>
-                        <input
-                          type="text"
-                          value={planSettings[activePlan].weeklyKWAssign.residential}
-                          onChange={(e) => handleInputChange('weeklyKWAssign', e.target.value, 'residential')}
-                          className="w-24 px-4 py-3 border border-gray-300 rounded-xl text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                        />
-                      </div>
-                      <div className="flex items-center gap-4">
-                        <span className="w-56 text-gray-600 text-sm">Commercial(25Kw * 1Team)</span>
-                        <div className="relative w-24">
-                          <input
-                            type="number"
-                            value={planSettings[activePlan].weeklyKWAssign.commercial}
-                            onChange={(e) => handleInputChange('weeklyKWAssign', e.target.value, 'commercial')}
-                            className="w-full px-4 py-3 border border-gray-300 rounded-xl text-center text-sm focus:ring-2 focus:ring-blue-500 outline-none appearance-none"
-                          />
+                    <h5 className="font-bold text-gray-800 mb-4 text-base">Weekly KW Assign</h5>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-4 bg-gray-50/30 p-5 rounded-xl border border-gray-100">
+                      {(planSettings[activePlan]?.projectTypes || []).length > 0 ? (
+                        planSettings[activePlan].projectTypes.map((type) => (
+                          <div key={`kw-${type}`} className="flex items-center justify-between gap-4 group p-2 hover:bg-white rounded-lg transition-all border border-transparent hover:border-gray-200 hover:shadow-sm">
+                            <span className="text-gray-700 text-sm font-medium whitespace-nowrap overflow-hidden text-ellipsis flex-1 pr-2">{type} Capacity</span>
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="text"
+                                value={planSettings[activePlan].weeklyKWAssign?.[type] || "0"}
+                                onChange={(e) => handleInputChange('weeklyKWAssign', e.target.value, type)}
+                                className="w-24 px-4 py-2 border border-gray-300 rounded-lg text-center text-sm font-bold text-gray-800 focus:ring-2 focus:ring-blue-500 outline-none transition-all shadow-inner"
+                              />
+                              <span className="text-[10px] font-bold text-gray-400 uppercase">KW</span>
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="col-span-full border-2 border-dashed border-gray-100 p-8 rounded-xl text-center">
+                           <p className="text-gray-400 text-xs italic">Select Project Types in the top section to enable capacity settings</p>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -776,12 +872,20 @@ export default function InstallerVendors() {
                                           .map(([k]) => k.charAt(0).toUpperCase() + k.slice(1))
                                           .join(' / ') || '-'}
                                     </td>
-                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 whitespace-nowrap">
-                                        <span className="text-blue-600 font-medium">{plan.teams.residential}</span> / <span className="text-orange-600 font-medium">{plan.teams.commercial}</span>
-                                    </td>
-                                    <td className="p-3 border-r border-gray-100 text-center text-gray-600 whitespace-nowrap">
-                                        <span className="text-blue-600 font-medium">{plan.weeklyKWAssign.residential}</span> / <span className="text-orange-600 font-medium">{plan.weeklyKWAssign.commercial}</span>
-                                    </td>
+                                  <td className="p-3 border-r border-gray-100 text-center text-gray-600">
+                                      {Object.entries(plan.teams || {}).map(([key, val]) => (
+                                          <div key={key} className="text-xs whitespace-nowrap">
+                                              <span className="font-medium text-gray-500">{key}:</span> {val}
+                                          </div>
+                                      ))}
+                                  </td>
+                                  <td className="p-3 border-r border-gray-100 text-center text-gray-600">
+                                      {Object.entries(plan.weeklyKWAssign || {}).map(([key, val]) => (
+                                          <div key={key} className="text-xs whitespace-nowrap">
+                                              <span className="font-medium text-gray-500">{key}:</span> {val}KW
+                                          </div>
+                                      ))}
+                                  </td>
                                     <td className="p-3 border-r border-gray-100 text-center text-gray-600 text-xs whitespace-nowrap">
                                         On-Grid: <span className="font-medium text-gray-800">{plan.rates.resOnGrid}</span><br/>
                                         Off-Grid: <span className="font-medium text-gray-800">{plan.rates.resOffGrid}</span>

@@ -20,6 +20,8 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../hooks/useLocations';
 import { getLoanApplications, getLoanStats } from '../../../services/loan/loanApi';
+import * as masterApi from '../../../services/core/masterApi';
+import salesSettingsService from '../../../services/settings/salesSettingsApi';
 
 function Badge({ tone = 'gray', children, className = '' }) {
   const map = {
@@ -45,10 +47,14 @@ function Badge({ tone = 'gray', children, className = '' }) {
 export default function OrdersByLoanDashboard() {
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('bank-loans');
-  const [locationVisible, setLocationVisible] = useState(true);
+  const [selectedCountryId, setSelectedCountryId] = useState('');
   const [selectedStateId, setSelectedStateId] = useState('');
   const [selectedClusterId, setSelectedClusterId] = useState('');
+  const [selectedDistrictId, setSelectedDistrictId] = useState('');
+  const [locationVisible, setLocationVisible] = useState(true);
+  const [showStates, setShowStates] = useState(false);
   const [showClusters, setShowClusters] = useState(false);
+  const [showDistricts, setShowDistricts] = useState(false);
 
   const [filters, setFilters] = useState({
     timeline: '',
@@ -64,6 +70,11 @@ export default function OrdersByLoanDashboard() {
 
   const [bankLoansData, setBankLoansData] = useState([]);
   const [privateLoansData, setPrivateLoansData] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [allMappings, setAllMappings] = useState([]);
   const [stats, setStats] = useState({
     totalFiles: 0,
     totalLoanAmount: 0,
@@ -71,16 +82,18 @@ export default function OrdersByLoanDashboard() {
     overdue: 0
   });
 
-  const { states, clusters, fetchClusters } = useLocations();
+  const { countries, states, clusters, districts, fetchStates, fetchClusters, fetchDistricts } = useLocations();
+  const selectedCountry = countries.find((c) => c._id === selectedCountryId) || null;
   const selectedState = states.find((s) => s._id === selectedStateId) || null;
   const selectedCluster = clusters.find((c) => c._id === selectedClusterId) || null;
+  const selectedDistrict = districts.find((d) => d._id === selectedDistrictId) || null;
 
   // Summary calculations
-  const totalFiles = stats.totalFiles;
-  const totalLoanAmount = stats.totalLoanAmount;
-  const totalDisbursed = stats.totalDisbursed;
-  const disbursedPercentage = totalLoanAmount > 0 ? Math.round((totalDisbursed / totalLoanAmount) * 100) : 0;
-  const overdueCount = stats.overdue;
+  const totalFiles = stats?.totalFiles || 0;
+  const totalLoanAmount = stats?.totalLoanAmount || 0;
+  const totalDisbursed = stats?.totalDisbursed || 0;
+  const disbursedPercentage = (totalLoanAmount && totalLoanAmount > 0) ? Math.round((totalDisbursed / totalLoanAmount) * 100) : 0;
+  const overdueCount = stats?.overdue || 0;
 
   // Get status class
   const getStatusClass = (status) => {
@@ -101,26 +114,56 @@ export default function OrdersByLoanDashboard() {
 
   // Format number with commas
   const formatNumber = (num) => {
+    if (num === null || num === undefined) return "0";
     return num.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
   };
 
   // Format date
   const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'N/A';
     const options = { year: 'numeric', month: 'short', day: 'numeric' };
-    return new Date(dateString).toLocaleDateString('en-IN', options);
+    return date.toLocaleDateString('en-IN', options);
   };
 
-  // Handle state selection
+  // Handle selection chain
+  const handleCountrySelect = (countryId) => {
+    setSelectedCountryId(countryId);
+    setSelectedStateId('');
+    setSelectedClusterId('');
+    setSelectedDistrictId('');
+    setShowStates(true);
+    setShowClusters(false);
+    setShowDistricts(false);
+    fetchStates({ countryId });
+  };
+
   const handleStateSelect = (stateId) => {
     setSelectedStateId(stateId);
     setSelectedClusterId('');
+    setSelectedDistrictId('');
     setShowClusters(true);
+    setShowDistricts(false);
+    fetchClusters({ stateId });
   };
 
-  // Handle cluster selection
   const handleClusterSelect = (clusterId) => {
     setSelectedClusterId(clusterId);
+    setSelectedDistrictId('');
+    setShowDistricts(true);
+    fetchDistricts({ clusterId });
   };
+
+  const handleDistrictSelect = (districtId) => {
+    setSelectedDistrictId(districtId);
+  };
+
+  useEffect(() => {
+    if (selectedCountryId) {
+      fetchStates({ countryId: selectedCountryId });
+    }
+  }, [selectedCountryId]);
 
   useEffect(() => {
     if (selectedStateId) {
@@ -128,16 +171,127 @@ export default function OrdersByLoanDashboard() {
     }
   }, [selectedStateId]);
 
+  useEffect(() => {
+    if (selectedClusterId) {
+      fetchDistricts({ clusterId: selectedClusterId });
+    }
+  }, [selectedClusterId]);
+
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        const [catRes, ptRes, mappingRes, sptRes] = await Promise.all([
+          masterApi.getCategories(),
+          masterApi.getProjectTypes(),
+          masterApi.getProjectCategoryMappings({ status: true }),
+          masterApi.getSubProjectTypes()
+        ]);
+        setCategories(catRes.data || []);
+        setProjectTypes(ptRes.data || []);
+        setAllMappings(mappingRes.data || []);
+        setSubProjectTypes(sptRes.data || []);
+      } catch (err) {
+        console.error('Error loading master data:', err);
+      }
+    };
+    loadMasterData();
+  }, []);
+
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      if (!filters.category) {
+        setSubCategories([]);
+        return;
+      }
+      try {
+        const res = await masterApi.getSubCategories({ categoryId: filters.category });
+        setSubCategories(res.data || []);
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+      }
+    };
+    fetchSubCategories();
+  }, [filters.category]);
+
+  // Unique data from mappings for those specific ranges in the dropdown
+  const mappingOptions = (() => {
+    let filtered = allMappings || [];
+    
+    // Defensive filtering: handle both populated objects and ID strings
+    if (selectedStateId) {
+      filtered = filtered.filter(m => {
+        const mStateId = typeof m.stateId === 'object' ? m.stateId?._id : m.stateId;
+        return mStateId === selectedStateId;
+      });
+    }
+    if (selectedClusterId) {
+      filtered = filtered.filter(m => {
+        const mClusterId = typeof m.clusterId === 'object' ? m.clusterId?._id : m.clusterId;
+        return mClusterId === selectedClusterId;
+      });
+    }
+    if (filters.category) {
+      filtered = filtered.filter(m => {
+        const mCatId = typeof m.categoryId === 'object' ? m.categoryId?._id : m.categoryId;
+        return mCatId === filters.category;
+      });
+    }
+    if (filters.subcategory) {
+      filtered = filtered.filter(m => {
+        const mSubCatId = typeof m.subCategoryId === 'object' ? m.subCategoryId?._id : m.subCategoryId;
+        return mSubCatId === filters.subcategory;
+      });
+    }
+
+    const uniqueRanges = [];
+    const uniqueSubTypes = [];
+    const rangeKeys = new Set();
+    const subTypeKeys = new Set();
+
+    filtered.forEach(m => {
+       if (m.projectTypeFrom !== undefined && m.projectTypeTo !== undefined) {
+         const rangeLabel = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+         if (!rangeKeys.has(rangeLabel)) {
+           rangeKeys.add(rangeLabel);
+           uniqueRanges.push({ id: rangeLabel, name: rangeLabel, from: m.projectTypeFrom, to: m.projectTypeTo });
+         }
+       }
+       
+       const stId = m.subProjectTypeId?._id || m.subProjectTypeId;
+       if (stId && !subTypeKeys.has(stId)) {
+          subTypeKeys.add(stId);
+          uniqueSubTypes.push({ 
+            _id: stId, 
+            name: (typeof m.subProjectTypeId === 'object' ? m.subProjectTypeId?.name : null) || 'On-Grid' 
+          });
+       }
+    });
+
+    return { ranges: uniqueRanges, subTypes: uniqueSubTypes };
+  })();
+
   const fetchData = async () => {
     try {
       setLoading(true);
       const queryParams = {
+        country: selectedCountryId,
         state: selectedStateId,
         cluster: selectedClusterId,
+        district: selectedDistrictId,
         timeline: filters.timeline,
         category: filters.category,
-        projectType: filters.projectType
+        subCategory: filters.subcategory,
+        subType: filters.subType
       };
+
+      // Handle Project Type Range
+      if (filters.projectType && filters.projectType.includes('to')) {
+        const parts = filters.projectType.split(' ');
+        queryParams.projectTypeFrom = parts[0];
+        queryParams.projectTypeTo = parts[2];
+      } else if (filters.projectType) {
+        queryParams.projectType = filters.projectType;
+      }
 
       const statsRes = await getLoanStats(queryParams);
       if (statsRes.success) {
@@ -165,13 +319,17 @@ export default function OrdersByLoanDashboard() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, selectedStateId, selectedClusterId, filters.timeline, filters.category, filters.projectType]);
+  }, [activeTab, selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, filters.timeline, filters.category, filters.projectType]);
 
   // Clear all filters
   const clearAllFilters = () => {
+    setSelectedCountryId('');
     setSelectedStateId('');
     setSelectedClusterId('');
+    setSelectedDistrictId('');
+    setShowStates(false);
     setShowClusters(false);
+    setShowDistricts(false);
     setFilters({
       timeline: '',
       quarter: '',
@@ -251,49 +409,105 @@ export default function OrdersByLoanDashboard() {
         </div>
 
         {locationVisible && (
-          <div className="p-4">
-            {/* State Selection */}
-            <div className="mb-6">
-              <h6 className="font-medium text-gray-700 mb-3">Select State</h6>
+          <div className="p-4 space-y-6">
+            {/* Country Selection */}
+            <div>
+              <h6 className="font-medium text-gray-700 mb-3">Select Country</h6>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                {states.length > 0 ? states.map((state) => (
+                <div
+                  className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${!selectedCountryId ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                  onClick={() => handleCountrySelect('')}
+                >
+                  <div className="text-2xl text-center mb-1">🌍</div>
+                  <h6 className="font-bold text-center mb-0">All Countries</h6>
+                </div>
+                {countries.map((country) => (
                   <div
-                    key={state._id}
-                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedStateId === state._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                    onClick={() => handleStateSelect(state._id)}
+                    key={country._id}
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedCountryId === country._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                    onClick={() => handleCountrySelect(country._id)}
                   >
-                    <h6 className="font-bold text-center mb-1">{state.name}</h6>
-                    <small className="text-gray-500 text-center block">{state.code || '-'}</small>
+                    <div className="text-2xl text-center mb-1">🏳️</div>
+                    <h6 className="font-bold text-center mb-0">{country.name}</h6>
                   </div>
-                )) : (
-                  <div className="col-span-full p-4 rounded-lg border border-gray-200 text-center text-gray-500 bg-white">
-                    No states available.
-                  </div>
-                )}
+                ))}
               </div>
             </div>
 
+            {/* State Selection */}
+            {showStates && (
+              <div>
+                <h6 className="font-medium text-gray-700 mb-3">Select State</h6>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <div
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${!selectedStateId ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                    onClick={() => handleStateSelect('')}
+                  >
+                    <h6 className="font-bold text-center mb-1">All States</h6>
+                    <small className="text-gray-500 text-center block">{selectedCountry?.name || 'Global'}</small>
+                  </div>
+                  {states.map((state) => (
+                    <div
+                      key={state._id}
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedStateId === state._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                      onClick={() => handleStateSelect(state._id)}
+                    >
+                      <h6 className="font-bold text-center mb-1">{state.name}</h6>
+                      <small className="text-gray-500 text-center block">{selectedCountry?.name || ''}</small>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Cluster Selection */}
-            {showClusters && selectedStateId && (
-              <div className="mb-4">
+            {showClusters && (
+              <div>
                 <h6 className="font-medium text-gray-700 mb-3">Select Cluster</h6>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  {clusters.length > 0 ? (
-                    clusters.map((cluster) => (
-                      <div
-                        key={cluster._id}
-                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedClusterId === cluster._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                        onClick={() => handleClusterSelect(cluster._id)}
-                      >
-                        <h6 className="font-bold text-center mb-1">{cluster.name}</h6>
-                        <small className="text-gray-500 text-center block">{selectedState?.name || ''}</small>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="col-span-full p-4 rounded-lg border border-gray-200 text-center text-gray-500 bg-white">
-                      No clusters available.
+                  <div
+                    className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${!selectedClusterId ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                    onClick={() => handleClusterSelect('')}
+                  >
+                    <h6 className="font-bold text-center mb-1">All Clusters</h6>
+                    <small className="text-gray-500 text-center block">{selectedState?.name || 'All States'}</small>
+                  </div>
+                  {clusters.map((cluster) => (
+                    <div
+                      key={cluster._id}
+                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedClusterId === cluster._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                      onClick={() => handleClusterSelect(cluster._id)}
+                    >
+                      <h6 className="font-bold text-center mb-1">{cluster.name}</h6>
+                      <small className="text-gray-500 text-center block">{selectedState?.name || ''}</small>
                     </div>
-                  )}
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* District Selection */}
+            {showDistricts && (
+              <div>
+                <h6 className="font-medium text-gray-700 mb-3">Select District</h6>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                   <div
+                     className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${!selectedDistrictId ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                     onClick={() => handleDistrictSelect('')}
+                   >
+                     <h6 className="font-bold text-center mb-1">All Districts</h6>
+                     <small className="text-gray-500 text-center block">{selectedCluster?.name || 'All Clusters'}</small>
+                   </div>
+                   {districts.map((district) => (
+                      <div
+                        key={district._id}
+                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedDistrictId === district._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                        onClick={() => handleDistrictSelect(district._id)}
+                      >
+                        <h6 className="font-bold text-center mb-1">{district.name}</h6>
+                        <small className="text-gray-500 text-center block">{selectedCluster?.name || ''}</small>
+                      </div>
+                    ))}
                 </div>
               </div>
             )}
@@ -338,13 +552,10 @@ export default function OrdersByLoanDashboard() {
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
             value={filters.category}
-            onChange={(e) => setFilters({ ...filters, category: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, category: e.target.value, subcategory: '', projectType: '', subType: '' })}
           >
-            <option value="" disabled className="text-gray-400">Select Category</option>
-            <option value="solarpanel">Solar Panel</option>
-            <option value="rooftop">Solar Rooftop</option>
-            <option value="streetlight">Solar Street Light</option>
-            <option value="solarpump">Solar Pump</option>
+            <option value="">Select Category</option>
+            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
 
@@ -353,11 +564,10 @@ export default function OrdersByLoanDashboard() {
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
             value={filters.subcategory}
-            onChange={(e) => setFilters({ ...filters, subcategory: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, subcategory: e.target.value, projectType: '', subType: '' })}
           >
-            <option value="" disabled className="text-gray-400">Select Sub Category</option>
-            <option value="residential">Residential</option>
-            <option value="commercial">Commercial</option>
+            <option value="">Select Sub Category</option>
+            {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
           </select>
         </div>
 
@@ -366,11 +576,14 @@ export default function OrdersByLoanDashboard() {
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
             value={filters.projectType}
-            onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
+            onChange={(e) => setFilters({ ...filters, projectType: e.target.value, subType: '' })}
           >
-            <option value="" disabled className="text-gray-400">Select Project Type</option>
-            <option value="above3kw">Above 3KW</option>
-            <option value="below3kw">Below 3KW</option>
+            <option value="">Select Project Type</option>
+            {mappingOptions.ranges.length > 0 ? (
+                mappingOptions.ranges.map(r => <option key={r.id} value={r.id}>{r.name}</option>)
+            ) : (
+                projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)
+            )}
           </select>
         </div>
 
@@ -381,10 +594,12 @@ export default function OrdersByLoanDashboard() {
             value={filters.subType}
             onChange={(e) => setFilters({ ...filters, subType: e.target.value })}
           >
-            <option value="" disabled>Select Sub Type</option>
-            <option value="ongrid">On-Grid</option>
-            <option value="offgrid">Off-Grid</option>
-            <option value="hybrid">Hybrid</option>
+            <option value="">Select Sub Type</option>
+            {mappingOptions.subTypes.length > 0 ? (
+                mappingOptions.subTypes.map(spt => <option key={spt._id} value={spt._id}>{spt.name}</option>)
+            ) : (
+                subProjectTypes.map(spt => <option key={spt._id} value={spt._id}>{spt.name}</option>)
+            )}
           </select>
         </div>
       </div>
@@ -392,22 +607,26 @@ export default function OrdersByLoanDashboard() {
       {/* Active Filters */}
       <div className="bg-white rounded-lg shadow-sm border-l-4 border-blue-400 mb-4 p-4">
         <div className="flex flex-wrap gap-2 mb-2">
-          {selectedState && (
-            <Badge tone="primary" className="flex items-center gap-1">
-              State: {selectedState.name}
-              <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedStateId('')} />
-            </Badge>
-          )}
-          {selectedCluster && (
-            <Badge tone="success" className="flex items-center gap-1">
-              Cluster: {selectedCluster.name}
-              <X className="h-3 w-3 cursor-pointer" onClick={() => setSelectedClusterId('')} />
-            </Badge>
-          )}
-          {filters.timeline && (
+          <Badge tone="primary" className="flex items-center gap-1">
+            Country: {selectedCountry?.name || 'All'}
+            <X className="h-3 w-3 cursor-pointer" onClick={() => handleCountrySelect('')} />
+          </Badge>
+          <Badge tone="primary" className="flex items-center gap-1">
+            State: {selectedState?.name || 'All'}
+            <X className="h-3 w-3 cursor-pointer" onClick={() => handleStateSelect('')} />
+          </Badge>
+          <Badge tone="success" className="flex items-center gap-1">
+            Cluster: {selectedCluster?.name || 'All'}
+            <X className="h-3 w-3 cursor-pointer" onClick={() => handleClusterSelect('')} />
+          </Badge>
+          <Badge tone="info" className="flex items-center gap-1">
+            District: {selectedDistrict?.name || 'All'}
+            <X className="h-3 w-3 cursor-pointer" onClick={() => handleDistrictSelect('')} />
+          </Badge>
+          {filters.category && (
             <Badge tone="warning" className="flex items-center gap-1">
-              Timeline: {filters.timeline}
-              <X className="h-3 w-3 cursor-pointer" onClick={() => setFilters({ ...filters, timeline: '' })} />
+              Category: {categories.find(c => c._id === filters.category)?.name || filters.category}
+              <X className="h-3 w-3 cursor-pointer" onClick={() => setFilters({ ...filters, category: '', subcategory: '' })} />
             </Badge>
           )}
           {filters.quarter && (
@@ -562,7 +781,9 @@ export default function OrdersByLoanDashboard() {
                   </thead>
                   <tbody>
                     {bankLoansData.length > 0 ? bankLoansData.map((loan, index) => {
-                      const disbursedPercentage = Math.round((loan.disbursedAmount / loan.loanAmount) * 100);
+                      const loanAmt = loan.loanAmount || 0;
+                      const disbAmt = loan.disbursedAmount || 0;
+                      const disbursedPercentage = loanAmt > 0 ? Math.round((disbAmt / loanAmt) * 100) : 0;
                       return (
                         <tr key={loan._id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="p-3">{index + 1}</td>
@@ -668,7 +889,9 @@ export default function OrdersByLoanDashboard() {
                   </thead>
                   <tbody>
                     {privateLoansData.length > 0 ? privateLoansData.map((loan, index) => {
-                      const disbursedPercentage = Math.round((loan.disbursedAmount / loan.loanAmount) * 100);
+                      const loanAmt = loan.loanAmount || 0;
+                      const disbAmt = loan.disbursedAmount || 0;
+                      const disbursedPercentage = loanAmt > 0 ? Math.round((disbAmt / loanAmt) * 100) : 0;
                       return (
                         <tr key={loan._id} className="border-b border-gray-100 hover:bg-gray-50">
                           <td className="p-3">{index + 1}</td>

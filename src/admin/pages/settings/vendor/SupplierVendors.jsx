@@ -6,6 +6,7 @@ import {
   deleteSupplierVendorPlan
 } from '../../../../services/vendor/vendorApi';
 import { locationAPI } from '../../../../api/api';
+import inventoryApi from '../../../../services/inventory/inventoryApi';
 import toast from 'react-hot-toast';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
@@ -65,8 +66,8 @@ export default function SupplierVendors() {
   ];
 
   // Location Hierarchy State
-  const [locationData, setLocationData] = useState({ countries: [], states: [], clusters: [], districts: [] });
-  const [selectedLocation, setSelectedLocation] = useState({ country: '', state: '', cluster: '', district: '' });
+  const [locationData, setLocationData] = useState({ countries: [], states: [], clusters: [], warehouses: [] });
+  const [selectedLocation, setSelectedLocation] = useState({ country: '', state: '', cluster: '', warehouse: '' });
   
   useEffect(() => {
     const fetchCountries = async () => {
@@ -107,29 +108,30 @@ export default function SupplierVendors() {
   }, [selectedLocation.state]);
 
   useEffect(() => {
-    const fetchDistricts = async () => {
+    const fetchWarehouses = async () => {
       if (selectedLocation.cluster) {
         try {
           if (selectedLocation.cluster !== 'all') {
-            const res = await locationAPI.getClusterById(selectedLocation.cluster);
-            if (res.data?.data?.districts) setLocationData(prev => ({ ...prev, districts: res.data.data.districts }));
-            else setLocationData(prev => ({ ...prev, districts: [] }));
+            const res = await inventoryApi.getAllWarehouses({ cluster: selectedLocation.cluster });
+            if (res.data && res.data.data) setLocationData(prev => ({ ...prev, warehouses: res.data.data }));
+            else setLocationData(prev => ({ ...prev, warehouses: [] }));
           } else {
-            const params = { isActive: true };
-            if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
-            const res = await locationAPI.getAllDistricts(params);
-            setLocationData(prev => ({ ...prev, districts: res.data?.data || [] }));
+            const params = { status: 'Active' };
+            if (selectedLocation.state && selectedLocation.state !== 'all') params.state = selectedLocation.state;
+            const res = await inventoryApi.getAllWarehouses(params);
+            if (res.data && res.data.data) setLocationData(prev => ({ ...prev, warehouses: res.data.data }));
+            else setLocationData(prev => ({ ...prev, warehouses: [] }));
           }
-        } catch (error) { setLocationData(prev => ({ ...prev, districts: [] })); }
-      } else setLocationData(prev => ({ ...prev, districts: [] }));
+        } catch (error) { setLocationData(prev => ({ ...prev, warehouses: [] })); }
+      } else setLocationData(prev => ({ ...prev, warehouses: [] }));
     };
-    fetchDistricts();
+    fetchWarehouses();
   }, [selectedLocation.cluster, selectedLocation.state]);
 
   useEffect(() => {
-    if (selectedLocation.district) fetchPlans();
+    if (selectedLocation.warehouse) fetchPlans();
     else resetToDefaults();
-  }, [selectedLocation.district, selectedLocation.cluster, selectedLocation.state, selectedLocation.country, globalPlanNames]);
+  }, [selectedLocation.warehouse, selectedLocation.cluster, selectedLocation.state, selectedLocation.country, globalPlanNames]);
 
   const resetToDefaults = () => {
       const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
@@ -146,7 +148,7 @@ export default function SupplierVendors() {
     try {
       setLoading(true);
       const params = {};
-      if (selectedLocation.district && selectedLocation.district !== 'all') params.districtId = selectedLocation.district;
+      if (selectedLocation.warehouse && selectedLocation.warehouse !== 'all') params.warehouseId = selectedLocation.warehouse;
       else if (selectedLocation.cluster && selectedLocation.cluster !== 'all') params.clusterId = selectedLocation.cluster;
       else if (selectedLocation.state && selectedLocation.state !== 'all') params.stateId = selectedLocation.state;
       else if (selectedLocation.country && selectedLocation.country !== 'all') params.countryId = selectedLocation.country;
@@ -156,19 +158,19 @@ export default function SupplierVendors() {
         const dbPlans = res.data;
         setAllFetchedPlans(dbPlans);
         
-        const districtPlans = selectedLocation.district !== 'all' 
-          ? dbPlans.filter(p => p.districtId?._id === selectedLocation.district || p.districtId === selectedLocation.district)
+        const currentPlans = selectedLocation.warehouse !== 'all' 
+          ? dbPlans.filter(p => p.warehouseId?._id === selectedLocation.warehouse || p.warehouseId === selectedLocation.warehouse)
           : dbPlans;
 
         const baseTabs = ['Manufacturer', 'Distributor', 'Dealer'];
         const currentNames = globalPlanNames.length > 0 ? globalPlanNames : baseTabs;
-        const uniqueTabs = Array.from(new Set([...currentNames, ...districtPlans.map(p => p.name)]));
+        const uniqueTabs = Array.from(new Set([...currentNames, ...currentPlans.map(p => p.name)]));
         setTabs(uniqueTabs);
         if (!uniqueTabs.includes(activeTab)) setActiveTab(uniqueTabs[0]);
 
         const settings = {};
         uniqueTabs.forEach(name => {
-            const match = districtPlans.find(p => p.name === name);
+            const match = currentPlans.find(p => p.name === name);
             settings[name] = match ? { ...match } : getDefaultFormState();
         });
         setFormSettings(settings);
@@ -203,8 +205,8 @@ export default function SupplierVendors() {
               stateId: selectedLocation.state === 'all' ? null : selectedLocation.state,
               clusterId: selectedLocation.cluster === 'all' ? null : selectedLocation.cluster,
           };
-          if (selectedLocation.district === 'all') payload.districtId = null;
-          else payload.districtId = selectedLocation.district;
+          if (selectedLocation.warehouse === 'all') payload.warehouseId = null;
+          else payload.warehouseId = selectedLocation.warehouse;
 
           const response = await saveSupplierVendorPlan(payload);
           if (response.success) {
@@ -264,7 +266,7 @@ export default function SupplierVendors() {
               name: name,
               stateId: null,
               clusterId: null,
-              districtId: null
+              warehouseId: null
           };
           
           const response = await saveSupplierVendorPlan(payload);
@@ -313,9 +315,9 @@ export default function SupplierVendors() {
                 </button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedLocation.country === 'all'} onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', district: '' })} />
+                <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedLocation.country === 'all'} onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', warehouse: '' })} />
                 {locationData.countries.map(c => (
-                  <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.country === c._id} onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', district: '' })} />
+                  <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.country === c._id} onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', warehouse: '' })} />
                 ))}
               </div>
             </div>
@@ -332,9 +334,9 @@ export default function SupplierVendors() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', district: '' }))} />
+                  <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', warehouse: '' }))} />
                   {locationData.states.map(s => (
-                    <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', district: '' }))} />
+                    <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', warehouse: '' }))} />
                   ))}
                 </div>
               </div>
@@ -352,10 +354,10 @@ export default function SupplierVendors() {
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedLocation.cluster === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', district: '' }))} />
+                  <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedLocation.cluster === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', warehouse: '' }))} />
                   {locationData.clusters.map(c => {
                     const parentState = locationData.states.find(s => s._id === c.state) || locationData.states.find(s => s._id === selectedLocation.state);
-                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'} isSelected={selectedLocation.cluster === c._id} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, district: '' }))} />;
+                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'} isSelected={selectedLocation.cluster === c._id} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, warehouse: '' }))} />;
                   })}
                 </div>
               </div>
@@ -364,19 +366,19 @@ export default function SupplierVendors() {
             {selectedLocation.cluster && (
               <div>
                 <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-xl font-bold text-[#333]">Select District</h2>
+                  <h2 className="text-xl font-bold text-[#333]">Select Warehouse</h2>
                   <button
-                    onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))}
+                    onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: 'all' }))}
                     className="text-sm font-medium text-blue-600 hover:text-blue-800"
                   >
                     Select All
                   </button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                  <LocationCard title="All Districts" subtitle="ALL" isSelected={selectedLocation.district === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, district: 'all' }))} />
-                  {locationData.districts.map(d => {
+                  <LocationCard title="All Warehouses" subtitle="ALL" isSelected={selectedLocation.warehouse === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: 'all' }))} />
+                  {locationData.warehouses.map(w => {
                     const parentCluster = locationData.clusters.find(c => c._id === selectedLocation.cluster);
-                    return <LocationCard key={d._id} title={d.name} subtitle={parentCluster ? parentCluster.name : 'DIST'} isSelected={selectedLocation.district === d._id} onClick={() => setSelectedLocation(prev => ({ ...prev, district: d._id }))} />;
+                    return <LocationCard key={w._id} title={w.name} subtitle={parentCluster ? parentCluster.name : 'WH'} isSelected={selectedLocation.warehouse === w._id} onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: w._id }))} />;
                   })}
                 </div>
               </div>
@@ -385,7 +387,7 @@ export default function SupplierVendors() {
         )}
 
         {/* Form Container */}
-        {selectedLocation.district && (
+        {selectedLocation.warehouse && (
           <div className="bg-white rounded-md shadow-sm border border-gray-200 pt-8 pb-10 px-10 mb-16 relative">
              <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex gap-2">
                  {tabs.map(tab => (
@@ -522,7 +524,7 @@ export default function SupplierVendors() {
         )}
 
         {/* Dashboard table mapping the saved forms */}
-        {selectedLocation.district && !loading && allFetchedPlans.length > 0 && (
+        {selectedLocation.warehouse && !loading && allFetchedPlans.length > 0 && (
           <div className="bg-white rounded-md shadow-sm border border-gray-200 overflow-hidden mb-10">
             <div className="bg-gray-50 border-b border-gray-200 p-4">
               <h3 className="font-bold text-gray-800">Saved Configurations Overview</h3>
@@ -533,7 +535,7 @@ export default function SupplierVendors() {
                   <tr>
                     <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">State</th>
                     <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">Cluster</th>
-                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">District</th>
+                    <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">Warehouse</th>
                     <th className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap">Role Type</th>
                     {kycOptions.map(opt => (
                         <th key={opt} className="p-4 font-semibold border-r border-[#3a4752] whitespace-nowrap text-center max-w-[150px] truncate" title={opt}>{opt}</th>
@@ -554,7 +556,7 @@ export default function SupplierVendors() {
                         {plan.clusterId ? plan.clusterId.name : <span className="text-blue-600">All Clusters</span>}
                       </td>
                       <td className="p-4 text-gray-800 font-bold border-r border-gray-200">
-                        {plan.districtId ? plan.districtId.name : <span className="text-blue-600">All Districts</span>}
+                        {plan.warehouseId ? plan.warehouseId.name : <span className="text-blue-600">All Warehouses</span>}
                       </td>
                       <td className="p-4 font-bold text-[#007bff] border-r border-gray-200">{plan.name}</td>
                       

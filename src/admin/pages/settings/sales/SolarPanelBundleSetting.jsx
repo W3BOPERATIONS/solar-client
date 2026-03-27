@@ -3,7 +3,7 @@ import {
   Plus, Edit, Trash2, CheckCircle, Save, LayoutGrid, Package, Settings, RefreshCw 
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
-const salesSettingsService = { getBundles: async () => [], createBundle: async () => ({}), updateBundle: async () => ({}), deleteBundle: async () => ({}), getAmcPrices: async () => [], createAmcPrice: async () => ({}), updateAmcPrice: async () => ({}), deleteAmcPrice: async () => ({}), getOffers: async () => [], createOffer: async () => ({}), updateOffer: async () => ({}), deleteOffer: async () => ({}), getPrices: async () => [], createPrice: async () => ({}), updatePrice: async () => ({}), deletePrice: async () => ({}) };
+import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 
 const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
   <div

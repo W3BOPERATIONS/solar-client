@@ -9,10 +9,10 @@ import {
   Check, X,
   Box,
   HardHat,
-  Store
+  Store, Globe
 } from 'lucide-react';
 import { getApprovals, updateApprovalStatus } from "../../../services/approvals/approvalsApi";
-import { getStates, getClusters, getDistricts } from "../../../services/core/locationApi";
+import { useLocations } from '../../../hooks/useLocations';
 
 // Define table headers for each approval type
 const tableHeaders = {
@@ -139,14 +139,15 @@ const TimelineModal = ({ ticket, isOpen, onClose }) => {
 export default function AdminApproval() {
   const [locationCardsVisible, setLocationCardsVisible] = useState(true);
 
-  // Location State
-  const [statesList, setStatesList] = useState([]);
-  const [clustersList, setClustersList] = useState([]);
-  const [districtsList, setDistrictsList] = useState([]);
-
-  const [currentState, setCurrentState] = useState('');
-  const [currentCluster, setCurrentCluster] = useState('');
-  const [currentDistrict, setCurrentDistrict] = useState('');
+  // useLocations hook
+  const {
+    countries, states, clusters, districts,
+    selectedCountry, setSelectedCountry,
+    selectedState, setSelectedState,
+    selectedCluster, setSelectedCluster,
+    selectedDistrict, setSelectedDistrict,
+    fetchStates, fetchClusters, fetchDistricts
+  } = useLocations();
 
   const [currentApprovalType, setCurrentApprovalType] = useState('');
   const [currentComboKitType, setCurrentComboKitType] = useState('');
@@ -165,92 +166,36 @@ export default function AdminApproval() {
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // For manual refresh
 
-  // 1. Fetch States on Mount
+  // Cascade Effects
   useEffect(() => {
-    const fetchStates = async () => {
-      try {
-        const states = await getStates();
-        setStatesList(states);
-        console.log("✅ States loaded dynamically from DB", states.length);
-      } catch (error) {
-        console.error("Error loading states:", error);
-      }
-    };
-    fetchStates();
-  }, []);
+    if (selectedCountry) fetchStates({ countryId: selectedCountry });
+  }, [selectedCountry, fetchStates]);
 
-  // 2. Fetch Clusters when State changes
   useEffect(() => {
-    if (currentState) {
-      const fetchClusters = async () => {
-        try {
-          const selectedStateObj = statesList.find(s => s.name === currentState);
-          if (selectedStateObj) {
-            // Assuming getClusters needs districtId, but based on UI flow State -> Cluster -> District?
-            // Wait, the UI flow in original code was State -> Cluster -> District.
-            // But existing locationApi.js has getClusters(districtId).
-            // Let's check the location structure. usually State -> District -> City/Cluster
-            // In the requested hierarchy: Country -> State -> District -> City -> Cluster
-            // BUT the user prompt said: "Country -> State -> District -> City -> Cluster"
-            // However, the original UI had State -> Cluster -> District.
+    if (selectedState) fetchClusters({ stateId: selectedState });
+  }, [selectedState, fetchClusters]);
 
-            // Let's stick to the prompt's hierarchy requirement: Country -> State -> District -> City -> Cluster
-            // Wait, if I change the hierarchy, I change the UI flow?
-            // "Keep SAME UI, SAME layout, SAME design, SAME flow"
-            // "All location hierarchy must come from DB: Country -> State -> District -> City -> Cluster"
-            // This is conflicting. The existing UI has State -> Cluster -> District.
-            // If I follow "Keep SAME UI", I should use State -> Cluster -> District.
-            // But if the DB hierarchy is different, I might need to adapt.
-
-            // Let's look at `locationApi.js` again.
-            // `getClustersHierarchy(stateId)` exists!
-            // `getDistrictsHierarchy(clusterId)` exists!
-            // So it supports the hierarchy.
-
-            const clusters = await import('../../../services/core/locationApi').then(m => m.getClustersHierarchy(selectedStateObj._id));
-            setClustersList(clusters);
-            console.log("📍 Location Clusters loaded", clusters.length);
-          }
-        } catch (error) {
-          console.error("Error loading clusters:", error);
-        }
-      };
-      fetchClusters();
-    } else {
-      setClustersList([]);
-    }
-  }, [currentState, statesList]);
-
-  // 3. Fetch Districts when Cluster changes
   useEffect(() => {
-    if (currentCluster) {
-      const fetchDistricts = async () => {
-        try {
-          const selectedClusterObj = clustersList.find(c => c.name === currentCluster);
-          if (selectedClusterObj) {
-            const districts = await import('../../../services/core/locationApi').then(m => m.getDistrictsHierarchy(selectedClusterObj._id));
-            setDistrictsList(districts);
-            console.log("📍 Location Districts loaded", districts.length);
-          }
-        } catch (error) {
-          console.error("Error loading districts:", error);
-        }
-      };
-      fetchDistricts();
-    } else {
-      setDistrictsList([]);
-    }
-  }, [currentCluster, clustersList]);
+    if (selectedCluster) fetchDistricts({ clusterId: selectedCluster });
+  }, [selectedCluster, fetchDistricts]);
+
+  // Handle Card Click Helpers
+  const findName = (list, id) => {
+    if (id === 'all') return 'All';
+    return list.find(item => item._id === id)?.name || '';
+  };
 
   // 4. Fetch Approvals
   useEffect(() => {
     const fetchApprovalData = async () => {
       setLoading(true);
       try {
-        const filters = {};
-        if (currentState && currentState !== 'All') filters.state = currentState;
-        if (currentCluster && currentCluster !== 'All') filters.cluster = currentCluster;
-        if (currentDistrict && currentDistrict !== 'All') filters.district = currentDistrict;
+        const filters = {
+          country: selectedCountry,
+          state: findName(states, selectedState),
+          cluster: findName(clusters, selectedCluster),
+          district: findName(districts, selectedDistrict)
+        };
 
         const response = await getApprovals(filters);
         console.log("📊 Approval data fetched from database", response.length);
@@ -320,7 +265,7 @@ export default function AdminApproval() {
     // And "Fetch approval records... Render dynamically based on selected location"
     fetchApprovalData();
 
-  }, [currentState, currentCluster, currentDistrict, refreshKey]);
+  }, [selectedCountry, selectedState, selectedCluster, selectedDistrict, refreshKey, states, clusters, districts]);
 
   // Calculate summary data
   const totalPending = Object.values(data).reduce((sum, items) => sum + items.length, 0);
@@ -412,21 +357,6 @@ export default function AdminApproval() {
     }
   };
 
-  const handleStateSelect = (state) => {
-    setCurrentState(state);
-    setCurrentCluster('');
-    setCurrentDistrict('');
-  };
-
-  const handleClusterSelect = (cluster) => {
-    setCurrentCluster(cluster);
-    setCurrentDistrict('');
-  };
-
-  const handleDistrictSelect = (district) => {
-    setCurrentDistrict(district);
-  };
-
   const handleApprovalTypeSelect = (type) => {
     setCurrentApprovalType(type);
     setCurrentComboKitType('');
@@ -466,7 +396,8 @@ export default function AdminApproval() {
 
     // Add rejected items
     rejectedItems.forEach(item => {
-      csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},Rejected,${item.requestedBy},${item.rejectedDate || item.date},${currentDistrict || currentCluster || currentState || 'All'}\n`;
+      const loc = findName(districts, selectedDistrict) || findName(clusters, selectedCluster) || findName(states, selectedState) || 'All';
+      csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},Rejected,${item.requestedBy},${item.rejectedDate || item.date},${loc}\n`;
     });
 
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
@@ -749,40 +680,101 @@ export default function AdminApproval() {
 
       {/* Location Selection Section */}
       <div className={`location-section ${locationCardsVisible ? 'expanded' : 'collapsed'} mb-6`}>
-        {/* State Selection */}
+        {/* Country Selection */}
         <div className="mb-6">
-          <h4 className="text-lg font-semibold mb-4">Select State</h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-            {statesList.map((state) => (
+          <h4 className="text-lg font-semibold mb-4">Select Country</h4>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+            <div
+              className={`clickable-card bg-white rounded-lg shadow-sm p-4 text-center border-2 border-dashed ${selectedCountry === 'all' ? 'selected border-blue-500 bg-blue-50' : 'border-gray-200 opacity-80'
+                }`}
+              onClick={() => {
+                setSelectedCountry('all');
+                setSelectedState('');
+                setSelectedCluster('');
+                setSelectedDistrict('');
+              }}
+            >
+              <div className="bg-gray-100 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                <Users className="text-gray-600" size={24} />
+              </div>
+              <h5 className="font-bold text-lg italic">All Countries</h5>
+              <p className="text-gray-400 text-xs">Global Overview</p>
+            </div>
+            {countries.map((country) => (
               <div
-                key={state._id}
-                className={`clickable-card bg-white rounded-lg shadow-sm p-4 text-center border-2 ${currentState === state.name ? 'selected border-blue-500' : 'border-transparent'
+                key={country._id}
+                className={`clickable-card bg-white rounded-lg shadow-sm p-4 text-center border-2 ${selectedCountry === country._id ? 'selected border-blue-500' : 'border-transparent'
                   }`}
-                onClick={() => handleStateSelect(state.name)}
+                onClick={() => setSelectedCountry(country._id)}
               >
-                <h5 className="font-bold text-lg">{state.name}</h5>
-                <p className="text-gray-500 text-sm mt-1">
-                  {state.code || state.name.substring(0, 2).toUpperCase()}
-                </p>
+                <div className="bg-blue-50 w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <Globe className="text-blue-600" size={24} />
+                </div>
+                <h5 className="font-bold text-lg">{country.name}</h5>
+                <p className="text-gray-500 text-sm mt-1">{country.code}</p>
               </div>
             ))}
           </div>
         </div>
 
+        {/* State Selection */}
+        {(selectedCountry || selectedCountry === 'all') && (
+          <div className="mb-6">
+            <h4 className="text-lg font-semibold mb-4">Select State</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+              <div
+                className={`clickable-card bg-white rounded-lg shadow-sm p-4 text-center border-2 border-dashed ${selectedState === 'all' ? 'selected border-blue-500 bg-blue-50' : 'border-gray-200 opacity-80'
+                  }`}
+                onClick={() => {
+                  setSelectedState('all');
+                  setSelectedCluster('');
+                  setSelectedDistrict('');
+                }}
+              >
+                <h5 className="font-bold text-lg italic">All States</h5>
+                <p className="text-gray-400 text-xs text-sm mt-1">National View</p>
+              </div>
+              {states.map((state) => (
+                <div
+                  key={state._id}
+                  className={`clickable-card bg-white rounded-lg shadow-sm p-4 text-center border-2 ${selectedState === state._id ? 'selected border-blue-500' : 'border-transparent'
+                    }`}
+                  onClick={() => setSelectedState(state._id)}
+                >
+                  <h5 className="font-bold text-lg">{state.name}</h5>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {state.code || state.name.substring(0, 2).toUpperCase()}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* Cluster Selection */}
-        {currentState && clustersList.length > 0 && (
+        {(selectedState || selectedState === 'all') && clusters.length > 0 && (
           <div className="mb-6">
             <h4 className="text-lg font-semibold mb-4">Select Cluster</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {clustersList.map((cluster) => (
+              <div
+                className={`clickable-cluster bg-white rounded-lg shadow-sm p-4 text-center border-2 border-dashed ${selectedCluster === 'all' ? 'selected border-blue-500 bg-blue-50' : 'border-gray-200 opacity-80'
+                  }`}
+                onClick={() => {
+                  setSelectedCluster('all');
+                  setSelectedDistrict('');
+                }}
+              >
+                <h6 className="font-bold italic text-gray-500">All Clusters</h6>
+              </div>
+              {clusters.map((cluster) => (
                 <div
                   key={cluster._id}
-                  className={`clickable-cluster bg-white rounded-lg shadow-sm p-4 text-center border-2 ${currentCluster === cluster.name ? 'selected border-blue-500' : 'border-transparent'
+                  className={`clickable-cluster bg-white rounded-lg shadow-sm p-4 text-center border-2 ${selectedCluster === cluster._id ? 'selected border-blue-500' : 'border-transparent'
                     }`}
-                  onClick={() => handleClusterSelect(cluster.name)}
+                  onClick={() => setSelectedCluster(cluster._id)}
                 >
                   <h6 className="font-bold">{cluster.name}</h6>
-                  <p className="text-gray-500 text-sm mt-1">{currentState}</p>
+                  <p className="text-gray-500 text-sm mt-1">Cluster</p>
                 </div>
               ))}
             </div>
@@ -790,19 +782,26 @@ export default function AdminApproval() {
         )}
 
         {/* District Selection */}
-        {currentCluster && districtsList.length > 0 && (
+        {(selectedCluster || selectedCluster === 'all') && districts.length > 0 && (
           <div className="mb-6">
             <h4 className="text-lg font-semibold mb-4">Select District</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {districtsList.map((district) => (
+              <div
+                className={`clickable-district bg-white rounded-lg shadow-sm p-4 text-center border-2 border-dashed ${selectedDistrict === 'all' ? 'selected border-blue-500 bg-blue-50' : 'border-gray-200 opacity-80'
+                  }`}
+                onClick={() => setSelectedDistrict('all')}
+              >
+                <h6 className="font-bold italic text-gray-500">All Districts</h6>
+              </div>
+              {districts.map((district) => (
                 <div
                   key={district._id}
-                  className={`clickable-district bg-white rounded-lg shadow-sm p-4 text-center border-2 ${currentDistrict === district.name ? 'selected border-blue-500' : 'border-transparent'
+                  className={`clickable-district bg-white rounded-lg shadow-sm p-4 text-center border-2 ${selectedDistrict === district._id ? 'selected border-blue-500' : 'border-transparent'
                     }`}
-                  onClick={() => handleDistrictSelect(district.name)}
+                  onClick={() => setSelectedDistrict(district._id)}
                 >
                   <h6 className="font-bold">{district.name}</h6>
-                  <p className="text-gray-500 text-sm mt-1">{currentCluster}</p>
+                  <p className="text-gray-500 text-sm mt-1">District</p>
                 </div>
               ))}
             </div>
@@ -810,8 +809,8 @@ export default function AdminApproval() {
         )}
       </div>
 
-      {/* Main Container - Only show when state is selected */}
-      {currentState && (
+      {/* Main Container - Show when any category is selected, or Global view */}
+      {(selectedCountry || selectedCountry === 'all') && (
         <div className="space-y-6">
           {/* Summary Section */}
           <div className="bg-white rounded-lg shadow-sm p-6">

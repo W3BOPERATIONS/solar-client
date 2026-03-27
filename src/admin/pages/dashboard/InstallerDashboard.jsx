@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { dashboardAPI } from '../../../api/api';
+import * as masterApi from '../../../services/core/masterApi';
 import ReactApexChart from 'react-apexcharts';
 import {
   Users,
@@ -14,14 +15,17 @@ import { useLocations } from '../../../hooks/useLocations';
 
 export default function InstallerDashboard() {
   const {
+    countries,
     states,
     clusters,
     districts,
+    fetchStates,
     fetchClusters,
     fetchDistricts
   } = useLocations();
 
   const [filters, setFilters] = useState({
+    country: '',
     state: '',
     cluster: '',
     district: '',
@@ -33,6 +37,12 @@ export default function InstallerDashboard() {
     startDate: '',
     endDate: ''
   });
+
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [allMappings, setAllMappings] = useState([]);
 
   const [dashboardData, setDashboardData] = useState({
     totalInstallers: 0,
@@ -51,11 +61,56 @@ export default function InstallerDashboard() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
+  useEffect(() => {
+    const loadMasterData = async () => {
+      try {
+        const [catRes, ptRes, mappingRes, sptRes] = await Promise.all([
+          masterApi.getCategories(),
+          masterApi.getProjectTypes(),
+          masterApi.getProjectCategoryMappings({ status: true }),
+          masterApi.getSubProjectTypes()
+        ]);
+        setCategories(catRes.data || []);
+        setProjectTypes(ptRes.data || []);
+        setAllMappings(mappingRes.data || []);
+        setSubProjectTypes(sptRes.data || []);
+      } catch (err) {
+        console.error('Error loading master data:', err);
+      }
+    };
+    loadMasterData();
+  }, []);
+
+  useEffect(() => {
+    const fetchSubCategories = async () => {
+      if (!filters.category) {
+        setSubCategories([]);
+        return;
+      }
+      try {
+        const res = await masterApi.getSubCategories({ categoryId: filters.category });
+        setSubCategories(res.data || []);
+      } catch (err) {
+        console.error('Error fetching subcategories:', err);
+      }
+    };
+    fetchSubCategories();
+  }, [filters.category]);
+
   const loadDashboardData = async () => {
     try {
       setLoading(true);
       console.log('--- 🚀 Dashboard Data Fetch Started ---');
-      const res = await dashboardAPI.getInstaller(filters);
+      
+      const queryParams = { ...filters };
+      // Handle Project Type Range if selected
+      if (filters.projectType && filters.projectType.includes('to')) {
+        const parts = filters.projectType.split(' ');
+        queryParams.projectTypeFrom = parts[0];
+        queryParams.projectTypeTo = parts[2];
+      }
+
+      const res = await dashboardAPI.getInstaller(queryParams);
 
       if (res.data?.success) {
         setDashboardData(res.data.dashboard);
@@ -77,29 +132,75 @@ export default function InstallerDashboard() {
     }
   };
 
+  // Unique data from mappings for those specific ranges
+  const mappingOptions = (() => {
+    let filtered = allMappings || [];
+    
+    if (filters.state) {
+      filtered = filtered.filter(m => {
+        const mId = typeof m.stateId === 'object' ? m.stateId?._id : m.stateId;
+        return mId === filters.state;
+      });
+    }
+    if (filters.category) {
+      filtered = filtered.filter(m => {
+        const mId = typeof m.categoryId === 'object' ? m.categoryId?._id : m.categoryId;
+        return mId === filters.category;
+      });
+    }
+
+    const uniqueRanges = [];
+    const uniqueSubTypes = [];
+    const rangeKeys = new Set();
+    const subTypeKeys = new Set();
+
+    filtered.forEach(m => {
+       if (m.projectTypeFrom !== undefined && m.projectTypeTo !== undefined) {
+         const label = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+         if (!rangeKeys.has(label)) {
+           rangeKeys.add(label);
+           uniqueRanges.push({ id: label, name: label });
+         }
+       }
+       
+       const stId = m.subProjectTypeId?._id || m.subProjectTypeId;
+       if (stId && !subTypeKeys.has(stId)) {
+          subTypeKeys.add(stId);
+          uniqueSubTypes.push({ 
+            _id: stId, 
+            name: (typeof m.subProjectTypeId === 'object' ? m.subProjectTypeId?.name : null) || 'On-Grid' 
+          });
+       }
+    });
+
+    return { ranges: uniqueRanges, subTypes: uniqueSubTypes };
+  })();
+
   useEffect(() => {
     loadDashboardData();
   }, [filters]);
 
+  // Update states when country changes
+  useEffect(() => {
+    if (filters.country) {
+      fetchStates({ countryId: filters.country });
+      console.log('✅ Locations loaded dynamically from DB (States)');
+    }
+  }, [filters.country]);
+
   // Update clusters when state changes
   useEffect(() => {
     if (filters.state) {
-      const selectedState = states.find(s => s.name === filters.state);
-      if (selectedState) {
-        fetchClusters({ stateId: selectedState._id });
-        console.log('✅ Locations loaded dynamically from DB (Clusters)');
-      }
+      fetchClusters({ stateId: filters.state });
+      console.log('✅ Locations loaded dynamically from DB (Clusters)');
     }
   }, [filters.state]);
 
   // Update districts when cluster changes
   useEffect(() => {
     if (filters.cluster) {
-      const selectedCluster = clusters.find(c => c.name === filters.cluster);
-      if (selectedCluster) {
-        fetchDistricts({ clusterId: selectedCluster._id });
-        console.log('✅ Locations loaded dynamically from DB (Districts)');
-      }
+      fetchDistricts({ clusterId: filters.cluster });
+      console.log('✅ Locations loaded dynamically from DB (Districts)');
     }
   }, [filters.cluster]);
 
@@ -109,6 +210,7 @@ export default function InstallerDashboard() {
 
   const resetFilters = () => {
     setFilters({
+      country: '',
       state: '',
       cluster: '',
       district: '',
@@ -163,27 +265,50 @@ export default function InstallerDashboard() {
         </div>
       </div>
 
-      {/* First Row of Filters */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+      {/* First Row of Filters (Location Hierarchy) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4 mb-4">
+        <div>
+          <select
+            className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+            value={filters.country}
+            onChange={(e) => {
+              handleFilterChange('country', e.target.value);
+              handleFilterChange('state', '');
+              handleFilterChange('cluster', '');
+              handleFilterChange('district', '');
+            }}
+          >
+            <option value="">All Countries</option>
+            {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          </select>
+        </div>
         <div>
           <select
             className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.state}
-            onChange={(e) => handleFilterChange('state', e.target.value)}
+            onChange={(e) => {
+              handleFilterChange('state', e.target.value);
+              handleFilterChange('cluster', '');
+              handleFilterChange('district', '');
+            }}
+            disabled={!filters.country}
           >
             <option value="">All States</option>
-            {states.map(s => <option key={s._id} value={s.name}>{s.name}</option>)}
+            {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
           </select>
         </div>
         <div>
           <select
             className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.cluster}
-            onChange={(e) => handleFilterChange('cluster', e.target.value)}
+            onChange={(e) => {
+              handleFilterChange('cluster', e.target.value);
+              handleFilterChange('district', '');
+            }}
             disabled={!filters.state}
           >
             <option value="">All Clusters</option>
-            {clusters.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+            {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
         <div>
@@ -194,7 +319,7 @@ export default function InstallerDashboard() {
             disabled={!filters.cluster}
           >
             <option value="">All Districts</option>
-            {districts.map(d => <option key={d._id} value={d.name}>{d.name}</option>)}
+            {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
           </select>
         </div>
         <div>
@@ -246,33 +371,46 @@ export default function InstallerDashboard() {
           <select
             className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.category}
-            onChange={(e) => handleFilterChange('category', e.target.value)}
+            onChange={(e) => {
+               handleFilterChange('category', e.target.value);
+               handleFilterChange('subcategory', '');
+               handleFilterChange('projectType', '');
+               handleFilterChange('subType', '');
+            }}
           >
             <option value="">All Categories</option>
-            <option>Solar Rooftop</option>
-            <option>Solar Pump</option>
+            {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
         <div>
           <select
             className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.subcategory}
-            onChange={(e) => handleFilterChange('subcategory', e.target.value)}
+            onChange={(e) => {
+               handleFilterChange('subcategory', e.target.value);
+               handleFilterChange('projectType', '');
+               handleFilterChange('subType', '');
+            }}
           >
             <option value="">All Sub Categories</option>
-            <option>Residential</option>
-            <option>Commercial</option>
+            {subCategories.map(sc => <option key={sc._id} value={sc._id}>{sc.name}</option>)}
           </select>
         </div>
         <div>
           <select
             className="w-full p-3 border border-gray-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             value={filters.projectType}
-            onChange={(e) => handleFilterChange('projectType', e.target.value)}
+            onChange={(e) => {
+               handleFilterChange('projectType', e.target.value);
+               handleFilterChange('subType', '');
+            }}
           >
             <option value="">All Project Type</option>
-            <option>3kw - 5kw</option>
-            <option>5kw - 10kw</option>
+            {mappingOptions.ranges.length > 0 ? (
+               mappingOptions.ranges.map(r => <option key={r.id} value={r.id}>{r.name}</option>)
+            ) : (
+               projectTypes.map(pt => <option key={pt._id} value={pt._id}>{pt.name}</option>)
+            )}
           </select>
         </div>
         <div>
@@ -282,9 +420,11 @@ export default function InstallerDashboard() {
             onChange={(e) => handleFilterChange('subType', e.target.value)}
           >
             <option value="">All Sub Project</option>
-            <option>OnGrid</option>
-            <option>OffGrid</option>
-            <option>Hybrid</option>
+            {mappingOptions.subTypes.length > 0 ? (
+               mappingOptions.subTypes.map(st => <option key={st._id} value={st._id}>{st.name}</option>)
+            ) : (
+               subProjectTypes.map(st => <option key={st._id} value={st._id}>{st.name}</option>)
+            )}
           </select>
         </div>
         <div className="flex flex-col sm:flex-row gap-2 sm:items-end">

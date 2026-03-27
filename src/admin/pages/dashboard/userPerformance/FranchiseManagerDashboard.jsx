@@ -33,6 +33,7 @@ const loadGoogleMapsScript = (callback) => {
 };
 
 export default function FranchiseManagerDashboard() {
+  const [selectedCountry, setSelectedCountry] = useState(null);
   const [selectedState, setSelectedState] = useState(null);
   const [selectedCluster, setSelectedCluster] = useState(null);
   const [selectedDistrict, setSelectedDistrict] = useState(null);
@@ -40,6 +41,7 @@ export default function FranchiseManagerDashboard() {
   const [userType, setUserType] = useState('cprmtrainee');
   const [showLeadsModal, setShowLeadsModal] = useState(false);
 
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
   const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
@@ -53,36 +55,44 @@ export default function FranchiseManagerDashboard() {
   const chart2Instance = useRef(null);
 
   useEffect(() => {
-    fetchStates();
+    fetchCountries();
+    fetchStatesByCountry(null); // Fetch global states initially
     fetchPerformance();
   }, [userType]);
 
   useEffect(() => {
     fetchPerformance();
-  }, [selectedState, selectedCluster, selectedDistrict]);
+  }, [selectedCountry, selectedState, selectedCluster, selectedDistrict]);
 
-  const fetchStates = async () => {
+  const fetchCountries = async () => {
     try {
-      const statesData = await locationApi.getStates();
-      setStates(statesData);
+      const data = await locationApi.getCountries();
+      setCountries(data || []);
+    } catch (err) { console.error(err); }
+  };
+
+  const fetchStatesByCountry = async (countryId) => {
+    try {
+      const statesData = await locationApi.getStates(countryId);
+      setStates(statesData || []);
     } catch (err) {
       console.error('Error fetching states:', err);
     }
   };
 
-  const fetchClusters = async (districtId) => {
+  const fetchClustersByDistrict = async (districtId) => {
     try {
       const data = await locationApi.getClusters(districtId);
-      setClusters(data);
+      setClusters(data || []);
     } catch (err) {
       console.error('Error fetching clusters:', err);
     }
   };
 
-  const fetchDistrictsByState = async (stateId) => {
+  const fetchDistrictsByCluster = async (clusterId) => {
     try {
-      const data = await locationApi.getDistricts({ stateId });
-      setDistricts(data);
+      const data = await locationApi.getDistrictsHierarchy(clusterId);
+      setDistricts(data || []);
     } catch (err) {
       console.error('Error fetching districts:', err);
     }
@@ -92,6 +102,7 @@ export default function FranchiseManagerDashboard() {
     setLoading(true);
     try {
       const params = {
+        countryId: selectedCountry?._id,
         stateId: selectedState?._id,
         clusterId: selectedCluster?._id,
         districtId: selectedDistrict?._id,
@@ -316,24 +327,44 @@ export default function FranchiseManagerDashboard() {
     initCharts();
   }, [performanceData]);
 
+  const handleCountrySelect = (country) => {
+    setSelectedCountry(country);
+    setSelectedState(null);
+    setSelectedCluster(null);
+    setSelectedDistrict(null);
+    setStates([]);
+    setClusters([]);
+    setDistricts([]);
+    fetchStatesByCountry(country?._id);
+  };
+
   const handleStateSelect = (state) => {
     setSelectedState(state);
     setSelectedCluster(null);
     setSelectedDistrict(null);
-    setDistricts([]);
     setClusters([]);
-    fetchDistrictsByState(state._id);
+    setDistricts([]);
+    // Step: State -> Cluster
+    fetchClustersByState(state?._id);
+  };
+
+  const fetchClustersByState = async (stateId) => {
+    try {
+      const data = await locationApi.getClustersHierarchy(stateId);
+      setClusters(data || []);
+    } catch (err) { console.error(err); }
   };
 
   const handleClusterSelect = (cluster) => {
     setSelectedCluster(cluster);
-    // Note: No further dependent data for cluster in current UI flow
+    setSelectedDistrict(null);
+    setDistricts([]);
+    // Step: Cluster -> Districts
+    fetchDistrictsByCluster(cluster?._id);
   };
 
   const handleDistrictSelect = (district) => {
     setSelectedDistrict(district);
-    setSelectedCluster(null);
-    fetchClusters(district._id);
   };
 
   // No static data needed
@@ -365,38 +396,69 @@ export default function FranchiseManagerDashboard() {
       {/* Location Section */}
       {showLocationCards && (
         <div className="mb-6 transition-all duration-500 ease-in-out">
-          {/* State Selection */}
-          <div className="mb-6">
-            <h4 className="text-lg font-semibold text-gray-800 mb-3">Select State</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              {states.map((state) => (
+          {/* Country Selection */}
+          <div className="mb-6 mb-8 group">
+            <div className="flex justify-between items-center mb-3">
+              <h4 className="text-lg font-semibold text-gray-800">Select Country</h4>
+              <button 
+                onClick={() => handleCountrySelect(null)}
+                className={`text-xs px-3 py-1 rounded-full border transition-all ${!selectedCountry ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'text-gray-500 border-gray-300 hover:border-blue-400'}`}
+              >
+                Select All Countries
+              </button>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+              {/* All Countries Card - Optional visual card if button above is not enough */}
+              <div
+                onClick={() => handleCountrySelect(null)}
+                className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${!selectedCountry ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-200' : 'border-transparent'}`}
+              >
+                <h5 className="font-bold text-gray-800">All Countries</h5>
+                <p className="text-gray-500 text-sm mt-1">Global View</p>
+              </div>
+              {countries.map((country) => (
                 <div
-                  key={state._id}
-                  onClick={() => handleStateSelect(state)}
-                  className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedState?._id === state._id ? 'border-blue-600' : 'border-transparent'
+                  key={country._id}
+                  onClick={() => handleCountrySelect(country)}
+                  className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedCountry?._id === country._id ? 'border-indigo-600 bg-indigo-50' : 'border-transparent'
                     }`}
                 >
-                  <h5 className="font-bold text-gray-800">{state.name}</h5>
-                  <p className="text-gray-500 text-sm mt-1">{state.code || 'N/A'}</p>
+                  <h5 className="font-bold text-gray-800">{country.name}</h5>
+                  <p className="text-gray-500 text-sm mt-1">{country.code || 'INTL'}</p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* District Selection */}
-          {selectedState && districts.length > 0 && (
-            <div className="mb-6 transition-all duration-500 ease-in-out">
-              <h4 className="text-lg font-semibold text-gray-800 mb-3">Select District</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                {districts.map((district) => (
+          {/* State Selection */}
+          {(selectedCountry || countries.length > 0) && (
+            <div className="mb-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+               <div className="flex justify-between items-center mb-3">
+                <h4 className="text-lg font-semibold text-gray-800">Select State</h4>
+                <button 
+                  onClick={() => handleStateSelect(null)}
+                  className={`text-xs px-3 py-1 rounded-full border transition-all ${!selectedState ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'text-gray-500 border-gray-300 hover:border-blue-400'}`}
+                >
+                  Select All States
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                 <div
+                    onClick={() => handleStateSelect(null)}
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${!selectedState ? 'border-blue-600 bg-blue-50 ring-2 ring-blue-200' : 'border-transparent'}`}
+                  >
+                    <h5 className="font-bold text-gray-800">All States</h5>
+                    <p className="text-gray-500 text-sm mt-1">{selectedCountry?.name || 'All Countries'}</p>
+                  </div>
+                {states.map((state) => (
                   <div
-                    key={district._id}
-                    onClick={() => handleDistrictSelect(district)}
-                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedDistrict?._id === district._id ? 'border-blue-600' : 'border-transparent'
+                    key={state._id}
+                    onClick={() => handleStateSelect(state)}
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedState?._id === state._id ? 'border-blue-600 bg-blue-50' : 'border-transparent'
                       }`}
                   >
-                    <h6 className="font-bold text-gray-800">{district.name}</h6>
-                    <p className="text-gray-500 text-sm mt-1">{selectedState.name}</p>
+                    <h5 className="font-bold text-gray-800">{state.name}</h5>
+                    <p className="text-gray-500 text-sm mt-1">{state.code || 'N/A'}</p>
                   </div>
                 ))}
               </div>
@@ -404,19 +466,69 @@ export default function FranchiseManagerDashboard() {
           )}
 
           {/* Cluster Selection */}
-          {selectedDistrict && clusters.length > 0 && (
-            <div className="mb-6 transition-all duration-500 ease-in-out">
-              <h4 className="text-lg font-semibold text-gray-800 mb-3">Select Cluster</h4>
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {(selectedState || states.length > 0) && (
+            <div className="mb-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+              <div className="flex justify-between items-center mb-3">
+                <h4 className="text-lg font-semibold text-gray-800">Select Cluster</h4>
+                <button 
+                  onClick={() => handleClusterSelect(null)}
+                  className={`text-xs px-3 py-1 rounded-full border transition-all ${!selectedCluster ? 'bg-purple-600 text-white border-purple-600 shadow-md' : 'text-gray-500 border-gray-300 hover:border-purple-400'}`}
+                >
+                  Select All Clusters
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                 <div
+                    onClick={() => handleClusterSelect(null)}
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${!selectedCluster ? 'border-purple-600 bg-purple-50 ring-2 ring-purple-200' : 'border-transparent'}`}
+                  >
+                    <h6 className="font-bold text-gray-800">All Clusters</h6>
+                    <p className="text-gray-500 text-sm mt-1">{selectedState?.name || 'All States'}</p>
+                  </div>
                 {clusters.map((cluster) => (
                   <div
                     key={cluster._id}
                     onClick={() => handleClusterSelect(cluster)}
-                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedCluster?._id === cluster._id ? 'border-blue-600' : 'border-transparent'
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedCluster?._id === cluster._id ? 'border-purple-600 bg-purple-50' : 'border-transparent'
                       }`}
                   >
                     <h6 className="font-bold text-gray-800">{cluster.name}</h6>
-                    <p className="text-gray-500 text-sm mt-1">{selectedDistrict.name}</p>
+                    <p className="text-gray-500 text-sm mt-1">{selectedState?.name || '-'}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* District Selection */}
+          {(selectedCluster || clusters.length > 0) && (
+            <div className="mb-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-500">
+               <div className="flex justify-between items-center mb-3">
+                <h4 className="text-lg font-semibold text-gray-800">Select District</h4>
+                <button 
+                  onClick={() => handleDistrictSelect(null)}
+                  className={`text-xs px-3 py-1 rounded-full border transition-all ${!selectedDistrict ? 'bg-green-600 text-white border-green-600 shadow-md' : 'text-gray-500 border-gray-300 hover:border-green-400'}`}
+                >
+                  Select All Districts
+                </button>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-4">
+                 <div
+                    onClick={() => handleDistrictSelect(null)}
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${!selectedDistrict ? 'border-green-600 bg-green-50 ring-2 ring-green-200' : 'border-transparent'}`}
+                  >
+                    <h6 className="font-bold text-gray-800">All Districts</h6>
+                    <p className="text-gray-500 text-sm mt-1">{selectedCluster?.name || 'All Clusters'}</p>
+                  </div>
+                {districts.map((district) => (
+                  <div
+                    key={district._id}
+                    onClick={() => handleDistrictSelect(district)}
+                    className={`bg-white rounded-lg shadow-sm p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-md border-2 ${selectedDistrict?._id === district._id ? 'border-green-600 bg-green-50' : 'border-transparent'
+                      }`}
+                  >
+                    <h6 className="font-bold text-gray-800">{district.name}</h6>
+                    <p className="text-gray-500 text-sm mt-1">{selectedCluster?.name || '-'}</p>
                   </div>
                 ))}
               </div>
@@ -457,7 +569,7 @@ export default function FranchiseManagerDashboard() {
                 <div className="w-3 h-3 rounded-full bg-red-500" title="Inactive"></div>
               </div>
             </div>
-            <div className="text-gray-600 font-medium">Total Partner's</div>
+            <div className="text-gray-600 font-medium">Total Partners</div>
             <div className="text-sm text-gray-500 mt-2">
               <span className="text-green-600 mr-2">{performanceData?.summary?.statusCounts?.Performer || 0} Performers,</span>
               <span className="text-gray-500 mr-2">{performanceData?.summary?.statusCounts?.Active || 0} Active,</span>
@@ -525,10 +637,10 @@ export default function FranchiseManagerDashboard() {
             </div>
           </div>
 
-          {/* Franchisee Signups */}
+          {/* Partner Signups */}
           <div className="bg-white rounded-xl shadow-sm p-5 border-l-4 border-yellow-500 hover:-translate-y-1 transition-transform duration-300">
             <div className="text-2xl font-bold text-gray-800 mb-1">{performanceData?.summary?.signups || 0}</div>
-            <div className="text-gray-600 font-medium mb-2">Partner's Signups</div>
+            <div className="text-gray-600 font-medium mb-2">Partner Signups</div>
             <div>
               <span className="text-gray-500 text-sm">New onboardings</span>
             </div>
@@ -551,43 +663,57 @@ export default function FranchiseManagerDashboard() {
       </div>
 
       <hr className="my-6" />
-
       {/* Filters Row */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-6">
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-3 mb-6">
         <select
           className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={selectedState?._id || ''}
+          value={selectedCountry?._id || ''}
           onChange={(e) => {
-            const state = states.find(s => s._id === e.target.value);
-            if (state) handleStateSelect(state);
+            const country = countries.find(c => c._id === e.target.value);
+            handleCountrySelect(country || null);
           }}
         >
-          <option value="" disabled>Select State</option>
+          <option value="">All Countries</option>
+          {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+        </select>
+
+        <select
+          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+          value={selectedState?._id || ''}
+          disabled={!selectedCountry && countries.length === 0}
+          onChange={(e) => {
+            const state = states.find(s => s._id === e.target.value);
+            handleStateSelect(state || null);
+          }}
+        >
+          <option value="">All States</option>
           {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
         </select>
 
         <select
-          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={selectedDistrict?._id || ''}
+          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+          value={selectedCluster?._id || ''}
+          disabled={!selectedState && states.length === 0}
           onChange={(e) => {
-            const district = districts.find(d => d._id === e.target.value);
-            if (district) handleDistrictSelect(district);
+            const cluster = clusters.find(c => c._id === e.target.value);
+            handleClusterSelect(cluster || null);
           }}
         >
-          <option value="" disabled>Select District</option>
-          {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+          <option value="">All Clusters</option>
+          {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
         </select>
 
         <select
-          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-          value={selectedCluster?._id || ''}
+          className="bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-50"
+          value={selectedDistrict?._id || ''}
+          disabled={!selectedCluster && clusters.length === 0}
           onChange={(e) => {
-            const cluster = clusters.find(c => c._id === e.target.value);
-            if (cluster) setSelectedCluster(cluster);
+            const district = districts.find(d => d._id === e.target.value);
+            handleDistrictSelect(district || null);
           }}
         >
-          <option value="" disabled>Select Cluster</option>
-          {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
+          <option value="">All Districts</option>
+          {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
         </select>
 
         <select
@@ -732,10 +858,10 @@ export default function FranchiseManagerDashboard() {
         </div>
       </div>
 
-      {/* Franchisee's Onboarding Goals */}
+      {/* Partner Onboarding Goals */}
       <div className="mb-8">
         <h3 className="text-xl font-semibold text-blue-600 mb-4">
-          Partner's Onboarding Goals - Engineer Partner Goal
+          Partner Onboarding Goals - Engineer Partner Goal
         </h3>
         <div className="bg-white rounded-xl shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
