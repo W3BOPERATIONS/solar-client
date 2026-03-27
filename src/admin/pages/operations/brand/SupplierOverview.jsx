@@ -97,8 +97,8 @@ const BrandSupplierOverview = () => {
     name: '',
     state: '',
     cluster: '',
-    district: '',
-    city: '',
+    district: [],
+    city: [],
     manufacturer: '',
     product: '',
     category: '',
@@ -455,8 +455,8 @@ const BrandSupplierOverview = () => {
       name: '',
       state: '',
       cluster: '',
-      district: '',
-      city: '',
+      district: [],
+      city: [],
       manufacturer: '',
       product: '',
       category: '',
@@ -487,8 +487,8 @@ const BrandSupplierOverview = () => {
       name: supplier.name,
       state: stateId,
       cluster: clusterId,
-      district: districtId,
-      city: supplier.city?._id || supplier.city,
+      district: Array.isArray(supplier.district) ? supplier.district.map(d => d._id || d) : (supplier.district ? [supplier.district._id || supplier.district] : []),
+      city: Array.isArray(supplier.city) ? supplier.city.map(c => c._id || c) : (supplier.city ? [supplier.city._id || supplier.city] : []),
       manufacturer: supplier.manufacturer?._id || supplier.manufacturer,
       product: supplier.product,
       category: supplier.category,
@@ -503,7 +503,10 @@ const BrandSupplierOverview = () => {
     // Fetch lists for modal
     if (stateId) fetchModalClusters(stateId);
     if (clusterId) fetchModalDistricts(clusterId);
-    if (districtId) fetchModalCities(districtId);
+    if (districtId || (Array.isArray(supplier.district) && supplier.district.length > 0)) {
+        const firstDist = Array.isArray(supplier.district) ? (supplier.district[0]?._id || supplier.district[0]) : districtId;
+        fetchModalCities(firstDist); // This is a bit tricky if multiple districts are selected, we might need to fetch for all or handle it differently.
+    }
 
     // Load dependent categories/types for edit
     if (supplier.category) {
@@ -550,7 +553,7 @@ const BrandSupplierOverview = () => {
 
   const handleModalSubmit = async (e) => {
     e.preventDefault();
-    if (!modalForm.name || !modalForm.state || !modalForm.cluster || !modalForm.district || !modalForm.city || !modalForm.manufacturer) {
+    if (!modalForm.name || !modalForm.state || !modalForm.cluster || !(modalForm.district && modalForm.district.length > 0) || !(modalForm.city && modalForm.city.length > 0) || !modalForm.manufacturer) {
       alert('Please fill all required fields');
       return;
     }
@@ -609,16 +612,29 @@ const BrandSupplierOverview = () => {
     fetchModalDistricts(val);
   };
 
-  const handleModalDistrictChange = (e) => {
-    const val = e.target.value;
-    setModalForm({ ...modalForm, district: val, city: '' });
+  const handleModalDistrictChange = (selected) => {
+    const vals = selected ? selected.map(o => o.value) : [];
+    setModalForm({ ...modalForm, district: vals, city: [] });
     setModalCities([]);
-    fetchModalCities(val);
+    if (vals.length > 0) {
+      // Fetch cities for ALL selected districts and merge
+      fetchAllModalCities(vals);
+    }
   };
 
-  const handleModalCityChange = (e) => {
-    const val = e.target.value;
-    setModalForm({ ...modalForm, city: val });
+  const fetchAllModalCities = async (districtIds) => {
+    try {
+      const promises = districtIds.map(id => locationApi.getCitiesHierarchy(id, { silent: true }));
+      const results = await Promise.all(promises);
+      const merged = results.flatMap(r => Array.isArray(r) ? r : (r?.data || []));
+      const unique = Array.from(new Map(merged.map(c => [c._id, c])).values());
+      setModalCities(unique);
+    } catch (e) { console.error(e); }
+  };
+
+  const handleModalCityChange = (selected) => {
+    const vals = selected ? selected.map(o => o.value) : [];
+    setModalForm({ ...modalForm, city: vals });
   };
 
   const handleModalCategoryChange = async (e) => {
@@ -1013,8 +1029,8 @@ const BrandSupplierOverview = () => {
                     <td className="px-6 py-4 text-sm font-medium">{supplier.name}</td>
                     <td className="px-6 py-4 text-sm">{supplier.state?.name || '-'}</td>
                     <td className="px-6 py-4 text-sm">{supplier.cluster?.name || '-'}</td>
-                    <td className="px-6 py-4 text-sm">{supplier.district?.name || '-'}</td>
-                    <td className="px-6 py-4 text-sm">{supplier.city?.name || '-'}</td>
+                    <td className="px-6 py-4 text-sm whitespace-pre-wrap max-w-xs">{Array.isArray(supplier.district) ? supplier.district.map(d => d.name).join(', ') : (supplier.district?.name || '-')}</td>
+                    <td className="px-6 py-4 text-sm whitespace-pre-wrap max-w-xs">{Array.isArray(supplier.city) ? supplier.city.map(c => c.name).join(', ') : (supplier.city?.name || '-')}</td>
                     <td className="px-6 py-4 text-sm">{supplier.manufacturer?.companyName || '-'}</td>
                     <td className="px-6 py-4 text-sm">{supplier.product}</td>
                     <td className="px-6 py-4 text-sm">{supplier.category}</td>
@@ -1090,18 +1106,46 @@ const BrandSupplierOverview = () => {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">District*</label>
-                  <select className="w-full border p-2 rounded" value={modalForm.district} onChange={handleModalDistrictChange} required disabled={!modalForm.cluster}>
-                    <option value="">Select District</option>
-                    {modalDistricts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-                  </select>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium">District*</label>
+                    <button 
+                      type="button" 
+                      onClick={() => handleModalDistrictChange(modalDistricts.map(d => ({ label: d.name, value: d._id })))}
+                      className="text-[10px] text-blue-600 hover:underline font-bold"
+                    >
+                      Select All
+                    </button>
+                  </div>
+                  <Select
+                    isMulti
+                    isDisabled={!modalForm.cluster}
+                    placeholder="Select Districts"
+                    options={modalDistricts.map(d => ({ label: d.name, value: d._id }))}
+                    value={modalDistricts.filter(d => (modalForm.district || []).includes(d._id)).map(d => ({ label: d.name, value: d._id }))}
+                    onChange={handleModalDistrictChange}
+                    className="text-sm"
+                  />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium">City*</label>
-                  <select className="w-full border p-2 rounded" value={modalForm.city} onChange={handleModalCityChange} required disabled={!modalForm.district}>
-                    <option value="">Select City</option>
-                    {modalCities.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-                  </select>
+                  <div className="flex justify-between items-center mb-1">
+                    <label className="block text-sm font-medium">City*</label>
+                    <button 
+                      type="button" 
+                      onClick={() => handleModalCityChange(modalCities.map(c => ({ label: c.name, value: c._id })))}
+                      className="text-[10px] text-blue-600 hover:underline font-bold"
+                    >
+                      Select All
+                    </button>
+                  </div>
+                  <Select
+                    isMulti
+                    isDisabled={!(modalForm.district && modalForm.district.length > 0)}
+                    placeholder="Select Cities"
+                    options={modalCities.map(c => ({ label: c.name, value: c._id }))}
+                    value={modalCities.filter(c => (modalForm.city || []).includes(c._id)).map(c => ({ label: c.name, value: c._id }))}
+                    onChange={handleModalCityChange}
+                    className="text-sm"
+                  />
                 </div>
               </div>
 
