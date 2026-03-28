@@ -45,11 +45,13 @@ import {
     Wrench,
     Hammer,
     Settings2,
-    Star
 } from 'lucide-react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { locationAPI } from '../../../../api/api';
 
 const AdminProjectManagementInstall = () => {
+    const { entityType } = useParams();
+    const entityLabel = entityType ? entityType.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : 'Company';
 
     const groupsList = [
         { id: 1, name: "Group 1 - Rajkot Projects", projectCount: 4, capacity: "11.5 KW", installation: "₹12,500/-", district: "Rajkot", installer: "Amit Patel", created: "Mar 6, 2026" },
@@ -796,6 +798,15 @@ const AdminProjectManagementInstall = () => {
                         </ul>
                     </div>
                 </nav>
+
+                <div className="bg-white rounded-xl shadow-sm mb-4 border border-gray-100">
+                    <div className="p-4">
+                        <h4 className="text-blue-600 font-bold text-lg flex items-center gap-2">
+                            <Wrench size={20} />
+                            Project Install ({entityLabel})
+                        </h4>
+                    </div>
+                </div>
 
                 {activeTab === 'makeGroup' && (
                     <>

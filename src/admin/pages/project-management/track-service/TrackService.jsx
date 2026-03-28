@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     Headphones,
     Search,
@@ -32,6 +33,8 @@ import {
 } from 'lucide-react';
 
 const AdminProjectManagementTrackService = () => {
+    const { entityType } = useParams();
+    const entityLabel = entityType ? entityType.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : 'Company';
     // State for selected ticket index
     const [selectedTicketIndex, setSelectedTicketIndex] = useState(0);
 
@@ -193,7 +196,7 @@ const AdminProjectManagementTrackService = () => {
                     <div className="bg-blue-600 text-white p-6">
                         <div className="flex items-center">
                             <Headphones size={24} className="mr-3" />
-                            <h4 className="text-xl font-bold">Support Tickets</h4>
+                            <h4 className="text-xl font-bold">Support Tickets ({entityLabel})</h4>
                         </div>
                     </div>
 
@@ -338,7 +341,7 @@ const AdminProjectManagementTrackService = () => {
                     <div className="hidden md:block bg-white shadow-sm p-4 border-b">
                         <div className="flex justify-between items-center">
                             <div>
-                                <h4 className="text-blue-600 font-bold text-xl">Ticket Details</h4>
+                                <h4 className="text-blue-600 font-bold text-xl">Ticket Details ({entityLabel})</h4>
                                 <p className="text-gray-500 text-sm">Detailed view of selected support ticket</p>
                             </div>
                         </div>

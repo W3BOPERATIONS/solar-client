@@ -992,22 +992,7 @@ export default function SupplierType() {
                 <div className="grid grid-cols-2 gap-8 mb-8">
                   {/* Left Column: Basic Info */}
                   <div className="space-y-5">
-                    <div>
-                      <label className="block text-sm font-bold text-gray-700 mb-1.5">Type Of Login</label>
-                      <select
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded outline-none focus:border-blue-500 bg-white"
-                        value={editFormData.loginTypeName}
-                        onChange={e => setEditFormData({ ...editFormData, loginTypeName: e.target.value })}
-                      >
-                        <option value="">Select Login Type</option>
-                        {loginTypes.map(name => (
-                          <option key={name} value={name}>{name}</option>
-                        ))}
-                        {editFormData.loginTypeName && !loginTypes.includes(editFormData.loginTypeName) && (
-                          <option value={editFormData.loginTypeName}>{editFormData.loginTypeName}</option>
-                        )}
-                      </select>
-                    </div>
+
 
                     <div>
                       <label className="block text-sm font-bold text-gray-700 mb-1.5">Category</label>

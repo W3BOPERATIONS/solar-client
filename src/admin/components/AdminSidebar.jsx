@@ -116,6 +116,9 @@ export default function AdminSidebar() {
     settingsOverdue: false,
     settingsLoan: false,
     settingsChecklist: false,
+    pmCompany: false,
+    pmPartners: false,
+    pmInstallerAgency: false,
   });
 
   const toggleSection = (section) => {
@@ -175,10 +178,45 @@ export default function AdminSidebar() {
       icon: BriefcaseBusiness,
       isExpanded: expandedSections.projectManagement,
       children: [
-        { name: 'Management', href: '/admin/project-management/management', icon: Settings },
-        { name: 'Install', href: '/admin/project-management/install', icon: Wrench },
-        { name: 'Service', href: '/admin/project-management/service', icon: Wrench },
-        { name: 'Track Service', href: '/admin/project-management/track-service', icon: ClipboardList },
+        {
+          id: 'pmCompany',
+          name: 'Company',
+          icon: Building2,
+          isGroup: true,
+          isExpanded: expandedSections.pmCompany,
+          children: [
+            { name: '- Management', href: '/admin/project-management/company/management', icon: Settings },
+            { name: '- Install', href: '/admin/project-management/company/install', icon: Wrench },
+            { name: '- Service', href: '/admin/project-management/company/service', icon: Wrench },
+            { name: '- Track Service', href: '/admin/project-management/company/track-service', icon: ClipboardList },
+          ]
+        },
+        {
+          id: 'pmPartners',
+          name: 'Partners',
+          icon: Users,
+          isGroup: true,
+          isExpanded: expandedSections.pmPartners,
+          children: [
+            { name: '- Management', href: '/admin/project-management/partners/management', icon: Settings },
+            { name: '- Install', href: '/admin/project-management/partners/install', icon: Wrench },
+            { name: '- Service', href: '/admin/project-management/partners/service', icon: Wrench },
+            { name: '- Track Service', href: '/admin/project-management/partners/track-service', icon: ClipboardList },
+          ]
+        },
+        {
+          id: 'pmInstallerAgency',
+          name: 'Installer Agency',
+          icon: Store,
+          isGroup: true,
+          isExpanded: expandedSections.pmInstallerAgency,
+          children: [
+            { name: '- Management', href: '/admin/project-management/installer-agency/management', icon: Settings },
+            { name: '- Install', href: '/admin/project-management/installer-agency/install', icon: Wrench },
+            { name: '- Service', href: '/admin/project-management/installer-agency/service', icon: Wrench },
+            { name: '- Track Service', href: '/admin/project-management/installer-agency/track-service', icon: ClipboardList },
+          ]
+        },
       ],
     },
     {

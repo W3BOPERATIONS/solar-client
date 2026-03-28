@@ -396,13 +396,13 @@ function App() {
                 element={<AdminOrganizationChart />}
               />
               <Route path="approvals" element={<AdminApprovals />} />
-              <Route path="project-management/management" element={<ManagementProjects />} />
-              <Route path="project-management/install" element={<InstallProjects />} />
-              <Route path="project-management/service" element={<ServiceProjects />} />
-              <Route path="project-management/track-service" element={<TrackServiceProjects />} />
+              <Route path="project-management/:entityType/management" element={<ManagementProjects />} />
+              <Route path="project-management/:entityType/install" element={<InstallProjects />} />
+              <Route path="project-management/:entityType/service" element={<ServiceProjects />} />
+              <Route path="project-management/:entityType/track-service" element={<TrackServiceProjects />} />
               <Route path="residential-project" element={<AdminResidentialProject />} />
               <Route path="commercial-project" element={<AdminCommercialProject />} />
-              <Route path="project-management" element={<Navigate to="management" />} />
+              <Route path="project-management" element={<Navigate to="company/management" />} />
               <Route path="operations/warehouse" element={<AdminWarehouse />} />
               <Route path="operations/add-inventory" element={<AdminAddInventory />} />
               <Route

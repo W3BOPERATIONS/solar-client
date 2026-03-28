@@ -19,23 +19,24 @@ const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
 
 export default function AdminOffers() {
   const [showLocationCards, setShowLocationCards] = useState(true);
+  const [selectedCountryId, setSelectedCountryId] = useState('');
   const [selectedStateId, setSelectedStateId] = useState('');
-  const [selectedDistrictId, setSelectedDistrictId] = useState('');
   const [selectedClusterId, setSelectedClusterId] = useState('');
+  const [selectedDistrictId, setSelectedDistrictId] = useState('');
 
   const [activeTab, setActiveTab] = useState('solar'); // 'solar', 'loyalty', 'limited'
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(false);
 
-  const { states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  const { countries, states, districts, clusters, fetchCountries, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  const selectedCountryObj = countries.find((c) => c._id === selectedCountryId) || null;
   const selectedStateObj = states.find((s) => s._id === selectedStateId) || null;
   const selectedClusterObj = clusters.find((c) => c._id === selectedClusterId) || null;
   const selectedDistrictObj = districts.find((d) => d._id === selectedDistrictId) || null;
 
   // Global Location Logic
   useEffect(() => {
-    fetchStates();
-    fetchClusters();
+    fetchCountries();
   }, []);
 
   // Form States
@@ -63,6 +64,19 @@ export default function AdminOffers() {
 
   // Global Location Logic
   useEffect(() => {
+    if (selectedCountryId) {
+       setSelectedStateId('');
+       setSelectedClusterId('');
+       setSelectedDistrictId('');
+       if (selectedCountryId !== 'all') {
+         fetchStates({ countryId: selectedCountryId });
+       } else {
+         fetchStates(); // Fetch all states
+       }
+    }
+  }, [selectedCountryId]);
+
+  useEffect(() => {
     if (selectedStateId) {
       setSelectedClusterId('');
       setSelectedDistrictId('');
@@ -73,7 +87,7 @@ export default function AdminOffers() {
       }
     }
   }, [selectedStateId]);
-
+ 
   useEffect(() => {
     if (selectedClusterId) {
        setSelectedDistrictId('');
@@ -87,7 +101,7 @@ export default function AdminOffers() {
 
   useEffect(() => {
     fetchOffers();
-  }, [selectedStateId, selectedClusterId, selectedDistrictId, activeTab]);
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, activeTab]);
 
   const fetchOffers = async () => {
     setLoading(true);
@@ -139,6 +153,7 @@ export default function AdminOffers() {
         endDate: solarForm.endDate,
         autoRenew: solarForm.autoRenew,
         location: {
+          country: selectedCountryId || 'All',
           state: selectedStateId || 'All',
           district: selectedDistrictId || 'All',
           cluster: solarForm.cluster === 'All' ? 'All' : solarForm.cluster
@@ -165,6 +180,7 @@ export default function AdminOffers() {
         kwSelection: loyaltyForm.kwSelection,
         yearCashbacks: loyaltyForm.yearCashbacks,
         location: {
+          country: selectedCountryId || 'All',
           state: selectedStateId || 'All',
           district: selectedDistrictId || 'All',
           cluster: loyaltyForm.cluster === 'All' ? 'All' : loyaltyForm.cluster
@@ -192,6 +208,7 @@ export default function AdminOffers() {
         brand: stockForm.brand,
         cashbackValue: Number(stockForm.cashbackValue),
         location: {
+          country: selectedCountryId || 'All',
           state: selectedStateId || 'All',
           district: selectedDistrictId || 'All',
           cluster: stockForm.cluster === 'All' ? 'All' : stockForm.cluster
@@ -246,6 +263,7 @@ export default function AdminOffers() {
            <div className="mb-4 text-sm text-gray-600 flex items-center gap-2">
              <MapPin size={14} className="text-gray-400" />
              Filtering by: 
+             {selectedCountryObj && <><span className="font-bold text-[#14233c]">{selectedCountryObj.name}</span> <span className="text-gray-400">&gt;</span></>}
              <span className="font-bold text-[#14233c]">{selectedStateObj?.name}</span>
              {selectedClusterObj && <><span className="text-gray-400">&gt;</span><span className="font-bold text-[#14233c]">{selectedClusterObj.name}</span></>}
              {selectedDistrictObj && <><span className="text-gray-400">&gt;</span><span className="font-bold text-[#14233c]">{selectedDistrictObj.name}</span></>}
@@ -255,14 +273,41 @@ export default function AdminOffers() {
         {/* Location Selection Cards */}
         {showLocationCards && (
           <div className="mb-8 bg-gray-50 p-6 rounded-xl border border-gray-100 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
-             {/* State Select */}
+             {/* Country Select */}
              <div className="mb-6">
-                <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
-                  <MapPin className="text-[#007bff]" size={16} /> Select State
-                </h2>
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-[16px] font-bold text-[#14233c] flex items-center gap-2">
+                    <MapPin className="text-[#007bff]" size={16} /> Select Country
+                  </h2>
+                  <button onClick={() => { setSelectedCountryId('all'); setSelectedStateId(''); setSelectedClusterId(''); setSelectedDistrictId(''); }} className="text-xs font-bold text-[#0076a8] hover:underline uppercase tracking-wider">Select All</button>
+                </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     <LocationCard 
-                      title="All States" subtitle="ALL" isSelected={selectedStateId === 'all' || selectedStateId === ''} isState={true}
+                      title="All Countries" subtitle="ALL" isSelected={selectedCountryId === 'all' || selectedCountryId === ''} 
+                      onClick={() => { setSelectedCountryId('all'); setSelectedStateId(''); setSelectedClusterId(''); setSelectedDistrictId(''); }} 
+                    />
+                    {countries.map((c) => (
+                      <LocationCard 
+                         key={c._id} title={c.name} subtitle={c.code || c.name.substring(0,2).toUpperCase()} 
+                         isSelected={selectedCountryId === c._id}
+                         onClick={() => setSelectedCountryId(c._id)} 
+                      />
+                    ))}
+                </div>
+             </div>
+
+             {/* State Select */}
+             {selectedCountryId && (
+              <div className="mb-6 border-t border-gray-100 pt-6 animate-in slide-in-from-left duration-300">
+                <div className="flex justify-between items-center mb-3">
+                  <h2 className="text-[16px] font-bold text-[#14233c] flex items-center gap-2">
+                    <MapPin className="text-[#007bff]" size={16} /> Select State
+                  </h2>
+                  <button onClick={() => { setSelectedStateId('all'); setSelectedClusterId(''); setSelectedDistrictId(''); }} className="text-xs font-bold text-[#0076a8] hover:underline uppercase tracking-wider">Select All</button>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+                    <LocationCard 
+                      title="All States" subtitle="ALL" isSelected={selectedStateId === 'all' || (selectedCountryId && selectedStateId === '')} isState={true}
                       onClick={() => { setSelectedStateId('all'); setSelectedClusterId(''); setSelectedDistrictId(''); }} 
                     />
                     {states.map((s) => (
@@ -273,14 +318,18 @@ export default function AdminOffers() {
                       />
                     ))}
                 </div>
-             </div>
+              </div>
+             )}
 
-             {/* Cluster Select */}
+              {/* Cluster Select */}
              {selectedStateId && (
                 <div className="mb-6 border-t border-gray-100 pt-6 animate-in slide-in-from-left duration-300">
-                  <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
-                    <Layers className="text-[#007bff]" size={16} /> Select Cluster
-                  </h2>
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-[16px] font-bold text-[#14233c] flex items-center gap-2">
+                      <Layers className="text-[#007bff]" size={16} /> Select Cluster
+                    </h2>
+                    <button onClick={() => { setSelectedClusterId('all'); setSelectedDistrictId(''); }} className="text-xs font-bold text-[#0076a8] hover:underline uppercase tracking-wider">Select All</button>
+                  </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                      <LocationCard 
                         title="All Clusters" subtitle="ALL" isSelected={selectedClusterId === 'all' || selectedClusterId === ''} 
@@ -297,12 +346,15 @@ export default function AdminOffers() {
                 </div>
              )}
 
-             {/* District Select */}
+              {/* District Select */}
              {selectedClusterId && (
                 <div className="border-t border-gray-100 pt-6 animate-in slide-in-from-left duration-300">
-                  <h2 className="text-[16px] font-bold text-[#14233c] mb-3 flex items-center gap-2">
-                    <MapPin className="text-[#007bff]" size={16} /> Select District
-                  </h2>
+                  <div className="flex justify-between items-center mb-3">
+                    <h2 className="text-[16px] font-bold text-[#14233c] flex items-center gap-2">
+                      <MapPin className="text-[#007bff]" size={16} /> Select District
+                    </h2>
+                    <button onClick={() => setSelectedDistrictId('all')} className="text-xs font-bold text-[#0076a8] hover:underline uppercase tracking-wider">Select All</button>
+                  </div>
                   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                      <LocationCard 
                         title="All Districts" subtitle="ALL" isSelected={selectedDistrictId === 'all' || selectedDistrictId === ''} 
@@ -642,7 +694,8 @@ export default function AdminOffers() {
                              <th className="p-3 border-r border-white/20 font-bold">Brand/Plan</th>
                              <th className="p-3 border-r border-white/20 font-bold">Target</th>
                              <th className="p-3 border-r border-white/20 font-bold">Cashback / Value</th>
-                             <th className="p-3 border-r border-white/20 font-bold">State</th>
+                             <th className="p-3 border-r border-white/20 font-bold">Country</th>
+                              <th className="p-3 border-r border-white/20 font-bold">State</th>
                              <th className="p-3 border-r border-white/20 font-bold">Cluster</th>
                              <th className="p-3 border-r border-white/20 font-bold">Deadline / Status</th>
                              <th className="p-3 font-bold text-center">Actions</th>
@@ -650,9 +703,9 @@ export default function AdminOffers() {
                      </thead>
                      <tbody>
                          {loading ? (
-                             <tr><td colSpan="9" className="text-center p-6 text-gray-500">Loading offers...</td></tr>
+                             <tr><td colSpan="10" className="text-center p-6 text-gray-500">Loading offers...</td></tr>
                          ) : offers.length === 0 ? (
-                             <tr><td colSpan="9" className="text-center p-6 text-gray-500">No offers found holding current filter criteria.</td></tr>
+                             <tr><td colSpan="10" className="text-center p-6 text-gray-500">No offers found holding current filter criteria.</td></tr>
                          ) : (
                              offers.map(offer => (
                                  <tr key={offer._id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
@@ -674,7 +727,8 @@ export default function AdminOffers() {
                                      <td className="p-3 border-r border-gray-100 text-gray-800 font-bold text-center">
                                          {offer.cashbackAmount ? `₹${offer.cashbackAmount}` : offer.yearCashbacks?.length ? `${offer.yearCashbacks.length} Tiers` : '-'}
                                      </td>
-                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.state !== 'All' ? states.find(s => s._id === offer.location?.state)?.name || offer.location?.state : 'All'}</td>
+                                     <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.country !== 'All' ? countries.find(c => c._id === offer.location?.country)?.name || offer.location?.country : 'All'}</td>
+                                      <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.state !== 'All' ? states.find(s => s._id === offer.location?.state)?.name || offer.location?.state : 'All'}</td>
                                      <td className="p-3 border-r border-gray-100 text-gray-600 text-center">{offer.location?.cluster !== 'All' ? clusters.find(c => c._id === offer.location?.cluster)?.name || offer.location?.cluster : 'All'}</td>
                                      <td className="p-3 border-r border-gray-100 text-gray-600 text-center">
                                          {offer.endDate ? new Date(offer.endDate).toLocaleDateString() : offer.deadline ? new Date(offer.deadline).toLocaleDateString() : 'N/A'}

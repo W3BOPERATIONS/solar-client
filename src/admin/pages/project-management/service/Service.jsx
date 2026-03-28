@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
     User,
     Phone,
@@ -40,6 +41,8 @@ import {
 } from 'lucide-react';
 
 const AdminProjectManagementService = () => {
+    const { entityType } = useParams();
+    const entityLabel = entityType ? entityType.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : 'Company';
     // State for selected customer
     const [selectedCustomer, setSelectedCustomer] = useState(null);
 
@@ -231,7 +234,7 @@ const AdminProjectManagementService = () => {
                 <nav className="bg-white rounded-lg shadow-sm p-4">
                     <ol className="flex items-center">
                         <li className="flex-1">
-                            <h3 className="text-xl font-bold text-blue-600">Raise Ticket</h3>
+                            <h3 className="text-xl font-bold text-blue-600">Raise Ticket ({entityLabel})</h3>
                         </li>
                     </ol>
                 </nav>
@@ -241,7 +244,7 @@ const AdminProjectManagementService = () => {
                 {/* Left Sidebar */}
                 <div className="lg:w-1/4 pr-0 lg:pr-4 mb-4 lg:mb-0">
                     <div className="bg-white rounded-lg shadow-sm p-4 sticky top-4">
-                        <h3 className="text-lg font-bold mb-2">Project Signup</h3>
+                        <h3 className="text-lg font-bold mb-2">Project Management ({entityLabel})</h3>
                         <p className="text-sm text-gray-500 mb-4">Complete the signup process for your solar project</p>
 
                         {/* Search */}

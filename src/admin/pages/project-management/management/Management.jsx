@@ -15,7 +15,7 @@ import {
     Settings,
     List
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useLocations } from '../../../../hooks/useLocations';
 import { getDiscomsByState } from '../../../../services/quote/quoteApi';
 import { projectApi } from '../../../../services/project/projectApi';
@@ -24,6 +24,10 @@ import { getSubCategories } from '../../../../services/core/masterApi';
 
 const AdminProjectManagement = () => {
     const navigate = useNavigate();
+    const { entityType } = useParams();
+    
+    // Capitalize for display
+    const entityLabel = entityType ? entityType.split('-').map(s => s.charAt(0).toUpperCase() + s.slice(1)).join(' ') : 'Company';
     // State for filters
     const [filters, setFilters] = useState({
         category: '',
@@ -226,7 +230,7 @@ const AdminProjectManagement = () => {
                 ? `${selectedCustomerType.toLowerCase()}-project`
                 : 'residential-project'; // Defaulting to residential journey for others
 
-            navigate(`/admin/${pathName}?${params}`);
+            navigate(`/admin/${pathName}?${params}&entityType=${entityType}`);
         }
     };
 
@@ -242,7 +246,7 @@ const AdminProjectManagement = () => {
                     <div className="p-4 flex justify-between items-center">
                         <h4 className="text-blue-600 font-bold text-lg flex items-center gap-2">
                             <Settings size={20} />
-                            Project Management
+                            Project Management ({entityLabel})
                         </h4>
                         {(selectedStateId || selectedDiscomId || selectedCustomerType) && (
                             <button
