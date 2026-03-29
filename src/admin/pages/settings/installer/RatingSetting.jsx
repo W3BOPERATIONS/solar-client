@@ -15,8 +15,7 @@ export default function RatingSetting() {
   const [currentRatingId, setCurrentRatingId] = useState(null);
 
   const [formData, setFormData] = useState({
-    category: '',
-    rate: ''
+    category: ''
   });
 
   useEffect(() => {
@@ -43,24 +42,18 @@ export default function RatingSetting() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.category || !formData.rate) {
-      toast.error('Both Category and Rate are required');
-      return;
-    }
-
-    const rateNum = Number(formData.rate);
-    if (rateNum < 1 || rateNum > 5) {
-      toast.error('Rate must be between 1 and 5');
+    if (!formData.category) {
+      toast.error('Category name is required');
       return;
     }
 
     try {
       if (isEditing && currentRatingId) {
-        await updateInstallerRating(currentRatingId, { ...formData, rate: rateNum });
-        toast.success('Rating updated successfully');
+        await updateInstallerRating(currentRatingId, formData);
+        toast.success('Rating category updated successfully');
       } else {
-        await createInstallerRating({ ...formData, rate: rateNum });
-        toast.success('Rating added successfully');
+        await createInstallerRating(formData);
+        toast.success('Rating category added successfully');
       }
       resetForm();
       fetchRatings();
@@ -72,8 +65,7 @@ export default function RatingSetting() {
 
   const handleEdit = (rating) => {
     setFormData({
-      category: rating.category,
-      rate: rating.rate,
+      category: rating.category
     });
     setCurrentRatingId(rating._id);
     setIsEditing(true);
@@ -93,7 +85,7 @@ export default function RatingSetting() {
   };
 
   const resetForm = () => {
-    setFormData({ category: '', rate: '' });
+    setFormData({ category: '' });
     setIsEditing(false);
     setCurrentRatingId(null);
   };
@@ -120,22 +112,7 @@ export default function RatingSetting() {
                 value={formData.category}
                 onChange={handleInputChange}
                 className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none"
-                placeholder="Ex. erijidj"
-                required
-              />
-            </div>
-
-            <div className="flex-1">
-              <label className="block text-sm font-medium text-gray-700 mb-2">Rate (Out of 5)</label>
-              <input
-                type="number"
-                name="rate"
-                value={formData.rate}
-                onChange={handleInputChange}
-                className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none"
-                placeholder="1-5"
-                min="1"
-                max="5"
+                placeholder="Ex. Behavior, Quality, Speed..."
                 required
               />
             </div>
@@ -171,28 +148,26 @@ export default function RatingSetting() {
               <thead className="bg-[#74b9ff] text-white">
                 <tr>
                   <th className="px-6 py-3 font-medium text-sm w-16">#</th>
-                  <th className="px-6 py-3 font-medium text-sm">Category</th>
-                  <th className="px-6 py-3 font-medium text-sm">Rate (Out of 5)</th>
+                  <th className="px-6 py-3 font-medium text-sm">Category Name</th>
                   <th className="px-6 py-3 font-medium text-sm w-32">Action</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm text-gray-600">
                 {loading ? (
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-gray-500">Loading ratings...</td>
+                    <td colSpan="3" className="px-6 py-8 text-center text-gray-500">Loading categories...</td>
                   </tr>
                 ) : ratings.length === 0 ? (
                   <tr>
-                    <td colSpan="4" className="px-6 py-8 text-center text-gray-500 font-medium border-t border-gray-100">
-                      No ratings added
+                    <td colSpan="3" className="px-6 py-8 text-center text-gray-500 font-medium border-t border-gray-100">
+                      No categories added
                     </td>
                   </tr>
                 ) : (
                   ratings.map((rating, index) => (
                     <tr key={rating._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">{index + 1}</td>
-                      <td className="px-6 py-4">{rating.category}</td>
-                      <td className="px-6 py-4">{rating.rate}</td>
+                      <td className="px-6 py-4 font-medium text-gray-800">{rating.category}</td>
                       <td className="px-6 py-4">
                         <div className="flex items-center space-x-3">
                           <button

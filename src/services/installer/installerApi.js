@@ -91,9 +91,10 @@ export const deleteInstallerAgency = async (id) => {
 // Installer Agency Plan functions
 // ---------------------------------------------------------------------------
 
-// Get all installer agency plans (optionally filtered by state)
-export const getInstallerAgencyPlans = async (stateId = null) => {
-    const url = stateId ? `${API_URL}/agency-plans?stateId=${stateId}` : `${API_URL}/agency-plans`;
+// Get all installer agency plans (filtered by location hierarchy)
+export const getInstallerAgencyPlans = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const url = query ? `${API_URL}/agency-plans?${query}` : `${API_URL}/agency-plans`;
     const response = await axios.get(url);
     return response.data;
 };

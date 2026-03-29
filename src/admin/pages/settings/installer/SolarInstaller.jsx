@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings, Check, Rocket, Edit, LayoutGrid, CircleUserRound, Building2, House,
-  MapPin, Eye, CheckCircle2, ChevronUp, Plus, Trash2, X
+  MapPin, Eye, CheckCircle2, ChevronUp, Plus, Trash2, X, RefreshCw, ClipboardList
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -10,7 +10,9 @@ import {
   updateInstallerAgencyPlan,
   deleteInstallerAgencyPlan
 } from '../../../../services/installer/installerApi';
-import { getStates } from '../../../../services/core/locationApi';
+import { getStates, getDistricts, getClusters } from '../../../../services/core/locationApi';
+import { productApi } from '../../../../api/productApi';
+
 
 const DEFAULT_PLAN = {
   name: 'New Plan',
@@ -18,37 +20,35 @@ const DEFAULT_PLAN = {
   minimumRating: 0,
   planColor: '#0070cc',
   state: null,
-  eligibility: { kyc: false, agreement: false },
-  coverage: 'District',
+  eligibility: {
+    aadharCard: false,
+    panCard: false,
+    agreement: false,
+    requiredDocuments: []
+  },
+  coverage: 'Single District',
+  selectedDistricts: [],
+  selectedClusters: [],
   userLimits: 10,
   subUser: { supervisor: false },
-  assignedProjectTypes: [
-    { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '3kw - 5kw', subProjectType: 'On-Grid', capacity: '', daysRequiredUnit: 'Weeks', daysRequiredVal: '', active: false },
-    { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '5kw - 15kw', subProjectType: 'Off-Grid', capacity: '', daysRequiredUnit: 'Weeks', daysRequiredVal: '', active: false },
-    { category: 'Solar Rooftop', subCategory: 'Commercial', projectType: '10kw - 25kw', subProjectType: 'On-Grid', capacity: '', daysRequiredUnit: 'Weeks', daysRequiredVal: '', active: false }
-  ],
-  solarInstallationPoints: [
-    { typeLabel: 'Residential', points: 0, periodInMonth: 0, claimInMonth: 0 },
-    { typeLabel: 'Commercial up to 100 Kw', points: 0, periodInMonth: 0, claimInMonth: 0 },
-    { typeLabel: 'Commercial above 100 Kw', points: 0, periodInMonth: 0, claimInMonth: 0 }
-  ],
-  solarInstallationCharges: [
-    { typeLabel: 'Residential', charges: 0 },
-    { typeLabel: 'Commercial up to 100 Kw', charges: 0 },
-    { typeLabel: 'Commercial above 100 Kw', charges: 0 }
-  ],
+  assignedProjectTypes: [],
+  solarInstallationPoints: [],
+  solarInstallationCharges: [],
   signupFees: 0,
-  yearlyTargetKw: 0,
-  incentive: 0,
   depositFees: 0,
   isActive: true
 };
+
 
 const SolarInstaller = () => {
   const [plans, setPlans] = useState([]);
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isApplying, setIsApplying] = useState(false);
   const [states, setStates] = useState([]);
+  const [districts, setDistricts] = useState([]);
+  const [clusters, setClusters] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
 
   // Refs for scrolling
   const sectionRefs = {
@@ -58,6 +58,14 @@ const SolarInstaller = () => {
     points: useRef(null),
     charges: useRef(null)
   };
+
+  const getRowLabel = (row) => {
+    const main = row.subCategory || row.category || 'Unknown';
+    const type = row.projectType || '';
+    const sub = (row.subProjectType && row.subProjectType !== '-' && row.subProjectType !== 'On-Grid') ? ` (${row.subProjectType})` : '';
+    return `${main} ${type}${sub}`.trim();
+  };
+
 
   const scrollToSection = (sectionKey) => {
     sectionRefs[sectionKey].current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -72,14 +80,80 @@ const SolarInstaller = () => {
     fetchInitialData();
   }, []);
 
+  const fetchStates = async () => {
+    try {
+      const res = await getStates();
+      setStates(res || []);
+    } catch (err) {
+      console.error('Failed to fetch states', err);
+    }
+  };
+
+
+  const fetchDistricts = async () => {
+    try {
+      const res = await getDistricts();
+      setDistricts(res || []);
+    } catch (err) {
+      console.error('Failed to fetch districts', err);
+    }
+  };
+
+  const fetchClusters = async () => {
+    try {
+      const res = await getClusters();
+      setClusters(res || []);
+    } catch (err) {
+      console.error('Failed to fetch clusters', err);
+    }
+  };
+
+  const fetchProjectMappings = async () => {
+    try {
+      setIsApplying(true);
+      const params = {};
+
+      if (formData.coverage === 'State' && formData.state) {
+        params.stateId = formData.state;
+      } else if (formData.coverage === 'Single District' && formData.selectedDistricts?.[0]) {
+        params.districtId = formData.selectedDistricts[0];
+      } else if (formData.coverage === 'Multi District' && formData.selectedDistricts?.length > 0) {
+        params.districtIds = formData.selectedDistricts;
+      } else if (formData.coverage === 'Cluster' && formData.selectedClusters?.length > 0) {
+        params.clusterIds = formData.selectedClusters;
+      }
+
+      const res = await productApi.getProjectCategoryMappings(params);
+      if (res.data.success) {
+        const mappings = res.data.data || [];
+        setProjectMappings(mappings);
+
+        // Immediately sync to the table
+        setFormData(prev => handleSyncLogic(prev, mappings));
+
+        if (mappings.length === 0) {
+          toast("No configurations found for this location", { icon: 'ℹ️' });
+        } else {
+          toast.success("Applied new configurations");
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch project mappings', err);
+      toast.error("Failed to fetch configurations");
+    } finally {
+      setIsApplying(false);
+    }
+  };
+
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [plansData, statesData] = await Promise.all([
+      const [plansData] = await Promise.all([
         getInstallerAgencyPlans(),
-        getStates()
+        fetchStates(),
+        fetchDistricts(),
+        fetchClusters()
       ]);
-      setStates(statesData || []);
 
       const pData = plansData.data || plansData || [];
       setPlans(pData);
@@ -96,6 +170,125 @@ const SolarInstaller = () => {
       setLoading(false);
     }
   };
+
+
+  useEffect(() => {
+    // We removed auto-fetch to implement the "Apply" button logic
+    // fetchProjectMappings(); 
+  }, []); // Only once or never, we use the button now
+
+
+  const handleSyncLogic = (prevData, mappings) => {
+    const currentAssigned = prevData.assignedProjectTypes || [];
+    const grouped = Object.values(mappings.reduce((acc, curr) => {
+      if (!curr.categoryId?.name || !curr.subCategoryId?.name) return acc;
+      const key = `${curr.categoryId?._id}-${curr.subCategoryId?._id}-${curr.subProjectTypeId?._id || 'none'}-${curr.projectTypeFrom}-${curr.projectTypeTo}`;
+      if (!acc[key]) acc[key] = curr;
+      return acc;
+    }, {}));
+
+    const updatedAssigned = grouped.map(m => {
+      const projectTypeStr = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+      const subPType = m.subProjectTypeId?.name || (m.subProjectTypeId ? (m.subProjectTypeId.name || m.subProjectTypeId) : '-');
+      const existing = currentAssigned.find(pt =>
+        pt.category === m.categoryId?.name &&
+        pt.subCategory === m.subCategoryId?.name &&
+        pt.projectType === projectTypeStr &&
+        pt.subProjectType === subPType
+      );
+
+      return {
+        category: m.categoryId?.name,
+        subCategory: m.subCategoryId?.name,
+        projectType: projectTypeStr,
+        subProjectType: subPType,
+        yearlyTargetKw: existing?.yearlyTargetKw || '',
+        incentiveAmount: existing?.incentiveAmount || '',
+        installationCharges: existing?.installationCharges || '',
+        capacity: existing?.capacity || '',
+        daysRequiredUnit: existing?.daysRequiredUnit || 'Weeks',
+        daysRequiredVal: existing?.daysRequiredVal || '',
+        active: existing ? existing.active : true
+      };
+    });
+
+    const activeRows = updatedAssigned.filter(r => r.active);
+    const nextPoints = activeRows.map(row => {
+      const label = getRowLabel(row);
+      const existing = prevData.solarInstallationPoints.find(p => p.typeLabel === label);
+      return {
+        typeLabel: label,
+        points: existing?.points || 0,
+        periodInMonth: existing?.periodInMonth || 0,
+        claimInMonth: existing?.claimInMonth || 0,
+        active: true
+      };
+    });
+
+    const nextCharges = activeRows.map(row => {
+      const label = getRowLabel(row);
+      const existing = prevData.solarInstallationCharges.find(c => c.typeLabel === label);
+      return {
+        typeLabel: label,
+        charges: row.installationCharges || existing?.charges || 0,
+        active: true
+      };
+    });
+
+    return {
+      ...prevData,
+      assignedProjectTypes: updatedAssigned,
+      solarInstallationPoints: nextPoints,
+      solarInstallationCharges: nextCharges
+    };
+  };
+
+  const syncFromGlobal = () => {
+    if (projectMappings.length > 0) {
+      setFormData(prev => handleSyncLogic(prev, projectMappings));
+      toast.success("Synced with Global Settings");
+    }
+  };
+
+  // Keep Points and Charges in sync with Active AssignedProjectTypes
+  useEffect(() => {
+    setFormData(prev => {
+      const activeRows = prev.assignedProjectTypes.filter(r => r.active);
+
+      const nextPoints = activeRows.map(row => {
+        const label = getRowLabel(row);
+        const existing = prev.solarInstallationPoints.find(p => p.typeLabel === label);
+        return {
+          typeLabel: label,
+          points: existing?.points || 0,
+          periodInMonth: existing?.periodInMonth || 0,
+          claimInMonth: existing?.claimInMonth || 0,
+          active: true
+        };
+      });
+
+      const nextCharges = activeRows.map(row => {
+        const label = getRowLabel(row);
+        const existing = prev.solarInstallationCharges.find(c => c.typeLabel === label);
+        return {
+          typeLabel: label,
+          charges: row.installationCharges || existing?.charges || 0,
+          active: true
+        };
+      });
+
+      const pMatch = JSON.stringify(nextPoints) === JSON.stringify(prev.solarInstallationPoints);
+      const cMatch = JSON.stringify(nextCharges) === JSON.stringify(prev.solarInstallationCharges);
+
+      if (pMatch && cMatch) return prev;
+
+      return {
+        ...prev,
+        solarInstallationPoints: nextPoints,
+        solarInstallationCharges: nextCharges
+      };
+    });
+  }, [formData.assignedProjectTypes]);
 
   const handleSelectPlan = (plan) => {
     setSelectedPlanId(plan._id);
@@ -126,16 +319,90 @@ const SolarInstaller = () => {
         }
       }));
     } else {
-      setFormData(prev => ({ ...prev, [name]: type === 'checkbox' ? checked : value }));
+      let val = type === 'checkbox' ? checked : value;
+      if (name === 'minimumRating') {
+        val = Math.max(0, Math.min(10, Number(value)));
+      }
+      setFormData(prev => ({ ...prev, [name]: val }));
     }
+  };
+
+  const handleDocToggle = (doc) => {
+    setFormData(prev => {
+      const docs = prev.eligibility.requiredDocuments || [];
+      const newDocs = docs.includes(doc) ? docs.filter(d => d !== doc) : [...docs, doc];
+      return {
+        ...prev,
+        eligibility: { ...prev.eligibility, requiredDocuments: newDocs }
+      };
+    });
+  };
+
+  const handleClusterToggle = (clusterId) => {
+    setFormData(prev => {
+      const current = prev.selectedClusters || [];
+      const next = current.includes(clusterId) ? current.filter(id => id !== clusterId) : [...current, clusterId];
+      return { ...prev, selectedClusters: next };
+    });
+  };
+
+  const handleDistrictToggle = (districtId, isSingle = false) => {
+    setFormData(prev => {
+      const current = prev.selectedDistricts || [];
+      let next;
+      if (isSingle) {
+        next = [districtId];
+      } else {
+        next = current.includes(districtId) ? current.filter(id => id !== districtId) : [...current, districtId];
+      }
+      return { ...prev, selectedDistricts: next };
+    });
   };
 
   const handleArrayChange = (arrayName, index, field, value) => {
     setFormData(prev => {
       const newArray = [...prev[arrayName]];
       newArray[index] = { ...newArray[index], [field]: value };
-      return { ...prev, [arrayName]: newArray };
+
+      let nextData = { ...prev, [arrayName]: newArray };
+
+      // Link Charges between Table 1 and Table 3
+      if (arrayName === 'assignedProjectTypes' && field === 'installationCharges') {
+        const label = getRowLabel(newArray[index]);
+        nextData.solarInstallationCharges = prev.solarInstallationCharges.map(c =>
+          c.typeLabel === label ? { ...c, charges: value } : c
+        );
+      } else if (arrayName === 'solarInstallationCharges' && field === 'charges') {
+        const label = newArray[index].typeLabel;
+        nextData.assignedProjectTypes = prev.assignedProjectTypes.map(apt =>
+          getRowLabel(apt) === label ? { ...apt, installationCharges: value } : apt
+        );
+      }
+
+      return nextData;
     });
+  };
+
+  const handleAddNewProjectType = () => {
+    setFormData(prev => ({
+      ...prev,
+      assignedProjectTypes: [
+        ...prev.assignedProjectTypes,
+        {
+          category: 'Residential',
+          subCategory: 'Residential',
+          projectType: '0 to 10 kW',
+          subProjectType: 'On-Grid',
+          yearlyTargetKw: '',
+          incentiveAmount: '',
+          installationCharges: '',
+          capacity: '',
+          daysRequiredUnit: 'Weeks',
+          daysRequiredVal: '',
+          active: true
+        }
+      ]
+    }));
   };
 
   const handleSave = async () => {
@@ -295,17 +562,18 @@ const SolarInstaller = () => {
                 <Check className="w-4 h-4 text-green-500" /> <span>Eligibility Requirements</span>
               </div>
               <div onClick={() => scrollToSection('subUser')} className="flex items-center gap-3 p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition">
-                <Check className="w-4 h-4 text-green-500" /> <span>Sub User</span>
+                <Check className="w-4 h-4 text-green-500" /> <span>App User</span>
               </div>
               <div onClick={() => scrollToSection('capacity')} className="flex items-start gap-3 p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition">
                 <Check className="w-4 h-4 text-green-500 mt-0.5" /> <span className="leading-tight">Project Types vise Installation Capacity</span>
               </div>
               <div onClick={() => scrollToSection('points')} className="flex items-center gap-3 p-4 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition">
-                <Check className="w-4 h-4 text-green-500" /> <span>Installation Points</span>
+                <Check className="w-4 h-4 text-green-500" /> <span className="leading-tight">Solar Installation Points</span>
               </div>
               <div onClick={() => scrollToSection('charges')} className="flex items-center gap-3 p-4 hover:bg-blue-50 cursor-pointer transition">
-                <Check className="w-4 h-4 text-green-500" /> <span>Installation Charges</span>
+                <Check className="w-4 h-4 text-green-500" /> <span className="leading-tight">Solar Installation Charges</span>
               </div>
+
             </div>
           </div>
         </div>
@@ -337,17 +605,6 @@ const SolarInstaller = () => {
               </div>
               <div className="flex gap-4 items-center bg-gray-50 p-3 rounded-lg border border-gray-100 shrink-0">
                 <div className="flex flex-col gap-1">
-                  <label className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Minimum Rating :</label>
-                  <input
-                    type="number"
-                    name="minimumRating"
-                    value={formData.minimumRating}
-                    onChange={handleInputChange}
-                    placeholder="e.g. 4.5"
-                    className="border border-gray-300 rounded px-2 py-1 text-xs w-28 focus:outline-blue-500 bg-white"
-                  />
-                </div>
-                <div className="flex flex-col gap-1">
                   <label className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">Banner Color :</label>
                   <input
                     type="color"
@@ -365,60 +622,152 @@ const SolarInstaller = () => {
               {/* Eligibility Requirements */}
               <section ref={sectionRefs.eligibility} className="scroll-mt-6">
                 <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">Eligibility Requirements</h4>
-                <div className="flex items-start gap-12">
-                  <div className="flex flex-col gap-3">
-                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="eligibility.kyc"
-                        checked={formData.eligibility.kyc}
-                        onChange={handleInputChange}
-                        className="w-3.5 h-3.5 accent-green-600"
-                      /> KYC
-                    </label>
-                    <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-                      <input
-                        type="checkbox"
-                        name="eligibility.agreement"
-                        checked={formData.eligibility.agreement}
-                        onChange={handleInputChange}
-                        className="w-3.5 h-3.5 accent-green-600"
-                      /> Agreement
-                    </label>
+                <div className="flex flex-wrap items-start gap-8 md:gap-12">
+                  <div className="flex flex-col gap-3 min-w-[150px]">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Documents Required</label>
+                    <div className="flex flex-col gap-2">
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="eligibility.aadharCard"
+                          checked={formData.eligibility.aadharCard}
+                          onChange={handleInputChange}
+                          className="w-3.5 h-3.5 accent-blue-600"
+                        /> Aadhar Card
+                      </label>
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="eligibility.panCard"
+                          checked={formData.eligibility.panCard}
+                          onChange={handleInputChange}
+                          className="w-3.5 h-3.5 accent-blue-600"
+                        /> PAN Card
+                      </label>
+                      <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
+                        <input
+                          type="checkbox"
+                          name="eligibility.agreement"
+                          checked={formData.eligibility.agreement}
+                          onChange={handleInputChange}
+                          className="w-3.5 h-3.5 accent-blue-600"
+                        /> Business Agreement RAM
+                      </label>
+
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Coverage</label>
-                    <select
-                      name="coverage"
-                      value={formData.coverage}
-                      onChange={handleInputChange}
-                      className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-40 focus:outline-blue-500 bg-white"
-                    >
-                      <option value="District">District</option>
-                      <option value="State">State</option>
-                      <option value="Cluster">Cluster</option>
-                    </select>
-                  </div>
-                  {formData.coverage === 'State' && (
+
+
+                  <div className="flex flex-col gap-4 min-w-[200px]">
                     <div>
-                      <label className="block text-xs font-bold text-gray-700 mb-1">Specific State (Optional)</label>
+                      <label className="block text-xs font-bold text-gray-700 mb-1">Coverage</label>
                       <select
-                        name="state"
-                        value={formData.state || ''}
+                        name="coverage"
+                        value={formData.coverage}
                         onChange={handleInputChange}
-                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-40 focus:outline-blue-500 bg-white"
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
                       >
-                        <option value="">All States</option>
-                        {states.map(s => <option key={s._id} value={s._id}>{s.name || s.stateName}</option>)}
+                        <option value="Single District">Single District</option>
+                        <option value="Multi District">Multi District</option>
+                        <option value="State">State-wise</option>
+                        <option value="Cluster">Cluster-wise</option>
                       </select>
                     </div>
-                  )}
+
+                    {formData.coverage === 'Single District' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Select District</label>
+                        <select
+                          value={formData.selectedDistricts[0] || ''}
+                          onChange={(e) => handleDistrictToggle(e.target.value, true)}
+                          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
+                        >
+                          <option value="">Choose District</option>
+                          {districts.map(d => <option key={d._id} value={d._id}>{d.name || d.districtName}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {formData.coverage === 'Multi District' && (
+                      <div className="flex flex-col gap-1 max-h-48 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50/50">
+                        <label className="block text-xs font-bold text-gray-700 mb-2">Select Districts</label>
+                        {districts.map(d => (
+                          <label key={d._id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedDistricts?.includes(d._id)}
+                              onChange={() => handleDistrictToggle(d._id, false)}
+                              className="w-3.5 h-3.5 accent-blue-600"
+                            /> {d.name || d.districtName}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    {formData.coverage === 'State' && (
+                      <div>
+                        <label className="block text-xs font-bold text-gray-700 mb-1">Specific State (Optional)</label>
+                        <select
+                          name="state"
+                          value={formData.state || ''}
+                          onChange={handleInputChange}
+                          className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
+                        >
+                          <option value="">All States</option>
+                          {states.map(s => <option key={s._id} value={s._id}>{s.name || s.stateName}</option>)}
+                        </select>
+                      </div>
+                    )}
+
+                    {formData.coverage === 'Cluster' && (
+                      <div className="flex flex-col gap-1 max-h-48 overflow-y-auto border border-gray-200 rounded p-2 bg-gray-50/50">
+                        <label className="block text-xs font-bold text-gray-700 mb-2">Select Clusters</label>
+                        {clusters.map(c => (
+                          <label key={c._id} className="flex items-center gap-2 text-xs font-medium cursor-pointer hover:bg-white p-1 rounded transition-colors">
+                            <input
+                              type="checkbox"
+                              checked={formData.selectedClusters?.includes(c._id)}
+                              onChange={() => handleClusterToggle(c._id)}
+                              className="w-3.5 h-3.5 accent-blue-600"
+                            /> {c.name || c.clusterName}
+                          </label>
+                        ))}
+                      </div>
+                    )}
+
+                    <button
+                      onClick={fetchProjectMappings}
+                      disabled={isApplying}
+                      className={`mt-2 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-bold transition-all shadow-sm ${isApplying
+                        ? 'bg-gray-100 text-gray-400 cursor-not-allowed'
+                        : 'bg-blue-600 text-white hover:bg-blue-700 active:scale-95'
+                        }`}
+                    >
+                      {isApplying ? <RefreshCw className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
+                      {isApplying ? 'Applying...' : 'Apply Selection'}
+                    </button>
+                  </div>
+
+                  <div className="min-w-[150px]">
+                    <label className="block text-xs font-bold text-gray-700 mb-1">Minimum Rating Req.</label>
+                    <input
+                      type="number"
+                      name="minimumRating"
+                      step="0.1"
+                      min="0"
+                      max="10"
+                      value={formData.minimumRating}
+                      onChange={handleInputChange}
+                      placeholder="e.g. 4.5"
+                      className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
+                    />
+                  </div>
                 </div>
               </section>
 
               {/* Sub User */}
               <section ref={sectionRefs.subUser} className="scroll-mt-6">
-                <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">Sub User</h4>
+                <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100">App User</h4>
                 <div className="flex items-start gap-12">
                   <label className="flex items-center gap-2 text-sm font-medium cursor-pointer mt-5">
                     <input
@@ -442,25 +791,21 @@ const SolarInstaller = () => {
                 </div>
               </section>
 
-              {/* Project Type Vise Installation Capacity */}
               <section ref={sectionRefs.capacity} className="scroll-mt-6">
-                <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100 flex justify-between items-center">
-                  Project Type Vise Installation Capacity
-                  <button
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        assignedProjectTypes: [
-                          ...prev.assignedProjectTypes,
-                          { category: 'Solar Rooftop', subCategory: 'Residential', projectType: '', subProjectType: 'On-Grid', capacity: '', daysRequiredUnit: 'Weeks', daysRequiredVal: '', active: false }
-                        ]
-                      }))
-                    }}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add Row
-                  </button>
-                </h4>
+                <div className="flex justify-between items-center mb-4 pb-2 border-b border-gray-100">
+                  <h4 className="font-bold text-gray-800">Project Type Vise Installation Capacity</h4>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] bg-blue-100 text-blue-700 px-3 py-1 rounded-full uppercase tracking-tighter font-black shadow-sm flex items-center gap-1">
+                      <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" /> Auto-Generated
+                    </span>
+                    <button
+                      onClick={handleAddNewProjectType}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add New Row
+                    </button>
+                  </div>
+                </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
                   <div className="bg-[#6b7280] text-white flex items-center gap-2 px-4 py-2 text-sm font-medium">
                     <MapPin className="w-4 h-4" /> Project Type Vise Installation Capacity
@@ -469,106 +814,147 @@ const SolarInstaller = () => {
                     <table className="w-full text-sm text-left">
                       <thead className="bg-[#f3f4f6] text-[#4b5563] border-b border-gray-200 text-xs font-semibold">
                         <tr>
-                          <th className="px-3 py-4 text-center w-12 border-l border-gray-200">Action</th>
+                          <th className="px-3 py-4 text-center w-12 border-l border-gray-200">Active</th>
                           <th className="px-3 py-4 border-l border-gray-200">Category</th>
                           <th className="px-3 py-4 border-l border-gray-200">Sub-Category</th>
                           <th className="px-3 py-4 border-l border-gray-200">Project Type</th>
                           <th className="px-3 py-4 border-l border-gray-200 whitespace-nowrap">Sub ProjectType</th>
-                          <th className="px-3 py-4 border-l border-gray-200">Capacity (kW)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Yearly Target (kW)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Incentive (₹)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Inst. Charges (₹/kW)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Max Capacity (kW)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Days Required</th>
-                          <th className="px-3 py-4 border-l border-gray-200 text-center w-12">Edit</th>
+                          <th className="px-3 py-4 border-l border-gray-200 text-center w-12">Delete</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
-                        {formData.assignedProjectTypes.map((row, idx) => (
-                          <tr key={idx} className={`hover:bg-gray-50 text-[13px] font-medium transition-colors ${row.active ? 'bg-white' : 'text-gray-500'}`}>
-                            <td className="px-3 py-3 text-center border-l border-gray-200">
-                              <input
-                                type="checkbox"
-                                checked={row.active}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'active', e.target.checked)}
-                                className="w-3.5 h-3.5 accent-blue-600"
-                              />
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <input
-                                type="text"
-                                value={row.category || ''}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'category', e.target.value)}
-                                className="w-full bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-300 rounded px-1"
-                              />
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <input
-                                type="text"
-                                value={row.subCategory || ''}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'subCategory', e.target.value)}
-                                className="w-full bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-300 rounded px-1"
-                              />
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <input
-                                type="text"
-                                value={row.projectType || ''}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'projectType', e.target.value)}
-                                className="w-full bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-300 rounded px-1 min-w-[70px]"
-                              />
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <select
-                                value={row.subProjectType || 'On-Grid'}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'subProjectType', e.target.value)}
-                                className="w-full bg-transparent border-none outline-none focus:ring-1 focus:ring-blue-300 rounded px-1 cursor-pointer"
-                              >
-                                <option value="On-Grid">On-Grid</option>
-                                <option value="Off-Grid">Off-Grid</option>
-                                <option value="Hybrid">Hybrid</option>
-                              </select>
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <input
-                                type="number"
-                                value={row.capacity || ''}
-                                onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'capacity', e.target.value)}
-                                className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
-                              />
-                            </td>
-                            <td className="px-2 py-3 border-l border-gray-200">
-                              <div className="flex items-center gap-2">
-                                <select
-                                  value={row.daysRequiredUnit || 'Weeks'}
-                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'daysRequiredUnit', e.target.value)}
-                                  className="w-24 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white text-xs cursor-pointer"
-                                >
-                                  <option value="Days">Days</option>
-                                  <option value="Weeks">Weeks</option>
-                                  <option value="Months">Months</option>
-                                </select>
+                        {formData.assignedProjectTypes.length > 0 ? (
+                          formData.assignedProjectTypes.map((row, idx) => (
+                            <tr key={idx} className={`hover:bg-gray-50 text-[13px] font-medium transition-colors ${row.active ? 'bg-white' : 'text-gray-500'}`}>
+                              <td className="px-3 py-3 text-center border-l border-gray-200">
+                                <input
+                                  type="checkbox"
+                                  checked={row.active}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'active', e.target.checked)}
+                                  className="w-3.5 h-3.5 accent-blue-600"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="text"
+                                  value={row.category || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'category', e.target.value)}
+                                  className="w-full text-sm font-medium text-gray-800 bg-gray-50 px-2 py-1 rounded outline-none focus:ring-1 focus:ring-blue-200"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="text"
+                                  value={row.subCategory || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'subCategory', e.target.value)}
+                                  className="w-full text-sm font-medium text-gray-800 bg-gray-50 px-2 py-1 rounded outline-none focus:ring-1 focus:ring-blue-200"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="text"
+                                  value={row.projectType || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'projectType', e.target.value)}
+                                  className="w-full text-sm font-bold text-blue-700 bg-blue-50 px-2 py-1 rounded border border-blue-100 outline-none focus:ring-1 focus:ring-blue-300"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="text"
+                                  value={row.subProjectType || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'subProjectType', e.target.value)}
+                                  className="w-full text-[11px] font-black text-gray-600 bg-gray-100 px-2 py-1 rounded border border-gray-200 outline-none uppercase tracking-tighter text-center focus:ring-1 focus:ring-gray-300"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
                                 <input
                                   type="number"
-                                  value={row.daysRequiredVal || ''}
-                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'daysRequiredVal', e.target.value)}
+                                  placeholder="0"
+                                  value={row.yearlyTargetKw || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'yearlyTargetKw', e.target.value)}
                                   className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
                                 />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={row.incentiveAmount || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'incentiveAmount', e.target.value)}
+                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  placeholder="0"
+                                  value={row.installationCharges || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'installationCharges', e.target.value)}
+                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  value={row.capacity || ''}
+                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'capacity', e.target.value)}
+                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                                />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={row.daysRequiredUnit || 'Weeks'}
+                                    onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'daysRequiredUnit', e.target.value)}
+                                    className="w-24 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white text-xs cursor-pointer"
+                                  >
+                                    <option value="Days">Days</option>
+                                    <option value="Weeks">Weeks</option>
+                                    <option value="Months">Months</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    value={row.daysRequiredVal || ''}
+                                    onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'daysRequiredVal', e.target.value)}
+                                    className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200 text-center">
+                                <button
+                                  onClick={() => {
+                                    setFormData(prev => ({
+                                      ...prev,
+                                      assignedProjectTypes: prev.assignedProjectTypes.filter((_, i) => i !== idx)
+                                    }))
+                                  }}
+                                  className="text-red-500 hover:text-red-700 p-1"
+                                  title="Delete row"
+                                >
+                                  <Trash2 className="w-4 h-4" />
+                                </button>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr>
+                            <td colSpan="8" className="p-12 text-center bg-gray-50/30">
+                              <div className="flex flex-col items-center gap-3">
+                                <div className="p-4 bg-white rounded-full shadow-sm">
+                                  <ClipboardList className="w-8 h-8 text-gray-300" />
+                                </div>
+                                <div className="space-y-1">
+                                  <p className="text-gray-800 font-bold">No Configurations Active</p>
+                                  <p className="text-xs text-gray-500">Please select a location and click <span className="text-blue-600 font-bold uppercase">'Apply Selection'</span></p>
+                                </div>
                               </div>
                             </td>
-                            <td className="px-2 py-3 border-l border-gray-200 text-center">
-                              <button
-                                onClick={() => {
-                                  setFormData(prev => ({
-                                    ...prev,
-                                    assignedProjectTypes: prev.assignedProjectTypes.filter((_, i) => i !== idx)
-                                  }))
-                                }}
-                                className="text-blue-500 hover:text-blue-700 p-1"
-                              >
-                                <Edit className="w-4 h-4" />
-                              </button>
-                            </td>
                           </tr>
-                        ))}
-                        {formData.assignedProjectTypes.length === 0 && (
-                          <tr><td colSpan="8" className="text-center py-4 text-xs text-gray-400">No project configurations</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -580,72 +966,89 @@ const SolarInstaller = () => {
               <section ref={sectionRefs.points} className="scroll-mt-6">
                 <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100 flex justify-between items-center">
                   Solar Installation Points
-                  <button
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        solarInstallationPoints: [
-                          ...prev.solarInstallationPoints,
-                          { typeLabel: 'New Type', points: 0, periodInMonth: 0, claimInMonth: 0 }
-                        ]
-                      }))
-                    }}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">Dynamic Sync Active</span>
+                    <button
+                      onClick={handleAddNewProjectType}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add New Row
+                    </button>
+                  </div>
                 </h4>
-                <div className="space-y-3 relative">
-                  {formData.solarInstallationPoints.map((pt, idx) => (
-                    <div key={idx} className="bg-gray-50/80 rounded-lg p-4 border border-gray-100 flex flex-col md:flex-row md:items-center gap-4 relative group">
-                      <div className="w-full md:w-1/3">
-                        <input
-                          type="text"
-                          value={pt.typeLabel}
-                          onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'typeLabel', e.target.value)}
-                          className="block text-sm font-bold text-gray-800 mb-1 w-full bg-transparent border-none outline-none border-b border-transparent focus:border-blue-300 px-0 focus:ring-0"
-                        />
-                        <div className="flex items-center text-xs text-gray-500 mb-1">₹ Point</div>
-                        <input
-                          type="number"
-                          value={pt.points}
-                          onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'points', Number(e.target.value))}
-                          className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
-                        />
-                      </div>
-                      <div className="w-full md:w-1/3">
-                        <div className="flex items-center text-xs text-gray-500 mb-1 mt-5 md:mt-0">Period (in Month)</div>
-                        <input
-                          type="number"
-                          value={pt.periodInMonth}
-                          onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'periodInMonth', Number(e.target.value))}
-                          className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
-                        />
-                      </div>
-                      <div className="w-full md:w-1/3 pr-6">
-                        <div className="flex items-center text-xs text-gray-500 mb-1 mt-5 md:mt-0">Claim (in Month)</div>
-                        <input
-                          type="number"
-                          value={pt.claimInMonth}
-                          onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'claimInMonth', Number(e.target.value))}
-                          className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
-                        />
-                      </div>
-                      <button
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            solarInstallationPoints: prev.solarInstallationPoints.filter((_, i) => i !== idx)
-                          }))
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  {formData.solarInstallationPoints.length === 0 && <p className="text-sm text-gray-400 p-4 text-center">No points configured</p>}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-[#64748b] text-white flex items-center gap-2 px-4 py-2 text-sm font-medium">
+                    <CheckCircle2 className="w-4 h-4" /> Installation Point Settings
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-[#f8fafc] text-[#475569] border-b border-gray-200 text-xs font-bold uppercase tracking-wider">
+                        <tr>
+                          <th className="px-3 py-4 text-center w-12 border-l border-gray-200">Active</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Type Label / Category</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Points (₹)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Period (Mo)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Claim (Mo)</th>
+                          <th className="px-3 py-4 border-l border-gray-200 text-center w-12">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {formData.solarInstallationPoints.length > 0 ? (
+                          formData.solarInstallationPoints.map((pt, idx) => (
+                            <tr key={idx} className={`hover:bg-gray-50/80 transition-colors ${pt.active ? 'bg-white' : 'text-gray-400 bg-gray-50/30'}`}>
+                              <td className="px-3 py-3 text-center border-l border-gray-200">
+                                <input
+                                  type="checkbox"
+                                  checked={pt.active}
+                                  onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'active', e.target.checked)}
+                                  className="w-4 h-4 accent-blue-600 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
+                                <span className="font-bold text-gray-800 block px-1 truncate max-w-[200px]" title={pt.typeLabel}>
+                                  {pt.typeLabel}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
+                                <div className="flex items-center gap-1 group">
+                                  <span className="text-gray-400 font-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    value={pt.points}
+                                    onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'points', Number(e.target.value))}
+                                    className="w-20 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  value={pt.periodInMonth}
+                                  onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'periodInMonth', Number(e.target.value))}
+                                  className="w-16 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white text-center"
+                                />
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  value={pt.claimInMonth}
+                                  onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'claimInMonth', Number(e.target.value))}
+                                  className="w-16 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white text-center"
+                                />
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200 text-center">
+                                <span className="text-gray-300">
+                                  <Trash2 className="w-4 h-4 opacity-50" />
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr><td colSpan="6" className="py-8 text-center text-gray-400 font-medium">No installation points added yet</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </section>
 
@@ -653,56 +1056,74 @@ const SolarInstaller = () => {
               <section ref={sectionRefs.charges} className="scroll-mt-6">
                 <h4 className="font-bold text-gray-800 mb-4 pb-2 border-b border-gray-100 flex justify-between items-center">
                   Solar Installation Charges
-                  <button
-                    onClick={() => {
-                      setFormData(prev => ({
-                        ...prev,
-                        solarInstallationCharges: [
-                          ...prev.solarInstallationCharges,
-                          { typeLabel: 'New Type', charges: 0 }
-                        ]
-                      }))
-                    }}
-                    className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-2 py-1 rounded flex items-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" /> Add
-                  </button>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">Dynamic Sync Active</span>
+                    <button
+                      onClick={handleAddNewProjectType}
+                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add New Row
+                    </button>
+                  </div>
                 </h4>
-                <div className="space-y-3">
-                  {formData.solarInstallationCharges.map((pt, idx) => (
-                    <div key={idx} className="bg-gray-50/80 rounded-lg p-4 border border-gray-100 relative group">
-                      <div className="w-full md:w-1/2 pr-6">
-                        <input
-                          type="text"
-                          value={pt.typeLabel}
-                          onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'typeLabel', e.target.value)}
-                          className="block text-sm font-bold text-gray-800 mb-1 w-full bg-transparent border-none outline-none border-b border-transparent focus:border-blue-300 px-0 focus:ring-0"
-                        />
-                        <div className="flex items-center text-xs text-gray-500 mb-1">₹ charges</div>
-                        <input
-                          type="number"
-                          value={pt.charges}
-                          onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'charges', Number(e.target.value))}
-                          className="border border-gray-300 rounded px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
-                        />
-                      </div>
-                      <button
-                        onClick={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            solarInstallationCharges: prev.solarInstallationCharges.filter((_, i) => i !== idx)
-                          }))
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-300 hover:text-red-500 p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                        title="Remove"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  ))}
-                  {formData.solarInstallationCharges.length === 0 && <p className="text-sm text-gray-400 p-4 text-center">No charges configured</p>}
+                <div className="border border-gray-200 rounded-lg overflow-hidden">
+                  <div className="bg-[#64748b] text-white flex items-center gap-2 px-4 py-2 text-sm font-medium">
+                    <MapPin className="w-4 h-4" /> Installation Charge Settings
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                      <thead className="bg-[#f8fafc] text-[#475569] border-b border-gray-200 text-xs font-bold uppercase tracking-wider">
+                        <tr>
+                          <th className="px-4 py-4 text-center w-12 border-l border-gray-200">Active</th>
+                          <th className="px-4 py-4 border-l border-gray-200">Type Label / Category</th>
+                          <th className="px-4 py-4 border-l border-gray-200">Charges (₹/kW)</th>
+                          <th className="px-4 py-4 border-l border-gray-200 text-center w-12">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-200">
+                        {formData.solarInstallationCharges.length > 0 ? (
+                          formData.solarInstallationCharges.map((pt, idx) => (
+                            <tr key={idx} className={`hover:bg-gray-50/80 transition-colors ${pt.active ? 'bg-white' : 'text-gray-400 bg-gray-50/30'}`}>
+                              <td className="px-4 py-3 text-center border-l border-gray-200">
+                                <input
+                                  type="checkbox"
+                                  checked={pt.active}
+                                  onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'active', e.target.checked)}
+                                  className="w-4 h-4 accent-blue-600 cursor-pointer"
+                                />
+                              </td>
+                              <td className="px-4 py-3 border-l border-gray-200">
+                                <span className="font-bold text-gray-800 block px-1 truncate max-w-[250px]" title={pt.typeLabel}>
+                                  {pt.typeLabel}
+                                </span>
+                              </td>
+                              <td className="px-4 py-3 border-l border-gray-200">
+                                <div className="flex items-center gap-1 group">
+                                  <span className="text-gray-400 font-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    value={pt.charges}
+                                    onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'charges', Number(e.target.value))}
+                                    className="w-24 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-4 py-3 border-l border-gray-200 text-center">
+                                <span className="text-gray-300">
+                                  <Trash2 className="w-4 h-4 opacity-50" />
+                                </span>
+                              </td>
+                            </tr>
+                          ))
+                        ) : (
+                          <tr><td colSpan="4" className="py-8 text-center text-gray-400 font-medium">No installation charges added yet</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </section>
+
 
               <div className="pt-2 flex items-center justify-between">
                 <label className="flex items-center gap-2 cursor-pointer font-semibold text-gray-700">
@@ -761,20 +1182,14 @@ const SolarInstaller = () => {
                 <p className="text-sm text-gray-500 font-medium mt-1">signup fees</p>
               </div>
 
-              {/* Target Box */}
+              {/* Target Box - Auto Calculated */}
               <div className="bg-[#00aaff] rounded-xl text-white p-4 shadow-md relative overflow-hidden transition-colors" style={{ backgroundColor: formData.planColor ? `${formData.planColor}dd` : '#00aaff' }}>
                 <div className="flex items-center gap-3 mb-2 px-2">
                   <div className="w-4 h-4 rounded-full bg-red-500 flex items-center justify-center border-2 border-white text-[10px] font-bold">↑</div>
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-white/80">Yearly Target:</span>
-                    <div className="flex items-center gap-1 font-semibold text-sm">
-                      <input
-                        type="number"
-                        name="yearlyTargetKw"
-                        value={formData.yearlyTargetKw || ''}
-                        onChange={handleInputChange}
-                        className="bg-transparent border-b border-white/30 font-bold text-white px-1 w-16 outline-none focus:border-white"
-                      /> kw
+                    <div className="flex items-center gap-1 font-black text-sm">
+                      {formData.assignedProjectTypes.filter(r => r.active).reduce((sum, r) => sum + (parseFloat(r.yearlyTargetKw) || 0), 0)} kw
                     </div>
                   </div>
                 </div>
@@ -782,14 +1197,8 @@ const SolarInstaller = () => {
                   <div className="w-4 h-4 rounded-full bg-yellow-400 flex items-center justify-center border-2 border-white text-[10px] text-gray-800 font-bold">$</div>
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-white/80">Incentive:</span>
-                    <div className="flex items-center gap-1 font-semibold text-sm">
-                      ₹ <input
-                        type="number"
-                        name="incentive"
-                        value={formData.incentive || ''}
-                        onChange={handleInputChange}
-                        className="bg-transparent border-b border-white/30 font-bold text-white px-1 w-16 outline-none focus:border-white"
-                      />
+                    <div className="flex items-center gap-1 font-black text-sm text-yellow-200">
+                      ₹ {formData.assignedProjectTypes.filter(r => r.active).reduce((sum, r) => sum + (parseFloat(r.incentiveAmount) || 0), 0).toLocaleString()}
                     </div>
                   </div>
                 </div>
@@ -852,10 +1261,10 @@ const SolarInstaller = () => {
                 <h4 className="text-[13px] font-bold text-gray-800 mb-3">Required Documents:</h4>
                 <div className="space-y-2 pl-1">
                   <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
-                    <CheckCircle2 className={`w-4 h-4 ${formData.eligibility.kyc ? 'text-green-500 fill-green-50' : 'text-gray-300 fill-gray-50'}`} /> ID Proof
+                    <CheckCircle2 className={`w-4 h-4 ${formData.eligibility.aadharCard ? 'text-green-500 fill-green-50' : 'text-gray-300 fill-gray-50'}`} /> Aadhar Card
                   </div>
                   <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
-                    <CheckCircle2 className={`w-4 h-4 ${formData.eligibility.kyc ? 'text-green-500 fill-green-50' : 'text-gray-300 fill-gray-50'}`} /> Address Proof
+                    <CheckCircle2 className={`w-4 h-4 ${formData.eligibility.panCard ? 'text-green-500 fill-green-50' : 'text-gray-300 fill-gray-50'}`} /> PAN Card
                   </div>
                   <div className="flex items-center gap-2 text-xs font-semibold text-gray-400">
                     <CheckCircle2 className={`w-4 h-4 ${formData.eligibility.agreement ? 'text-green-500 fill-green-50' : 'text-gray-300 fill-gray-50'}`} /> Business RAM

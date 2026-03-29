@@ -36,26 +36,44 @@ export default function ToolRequirements() {
 
   const fetchFilters = async () => {
     try {
-      const [catRes, typeRes] = await Promise.all([
+      const [catRes, subPTypeRes] = await Promise.all([
         productApi.getCategories().catch(() => ({ data: { data: [] } })),
-        productApi.getProjectTypes().catch(() => ({ data: { data: [] } }))
+        productApi.getSubProjectTypes().catch(() => ({ data: { data: [] } }))
       ]);
       setCategories(catRes.data?.data || []);
-      setProjectTypes(typeRes.data?.data || []);
+      setSubTypes(subPTypeRes.data?.data || []);
     } catch (error) {
       console.error('Error fetching filter data:', error);
+    }
+  };
+
+  const fetchProjectTypes = async (categoryId) => {
+    if (!categoryId) {
+      setProjectTypes([]);
+      return;
+    }
+    try {
+      const res = await productApi.getProjectCategoryMappings({ categoryId }).catch(() => ({ data: { success: true, data: [] } }));
+      if (res.data?.success) {
+        const mappings = res.data.data;
+        // Extract unique ranges like "1 to 3 kW"
+        const uniqueRanges = [...new Set(mappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`))];
+        setProjectTypes(uniqueRanges.map(r => ({ _id: r, name: r })));
+      }
+    } catch (error) {
+      setProjectTypes([]);
     }
   };
 
   const fetchTools = async () => {
     try {
       setLoading(true);
-      const params = {
-        projectCategory: formData.projectCategory,
-        subCategory: formData.subCategory,
-        projectType: formData.projectType,
-        subType: formData.subType
-      };
+      const params = {};
+      if (formData.projectCategory) params.projectCategory = formData.projectCategory;
+      if (formData.subCategory) params.subCategory = formData.subCategory;
+      if (formData.projectType) params.projectType = formData.projectType;
+      if (formData.subType) params.subType = formData.subType;
+      
       const data = await getInstallerTools(params);
       setTools(Array.isArray(data) ? data : data.data || []);
     } catch (error) {
@@ -75,30 +93,25 @@ export default function ToolRequirements() {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
 
-    // Handle cascading dropdowns if applicable
-    // Subcategories and sub-types might not exist natively in the product API provided.
-    // In many Solarkits setups, these might be filtered on the frontend or omitted if not strictly available.
-    // For now, if the API doesn't exist, we leave it blank, but it won't throw 404s anymore.
     if (name === 'projectCategory') {
-      // try {
-      //   const res = await api.get(`/project-subcategory?category=${value}`).catch(() => ({ data: [] }));
-      //   setSubCategories(res.data || []);
-      // } catch (error) {}
-      setFormData(prev => ({ ...prev, subCategory: '' }));
+      try {
+        const res = await productApi.getSubCategories({ categoryId: value }).catch(() => ({ data: { data: [] } }));
+        setSubCategories(res.data?.data || []);
+      } catch (error) {
+        setSubCategories([]);
+      }
+      setFormData(prev => ({ ...prev, subCategory: '', projectType: '', subType: '' }));
+      fetchProjectTypes(value);
     }
 
     if (name === 'projectType') {
-      // try {
-      //   const res = await api.get(`/project-subtype?type=${value}`).catch(() => ({ data: [] }));
-      //   setSubTypes(res.data || []);
-      // } catch (error) {}
       setFormData(prev => ({ ...prev, subType: '' }));
     }
   };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData({ ...formData, [name]: value });
+    setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e) => {
@@ -133,11 +146,15 @@ export default function ToolRequirements() {
   };
 
   const handleEdit = (tool) => {
+    // When editing, we need to ensure project types for that category are loaded
+    const catId = tool.projectCategory?._id || tool.projectCategory || '';
+    if (catId) fetchProjectTypes(catId);
+
     setFormData({
       toolName: tool.toolName || '',
-      projectCategory: tool.projectCategory?._id || tool.projectCategory || '',
+      projectCategory: catId,
       subCategory: tool.subCategory?._id || tool.subCategory || '',
-      projectType: tool.projectType?._id || tool.projectType || '',
+      projectType: tool.projectType || '',
       subType: tool.subType?._id || tool.subType || ''
     });
     setCurrentToolId(tool._id);
@@ -176,15 +193,31 @@ export default function ToolRequirements() {
 
         {/* Project Filters Section */}
         <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
-          <div className="bg-[#0073b7] px-6 py-3">
+          <div className="bg-[#0073b7] px-6 py-3 flex justify-between items-center">
             <h3 className="text-white font-medium">Project Filters</h3>
+            <button 
+              onClick={() => {
+                setFormData({
+                  toolName: '',
+                  projectCategory: '',
+                  subCategory: '',
+                  projectType: '',
+                  subType: ''
+                });
+                setSubCategories([]);
+                setProjectTypes([]);
+              }}
+              className="text-xs bg-white/20 hover:bg-white/30 text-white px-3 py-1 rounded transition-colors"
+            >
+              Clear All
+            </button>
           </div>
           <div className="p-6 grid grid-cols-1 md:grid-cols-4 gap-4">
             <select
               name="projectCategory"
               value={formData.projectCategory}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 outline-none"
+              className="w-full px-4 py-2 border border-gray-100 rounded-md text-gray-600 outline-none focus:border-blue-300 transition-colors bg-white shadow-sm"
             >
               <option value="">Select Category</option>
               {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
@@ -194,7 +227,7 @@ export default function ToolRequirements() {
               name="subCategory"
               value={formData.subCategory}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 outline-none"
+              className="w-full px-4 py-2 border border-gray-100 rounded-md text-gray-600 outline-none focus:border-blue-300 transition-colors bg-white shadow-sm"
             >
               <option value="">Select Sub Category</option>
               {subCategories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
@@ -204,7 +237,7 @@ export default function ToolRequirements() {
               name="projectType"
               value={formData.projectType}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 outline-none"
+              className="w-full px-4 py-2 border border-gray-100 rounded-md text-gray-600 outline-none focus:border-blue-300 transition-colors bg-white shadow-sm"
             >
               <option value="">Project Type</option>
               {projectTypes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
@@ -214,7 +247,7 @@ export default function ToolRequirements() {
               name="subType"
               value={formData.subType}
               onChange={handleFilterChange}
-              className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 outline-none"
+              className="w-full px-4 py-2 border border-gray-100 rounded-md text-gray-600 outline-none focus:border-blue-300 transition-colors bg-white shadow-sm"
             >
               <option value="">Select Sub type</option>
               {subTypes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
@@ -237,7 +270,7 @@ export default function ToolRequirements() {
                     name="toolName"
                     value={formData.toolName}
                     onChange={handleInputChange}
-                    className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none"
+                    className="w-full px-4 py-2 border border-blue-100 bg-blue-50/10 rounded-md text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none placeholder:text-gray-400"
                     placeholder="Enter tool name"
                   />
                   {isEditing && (
@@ -251,7 +284,7 @@ export default function ToolRequirements() {
                   )}
                   <button
                     type="submit"
-                    className="w-full md:w-32 px-6 py-2 bg-[#0073b7] hover:bg-[#005f98] text-white font-medium rounded transition-colors whitespace-nowrap"
+                    className="w-full md:w-32 px-6 py-2 bg-[#0073b7] hover:bg-[#005f98] text-white font-bold rounded shadow-sm hover:shadow-md transition-all whitespace-nowrap"
                   >
                     {isEditing ? 'Update' : 'Add'}
                   </button>
@@ -272,6 +305,8 @@ export default function ToolRequirements() {
               <thead className="bg-[#74b9ff] text-white">
                 <tr>
                   <th className="px-6 py-3 font-medium text-sm w-16">#</th>
+                  <th className="px-6 py-3 font-medium text-sm">Category</th>
+                  <th className="px-6 py-3 font-medium text-sm">Project Type</th>
                   <th className="px-6 py-3 font-medium text-sm">Tool Name</th>
                   <th className="px-6 py-3 font-medium text-sm w-32 border-l border-white/20">Actions</th>
                 </tr>
@@ -279,19 +314,31 @@ export default function ToolRequirements() {
               <tbody className="divide-y divide-gray-100 text-sm text-gray-600">
                 {loading ? (
                   <tr>
-                    <td colSpan="3" className="px-6 py-8 text-center text-gray-500">Loading tools...</td>
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-500">Loading tools...</td>
                   </tr>
                 ) : tools.length === 0 ? (
                   <tr>
-                    <td colSpan="3" className="px-6 py-8 text-center text-gray-700 font-medium">
+                    <td colSpan="5" className="px-6 py-8 text-center text-gray-700 font-medium">
                       No Rows Added Here
                     </td>
-                  </tr>
+                   </tr>
                 ) : (
                   tools.map((tool, index) => (
                     <tr key={tool._id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">{index + 1}</td>
-                      <td className="px-6 py-4">{tool.toolName}</td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-gray-800">{tool.projectCategory?.name || 'N/A'}</span>
+                          {tool.subCategory?.name && <span className="text-[11px] text-gray-500">{tool.subCategory.name}</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-col">
+                          <span className="font-medium text-green-700">{tool.projectType || 'N/A'}</span>
+                          {tool.subType?.name && <span className="text-[11px] text-gray-500">{tool.subType.name}</span>}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 font-semibold text-blue-600">{tool.toolName}</td>
                       <td className="px-6 py-4 border-l border-gray-100">
                         <div className="flex items-center space-x-3">
                           <button
