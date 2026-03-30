@@ -6,10 +6,10 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  getInstallerAgencyPlans,
-  createInstallerAgencyPlan,
-  updateInstallerAgencyPlan,
-  deleteInstallerAgencyPlan,
+  getSolarInstallerPlans,
+  createSolarInstallerPlan,
+  updateSolarInstallerPlan,
+  deleteSolarInstallerPlan,
   getInstallerRatings
 } from '../../../../services/installer/installerApi';
 import { getStates, getCountries, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
@@ -51,6 +51,7 @@ const SolarInstaller = () => {
   const [states, setStates] = useState([]);
   const [clusters, setClusters] = useState([]);
   const [districts, setDistricts] = useState([]);
+  const [allPlansForCount, setAllPlansForCount] = useState([]);
 
   const [selectedCountryId, setSelectedCountryId] = useState([]);
   const [selectedStateId, setSelectedStateId] = useState([]);
@@ -131,11 +132,13 @@ const SolarInstaller = () => {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [countriesData, ratingsData] = await Promise.all([
+      const [countriesData, ratingsData, plansRes] = await Promise.all([
         getCountries(),
-        getInstallerRatings()
+        getInstallerRatings(),
+        getSolarInstallerPlans()
       ]);
       setCountries(countriesData);
+      setAllPlansForCount(plansRes.data || plansRes || []);
       if (ratingsData.length > 0) {
         setMaxRating(ratingsData[0].maxRating || 5);
       }
@@ -148,6 +151,17 @@ const SolarInstaller = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  // Plan Counting Helper
+  const getPlanCount = (type, id) => {
+    return allPlansForCount.filter(p => {
+      if (type === 'country') return (p.country?._id || p.country) === id || (p.country?.includes?.(id));
+      if (type === 'state') return (p.state?._id || p.state) === id || (p.state?.includes?.(id));
+      if (type === 'cluster') return (p.cluster?._id || p.cluster) === id || (p.cluster?.includes?.(id)) || p.selectedClusters?.includes?.(id);
+      if (type === 'district') return (p.districts?.some(d => (d._id || d) === id)) || p.selectedDistricts?.includes?.(id);
+      return false;
+    }).length;
   };
 
   // Cascading: States
@@ -227,7 +241,7 @@ const SolarInstaller = () => {
   const fetchPlans = async () => {
     try {
       setLoading(true);
-      const res = await getInstallerAgencyPlans({
+      const res = await getSolarInstallerPlans({
         countryIds: selectedCountryId,
         stateIds: selectedStateId,
         clusterIds: selectedClusterId,
@@ -505,13 +519,13 @@ const SolarInstaller = () => {
       };
 
       if (selectedPlanId === 'new') {
-        const result = await createInstallerAgencyPlan(payload);
+        const result = await createSolarInstallerPlan(payload);
         toast.success('Plan created successfully');
         const newPlan = result.data || result;
         setPlans([...plans, newPlan]);
         handleSelectPlan(newPlan);
       } else {
-        const result = await updateInstallerAgencyPlan(selectedPlanId, payload);
+        const result = await updateSolarInstallerPlan(selectedPlanId, payload);
         toast.success('Plan updated successfully');
         const updatedPlan = result.data || result;
         setPlans(plans.map(p => p._id === updatedPlan._id ? updatedPlan : p));
@@ -528,7 +542,7 @@ const SolarInstaller = () => {
     if (!window.confirm('Are you sure you want to delete this plan?')) return;
 
     try {
-      await deleteInstallerAgencyPlan(selectedPlanId);
+      await deleteSolarInstallerPlan(selectedPlanId);
       toast.success('Plan deleted successfully');
 
       const newPlans = plans.filter(p => p._id !== selectedPlanId);
@@ -575,15 +589,20 @@ const SolarInstaller = () => {
               </button>
            </div>
            <div className="flex flex-wrap gap-2">
-              {countries.map(c => (
-                <button
-                  key={c._id}
-                  onClick={() => setSelectedCountryId(prev => prev.includes(c._id) ? prev.filter(id => id !== c._id) : [...prev, c._id])}
-                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedCountryId.includes(c._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
-                >
-                  {c.name}
-                </button>
-              ))}
+              {countries.map(c => {
+                const count = getPlanCount('country', c._id);
+                const isSelected = selectedCountryId.includes(c._id);
+                return (
+                  <button
+                    key={c._id}
+                    onClick={() => setSelectedCountryId(prev => isSelected ? prev.filter(id => id !== c._id) : [...prev, c._id])}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                  >
+                    {c.name}
+                    {count > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'}`}>{count}</span>}
+                  </button>
+                );
+              })}
            </div>
         </div>
 
@@ -602,16 +621,21 @@ const SolarInstaller = () => {
                 </button>
              </div>
              <div className="flex flex-wrap gap-2">
-                {states.map(s => (
-                  <button
-                    key={s._id}
-                    onClick={() => setSelectedStateId(prev => prev.includes(s._id) ? prev.filter(id => id !== s._id) : [...prev, s._id])}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedStateId.includes(s._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
-                  >
-                    {s.name}
-                  </button>
-                ))}
-             </div>
+                 {states.map(s => {
+                   const count = getPlanCount('state', s._id);
+                   const isSelected = selectedStateId.includes(s._id);
+                   return (
+                     <button
+                       key={s._id}
+                       onClick={() => setSelectedStateId(prev => isSelected ? prev.filter(id => id !== s._id) : [...prev, s._id])}
+                       className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                     >
+                       {s.name}
+                       {count > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'}`}>{count}</span>}
+                     </button>
+                   );
+                 })}
+              </div>
           </div>
         )}
 
@@ -630,17 +654,21 @@ const SolarInstaller = () => {
                 </button>
              </div>
              <div className="flex flex-wrap gap-2">
-                {clusters.length > 0 ? clusters.map(c => (
-                  <button
-                    key={c._id}
-                    onClick={() => setSelectedClusterId(prev => prev.includes(c._id) ? prev.filter(id => id !== c._id) : [...prev, c._id])}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedClusterId.includes(c._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
-                    title={c.name || c.clusterName}
-                  >
-                    {c.name || c.clusterName}
-                  </button>
-                )) : <div className="text-gray-400 text-xs italic">No clusters</div>}
-             </div>
+                 {clusters.map(c => {
+                    const count = getPlanCount('cluster', c._id);
+                    const isSelected = selectedClusterId.includes(c._id);
+                    return (
+                      <button
+                        key={c._id}
+                        onClick={() => setSelectedClusterId(prev => isSelected ? prev.filter(id => id !== c._id) : [...prev, c._id])}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                      >
+                        {c.name || c.clusterName}
+                        {count > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'}`}>{count}</span>}
+                      </button>
+                    );
+                 })}
+              </div>
           </div>
         )}
 
@@ -659,17 +687,21 @@ const SolarInstaller = () => {
                 </button>
              </div>
              <div className="flex flex-wrap gap-2">
-                {districts.length > 0 ? districts.map(d => (
-                  <button
-                    key={d._id}
-                    onClick={() => setSelectedDistrictId(prev => prev.includes(d._id) ? prev.filter(id => id !== d._id) : [...prev, d._id])}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedDistrictId.includes(d._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
-                    title={d.name || d.districtName}
-                  >
-                    {d.name || d.districtName}
-                  </button>
-                )) : <div className="text-gray-400 text-xs italic">No districts</div>}
-             </div>
+                 {districts.map(d => {
+                    const count = getPlanCount('district', d._id);
+                    const isSelected = selectedDistrictId.includes(d._id);
+                    return (
+                      <button
+                        key={d._id}
+                        onClick={() => setSelectedDistrictId(prev => isSelected ? prev.filter(id => id !== d._id) : [...prev, d._id])}
+                        className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border flex items-center gap-2 ${isSelected ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                      >
+                        {d.name || d.districtName}
+                        {count > 0 && <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${isSelected ? 'bg-white text-blue-600' : 'bg-blue-100 text-blue-600'}`}>{count}</span>}
+                      </button>
+                    );
+                 })}
+              </div>
           </div>
         )}
       </div>
@@ -1190,7 +1222,8 @@ const SolarInstaller = () => {
                           <th className="px-3 py-4 text-center w-12 border-l border-gray-200">Active</th>
                           <th className="px-3 py-4 border-l border-gray-200">Type Label / Category</th>
                           <th className="px-3 py-4 border-l border-gray-200">Yearly Target (kW)</th>
-                          <th className="px-3 py-4 border-l border-gray-200">Points (₹)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Points</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Rupees per Point (₹)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Period (Mo)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Claim (Mo)</th>
                         </tr>
@@ -1222,11 +1255,21 @@ const SolarInstaller = () => {
                               </td>
                               <td className="px-3 py-3 border-l border-gray-200">
                                 <div className="flex items-center gap-1 group">
-                                  <span className="text-gray-400 font-bold">₹</span>
                                   <input
                                     type="number"
                                     value={pt.points ?? 0}
                                     onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'points', Number(e.target.value))}
+                                    className="w-20 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
+                                  />
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
+                                <div className="flex items-center gap-1 group">
+                                  <span className="text-gray-400 font-bold">₹</span>
+                                  <input
+                                    type="number"
+                                    value={pt.rupeesPerPoint ?? 0}
+                                    onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'rupeesPerPoint', Number(e.target.value))}
                                     className="w-20 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
                                   />
                                 </div>
@@ -1423,16 +1466,15 @@ const SolarInstaller = () => {
               <div className="flex items-center justify-between py-4 border-b border-gray-100">
                 <div className="flex items-center gap-4">
                   <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-inner" style={{ backgroundColor: `${formData.planColor}15` }}>
-                    <div className="w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] text-white" style={{ backgroundColor: formData.planColor || '#0073b7' }}>₹</div>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] text-white" style={{ backgroundColor: formData.planColor || '#0073b7' }}>PT</div>
                   </div>
                   <div>
                     <h4 className="font-bold text-gray-600 text-[13px] leading-tight opacity-80 uppercase tracking-tight">Points as per <br /> Project Type</h4>
                     <div className="text-xl font-black text-gray-800 mt-0.5">
-                      ₹ {formData.solarInstallationPoints
+                      {formData.solarInstallationPoints
                         ? formData.solarInstallationPoints
                           .filter(p => p.active)
                           .reduce((sum, p) => sum + (parseFloat(p.points) || 0), 0)
-                          .toLocaleString()
                         : 0}
                     </div>
                   </div>

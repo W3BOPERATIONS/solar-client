@@ -113,3 +113,29 @@ export const deleteInstallerAgencyPlan = async (id) => {
     const response = await axios.delete(`${API_URL}/agency-plans/${id}`);
     return response.data;
 };
+
+// ---------------------------------------------------------------------------
+// Solar Installer Individual Plan functions
+// ---------------------------------------------------------------------------
+
+export const getSolarInstallerPlans = async (params = {}) => {
+    const query = new URLSearchParams(params).toString();
+    const url = query ? `${API_URL}/installer-plans?${query}` : `${API_URL}/installer-plans`;
+    const response = await axios.get(url);
+    return response.data;
+};
+
+export const createSolarInstallerPlan = async (data) => {
+    const response = await axios.post(`${API_URL}/installer-plans`, data);
+    return response.data;
+};
+
+export const updateSolarInstallerPlan = async (id, data) => {
+    const response = await axios.put(`${API_URL}/installer-plans/${id}`, data);
+    return response.data;
+};
+
+export const deleteSolarInstallerPlan = async (id) => {
+    const response = await axios.delete(`${API_URL}/installer-plans/${id}`);
+    return response.data;
+};
