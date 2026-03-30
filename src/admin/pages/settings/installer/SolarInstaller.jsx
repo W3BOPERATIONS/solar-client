@@ -1,16 +1,18 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Settings, Check, Rocket, Edit, LayoutGrid, CircleUserRound, Building2, House,
-  MapPin, Eye, CheckCircle2, ChevronUp, Plus, Trash2, X, RefreshCw, ClipboardList
+  MapPin, Eye, CheckCircle2, ChevronUp, Plus, Trash2, X, RefreshCw, ClipboardList,
+  Globe, Target, Layers, Star
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getInstallerAgencyPlans,
   createInstallerAgencyPlan,
   updateInstallerAgencyPlan,
-  deleteInstallerAgencyPlan
+  deleteInstallerAgencyPlan,
+  getInstallerRatings
 } from '../../../../services/installer/installerApi';
-import { getStates, getDistricts, getClusters } from '../../../../services/core/locationApi';
+import { getStates, getCountries, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 import { productApi } from '../../../../api/productApi';
 
 
@@ -45,10 +47,17 @@ const SolarInstaller = () => {
   const [selectedPlanId, setSelectedPlanId] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isApplying, setIsApplying] = useState(false);
+  const [countries, setCountries] = useState([]);
   const [states, setStates] = useState([]);
-  const [districts, setDistricts] = useState([]);
   const [clusters, setClusters] = useState([]);
+  const [districts, setDistricts] = useState([]);
+
+  const [selectedCountryId, setSelectedCountryId] = useState([]);
+  const [selectedStateId, setSelectedStateId] = useState([]);
+  const [selectedClusterId, setSelectedClusterId] = useState([]);
+  const [selectedDistrictId, setSelectedDistrictId] = useState([]);
   const [projectMappings, setProjectMappings] = useState([]);
+  const [maxRating, setMaxRating] = useState(5);
 
   // Refs for scrolling
   const sectionRefs = {
@@ -80,33 +89,7 @@ const SolarInstaller = () => {
     fetchInitialData();
   }, []);
 
-  const fetchStates = async () => {
-    try {
-      const res = await getStates();
-      setStates(res || []);
-    } catch (err) {
-      console.error('Failed to fetch states', err);
-    }
-  };
-
-
-  const fetchDistricts = async () => {
-    try {
-      const res = await getDistricts();
-      setDistricts(res || []);
-    } catch (err) {
-      console.error('Failed to fetch districts', err);
-    }
-  };
-
-  const fetchClusters = async () => {
-    try {
-      const res = await getClusters();
-      setClusters(res || []);
-    } catch (err) {
-      console.error('Failed to fetch clusters', err);
-    }
-  };
+  // We removed old fetchers
 
   const fetchProjectMappings = async () => {
     try {
@@ -148,24 +131,130 @@ const SolarInstaller = () => {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [plansData] = await Promise.all([
-        getInstallerAgencyPlans(),
-        fetchStates(),
-        fetchDistricts(),
-        fetchClusters()
+      const [countriesData, ratingsData] = await Promise.all([
+        getCountries(),
+        getInstallerRatings()
       ]);
-
-      const pData = plansData.data || plansData || [];
-      setPlans(pData);
-
-      if (pData.length > 0) {
-        handleSelectPlan(pData[0]);
-      } else {
-        setFormData({ ...DEFAULT_PLAN });
+      setCountries(countriesData);
+      if (ratingsData.length > 0) {
+        setMaxRating(ratingsData[0].maxRating || 5);
+      }
+      if (countriesData.length > 0) {
+        setSelectedCountryId([countriesData[0]._id]);
       }
     } catch (error) {
       console.error('Failed to fetch data', error);
-      toast.error('Failed to load installer plans');
+      toast.error('Failed to load initial data');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Cascading: States
+  useEffect(() => {
+    if (selectedCountryId.length > 0) {
+      const fetchStatesForCountry = async () => {
+        try {
+          const promises = selectedCountryId.map(id => getStates({ countryId: id }));
+          const results = await Promise.all(promises);
+          const allStates = results.flat();
+          // Unique by _id
+          const uniqueStates = Array.from(new Map(allStates.map(s => [s._id, s])).values());
+          setStates(uniqueStates);
+          
+          // Clear children
+          setSelectedStateId(prev => prev.filter(id => uniqueStates.some(s => s._id === id)));
+        } catch (error) {
+          console.error(error);
+        }
+      };
+      fetchStatesForCountry();
+    } else {
+      setStates([]);
+      setSelectedStateId([]);
+    }
+  }, [selectedCountryId]);
+
+  // Cascading: Clusters
+  useEffect(() => {
+    if (selectedStateId.length > 0) {
+      const fetchClustersForState = async () => {
+        try {
+          const promises = selectedStateId.map(id => getClustersHierarchy(id));
+          const results = await Promise.all(promises);
+          const allClusters = results.flat();
+          const uniqueClusters = Array.from(new Map(allClusters.map(c => [c._id, c])).values());
+          setClusters(uniqueClusters);
+          setSelectedClusterId(prev => prev.filter(id => uniqueClusters.some(c => c._id === id)));
+        } catch (error) {
+          console.error(error);
+        }
+      };
+      fetchClustersForState();
+    } else {
+      setClusters([]);
+      setSelectedClusterId([]);
+    }
+  }, [selectedStateId]);
+
+  // Cascading: Districts
+  useEffect(() => {
+    if (selectedClusterId.length > 0) {
+      const fetchDistrictsForCluster = async () => {
+        try {
+          const promises = selectedClusterId.map(id => getDistrictsHierarchy(id));
+          const results = await Promise.all(promises);
+          const allDistricts = results.flat();
+          const uniqueDistricts = Array.from(new Map(allDistricts.map(d => [d._id, d])).values());
+          setDistricts(uniqueDistricts);
+          setSelectedDistrictId(prev => prev.filter(id => uniqueDistricts.some(d => d._id === id)));
+        } catch (error) {
+          console.error(error);
+        }
+      };
+      fetchDistrictsForCluster();
+    } else {
+      setDistricts([]);
+      setSelectedDistrictId([]);
+    }
+  }, [selectedClusterId]);
+
+  // Fetch Plans based on hierarchy or lack thereof
+  useEffect(() => {
+    fetchPlans();
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId]);
+
+  const fetchPlans = async () => {
+    try {
+      setLoading(true);
+      const res = await getInstallerAgencyPlans({
+        countryIds: selectedCountryId,
+        stateIds: selectedStateId,
+        clusterIds: selectedClusterId,
+        districtIds: selectedDistrictId
+      });
+      const pData = res.data || res || [];
+      
+      // Deduplicate by name if backend has legacy duplicates or overlapping filters
+      const uniqueData = [];
+      const seenNames = new Set();
+      pData.forEach(plan => {
+          if (!seenNames.has(plan.name)) {
+              seenNames.add(plan.name);
+              uniqueData.push(plan);
+          }
+      });
+      
+      setPlans(uniqueData);
+      if (uniqueData.length > 0) {
+        handleSelectPlan(uniqueData[0]);
+      } else {
+        setFormData({ ...DEFAULT_PLAN });
+        setSelectedPlanId(null);
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error('Failed to load plans');
     } finally {
       setLoading(false);
     }
@@ -321,7 +410,7 @@ const SolarInstaller = () => {
     } else {
       let val = type === 'checkbox' ? checked : value;
       if (name === 'minimumRating') {
-        val = Math.max(0, Math.min(10, Number(value)));
+        val = Math.max(0, Math.min(maxRating, Number(value)));
       }
       setFormData(prev => ({ ...prev, [name]: val }));
     }
@@ -407,14 +496,22 @@ const SolarInstaller = () => {
 
   const handleSave = async () => {
     try {
+      const payload = {
+        ...formData,
+        country: selectedCountryId,
+        state: selectedStateId,
+        cluster: selectedClusterId,
+        districts: selectedDistrictId ? [selectedDistrictId] : formData.districts
+      };
+
       if (selectedPlanId === 'new') {
-        const result = await createInstallerAgencyPlan(formData);
+        const result = await createInstallerAgencyPlan(payload);
         toast.success('Plan created successfully');
         const newPlan = result.data || result;
         setPlans([...plans, newPlan]);
         handleSelectPlan(newPlan);
       } else {
-        const result = await updateInstallerAgencyPlan(selectedPlanId, formData);
+        const result = await updateInstallerAgencyPlan(selectedPlanId, payload);
         toast.success('Plan updated successfully');
         const updatedPlan = result.data || result;
         setPlans(plans.map(p => p._id === updatedPlan._id ? updatedPlan : p));
@@ -460,6 +557,121 @@ const SolarInstaller = () => {
       <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-2 shadow-sm mb-6">
         <Settings className="w-6 h-6 text-gray-700" />
         <h1 className="text-xl font-bold bg-gradient-to-r from-blue-700 to-blue-500 bg-clip-text text-transparent">Solar Installer Settings</h1>
+      </div>
+
+      {/* Location Cascade Header */}
+      <div className="bg-white rounded-xl border border-gray-100 p-6 shadow-sm mb-8 flex flex-col gap-6">
+        {/* Country */}
+        <div className="animate-in fade-in slide-in-from-top-1">
+           <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                 <Globe className="w-4 h-4 text-blue-600" /> Select Country
+              </h3>
+              <button 
+                onClick={() => setSelectedCountryId(selectedCountryId.length === countries.length ? [] : countries.map(c => c._id))}
+                className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+              >
+                {selectedCountryId.length === countries.length ? 'Deselect All' : 'Select All'}
+              </button>
+           </div>
+           <div className="flex flex-wrap gap-2">
+              {countries.map(c => (
+                <button
+                  key={c._id}
+                  onClick={() => setSelectedCountryId(prev => prev.includes(c._id) ? prev.filter(id => id !== c._id) : [...prev, c._id])}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedCountryId.includes(c._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                >
+                  {c.name}
+                </button>
+              ))}
+           </div>
+        </div>
+
+        {/* State */}
+        {selectedCountryId.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-top-1 border-t pt-6">
+             <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                   <MapPin className="w-4 h-4 text-blue-600" /> Select State
+                </h3>
+                <button 
+                  onClick={() => setSelectedStateId(selectedStateId.length === states.length ? [] : states.map(s => s._id))}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+                >
+                  {selectedStateId.length === states.length ? 'Deselect All' : 'Select All'}
+                </button>
+             </div>
+             <div className="flex flex-wrap gap-2">
+                {states.map(s => (
+                  <button
+                    key={s._id}
+                    onClick={() => setSelectedStateId(prev => prev.includes(s._id) ? prev.filter(id => id !== s._id) : [...prev, s._id])}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedStateId.includes(s._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                  >
+                    {s.name}
+                  </button>
+                ))}
+             </div>
+          </div>
+        )}
+
+        {/* Cluster */}
+        {selectedStateId.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-top-1 border-t pt-6">
+             <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                   <Layers className="w-4 h-4 text-blue-600" /> Select Cluster
+                </h3>
+                <button 
+                  onClick={() => setSelectedClusterId(selectedClusterId.length === clusters.length ? [] : clusters.map(c => c._id))}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+                >
+                  {selectedClusterId.length === clusters.length ? 'Deselect All' : 'Select All'}
+                </button>
+             </div>
+             <div className="flex flex-wrap gap-2">
+                {clusters.length > 0 ? clusters.map(c => (
+                  <button
+                    key={c._id}
+                    onClick={() => setSelectedClusterId(prev => prev.includes(c._id) ? prev.filter(id => id !== c._id) : [...prev, c._id])}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedClusterId.includes(c._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                    title={c.name || c.clusterName}
+                  >
+                    {c.name || c.clusterName}
+                  </button>
+                )) : <div className="text-gray-400 text-xs italic">No clusters</div>}
+             </div>
+          </div>
+        )}
+
+        {/* District */}
+        {selectedClusterId.length > 0 && (
+          <div className="animate-in fade-in slide-in-from-top-1 border-t pt-6">
+             <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                   <Target className="w-4 h-4 text-blue-600" /> Select District
+                </h3>
+                <button 
+                  onClick={() => setSelectedDistrictId(selectedDistrictId.length === districts.length ? [] : districts.map(d => d._id))}
+                  className="text-[10px] font-bold text-blue-600 hover:text-blue-700 bg-blue-50 px-2 py-0.5 rounded border border-blue-100"
+                >
+                  {selectedDistrictId.length === districts.length ? 'Deselect All' : 'Select All'}
+                </button>
+             </div>
+             <div className="flex flex-wrap gap-2">
+                {districts.length > 0 ? districts.map(d => (
+                  <button
+                    key={d._id}
+                    onClick={() => setSelectedDistrictId(prev => prev.includes(d._id) ? prev.filter(id => id !== d._id) : [...prev, d._id])}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all border ${selectedDistrictId.includes(d._id) ? 'bg-blue-600 text-white border-blue-600 shadow-md' : 'bg-white text-gray-600 border-gray-200 hover:border-blue-300'}`}
+                    title={d.name || d.districtName}
+                  >
+                    {d.name || d.districtName}
+                  </button>
+                )) : <div className="text-gray-400 text-xs italic">No districts</div>}
+             </div>
+          </div>
+        )}
       </div>
 
       {/* Blue Banner */}
@@ -749,18 +961,29 @@ const SolarInstaller = () => {
                   </div>
 
                   <div className="min-w-[150px]">
-                    <label className="block text-xs font-bold text-gray-700 mb-1">Minimum Rating Req.</label>
-                    <input
-                      type="number"
-                      name="minimumRating"
-                      step="0.1"
-                      min="0"
-                      max="10"
-                      value={formData.minimumRating}
-                      onChange={handleInputChange}
-                      placeholder="e.g. 4.5"
-                      className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
-                    />
+                    <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                      Minimum Rating Req.
+                      <span className="text-[10px] text-gray-400 font-medium">(Out of {maxRating})</span>
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        name="minimumRating"
+                        step="0.1"
+                        min="0"
+                        max={maxRating}
+                        value={formData.minimumRating ?? 0}
+                        onChange={(e) => {
+                          let val = parseFloat(e.target.value);
+                          if (val > maxRating) val = maxRating;
+                          if (val < 0) val = 0;
+                          handleInputChange({ target: { name: 'minimumRating', value: isNaN(val) ? '' : val } });
+                        }}
+                        placeholder={`e.g. ${maxRating - 0.5}`}
+                        className="border border-gray-300 rounded-md pl-3 pr-8 py-1.5 text-sm w-full focus:outline-blue-500 bg-white"
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs font-bold">/{maxRating}</span>
+                    </div>
                   </div>
                 </div>
               </section>
@@ -783,7 +1006,7 @@ const SolarInstaller = () => {
                     <input
                       type="number"
                       name="userLimits"
-                      value={formData.userLimits}
+                      value={formData.userLimits ?? 0}
                       onChange={handleInputChange}
                       className="border border-gray-300 rounded-md px-3 py-1.5 text-sm w-24 focus:outline-blue-500 bg-white"
                     />
@@ -798,12 +1021,7 @@ const SolarInstaller = () => {
                     <span className="text-[10px] bg-blue-100 text-blue-700 px-3 py-1 rounded-full uppercase tracking-tighter font-black shadow-sm flex items-center gap-1">
                       <RefreshCw className="w-2.5 h-2.5 animate-spin-slow" /> Auto-Generated
                     </span>
-                    <button
-                      onClick={handleAddNewProjectType}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add New Row
-                    </button>
+
                   </div>
                 </div>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -819,10 +1037,8 @@ const SolarInstaller = () => {
                           <th className="px-3 py-4 border-l border-gray-200">Sub-Category</th>
                           <th className="px-3 py-4 border-l border-gray-200">Project Type</th>
                           <th className="px-3 py-4 border-l border-gray-200 whitespace-nowrap">Sub ProjectType</th>
-                          <th className="px-3 py-4 border-l border-gray-200">Yearly Target (kW)</th>
-                          <th className="px-3 py-4 border-l border-gray-200">Incentive (₹)</th>
-                          <th className="px-3 py-4 border-l border-gray-200">Inst. Charges (₹/kW)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Max Capacity (kW)</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Time Required</th>
                           <th className="px-3 py-4 border-l border-gray-200">Days Required</th>
                           <th className="px-3 py-4 border-l border-gray-200 text-center w-12">Delete</th>
                         </tr>
@@ -874,37 +1090,29 @@ const SolarInstaller = () => {
                               <td className="px-2 py-3 border-l border-gray-200">
                                 <input
                                   type="number"
-                                  placeholder="0"
-                                  value={row.yearlyTargetKw || ''}
-                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'yearlyTargetKw', e.target.value)}
-                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
-                                />
-                              </td>
-                              <td className="px-2 py-3 border-l border-gray-200">
-                                <input
-                                  type="number"
-                                  placeholder="0"
-                                  value={row.incentiveAmount || ''}
-                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'incentiveAmount', e.target.value)}
-                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
-                                />
-                              </td>
-                              <td className="px-2 py-3 border-l border-gray-200">
-                                <input
-                                  type="number"
-                                  placeholder="0"
-                                  value={row.installationCharges || ''}
-                                  onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'installationCharges', e.target.value)}
-                                  className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
-                                />
-                              </td>
-                              <td className="px-2 py-3 border-l border-gray-200">
-                                <input
-                                  type="number"
-                                  value={row.capacity || ''}
+                                  value={row.capacity ?? ''}
                                   onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'capacity', e.target.value)}
                                   className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
                                 />
+                              </td>
+                              <td className="px-2 py-3 border-l border-gray-200">
+                                <div className="flex items-center gap-2">
+                                  <select
+                                    value={row.timeRequiredUnit || 'Weeks'}
+                                    onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'timeRequiredUnit', e.target.value)}
+                                    className="w-24 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white text-xs cursor-pointer"
+                                  >
+                                    <option value="Days">Days</option>
+                                    <option value="Weeks">Weeks</option>
+                                    <option value="Months">Months</option>
+                                  </select>
+                                  <input
+                                    type="number"
+                                    value={row.timeRequiredVal ?? ''}
+                                    onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'timeRequiredVal', e.target.value)}
+                                    className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
+                                  />
+                                </div>
                               </td>
                               <td className="px-2 py-3 border-l border-gray-200">
                                 <div className="flex items-center gap-2">
@@ -919,7 +1127,7 @@ const SolarInstaller = () => {
                                   </select>
                                   <input
                                     type="number"
-                                    value={row.daysRequiredVal || ''}
+                                    value={row.daysRequiredVal ?? ''}
                                     onChange={(e) => handleArrayChange('assignedProjectTypes', idx, 'daysRequiredVal', e.target.value)}
                                     className="w-16 border border-gray-300 rounded-md px-2 py-1 outline-none focus:border-blue-500 bg-white"
                                   />
@@ -943,7 +1151,7 @@ const SolarInstaller = () => {
                           ))
                         ) : (
                           <tr>
-                            <td colSpan="8" className="p-12 text-center bg-gray-50/30">
+                            <td colSpan="9" className="p-12 text-center bg-gray-50/30">
                               <div className="flex flex-col items-center gap-3">
                                 <div className="p-4 bg-white rounded-full shadow-sm">
                                   <ClipboardList className="w-8 h-8 text-gray-300" />
@@ -968,12 +1176,7 @@ const SolarInstaller = () => {
                   Solar Installation Points
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">Dynamic Sync Active</span>
-                    <button
-                      onClick={handleAddNewProjectType}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add New Row
-                    </button>
+
                   </div>
                 </h4>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -986,10 +1189,10 @@ const SolarInstaller = () => {
                         <tr>
                           <th className="px-3 py-4 text-center w-12 border-l border-gray-200">Active</th>
                           <th className="px-3 py-4 border-l border-gray-200">Type Label / Category</th>
+                          <th className="px-3 py-4 border-l border-gray-200">Yearly Target (kW)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Points (₹)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Period (Mo)</th>
                           <th className="px-3 py-4 border-l border-gray-200">Claim (Mo)</th>
-                          <th className="px-3 py-4 border-l border-gray-200 text-center w-12">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1010,11 +1213,19 @@ const SolarInstaller = () => {
                                 </span>
                               </td>
                               <td className="px-3 py-3 border-l border-gray-200">
+                                <input
+                                  type="number"
+                                  value={pt.yearlyTargetKw ?? 0}
+                                  onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'yearlyTargetKw', e.target.value)}
+                                  className="w-20 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
+                                />
+                              </td>
+                              <td className="px-3 py-3 border-l border-gray-200">
                                 <div className="flex items-center gap-1 group">
                                   <span className="text-gray-400 font-bold">₹</span>
                                   <input
                                     type="number"
-                                    value={pt.points}
+                                    value={pt.points ?? 0}
                                     onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'points', Number(e.target.value))}
                                     className="w-20 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
                                   />
@@ -1023,7 +1234,7 @@ const SolarInstaller = () => {
                               <td className="px-3 py-3 border-l border-gray-200">
                                 <input
                                   type="number"
-                                  value={pt.periodInMonth}
+                                  value={pt.periodInMonth ?? 0}
                                   onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'periodInMonth', Number(e.target.value))}
                                   className="w-16 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white text-center"
                                 />
@@ -1031,15 +1242,10 @@ const SolarInstaller = () => {
                               <td className="px-3 py-3 border-l border-gray-200">
                                 <input
                                   type="number"
-                                  value={pt.claimInMonth}
+                                  value={pt.claimInMonth ?? 0}
                                   onChange={(e) => handleArrayChange('solarInstallationPoints', idx, 'claimInMonth', Number(e.target.value))}
                                   className="w-16 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white text-center"
                                 />
-                              </td>
-                              <td className="px-3 py-3 border-l border-gray-200 text-center">
-                                <span className="text-gray-300">
-                                  <Trash2 className="w-4 h-4 opacity-50" />
-                                </span>
                               </td>
                             </tr>
                           ))
@@ -1058,12 +1264,7 @@ const SolarInstaller = () => {
                   Solar Installation Charges
                   <div className="flex items-center gap-3">
                     <span className="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded border border-blue-100">Dynamic Sync Active</span>
-                    <button
-                      onClick={handleAddNewProjectType}
-                      className="text-xs bg-gray-100 hover:bg-gray-200 text-gray-600 px-3 py-1.5 rounded flex items-center gap-1 font-bold shadow-sm transition-all"
-                    >
-                      <Plus className="w-3.5 h-3.5" /> Add New Row
-                    </button>
+
                   </div>
                 </h4>
                 <div className="border border-gray-200 rounded-lg overflow-hidden">
@@ -1077,7 +1278,6 @@ const SolarInstaller = () => {
                           <th className="px-4 py-4 text-center w-12 border-l border-gray-200">Active</th>
                           <th className="px-4 py-4 border-l border-gray-200">Type Label / Category</th>
                           <th className="px-4 py-4 border-l border-gray-200">Charges (₹/kW)</th>
-                          <th className="px-4 py-4 border-l border-gray-200 text-center w-12">Action</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200">
@@ -1102,21 +1302,16 @@ const SolarInstaller = () => {
                                   <span className="text-gray-400 font-bold">₹</span>
                                   <input
                                     type="number"
-                                    value={pt.charges}
+                                    value={pt.charges ?? 0}
                                     onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'charges', Number(e.target.value))}
                                     className="w-24 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
                                   />
                                 </div>
                               </td>
-                              <td className="px-4 py-3 border-l border-gray-200 text-center">
-                                <span className="text-gray-300">
-                                  <Trash2 className="w-4 h-4 opacity-50" />
-                                </span>
-                              </td>
                             </tr>
                           ))
                         ) : (
-                          <tr><td colSpan="4" className="py-8 text-center text-gray-400 font-medium">No installation charges added yet</td></tr>
+                          <tr><td colSpan="3" className="py-8 text-center text-gray-400 font-medium">No installation charges added yet</td></tr>
                         )}
                       </tbody>
                     </table>
@@ -1155,17 +1350,23 @@ const SolarInstaller = () => {
             {/* Header */}
             <div className="text-white p-5 text-center transition-colors relative" style={{ backgroundColor: formData.planColor || '#1264a3' }}>
               <div className="absolute inset-0 bg-black/10 mix-blend-overlay"></div>
+              
+              {/* Rating Required Badge */}
+              {formData.minimumRating > 0 && (
+                <div className="absolute top-3 right-3 z-20">
+                  <div className="bg-white/20 backdrop-blur-md text-white text-[10px] px-2 py-1 rounded-full flex items-center gap-1 font-bold shadow-sm border border-white/30 whitespace-nowrap">
+                    <Star className="w-3 h-3 text-yellow-300 fill-yellow-300" /> 
+                    {formData.minimumRating} / 5
+                  </div>
+                </div>
+              )}
+
               <h3 className="text-xl font-bold tracking-wide uppercase relative z-10">{formData.name || 'PLAN'}</h3>
               <p className="text-xs font-medium text-white/80 mt-1 relative z-10">Summary View</p>
             </div>
 
             <div className="p-5 pb-8 relative pt-8">
-              {/* Badge break time */}
-              <div className="absolute right-0 top-[85px] z-10 mr-1">
-                <div className="bg-gray-900 text-white text-[9px] px-2 py-1 rounded-full flex items-center gap-1 font-bold shadow-sm whitespace-nowrap">
-                  🕒 Break Time
-                </div>
-              </div>
+
 
               {/* Price */}
               <div className="text-center mb-6 relative">
@@ -1189,7 +1390,7 @@ const SolarInstaller = () => {
                   <div className="flex flex-col">
                     <span className="text-xs font-medium text-white/80">Yearly Target:</span>
                     <div className="flex items-center gap-1 font-black text-sm">
-                      {formData.assignedProjectTypes.filter(r => r.active).reduce((sum, r) => sum + (parseFloat(r.yearlyTargetKw) || 0), 0)} kw
+                      {formData.solarInstallationPoints.filter(r => r.active).reduce((sum, r) => sum + (parseFloat(r.yearlyTargetKw) || 0), 0)} kw
                     </div>
                   </div>
                 </div>
@@ -1219,14 +1420,26 @@ const SolarInstaller = () => {
                   <p className="text-xs text-gray-500">{formData.userLimits} user account{formData.userLimits !== 1 ? 's' : ''}</p>
                 </div>
               </div>
-              <div className="flex items-center justify-between py-3 border-b border-gray-100">
+              <div className="flex items-center justify-between py-4 border-b border-gray-100">
                 <div className="flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: `${formData.planColor}15` }}>
-                    <div className="w-5 h-5 rounded-full" style={{ backgroundColor: `${formData.planColor}30` }}></div>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center shadow-inner" style={{ backgroundColor: `${formData.planColor}15` }}>
+                    <div className="w-5 h-5 rounded-full flex items-center justify-center font-black text-[10px] text-white" style={{ backgroundColor: formData.planColor || '#0073b7' }}>₹</div>
                   </div>
-                  <h4 className="font-bold text-gray-600 text-[15px]">Total <br /> Cashback</h4>
+                  <div>
+                    <h4 className="font-bold text-gray-600 text-[13px] leading-tight opacity-80 uppercase tracking-tight">Points as per <br /> Project Type</h4>
+                    <div className="text-xl font-black text-gray-800 mt-0.5">
+                      ₹ {formData.solarInstallationPoints
+                        ? formData.solarInstallationPoints
+                          .filter(p => p.active)
+                          .reduce((sum, p) => sum + (parseFloat(p.points) || 0), 0)
+                          .toLocaleString()
+                        : 0}
+                    </div>
+                  </div>
                 </div>
-                <Eye className="w-5 h-5 mr-2" style={{ color: formData.planColor || '#0070cc' }} />
+                <div className="p-2 rounded-lg bg-gray-50">
+                  <ClipboardList className="w-4 h-4 text-gray-400" />
+                </div>
               </div>
 
               {/* Project Types */}
@@ -1245,16 +1458,7 @@ const SolarInstaller = () => {
                 </div>
               </div>
 
-              {/* Features */}
-              <div className="mt-6">
-                <h4 className="text-[13px] font-bold text-gray-800 mb-3">Features:</h4>
-                <div className="flex flex-wrap gap-2">
-                  <span className="border border-gray-200 text-xs font-semibold text-gray-600 px-3 py-1 rounded-md bg-white">Leads</span>
-                  <span className="border border-gray-200 text-xs font-semibold text-gray-600 px-3 py-1 rounded-md bg-white">Quotes</span>
-                  <span className="border border-gray-200 text-xs font-semibold text-gray-600 px-3 py-1 rounded-md bg-white">Survey</span>
-                  <span className="border border-gray-200 text-xs font-semibold text-gray-600 px-3 py-1 rounded-md bg-white">Project Signup</span>
-                </div>
-              </div>
+
 
               {/* Required Documents */}
               <div className="mt-6">

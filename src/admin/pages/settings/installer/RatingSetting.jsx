@@ -15,7 +15,8 @@ export default function RatingSetting() {
   const [currentRatingId, setCurrentRatingId] = useState(null);
 
   const [formData, setFormData] = useState({
-    category: ''
+    category: '',
+    maxRating: 5
   });
 
   useEffect(() => {
@@ -27,6 +28,9 @@ export default function RatingSetting() {
       setLoading(true);
       const data = await getInstallerRatings();
       setRatings(data);
+      if (data.length > 0) {
+        setFormData(prev => ({ ...prev, maxRating: data[0].maxRating || 5 }));
+      }
     } catch (error) {
       console.error('Error fetching ratings:', error);
       toast.error('Failed to load ratings');
@@ -65,7 +69,8 @@ export default function RatingSetting() {
 
   const handleEdit = (rating) => {
     setFormData({
-      category: rating.category
+      category: rating.category,
+      maxRating: rating.maxRating || 5
     });
     setCurrentRatingId(rating._id);
     setIsEditing(true);
@@ -85,7 +90,7 @@ export default function RatingSetting() {
   };
 
   const resetForm = () => {
-    setFormData({ category: '' });
+    setFormData(prev => ({ ...prev, category: '' }));
     setIsEditing(false);
     setCurrentRatingId(null);
   };
@@ -114,6 +119,20 @@ export default function RatingSetting() {
                 className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none"
                 placeholder="Ex. Behavior, Quality, Speed..."
                 required
+              />
+            </div>
+
+            <div className="w-full md:w-32">
+              <label className="block text-sm font-medium text-gray-700 mb-2">Max Rating</label>
+              <input
+                type="number"
+                name="maxRating"
+                value={formData.maxRating}
+                onChange={handleInputChange}
+                className="w-full px-4 py-2 border border-gray-200 rounded text-gray-700 focus:ring-1 focus:ring-blue-500 outline-none"
+                placeholder="5"
+                required
+                min="1"
               />
             </div>
 

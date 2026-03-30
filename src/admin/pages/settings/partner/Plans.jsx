@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getPartnerPlans, createPartnerPlan, updatePartnerPlan, deletePartnerPlan, getPartners } from '../../../../services/partner/partnerApi';
-import { getStates } from '../../../../services/core/locationApi';
+import { getStates, getCountries, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
 import {
     Rocket,
     Layers,
@@ -33,9 +33,16 @@ import toast from 'react-hot-toast';
 export default function PartnerPlans() {
     const [loading, setLoading] = useState(true);
     const [partners, setPartners] = useState([]);
+    const [countries, setCountries] = useState([]);
     const [states, setStates] = useState([]);
+    const [clusters, setClusters] = useState([]);
+    const [districts, setDistricts] = useState([]);
+
     const [selectedPartnerType, setSelectedPartnerType] = useState('');
+    const [selectedCountryId, setSelectedCountryId] = useState('');
     const [selectedStateId, setSelectedStateId] = useState('');
+    const [selectedClusterId, setSelectedClusterId] = useState('');
+    const [selectedDistrictId, setSelectedDistrictId] = useState('');
     const [plans, setPlans] = useState([]);
     const [selectedPlanId, setSelectedPlanId] = useState(null);
     const [showAddPlanModal, setShowAddPlanModal] = useState(false);
@@ -69,7 +76,7 @@ export default function PartnerPlans() {
             incentive: { yearlyTarget: '', cashbackPerKw: '', totalIncentive: '' },
             commissions: []
         },
-        ui: { headerColor: 'bg-[#0078bd]', buttonColor: 'from-[#0078bd] to-[#005a8e]', icon: 'Rocket', iconColor: 'text-[#0078bd]', bgColor: 'bg-blue-50' }
+        ui: { headerColor: '#0078bd', buttonColor: '#0078bd', icon: 'Rocket', iconColor: 'text-[#0078bd]', bgColor: 'bg-blue-50' }
     };
 
     const [formData, setFormData] = useState(initialFormState);
@@ -82,19 +89,18 @@ export default function PartnerPlans() {
     const fetchInitialData = async () => {
         try {
             setLoading(true);
-            const [partnersData, statesData] = await Promise.all([
+            const [partnersData, countriesData] = await Promise.all([
                 getPartners(),
-                getStates()
+                getCountries()
             ]);
             setPartners(partnersData);
-            setStates(statesData);
+            setCountries(countriesData);
 
-            // Auto-select first partner if exists
             if (partnersData.length > 0) {
                 setSelectedPartnerType(partnersData[0].name);
             }
-            if (statesData.length > 0) {
-                setSelectedStateId(statesData[0]._id);
+            if (countriesData.length > 0) {
+                setSelectedCountryId(countriesData[0]._id);
             }
         } catch (error) {
             console.error('Error fetching initial data:', error);
@@ -104,26 +110,100 @@ export default function PartnerPlans() {
         }
     };
 
-    // Fetch Plans when Partner or State changes
+    // Cascading: Fetch States when Country changes
     useEffect(() => {
-        if (selectedPartnerType && selectedStateId) {
+        if (selectedCountryId) {
+            const fetchStatesForCountry = async () => {
+                try {
+                    const data = await getStates({ countryId: selectedCountryId });
+                    setStates(data);
+                    setSelectedStateId('');
+                    setSelectedClusterId('');
+                    setSelectedDistrictId('');
+                } catch (error) {
+                    console.error('Error fetching states:', error);
+                }
+            };
+            fetchStatesForCountry();
+        } else {
+            setStates([]);
+        }
+    }, [selectedCountryId]);
+
+    // Cascading: Fetch Clusters when State changes
+    useEffect(() => {
+        if (selectedStateId) {
+            const fetchClustersForState = async () => {
+                try {
+                    const data = await getClustersHierarchy(selectedStateId);
+                    setClusters(data);
+                    setSelectedClusterId('');
+                    setSelectedDistrictId('');
+                } catch (error) {
+                    console.error('Error fetching clusters:', error);
+                }
+            };
+            fetchClustersForState();
+        } else {
+            setClusters([]);
+        }
+    }, [selectedStateId]);
+
+    // Cascading: Fetch Districts when Cluster changes
+    useEffect(() => {
+        if (selectedClusterId) {
+            const fetchDistrictsForCluster = async () => {
+                try {
+                    const data = await getDistrictsHierarchy(selectedClusterId);
+                    setDistricts(data);
+                    setSelectedDistrictId('');
+                } catch (error) {
+                    console.error('Error fetching districts:', error);
+                }
+            };
+            fetchDistrictsForCluster();
+        } else {
+            setDistricts([]);
+        }
+    }, [selectedClusterId]);
+
+    // Fetch Plans when any filter changes
+    useEffect(() => {
+        if (selectedPartnerType) {
             fetchPlans();
         } else {
             setPlans([]);
             setSelectedPlanId(null);
             setFormData(initialFormState);
         }
-    }, [selectedPartnerType, selectedStateId]);
+    }, [selectedPartnerType, selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId]);
 
     const fetchPlans = async () => {
         try {
             setLoading(true);
-            const data = await getPartnerPlans(selectedPartnerType, selectedStateId);
-            setPlans(data);
-            if (data.length > 0) {
-                const firstPlanId = data[0]._id;
+            const data = await getPartnerPlans(
+                selectedPartnerType, 
+                selectedStateId, 
+                selectedCountryId, 
+                selectedClusterId, 
+                selectedDistrictId
+            );
+            
+            // Safety filter: Deduplicate by name if backend has legacy duplicates
+            const uniqueData = [];
+            const seenNames = new Set();
+            data.forEach(plan => {
+                if (!seenNames.has(plan.name)) {
+                    seenNames.add(plan.name);
+                    uniqueData.push(plan);
+                }
+            });
+
+            setPlans(uniqueData);
+            if (uniqueData.length > 0) {
+                const firstPlanId = uniqueData[0]._id;
                 setSelectedPlanId(firstPlanId);
-                loadPlanData(data[0]);
+                loadPlanData(uniqueData[0]);
             } else {
                 setSelectedPlanId(null);
                 setFormData(initialFormState);
@@ -157,6 +237,16 @@ export default function PartnerPlans() {
 
     const handleRootInputChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
+    };
+
+    const handleUiChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            ui: {
+                ...(prev.ui || {}),
+                [field]: value
+            }
+        }));
     };
 
     const handleAddCommissionRow = () => {
@@ -223,7 +313,14 @@ export default function PartnerPlans() {
         try {
             setLoading(true);
             if (selectedPlanId) {
-                await updatePartnerPlan(selectedPlanId, { ...formData, partnerType: selectedPartnerType, state: selectedStateId });
+                await updatePartnerPlan(selectedPlanId, { 
+                    ...formData, 
+                    partnerType: selectedPartnerType, 
+                    country: selectedCountryId,
+                    state: selectedStateId,
+                    cluster: selectedClusterId,
+                    district: selectedDistrictId
+                });
                 toast.success('Plan updated successfully');
                 fetchPlans(); // Refresh
             }
@@ -242,7 +339,10 @@ export default function PartnerPlans() {
                 name: formData.name || 'New Plan',
                 price: parseFloat(formData.price) || 0,
                 partnerType: selectedPartnerType,
-                state: selectedStateId
+                country: selectedCountryId,
+                state: selectedStateId,
+                cluster: selectedClusterId,
+                district: selectedDistrictId
             };
             await createPartnerPlan(newPlan);
             toast.success('Plan created successfully');
@@ -326,39 +426,146 @@ export default function PartnerPlans() {
                     </div>
                 </div>
 
-                {/* 2. State Selection */}
+                {/* 2. Location Cascade Selection */}
                 {selectedPartnerType && (
-                    <div className="pt-2">
-                        <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1">Select State to Configure Plans</h2>
-                        <div className="flex flex-wrap gap-4">
-                            {states.map((state) => (
-                                <div
-                                    key={state._id}
-                                    onClick={() => setSelectedStateId(state._id)}
-                                    className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[200px] transition-all bg-white border ${
-                                        selectedStateId === state._id
-                                            ? 'border-blue-500 ring-1 ring-blue-500'
-                                            : 'border-gray-200 hover:border-blue-300'
-                                    }`}
-                                >
-                                    <div className={`font-bold text-lg ${selectedStateId === state._id ? 'text-blue-600' : 'text-gray-800'}`}>
-                                        {state.name}
+                    <div className="pt-2 space-y-6">
+                        {/* Country Selection */}
+                        <div>
+                            <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
+                                <Globe className="w-5 h-5 text-blue-600" /> Select Country
+                            </h2>
+                            <div className="flex flex-wrap gap-4">
+                                {countries.map((country) => (
+                                    <div
+                                        key={country._id}
+                                        onClick={() => setSelectedCountryId(prev => prev === country._id ? '' : country._id)}
+                                        className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                                            selectedCountryId === country._id
+                                                ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                : 'border-gray-200 hover:border-blue-300'
+                                        }`}
+                                    >
+                                        <div className={`font-bold text-lg ${selectedCountryId === country._id ? 'text-blue-600' : 'text-gray-800'}`}>
+                                            {country.name}
+                                        </div>
+                                        <div className="text-gray-500 text-sm mt-1 uppercase tracking-wider">
+                                            {country.code || country.name.substring(0, 3).toUpperCase()}
+                                        </div>
                                     </div>
-                                    <div className="text-gray-500 text-sm mt-1">
-                                        {state.code || state.name.substring(0, 2).toUpperCase()}
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* State Selection */}
+                        {selectedCountryId && (
+                            <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
+                                    <MapPin className="w-5 h-5 text-blue-600" /> Select State
+                                </h2>
+                                <div className="flex flex-wrap gap-4">
+                                    {states.length > 0 ? (
+                                        states.map((state) => (
+                                            <div
+                                                key={state._id}
+                                                onClick={() => setSelectedStateId(prev => prev === state._id ? '' : state._id)}
+                                                className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                                                    selectedStateId === state._id
+                                                        ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                        : 'border-gray-200 hover:border-blue-300'
+                                                }`}
+                                            >
+                                                <div className={`font-bold text-lg ${selectedStateId === state._id ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                    {state.name}
+                                                </div>
+                                                <div className="text-gray-500 text-sm mt-1 uppercase">
+                                                    {state.code || state.name.substring(0, 2).toUpperCase()}
+                                                </div>
+                                            </div>
+                                        ))
+                                    ) : (
+                                        <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed w-full max-w-sm">
+                                            No states found for this country
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
+                        <div className="flex flex-col gap-6">
+                            {/* Cluster Selection */}
+                            {selectedStateId && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
+                                        <Layers className="w-5 h-5 text-blue-600" /> Select Cluster
+                                    </h2>
+                                    <div className="flex flex-wrap gap-3">
+                                        {clusters.length > 0 ? (
+                                            clusters.map((cluster) => (
+                                                <div
+                                                    key={cluster._id}
+                                                    onClick={() => setSelectedClusterId(prev => prev === cluster._id ? '' : cluster._id)}
+                                                    className={`cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                                                        selectedClusterId === cluster._id
+                                                            ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                            : 'border-gray-200 hover:border-blue-300'
+                                                    }`}
+                                                >
+                                                    <div className={`font-bold ${selectedClusterId === cluster._id ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                        {cluster.name || cluster.clusterName || 'Unnamed'}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed text-sm w-full max-w-sm">
+                                                No clusters found for this state
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
-                            ))}
+                            )}
+
+                            {/* District Selection */}
+                            {selectedClusterId && (
+                                <div className="animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
+                                        <Target className="w-5 h-5 text-blue-600" /> Select District
+                                    </h2>
+                                    <div className="flex flex-wrap gap-3">
+                                        {districts.length > 0 ? (
+                                            districts.map((district) => (
+                                                <div
+                                                    key={district._id}
+                                                    onClick={() => setSelectedDistrictId(prev => prev === district._id ? '' : district._id)}
+                                                    className={`cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                                                        selectedDistrictId === district._id
+                                                            ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                            : 'border-gray-200 hover:border-blue-300'
+                                                    }`}
+                                                >
+                                                    <div className={`font-bold ${selectedDistrictId === district._id ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                        {district.name || district.districtName || 'Unnamed'}
+                                                    </div>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed text-sm w-full max-w-sm">
+                                                No districts found for this cluster
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
             </div>
 
             {loading && partners.length > 0 ? (
-                <div className="flex justify-center p-8"><Loader className="animate-spin text-blue-600" /></div>
-            ) : (!selectedPartnerType || !selectedStateId) ? (
-                <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-dashed">
-                    Please select a Partner Type and State to view and configure plans.
+                <div className="flex justify-center p-8"><Loader className="animate-spin text-blue-600 w-8 h-8" /></div>
+            ) : (!selectedPartnerType) ? (
+                <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-dashed text-lg font-medium flex flex-col items-center justify-center min-h-[200px]">
+                    <Rocket className="w-12 h-12 text-gray-300 mb-4" />
+                    Please select a Partner Type to view and configure plans.
                 </div>
             ) : (
                 <div className="flex flex-col gap-6">
@@ -366,26 +573,35 @@ export default function PartnerPlans() {
                     <div className="flex flex-col lg:flex-row items-center justify-start gap-6 border-b border-gray-200 pb-2">
                         <div className="flex flex-wrap gap-2 overflow-visible w-auto pt-5 pb-3 px-3">
                             {plans.map(plan => {
-                                // Dynamic text color mapping based on design
-                                let textColorClass = 'text-gray-600 hover:text-gray-900';
-                                if (selectedPlanId === plan._id) {
-                                    if (plan.name?.includes("Startup")) textColorClass = 'bg-blue-600 text-white rounded-md';
-                                    else if (plan.name?.includes("Basic")) textColorClass = 'bg-green-500 text-white rounded-md';
-                                    else if (plan.name?.includes("Enterprise")) textColorClass = 'bg-gray-500 text-white rounded-md';
-                                    else if (plan.name?.includes("Solar")) textColorClass = 'bg-yellow-500 text-white rounded-md';
-                                    else textColorClass = 'bg-blue-600 text-white rounded-md';
+                                let isSelected = selectedPlanId === plan._id;
+                                let buttonClass = 'px-4 py-2 font-bold whitespace-nowrap transition-colors flex items-center gap-2 rounded-md';
+                                let customStyle = {};
+                                
+                                // Safely resolve color, ignoring legacy tailwind classes
+                                let safeColor = (plan.ui?.buttonColor && plan.ui.buttonColor.startsWith('#')) 
+                                    ? plan.ui.buttonColor 
+                                    : '#0078bd';
+                                
+                                if (isSelected) {
+                                    buttonClass += ' text-white shadow-md';
+                                    customStyle = {
+                                        backgroundColor: safeColor,
+                                        color: '#ffffff',
+                                    };
                                 } else {
-                                    if (plan.name?.includes("Startup")) textColorClass = 'text-blue-600 font-medium';
-                                    else if (plan.name?.includes("Basic")) textColorClass = 'text-green-500 font-medium';
-                                    else if (plan.name?.includes("Enterprise")) textColorClass = 'text-gray-500 font-medium';
-                                    else if (plan.name?.includes("Solar")) textColorClass = 'text-yellow-500 font-medium';
+                                    buttonClass += ' hover:bg-gray-50 border border-gray-200';
+                                    customStyle = {
+                                        color: safeColor,
+                                        backgroundColor: 'transparent',
+                                    };
                                 }
 
                                 return (
                                     <div key={plan._id} className="relative group">
                                         <button
                                             onClick={() => handlePlanSelect(plan._id)}
-                                            className={`px-4 py-2 font-bold whitespace-nowrap transition-colors flex items-center gap-2 ${textColorClass}`}
+                                            className={buttonClass}
+                                            style={customStyle}
                                         >
                                             {getIcon(plan.ui?.icon, "w-4 h-4")}
                                             {plan.name}
@@ -435,7 +651,8 @@ export default function PartnerPlans() {
                                         { name: 'Incentive& Targets', id: 'incentive-&-targets' },
                                         { name: 'Commission Setup', id: 'commission-setup' },
                                         { name: 'Rewards And Points', id: 'rewards-and-points' },
-                                        { name: 'Training Videos', id: 'training-videos' }
+                                        { name: 'Training Videos', id: 'training-videos' },
+                                        { name: 'UI & Branding', id: 'ui-branding' }
                                     ].map((item) => (
                                         <button
                                             key={item.name}
@@ -829,6 +1046,59 @@ export default function PartnerPlans() {
                                     </div>
                                 </div>
 
+                                {/* UI & Branding */}
+                                <div id="ui-branding" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
+                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
+                                        <div className="flex items-center justify-center p-1 rounded-sm bg-white/20 mr-1"><div className="w-3 h-3 bg-red-400 rounded-full mr-1"></div><div className="w-3 h-3 bg-green-400 rounded-full mr-1"></div><div className="w-3 h-3 bg-blue-400 rounded-full"></div></div> UI & Branding
+                                    </div>
+                                    <div className="p-5 grid grid-cols-2 gap-8">
+                                        <div>
+                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Plan Colors</h4>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Theme Button Color</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="color" 
+                                                            value={formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd'} 
+                                                            onChange={(e) => handleUiChange('buttonColor', e.target.value)} 
+                                                            className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
+                                                        />
+                                                        <span className="text-sm text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border">{formData.ui?.buttonColor || '#0078bd'}</span>
+                                                    </div>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Header Background Color</label>
+                                                    <div className="flex items-center gap-2">
+                                                        <input 
+                                                            type="color" 
+                                                            value={formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd'} 
+                                                            onChange={(e) => handleUiChange('headerColor', e.target.value)} 
+                                                            className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
+                                                        />
+                                                        <span className="text-sm text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border">{formData.ui?.headerColor || '#0078bd'}</span>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Plan Icons</h4>
+                                            <div className="space-y-4">
+                                                <div>
+                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Lucide Icon Name</label>
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="e.g. Rocket, Star, Shield"
+                                                        value={formData.ui?.icon || ''} 
+                                                        onChange={(e) => handleUiChange('icon', e.target.value)} 
+                                                        className="w-full border rounded p-2 text-sm"
+                                                    />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
                                 {/* Features */}
                                 <div id="features" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
                                     <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
@@ -876,9 +1146,12 @@ export default function PartnerPlans() {
                             
                             {/* Right Plan View Sidebar Widget */}
                             <div className="w-full lg:w-[20%] sticky top-20 bg-[#f8f9fa] border-4 border-white shadow-xl flex flex-col items-center p-8 relative rounded-md self-start text-left">
-                                <div className={`w-full py-8 px-4 text-center text-white mb-6 relative overflow-hidden flex flex-col items-center justify-center rounded ${formData.ui?.headerColor || 'bg-[#0078bd]'}`}>
+                                <div 
+                                    className="w-full py-8 px-4 text-center text-white mb-6 relative overflow-hidden flex flex-col items-center justify-center rounded"
+                                    style={{ backgroundColor: formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd' }}
+                                >
                                     <h2 className="text-3xl font-black uppercase tracking-wide mb-1 relative z-10">{formData.name}</h2>
-                                    <p className="text-sm font-medium relative z-10 opacity-90">Perfect for small businesses</p>
+                                    <p className="text-sm font-medium relative z-10 opacity-90">Perfect for your business</p>
                                 </div>
                                 
                                 <div className="text-center w-full mb-6">
@@ -929,7 +1202,11 @@ export default function PartnerPlans() {
                                     </ul>
                                 </div>
 
-                                <button onClick={handleSave} className="w-full bg-gradient-to-r from-[#0078bd] to-[#005a8e] text-white font-black py-4 rounded-lg hover:shadow-xl transition-all shadow-md uppercase tracking-widest text-sm flex items-center justify-center gap-2">
+                                <button 
+                                    onClick={handleSave} 
+                                    className="w-full text-white font-black py-4 rounded-lg hover:shadow-xl transition-all shadow-md uppercase tracking-widest text-sm flex items-center justify-center gap-2"
+                                    style={{ backgroundColor: formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd' }}
+                                >
                                     Upgrade Plan <Rocket className="w-4 h-4" />
                                 </button>
                                 
@@ -967,6 +1244,44 @@ export default function PartnerPlans() {
                                     value={formData.price}
                                     onChange={(e) => handleRootInputChange('price', e.target.value)}
                                 />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-sm text-gray-600 mb-1">Theme Color</label>
+                                    <div className="flex border rounded p-1">
+                                        <input 
+                                            type="color" 
+                                            value={formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd'} 
+                                            onChange={(e) => handleUiChange('buttonColor', e.target.value)} 
+                                            className="w-8 h-8 p-0 border-0 rounded cursor-pointer"
+                                        />
+                                        <input 
+                                            type="text"
+                                            value={formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd'}
+                                            onChange={(e) => handleUiChange('buttonColor', e.target.value)}
+                                            className="w-full border-none focus:ring-0 px-2 text-sm text-gray-600"
+                                            placeholder="#0078bd"
+                                        />
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm text-gray-600 mb-1">Header Color</label>
+                                    <div className="flex border rounded p-1">
+                                        <input 
+                                            type="color" 
+                                            value={formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd'} 
+                                            onChange={(e) => handleUiChange('headerColor', e.target.value)} 
+                                            className="w-8 h-8 p-0 border-0 rounded cursor-pointer"
+                                        />
+                                        <input 
+                                            type="text"
+                                            value={formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd'}
+                                            onChange={(e) => handleUiChange('headerColor', e.target.value)}
+                                            className="w-full border-none focus:ring-0 px-2 text-sm text-gray-600"
+                                            placeholder="#0078bd"
+                                        />
+                                    </div>
+                                </div>
                             </div>
                         </div>
                         <div className="flex justify-end gap-2 mt-6">

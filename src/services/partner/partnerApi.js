@@ -19,10 +19,13 @@ export const deletePartner = async (id) => {
 };
 
 // Partner Plans
-export const getPartnerPlans = async (partnerType, stateId) => {
+export const getPartnerPlans = async (partnerType, stateId, countryId, clusterId, districtId) => {
     const params = {};
     if (partnerType) params.partnerType = partnerType;
+    if (countryId) params.countryId = countryId;
     if (stateId) params.stateId = stateId;
+    if (clusterId) params.clusterId = clusterId;
+    if (districtId) params.districtId = districtId;
     const res = await api.get('/partner-settings/plans', { params });
     return res.data;
 };
