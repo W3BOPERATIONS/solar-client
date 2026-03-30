@@ -293,9 +293,12 @@ const AgencyPlan = () => {
 
       return {
         category: m.categoryId?.name,
+        categoryId: m.categoryId?._id,
         subCategory: m.subCategoryId?.name,
+        subCategoryId: m.subCategoryId?._id,
         projectType: projectTypeStr,
         subProjectType: subPType,
+        subProjectTypeId: m.subProjectTypeId?._id || null,
         yearlyTargetKw: existing?.yearlyTargetKw || '',
         incentiveAmount: existing?.incentiveAmount || '',
         installationCharges: existing?.installationCharges || '',
@@ -312,6 +315,10 @@ const AgencyPlan = () => {
       const existing = prevData.solarInstallationPoints.find(p => p.typeLabel === label);
       return {
         typeLabel: label,
+        category: row.categoryId,
+        subCategory: row.subCategoryId,
+        projectType: row.projectType,
+        subProjectType: row.subProjectTypeId,
         yearlyTargetKw: existing?.yearlyTargetKw || 0,
         points: existing?.points || 0,
         periodInMonth: existing?.periodInMonth || 0,
@@ -322,9 +329,13 @@ const AgencyPlan = () => {
 
     const nextCharges = activeRows.map(row => {
       const label = getRowLabel(row);
-      const existing = prevData.solarInstallationCharges.find(c => c.typeLabel === label);
+      const existing = prevData.solarInstallationCharges?.find(c => c.typeLabel === label);
       return {
         typeLabel: label,
+        category: row.categoryId,
+        subCategory: row.subCategoryId,
+        projectType: row.projectType,
+        subProjectType: row.subProjectTypeId,
         chargesPerKw: row.installationCharges || existing?.chargesPerKw || 0,
         active: true
       };
@@ -338,46 +349,7 @@ const AgencyPlan = () => {
     };
   };
 
-  // Sync Points and Charges with AssignedProjectTypes
-  useEffect(() => {
-    setFormData(prev => {
-      const activeRows = prev.assignedProjectTypes.filter(r => r.active);
 
-      const nextPoints = activeRows.map(row => {
-        const label = getRowLabel(row);
-        const existing = prev.solarInstallationPoints.find(p => p.typeLabel === label);
-        return {
-          typeLabel: label,
-          yearlyTargetKw: existing?.yearlyTargetKw || 0,
-          points: existing?.points || 0,
-          periodInMonth: existing?.periodInMonth || 0,
-          claimInMonth: existing?.claimInMonth || 0,
-          active: true
-        };
-      });
-
-      const nextCharges = activeRows.map(row => {
-        const label = getRowLabel(row);
-        const existing = prev.solarInstallationCharges.find(c => c.typeLabel === label);
-        return {
-          typeLabel: label,
-          charges: row.installationCharges || existing?.charges || 0,
-          active: true
-        };
-      });
-
-      const pMatch = JSON.stringify(nextPoints) === JSON.stringify(prev.solarInstallationPoints);
-      const cMatch = JSON.stringify(nextCharges) === JSON.stringify(prev.solarInstallationCharges);
-
-      if (pMatch && cMatch) return prev;
-
-      return {
-        ...prev,
-        solarInstallationPoints: nextPoints,
-        solarInstallationCharges: nextCharges
-      };
-    });
-  }, [formData.assignedProjectTypes]);
 
   const handleSelectPlan = (plan) => {
     setSelectedPlanId(plan._id);
@@ -464,10 +436,10 @@ const AgencyPlan = () => {
     try {
       const payload = {
         ...formData,
-        country: selectedCountryId[0] || null,
-        state: selectedStateId[0] || null,
-        cluster: selectedClusterId[0] || null,
-        districts: selectedDistrictId.length > 0 ? selectedDistrictId : (formData.selectedDistricts || [])
+        country: (Array.isArray(selectedCountryId) ? selectedCountryId[0] : selectedCountryId) || null,
+        state: (Array.isArray(selectedStateId) ? selectedStateId[0] : selectedStateId) || null,
+        cluster: (Array.isArray(selectedClusterId) ? selectedClusterId[0] : selectedClusterId) || null,
+        districts: Array.isArray(selectedDistrictId) ? selectedDistrictId : (selectedDistrictId ? [selectedDistrictId] : [])
       };
 
       if (selectedPlanId === 'new') {

@@ -302,9 +302,12 @@ const SolarInstaller = () => {
 
       return {
         category: m.categoryId?.name,
+        categoryId: m.categoryId?._id,
         subCategory: m.subCategoryId?.name,
+        subCategoryId: m.subCategoryId?._id,
         projectType: projectTypeStr,
         subProjectType: subPType,
+        subProjectTypeId: m.subProjectTypeId?._id || null,
         yearlyTargetKw: existing?.yearlyTargetKw || '',
         incentiveAmount: existing?.incentiveAmount || '',
         installationCharges: existing?.installationCharges || '',
@@ -321,6 +324,10 @@ const SolarInstaller = () => {
       const existing = prevData.solarInstallationPoints.find(p => p.typeLabel === label);
       return {
         typeLabel: label,
+        category: row.categoryId,
+        subCategory: row.subCategoryId,
+        projectType: row.projectType,
+        subProjectType: row.subProjectTypeId,
         points: existing?.points || 0,
         periodInMonth: existing?.periodInMonth || 0,
         claimInMonth: existing?.claimInMonth || 0,
@@ -330,10 +337,14 @@ const SolarInstaller = () => {
 
     const nextCharges = activeRows.map(row => {
       const label = getRowLabel(row);
-      const existing = prevData.solarInstallationCharges.find(c => c.typeLabel === label);
+      const existing = prevData.solarInstallationCharges?.find(c => c.typeLabel === label);
       return {
         typeLabel: label,
-        charges: row.installationCharges || existing?.charges || 0,
+        category: row.categoryId,
+        subCategory: row.subCategoryId,
+        projectType: row.projectType,
+        subProjectType: row.subProjectTypeId,
+        chargesPerKw: row.installationCharges || existing?.chargesPerKw || 0,
         active: true
       };
     });
@@ -353,45 +364,7 @@ const SolarInstaller = () => {
     }
   };
 
-  // Keep Points and Charges in sync with Active AssignedProjectTypes
-  useEffect(() => {
-    setFormData(prev => {
-      const activeRows = prev.assignedProjectTypes.filter(r => r.active);
 
-      const nextPoints = activeRows.map(row => {
-        const label = getRowLabel(row);
-        const existing = prev.solarInstallationPoints.find(p => p.typeLabel === label);
-        return {
-          typeLabel: label,
-          points: existing?.points || 0,
-          periodInMonth: existing?.periodInMonth || 0,
-          claimInMonth: existing?.claimInMonth || 0,
-          active: true
-        };
-      });
-
-      const nextCharges = activeRows.map(row => {
-        const label = getRowLabel(row);
-        const existing = prev.solarInstallationCharges.find(c => c.typeLabel === label);
-        return {
-          typeLabel: label,
-          charges: row.installationCharges || existing?.charges || 0,
-          active: true
-        };
-      });
-
-      const pMatch = JSON.stringify(nextPoints) === JSON.stringify(prev.solarInstallationPoints);
-      const cMatch = JSON.stringify(nextCharges) === JSON.stringify(prev.solarInstallationCharges);
-
-      if (pMatch && cMatch) return prev;
-
-      return {
-        ...prev,
-        solarInstallationPoints: nextPoints,
-        solarInstallationCharges: nextCharges
-      };
-    });
-  }, [formData.assignedProjectTypes]);
 
   const handleSelectPlan = (plan) => {
     setSelectedPlanId(plan._id);
@@ -473,9 +446,9 @@ const SolarInstaller = () => {
       if (arrayName === 'assignedProjectTypes' && field === 'installationCharges') {
         const label = getRowLabel(newArray[index]);
         nextData.solarInstallationCharges = prev.solarInstallationCharges.map(c =>
-          c.typeLabel === label ? { ...c, charges: value } : c
+          c.typeLabel === label ? { ...c, chargesPerKw: value } : c
         );
-      } else if (arrayName === 'solarInstallationCharges' && field === 'charges') {
+      } else if (arrayName === 'solarInstallationCharges' && field === 'chargesPerKw') {
         const label = newArray[index].typeLabel;
         nextData.assignedProjectTypes = prev.assignedProjectTypes.map(apt =>
           getRowLabel(apt) === label ? { ...apt, installationCharges: value } : apt
@@ -512,10 +485,10 @@ const SolarInstaller = () => {
     try {
       const payload = {
         ...formData,
-        country: selectedCountryId,
-        state: selectedStateId,
-        cluster: selectedClusterId,
-        districts: selectedDistrictId ? [selectedDistrictId] : formData.districts
+        country: (Array.isArray(selectedCountryId) ? selectedCountryId[0] : selectedCountryId) || null,
+        state: (Array.isArray(selectedStateId) ? selectedStateId[0] : selectedStateId) || null,
+        cluster: (Array.isArray(selectedClusterId) ? selectedClusterId[0] : selectedClusterId) || null,
+        districts: Array.isArray(selectedDistrictId) ? selectedDistrictId : (selectedDistrictId ? [selectedDistrictId] : [])
       };
 
       if (selectedPlanId === 'new') {
@@ -1345,8 +1318,8 @@ const SolarInstaller = () => {
                                   <span className="text-gray-400 font-bold">₹</span>
                                   <input
                                     type="number"
-                                    value={pt.charges ?? 0}
-                                    onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'charges', Number(e.target.value))}
+                                    value={pt.chargesPerKw || ''}
+                                    onChange={(e) => handleArrayChange('solarInstallationCharges', idx, 'chargesPerKw', e.target.value)}
                                     className="w-24 border border-gray-200 rounded px-2 py-1 text-sm outline-none focus:border-blue-500 bg-white"
                                   />
                                 </div>
