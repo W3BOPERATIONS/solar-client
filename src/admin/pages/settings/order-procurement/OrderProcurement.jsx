@@ -464,8 +464,18 @@ export default function OrderProcurement() {
           if (!newItem.assignModules || newItem.assignModules.length === 0) delete newItem.assignModules;
           if (!newItem.supplierType || newItem.supplierType.length === 0) delete newItem.supplierType;
           return newItem;
-        })
+        }),
+        state: formData.state || null,
+        cluster: formData.cluster || null,
+        warehouse: formData.warehouse || null
       };
+
+      // Clean up empty ObjectId strings in the root
+      if (!payload.state) delete payload.state;
+      if (!payload.cluster) delete payload.cluster;
+      if (!payload.warehouse) delete payload.warehouse;
+      if (!payload.brand) delete payload.brand;
+      if (!payload.product) delete payload.product;
 
       if (isEdit) {
         await updateOrderProcurementSetting(formData._id, payload);
@@ -505,7 +515,13 @@ export default function OrderProcurement() {
     // Also filter by row's selected Supply Types (assignModules)
     const rowModules = formData.skuItems[itemIndex].assignModules;
     if (rowModules && rowModules.length > 0) {
-      filtered = filtered.filter(s => rowModules.includes(s.assignModules));
+      filtered = filtered.filter(s => {
+        // Since supply types are now strings, and s.assignModules is [String], check for intersection
+        if (Array.isArray(s.assignModules)) {
+          return s.assignModules.some(m => rowModules.includes(m));
+        }
+        return rowModules.includes(s.assignModules);
+      });
     }
 
     return filtered.map(s => ({
@@ -524,7 +540,8 @@ export default function OrderProcurement() {
       (Array.isArray(s.projectType) ? s.projectType.includes(projectType) : s.projectType === projectType)
     );
 
-    const modules = [...new Set(filtered.map(s => s.assignModules).filter(m => m))];
+    // Flatten all modules from all filtered supplier types and deduplicate
+    const modules = [...new Set(filtered.flatMap(s => s.assignModules || []).filter(m => m))];
     return modules.map(m => ({ label: m, value: m }));
   };
 
