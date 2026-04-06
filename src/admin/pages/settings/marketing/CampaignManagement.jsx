@@ -482,6 +482,16 @@ const CampaignManagement = () => {
     return match;
   });
 
+  const getConfigCount = (level, id) => {
+    return campaignConfigs.filter(c => {
+       if (level === 'country') return (c.country?._id || c.country) === id;
+       if (level === 'state') return (c.state?._id || c.state) === id;
+       if (level === 'cluster') return (c.cluster?._id || c.cluster) === id;
+       if (level === 'district') return (c.district?._id || c.district) === id;
+       return false;
+    }).length;
+  };
+
   const calculateBudgetSummary = () => {
     const platformNames = [...new Set(filteredPlatforms.map(p => p.platform))].join(', ');
     const clusterNames = [...new Set(filteredPlatforms.map(p => p.cluster?.name || p.cluster?.clusterName).filter(Boolean))].join(', ');
@@ -538,16 +548,23 @@ const CampaignManagement = () => {
                 </div>
               </div>
             )}
-            {countries.map((country) => (
+            {countries.map((country) => {
+              const count = getConfigCount('country', country._id);
+              return (
               <div
                 key={country._id}
                 onClick={() => handleCountryChange(country._id)}
-                className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] relative transition-all bg-white border ${
                   config.country === country._id
                     ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50'
                     : 'border-gray-100 hover:border-blue-300'
                 }`}
               >
+                {count > 0 && (
+                   <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-6 h-6 flex items-center justify-center font-bold border-2 border-white shadow-sm z-10">
+                     {count}
+                   </span>
+                )}
                 <div className={`font-bold text-lg ${config.country === country._id ? 'text-blue-600' : 'text-gray-800'}`}>
                   {country.name}
                 </div>
@@ -555,7 +572,7 @@ const CampaignManagement = () => {
                   {country.code || country.name.substring(0, 3).toUpperCase()} Region
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         </div>
 
@@ -581,16 +598,23 @@ const CampaignManagement = () => {
                   All States
                 </div>
               </div>
-              {states.map((s) => (
+              {states.map((s) => {
+                const count = getConfigCount('state', s._id);
+                return (
                 <div
                   key={s._id}
                   onClick={() => handleStateChange(s._id)}
-                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] relative transition-all bg-white border ${
                     config.state === s._id
                       ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50'
                       : 'border-gray-100 hover:border-blue-300'
                   }`}
                 >
+                  {count > 0 && (
+                     <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-6 h-6 flex items-center justify-center font-bold border-2 border-white shadow-sm z-10">
+                       {count}
+                     </span>
+                  )}
                   <div className={`font-bold text-lg ${config.state === s._id ? 'text-blue-600' : 'text-gray-800'}`}>
                     {s.name}
                   </div>
@@ -598,7 +622,7 @@ const CampaignManagement = () => {
                     State Office
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
@@ -622,21 +646,28 @@ const CampaignManagement = () => {
                   Select All
                 </div>
               </div>
-              {clusters.map((c) => (
+              {clusters.map((c) => {
+                const count = getConfigCount('cluster', c._id);
+                return (
                 <div
                   key={c._id}
                   onClick={() => handleClusterChange(c._id)}
-                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[160px] relative transition-all bg-white border ${
                     config.cluster === c._id
                       ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50'
                       : 'border-gray-100 hover:border-blue-300'
                   }`}
                 >
+                  {count > 0 && (
+                     <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-6 h-6 flex items-center justify-center font-bold border-2 border-white shadow-sm z-10">
+                       {count}
+                     </span>
+                  )}
                   <div className={`font-bold ${config.cluster === c._id ? 'text-blue-600' : 'text-gray-800'}`}>
                     {c.name || c.clusterName}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
@@ -660,21 +691,28 @@ const CampaignManagement = () => {
                   Select All
                 </div>
               </div>
-              {districts.map((d) => (
+              {districts.map((d) => {
+                const count = getConfigCount('district', d._id);
+                return (
                 <div
                   key={d._id}
                   onClick={() => handleDistrictChange(d._id)}
-                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                  className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[160px] relative transition-all bg-white border ${
                     config.district === d._id
                       ? 'border-blue-500 ring-2 ring-blue-500/20 bg-blue-50'
                       : 'border-gray-100 hover:border-blue-300'
                   }`}
                 >
+                  {count > 0 && (
+                     <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-6 h-6 flex items-center justify-center font-bold border-2 border-white shadow-sm z-10">
+                       {count}
+                     </span>
+                  )}
                    <div className={`font-bold ${config.district === d._id ? 'text-blue-600' : 'text-gray-800'}`}>
                     {d.name || d.districtName}
                   </div>
                 </div>
-              ))}
+              )})}
             </div>
           </div>
         )}
