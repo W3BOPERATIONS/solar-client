@@ -23,6 +23,30 @@ import {
 } from '../../../../services/partner/partnerApi';
 import toast from 'react-hot-toast';
 
+const DEFAULT_PLATFORMS = [
+  'Google', 'Facebook', 'Instagram', 'LinkedIn', 'Twitter / X', 'TikTok',
+  'YouTube', 'Pinterest', 'Snapchat', 'Reddit', 'Quora', 'Threads',
+  'WhatsApp Business', 'Telegram', 'Discord', 'Medium', 'Substack'
+];
+
+const renderPlatformIcon = (platformName, size = 16) => {
+  const name = (platformName || '').toLowerCase();
+  if (name.includes('facebook')) return <Facebook size={size} className="text-blue-600" />;
+  if (name.includes('instagram')) return <Instagram size={size} className="text-pink-600" />;
+  if (name.includes('twitter') || name === 'x') return <Twitter size={size} className="text-blue-400" />;
+  if (name.includes('linkedin')) return <Linkedin size={size} className="text-blue-700" />;
+  
+  const firstLetter = (platformName || 'O')[0].toUpperCase();
+  return (
+    <div 
+      className="rounded flex items-center justify-center font-bold shadow-sm bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
+      style={{ width: size, height: size, fontSize: size * 0.7 }}
+    >
+      {firstLetter}
+    </div>
+  );
+};
+
 const CampaignManagement = () => {
   const [activeTab, setActiveTab] = useState('settings');
   const [loading, setLoading] = useState(false);
@@ -318,43 +342,92 @@ const CampaignManagement = () => {
     });
   };
 
-  const handleAddPlatform = async () => {
+  const handleAddPlatform = () => {
+    if (!config.country || config.country === 'all' || !config.state || config.state === 'all' || !config.cluster || config.cluster === 'all' || !config.district || config.district === 'all') {
+      toast.error('Please select Country, State, Cluster, and District from the region selection above to add a platform.');
+      return;
+    }
+
+    const countryObj = countries.find(c => c._id === config.country);
+    const stateObj = states.find(s => s._id === config.state);
+    const clusterObj = clusters.find(c => c._id === config.cluster);
+    const districtObj = districts.find(d => d._id === config.district);
+
     const newPlatform = {
-      platform: 'Facebook',
-      state: states.length > 0 ? states[0]._id : '',
-      cluster: clusters.length > 0 ? clusters[0]._id : '',
+      _id: 'temp-' + Date.now(),
+      platform: '',
       status: 'Active',
       quarter: 'January-March',
-      budget: 0
+      budget: 0,
+      country: countryObj ? { _id: countryObj._id, name: countryObj.name } : null,
+      state: stateObj ? { _id: stateObj._id, name: stateObj.name } : null,
+      cluster: clusterObj ? { _id: clusterObj._id, name: clusterObj.name || clusterObj.clusterName } : null,
+      district: districtObj ? { _id: districtObj._id, name: districtObj.name || districtObj.districtName } : null,
+      isNew: true,
+      isModified: true
     };
+
+    setSocialPlatforms([...socialPlatforms, newPlatform]);
+  };
+
+  const handleLocalUpdate = (id, updates) => {
+    setSocialPlatforms(socialPlatforms.map(p => 
+      p._id === id ? { ...p, ...updates, isModified: true } : p
+    ));
+  };
+
+  const handleSaveRow = async (id) => {
+    const row = socialPlatforms.find(p => p._id === id);
+    if (!row) return;
+
+    if (!row.platform || row.platform.trim() === '') {
+       toast.error('Platform name cannot be empty');
+       return;
+    }
 
     try {
       setLoading(true);
-      const res = await createSocialPlatform(newPlatform);
-      if (res.success) {
-        setSocialPlatforms([...socialPlatforms, res.data]);
-        toast.success('Platform added');
+      const dataToSave = {
+        platform: row.platform,
+        status: row.status,
+        quarter: row.quarter,
+        budget: row.budget,
+        country: row.country?._id || row.country,
+        state: row.state?._id || row.state,
+        cluster: row.cluster?._id || row.cluster,
+        district: row.district?._id || row.district
+      };
+
+      if (row.isNew) {
+        const res = await createSocialPlatform(dataToSave);
+        if (res.success) {
+          setSocialPlatforms(socialPlatforms.map(p => p._id === id ? { ...res.data, isModified: false, isNew: false } : p));
+          toast.success('Platform added successfully');
+        }
+      } else {
+        if (!row.isModified) {
+          toast.success('No changes to save');
+          return;
+        }
+        const res = await updateSocialPlatform(id, dataToSave);
+        if (res.success) {
+          setSocialPlatforms(socialPlatforms.map(p => p._id === id ? { ...res.data, isModified: false } : p));
+          toast.success('Platform updated successfully');
+        }
       }
     } catch (error) {
-      toast.error('Failed to add platform');
+      toast.error('Failed to save platform');
     } finally {
       setLoading(false);
     }
   };
 
-  const handleUpdatePlatform = async (id, updates) => {
-    try {
-      const res = await updateSocialPlatform(id, updates);
-      if (res.success) {
-        setSocialPlatforms(socialPlatforms.map(p => p._id === id ? res.data : p));
-        toast.success('Platform updated');
-      }
-    } catch (error) {
-      toast.error('Failed to update platform');
-    }
-  };
-
   const handleDeletePlatform = async (id) => {
+    const row = socialPlatforms.find(p => p._id === id);
+    if (row && row.isNew) {
+       setSocialPlatforms(socialPlatforms.filter(p => p._id !== id));
+       return;
+    }
     if (!window.confirm('Are you sure you want to delete this platform?')) return;
     try {
       const res = await deleteSocialPlatform(id);
@@ -367,12 +440,54 @@ const CampaignManagement = () => {
     }
   };
 
+  const filteredPlatforms = socialPlatforms.filter(p => {
+    let match = true;
+    if (config.country && config.country !== 'all') {
+      const pCountryId = p.country?._id || p.country;
+      if (pCountryId !== config.country) match = false;
+    }
+    if (config.state && config.state !== 'all') {
+      const pStateId = p.state?._id || p.state;
+      if (pStateId !== config.state) match = false;
+    }
+    if (config.cluster && config.cluster !== 'all') {
+      const pClusterId = p.cluster?._id || p.cluster;
+      if (pClusterId !== config.cluster) match = false;
+    }
+    if (config.district && config.district !== 'all') {
+      const pDistrictId = p.district?._id || p.district;
+      if (pDistrictId !== config.district) match = false;
+    }
+    return match;
+  });
+
+  const filteredCampaignConfigs = campaignConfigs.filter(c => {
+    let match = true;
+    if (config.country && config.country !== 'all') {
+      const pCountryId = c.country?._id || c.country;
+      if (pCountryId !== config.country) match = false;
+    }
+    if (config.state && config.state !== 'all') {
+      const pStateId = c.state?._id || c.state;
+      if (pStateId !== config.state) match = false;
+    }
+    if (config.cluster && config.cluster !== 'all') {
+      const pClusterId = c.cluster?._id || c.cluster;
+      if (pClusterId !== config.cluster) match = false;
+    }
+    if (config.district && config.district !== 'all') {
+      const pDistrictId = c.district?._id || c.district;
+      if (pDistrictId !== config.district) match = false;
+    }
+    return match;
+  });
+
   const calculateBudgetSummary = () => {
-    const platformNames = [...new Set(socialPlatforms.map(p => p.platform))].join(', ');
-    const clusterNames = [...new Set(socialPlatforms.map(p => p.cluster?.name || p.cluster?.clusterName).filter(Boolean))].join(', ');
-    const stateNames = [...new Set(socialPlatforms.map(p => p.state?.name).filter(Boolean))].join(', ');
-    const totalBudget = socialPlatforms.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
-    const totalPlatforms = socialPlatforms.length;
+    const platformNames = [...new Set(filteredPlatforms.map(p => p.platform))].join(', ');
+    const clusterNames = [...new Set(filteredPlatforms.map(p => p.cluster?.name || p.cluster?.clusterName).filter(Boolean))].join(', ');
+    const stateNames = [...new Set(filteredPlatforms.map(p => p.state?.name).filter(Boolean))].join(', ');
+    const totalBudget = filteredPlatforms.reduce((sum, p) => sum + (Number(p.budget) || 0), 0);
+    const totalPlatforms = filteredPlatforms.length;
 
     return { platformNames, clusterNames, stateNames, totalBudget, totalPlatforms };
   };
@@ -743,7 +858,7 @@ const CampaignManagement = () => {
                          </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-200 text-sm font-medium">
-                         {campaignConfigs.length > 0 ? campaignConfigs.map(c => (
+                         {filteredCampaignConfigs.length > 0 ? filteredCampaignConfigs.map(c => (
                            <tr key={c._id} className="hover:bg-gray-50/50 transition-all">
                               <td className="px-6 py-4">
                                 <div className="text-gray-900 font-bold">{c.country?.name || 'All'}</div>
@@ -803,8 +918,6 @@ const CampaignManagement = () => {
                   <thead className="bg-[#f8f9fa] text-xs font-bold text-gray-600 border-b border-gray-200">
                     <tr>
                       <th className="px-6 py-4">Platform</th>
-                      <th className="px-6 py-4">State</th>
-                      <th className="px-6 py-4">Cluster</th>
                       <th className="px-6 py-4 text-center">Status</th>
                       <th className="px-6 py-4">Quarter</th>
                       <th className="px-6 py-4">Budget</th>
@@ -812,56 +925,22 @@ const CampaignManagement = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200 font-medium text-sm">
-                    {socialPlatforms.map((p, idx) => (
+                    {filteredPlatforms.map((p, idx) => (
                       <tr key={p._id} className="hover:bg-gray-50/50 transition-all">
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-3">
-                            {p.platform === 'Facebook' && <Facebook size={16} className="text-blue-600" />}
-                            {p.platform === 'Instagram' && <Instagram size={16} className="text-pink-600" />}
-                            {p.platform === 'Twitter' && <Twitter size={16} className="text-blue-400" />}
-                            {p.platform === 'LinkedIn' && <Linkedin size={16} className="text-blue-700" />}
-                            <select
+                            {renderPlatformIcon(p.platform, 16)}
+                            <input
                               value={p.platform}
-                              onChange={(e) => handleUpdatePlatform(p._id, { platform: e.target.value })}
-                              className="bg-transparent outline-none focus:ring-0 cursor-pointer"
-                            >
-                              <option value="Facebook">Facebook</option>
-                              <option value="Instagram">Instagram</option>
-                              <option value="Twitter">Twitter</option>
-                              <option value="LinkedIn">LinkedIn</option>
-                              <option value="Google">Google</option>
-                            </select>
+                              onChange={(e) => handleLocalUpdate(p._id, { platform: e.target.value })}
+                              className={`bg-transparent border-b ${p.isModified ? 'border-blue-400' : 'border-dashed border-gray-300'} focus:border-blue-500 outline-none w-32 px-1 py-0.5 text-sm font-semibold text-gray-700`}
+                              placeholder="Type platform..."
+                            />
                           </div>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={p.state?._id || p.state || ''}
-                            onChange={(e) => handleUpdatePlatform(p._id, { state: e.target.value })}
-                            className="bg-transparent outline-none border border-gray-300 rounded-md p-2 text-xs"
-                          >
-                            <option value="">Select State</option>
-                            {states.map(s => (
-                              <option key={s._id} value={s._id}>{s.name}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="px-6 py-4">
-                          <select
-                            value={p.cluster?._id || p.cluster || ''}
-                            onChange={(e) => handleUpdatePlatform(p._id, { cluster: e.target.value })}
-                            className="bg-transparent outline-none border border-gray-300 rounded-md p-2 text-xs"
-                          >
-                            <option value="">Select Cluster</option>
-                            {clusters
-                              .filter(c => !p.state || (c.state?._id || c.state) === (p.state?._id || p.state))
-                              .map(c => (
-                                <option key={c._id} value={c._id}>{c.name || c.clusterName}</option>
-                              ))}
-                          </select>
                         </td>
                         <td className="px-6 py-4 text-center">
                           <button
-                            onClick={() => handleUpdatePlatform(p._id, { status: p.status === 'Active' ? 'Inactive' : 'Active' })}
+                            onClick={() => handleLocalUpdate(p._id, { status: p.status === 'Active' ? 'Inactive' : 'Active' })}
                             className={`px-3 py-1 rounded text-[11px] font-bold uppercase transition-all ${p.status === 'Active'
                               ? 'bg-[#28a745] text-white'
                               : 'bg-gray-200 text-gray-600'
@@ -873,8 +952,8 @@ const CampaignManagement = () => {
                         <td className="px-6 py-4">
                           <select
                             value={p.quarter}
-                            onChange={(e) => handleUpdatePlatform(p._id, { quarter: e.target.value })}
-                            className="bg-transparent outline-none border border-gray-300 rounded-md p-2 text-sm"
+                            onChange={(e) => handleLocalUpdate(p._id, { quarter: e.target.value })}
+                            className={`bg-transparent outline-none border ${p.isModified ? 'border-blue-300' : 'border-gray-300'} rounded-md p-2 text-sm`}
                           >
                             <option value="January-March">January-March</option>
                             <option value="April-June">April-June</option>
@@ -886,20 +965,19 @@ const CampaignManagement = () => {
                           <input
                             type="number"
                             value={p.budget}
-                            onBlur={(e) => handleUpdatePlatform(p._id, { budget: Number(e.target.value) })}
-                            onChange={(e) => {
-                              const newVal = e.target.value;
-                              setSocialPlatforms(socialPlatforms.map(item =>
-                                item._id === p._id ? { ...item, budget: newVal } : item
-                              ));
-                            }}
-                            className="w-24 border border-gray-300 rounded-md p-2 text-sm outline-none"
+                            onChange={(e) => handleLocalUpdate(p._id, { budget: Number(e.target.value) })}
+                            className={`w-24 border ${p.isModified ? 'border-blue-300' : 'border-gray-300'} rounded-md p-2 text-sm outline-none`}
                             placeholder="Budget"
                           />
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex items-center justify-center space-x-4">
-                            <button className="text-sm font-bold text-[#28a745] hover:opacity-80">Done</button>
+                            <button 
+                              onClick={() => handleSaveRow(p._id)}
+                              className={`text-sm font-bold transition-colors ${p.isModified || p.isNew ? 'text-blue-600 hover:text-blue-800' : 'text-[#28a745] hover:opacity-80'}`}
+                            >
+                              {p.isModified || p.isNew ? 'Save' : 'Done'}
+                            </button>
                             <button
                               onClick={() => handleDeletePlatform(p._id)}
                               className="text-red-400 hover:text-red-600 transition-all border border-red-200 p-1 rounded"
@@ -932,55 +1010,68 @@ const CampaignManagement = () => {
                     <span>Platform Wise Budget Summary</span>
                   </h3>
                   <div className="bg-[#00669c] text-white px-4 py-1.5 rounded-full text-xs font-bold shadow-sm">
-                    Total Platforms: {socialPlatforms.length}
+                    Total Platforms: {filteredPlatforms.length}
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 text-left">
-                  {socialPlatforms.map((p, idx) => (
-                    <div key={p._id || idx} className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-all">
-                      <div className="bg-[#f8f9fa] p-4 border-b border-gray-200 flex items-center justify-between">
-                        <div className="flex items-center space-x-2">
-                          {p.platform === 'Facebook' && <Facebook size={18} className="text-blue-600" />}
-                          {p.platform === 'Instagram' && <Instagram size={18} className="text-pink-600" />}
-                          {p.platform === 'Twitter' && <Twitter size={18} className="text-blue-400" />}
-                          {p.platform === 'LinkedIn' && <Linkedin size={18} className="text-blue-700" />}
-                          <span className="font-bold text-gray-700">{p.platform}</span>
-                        </div>
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase ${p.status === 'Active' ? 'bg-green-500' : 'bg-gray-400'}`}>
-                          {p.status}
-                        </span>
-                      </div>
-
-                      <div className="p-5 space-y-3">
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-500 italic">State:</span>
-                          <span className="font-semibold text-gray-800">{p.state?.name || 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-500 italic">Cluster:</span>
-                          <span className="font-semibold text-gray-800">{p.cluster?.name || p.cluster?.clusterName || 'N/A'}</span>
-                        </div>
-                        <div className="flex justify-between items-center text-sm">
-                          <span className="text-gray-500 italic">Quarter:</span>
-                          <span className="font-semibold text-[#00669c]">{p.quarter}</span>
-                        </div>
-                        <div className="pt-3 border-t border-gray-100 flex justify-between items-center">
-                          <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Budget</span>
-                          <div className="text-lg font-bold text-gray-900 flex items-center">
-                            <span className="text-sm mr-1">₹</span>
+                <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm overflow-x-auto text-left">
+                  <table className="w-full min-w-[600px]">
+                    <thead className="bg-[#f8f9fa] text-xs font-bold text-gray-600 border-b border-gray-200 uppercase tracking-wider">
+                      <tr>
+                        <th className="px-6 py-4">Platform</th>
+                        <th className="px-6 py-4">Location Area</th>
+                        <th className="px-6 py-4 text-center">Status</th>
+                        <th className="px-6 py-4">Quarter</th>
+                        <th className="px-6 py-4 text-right">Budget</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-200 text-sm font-medium text-gray-800">
+                      {filteredPlatforms.length > 0 ? filteredPlatforms.map((p, idx) => (
+                        <tr key={p._id || idx} className="hover:bg-gray-50/50 transition-all">
+                          <td className="px-6 py-4">
+                            <div className="flex items-center space-x-3">
+                              {renderPlatformIcon(p.platform, 18)}
+                              <span className="font-bold text-gray-700">{p.platform}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4">
+                            <div className="flex flex-col gap-1 text-xs">
+                               <div className="flex justify-between items-center w-full min-w-[180px]">
+                                 <span className="text-gray-400 font-semibold mr-4">Country:</span>
+                                 <span className="text-gray-800 font-bold">{p.country?.name || 'N/A'}</span>
+                               </div>
+                               <div className="flex justify-between items-center w-full">
+                                 <span className="text-gray-400 font-semibold mr-4">State:</span>
+                                 <span className="text-gray-800 font-bold">{p.state?.name || 'N/A'}</span>
+                               </div>
+                               <div className="flex justify-between items-center w-full">
+                                 <span className="text-gray-400 font-semibold mr-4">Cluster:</span>
+                                 <span className="text-gray-800 font-bold">{p.cluster?.name || p.cluster?.clusterName || 'N/A'}</span>
+                               </div>
+                               <div className="flex justify-between items-center w-full">
+                                 <span className="text-gray-400 font-semibold mr-4">District:</span>
+                                 <span className="text-gray-800 font-bold">{p.district?.name || p.district?.districtName || 'N/A'}</span>
+                               </div>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <span className={`text-[10px] font-bold px-3 py-1 rounded-full text-white uppercase ${p.status === 'Active' ? 'bg-[#28a745]' : 'bg-gray-400'}`}>
+                              {p.status}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 font-semibold text-[#00669c]">{p.quarter}</td>
+                          <td className="px-6 py-4 text-right text-lg font-bold text-gray-900">
+                            <span className="text-sm mr-1 text-gray-500">₹</span>
                             {Number(p.budget).toLocaleString() || '0'}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-
-                  {socialPlatforms.length === 0 && (
-                    <div className="col-span-full bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-10 text-center">
-                      <p className="text-gray-400 italic">No platforms added yet. Add a platform above to see the summary.</p>
-                    </div>
-                  )}
+                          </td>
+                        </tr>
+                      )) : (
+                        <tr>
+                          <td colSpan="4" className="px-6 py-10 text-center text-gray-400 italic">No platforms added yet. Add a platform above to see the summary.</td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
@@ -988,38 +1079,72 @@ const CampaignManagement = () => {
 
           {activeTab === 'budget' && (
             <div className="space-y-8 animate-fadeIn text-left">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-8">
-                <div className="space-y-4">
-                  <label className="text-base font-semibold text-gray-700">Default Company Campaign Budget (₹)</label>
-                  <input
-                    type="number"
-                    value={config.defaultCompanyBudget}
-                    onChange={(e) => setConfig({ ...config, defaultCompanyBudget: Number(e.target.value) })}
-                    className="w-full p-4 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-400 outline-none text-gray-700 bg-white font-medium shadow-sm"
-                    placeholder="5000"
-                  />
-                </div>
-                <div className="space-y-4">
-                  <label className="text-base font-semibold text-gray-700">Default CPRM Campaign Budget (₹)</label>
-                  <input
-                    type="number"
-                    value={config.defaultCprmBudget}
-                    onChange={(e) => setConfig({ ...config, defaultCprmBudget: Number(e.target.value) })}
-                    className="w-full p-4 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-400 outline-none text-gray-700 bg-white font-medium shadow-sm"
-                    placeholder="2500"
-                  />
-                </div>
+              <div className="bg-blue-50 border border-blue-200 text-blue-800 p-4 rounded-md shadow-sm mb-6 flex items-center gap-3">
+                 <MapPin size={20} className="mt-0.5" />
+                 <span className="font-semibold text-[15px]">
+                    Location: {
+                      [
+                        countries.find(c => c._id === config.country)?.name || 'All Countries',
+                        states.find(s => s._id === config.state)?.name || 'All States',
+                        clusters.find(c => c._id === config.cluster)?.name || clusters.find(c => c._id === config.cluster)?.clusterName || 'All Clusters',
+                        districts.find(d => d._id === config.district)?.name || districts.find(d => d._id === config.district)?.districtName || 'All Districts'
+                      ].join(' — ')
+                    }
+                 </span>
               </div>
 
-              <div className="pt-6 border-t border-gray-100">
-                <button
-                  onClick={handleConfigSave}
-                  disabled={loading}
-                  className="flex items-center space-x-2 py-3 px-8 bg-[#28a745] text-white rounded font-bold text-sm hover:bg-green-700 transition-all shadow-md"
-                >
-                  <Save size={18} />
-                  <span>Save Budget Settings</span>
-                </button>
+              <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm overflow-x-auto">
+                <table className="w-full text-left min-w-[600px]">
+                  <thead className="bg-[#f8f9fa] text-xs font-bold text-gray-600 border-b border-gray-200 uppercase tracking-wider">
+                    <tr>
+                      <th className="px-6 py-4">Social Platform</th>
+                      <th className="px-6 py-4 text-center">Quarter</th>
+                      <th className="px-6 py-4 text-center">Budget (₹)</th>
+                      <th className="px-6 py-4 text-center">Save Controls</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-200 font-medium text-sm">
+                    {filteredPlatforms.length > 0 ? filteredPlatforms.map((p) => (
+                      <tr key={p._id} className="hover:bg-gray-50/50 transition-all">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center space-x-3">
+                            {renderPlatformIcon(p.platform, 18)}
+                            <span className="font-bold text-gray-700">{p.platform}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center font-semibold text-[#00669c]">
+                           {p.quarter}
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                          <div className="flex justify-center">
+                            <div className="relative w-36">
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₹</span>
+                              <input
+                                type="number"
+                                value={p.budget}
+                                onChange={(e) => handleLocalUpdate(p._id, { budget: Number(e.target.value) })}
+                                className={`w-full border ${p.isModified ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-300'} rounded-md py-2.5 pl-8 pr-3 text-sm outline-none text-right font-bold transition-all text-gray-800 shadow-inner`}
+                                placeholder="0"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-center">
+                           <button 
+                             onClick={() => handleSaveRow(p._id)}
+                             className={`text-sm py-1.5 px-4 rounded-full font-bold transition-colors shadow-sm ${p.isModified || p.isNew ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                           >
+                             {p.isModified || p.isNew ? 'Update Budget' : 'Synced'}
+                           </button>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="4" className="px-6 py-10 text-center text-gray-400 italic">No social media platforms available for the currently selected region. Please configure them in the Social Media tab.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}
