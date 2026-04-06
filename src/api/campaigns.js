@@ -31,13 +31,23 @@ export const getCampaignStats = async () => {
 };
 
 // Config
-export const getCampaignConfig = async () => {
-    const response = await axios.get('/campaigns/settings/config');
+export const getCampaignConfig = async (params) => {
+    const response = await axios.get('/campaigns/settings/config', { params });
     return response.data;
 };
 
 export const updateCampaignConfig = async (data) => {
     const response = await axios.put('/campaigns/settings/config', data);
+    return response.data;
+};
+
+export const getAllCampaignConfigs = async () => {
+    const response = await axios.get('/campaigns/settings/config/list');
+    return response.data;
+};
+
+export const deleteCampaignConfig = async (id) => {
+    const response = await axios.delete(`/campaigns/settings/config/${id}`);
     return response.data;
 };
 
