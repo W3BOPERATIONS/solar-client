@@ -38,6 +38,7 @@ export default function SetPrice() {
   const [filteredModalSubProjectTypes, setFilteredModalSubProjectTypes] = useState([]);
 
   const [kitType, setKitType] = useState('Custom Kit'); // Custom Kit or Combo Kit
+  const [paymentType, setPaymentType] = useState('Cash'); // Cash, Loan, or EMI
 
   const [filters, setFilters] = useState({
     category: 'All Categories',
@@ -55,6 +56,10 @@ export default function SetPrice() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showMarginModal, setShowMarginModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
+  
+  const [solarKitsList, setSolarKitsList] = useState([]);
+  const [filteredSolarKits, setFilteredSolarKits] = useState([]);
+  const [mappingsList, setMappingsList] = useState([]);
   
   // Margin & History internal states for the mock modals
   const [historyFilter, setHistoryFilter] = useState('Last 3 Months');
@@ -76,7 +81,8 @@ export default function SetPrice() {
     benchmarkPrice: 0,
     marketPrice: 0,
     gst: 18,
-    status: 'Active'
+    status: 'Active',
+    comboKit: ''
   });
 
   const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
@@ -89,21 +95,34 @@ export default function SetPrice() {
   useEffect(() => {
     const fetchFilterData = async () => {
       try {
-        const [catRes, subCatRes, projRes, subProjRes, brandRes, prodRes] = await Promise.all([
+        const results = await Promise.allSettled([
           productApi.getCategories(),
           productApi.getSubCategories(),
           productApi.getProjectTypes(),
           productApi.getSubProjectTypes(),
           productApi.getBrands(),
-          productApi.getAll()
+          productApi.getAll(),
+          salesSettingsService.getSolarKits(),
+          productApi.getProjectCategoryMappings()
         ]);
         
-        if (catRes.data?.data) setCategoriesList(catRes.data.data);
-        if (subCatRes.data?.data) setSubCategoriesList(subCatRes.data.data);
-        if (projRes.data?.data) setProjectTypesList(projRes.data.data);
-        if (subProjRes.data?.data) setSubProjectTypesList(subProjRes.data.data);
-        if (brandRes.data?.data) setBrandsList(brandRes.data.data);
-        if (prodRes.data?.data) setProductsList(prodRes.data.data);
+        const safeExtract = (result) => {
+            if (result.status !== 'fulfilled') return [];
+            const val = result.value;
+            if (Array.isArray(val)) return val;
+            if (val && Array.isArray(val.data)) return val.data;
+            if (val && val.data && Array.isArray(val.data.data)) return val.data.data;
+            return [];
+        };
+        
+        setCategoriesList(safeExtract(results[0]));
+        setSubCategoriesList(safeExtract(results[1]));
+        setProjectTypesList(safeExtract(results[2]));
+        setSubProjectTypesList(safeExtract(results[3]));
+        setBrandsList(safeExtract(results[4]));
+        setProductsList(safeExtract(results[5]));
+        setSolarKitsList(safeExtract(results[6]));
+        setMappingsList(safeExtract(results[7]));
 
       } catch (error) {
         console.error("Error fetching filter data:", error);
@@ -146,7 +165,7 @@ export default function SetPrice() {
 
   useEffect(() => {
     fetchPrices();
-  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType]);
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType, paymentType]);
 
   const fetchPrices = async () => {
     setLoading(true);
@@ -164,6 +183,9 @@ export default function SetPrice() {
       if (filters.subProjectType !== 'All Sub Types') query.subProjectType = filters.subProjectType;
       if (filters.brand !== 'All Brands') query.brand = filters.brand;
       if (filters.productType !== 'All Products') query.productType = filters.productType;
+      
+      query.kitType = kitType;
+      query.paymentType = paymentType;
 
       const data = await salesSettingsService.getSetPrices(query);
       
@@ -207,6 +229,7 @@ export default function SetPrice() {
       productType: 'All Products'
     });
     setKitType('Custom Kit');
+    setPaymentType('Cash');
     setTimeout(() => {
       fetchPrices();
     }, 0);
@@ -263,6 +286,8 @@ export default function SetPrice() {
     try {
       const payload = {
         ...newPriceForm,
+        kitType: kitType, // Use current selected filters
+        paymentType: paymentType,
         state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
         cluster: (selectedClusterId && selectedClusterId !== 'all') ? selectedClusterId : undefined,
         district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined,
@@ -461,7 +486,18 @@ export default function SetPrice() {
                         value={filters.projectType}
                         onChange={(e) => handleFilterChange('projectType', e.target.value)}
                       >
-                        <option>All Project Types</option>
+                      <option>All Project Types</option>
+                        {mappingsList
+                          .filter(m => {
+                            const catMatch = filters.category === 'All Categories' || m.categoryId?.name === filters.category;
+                            const subMatch = filters.subCategory === 'All Sub Categories' || m.subCategoryId?.name === filters.subCategory;
+                            return catMatch && subMatch;
+                          })
+                          .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                          .filter((v, i, a) => a.indexOf(v) === i) // Unique ranges
+                          .map((range, i) => <option key={i} value={range}>{range}</option>)
+                        }
+                        {projectTypesList.length > 0 && <option disabled>──────────</option>}
                         {projectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                       </select>
                     </div>
@@ -484,28 +520,50 @@ export default function SetPrice() {
 
                {/* Select Kit Type */}
                <div className="xl:w-[350px] shrink-0 p-5">
-                  <h5 className="font-bold text-[#14233c] mb-4 text-[15px]">Select Kit Type</h5>
-                  <div className="flex gap-4 mt-2">
-                    <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Custom Kit')}>
-                      <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Custom Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
-                          {kitType === 'Custom Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className={`text-[13px] font-bold tracking-tight ${kitType === 'Custom Kit' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Custom Kit</span>
-                        <span className="text-[10px] text-gray-400">Build your own kit</span>
-                      </div>
-                    </label>
-                    <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Combo Kit')}>
-                      <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Combo Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
-                          {kitType === 'Combo Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}
-                      </div>
-                      <div className="flex flex-col">
-                         <span className={`text-[13px] font-bold tracking-tight ${kitType === 'Combo Kit' ? 'text-[#14233c]' : 'text-gray-500'}`}>Combo Kit</span>
-                         <span className="text-[10px] text-gray-400">Pre-configured kits</span>
-                      </div>
-                    </label>
-                  </div>
-               </div>
+                   <h5 className="font-bold text-[#14233c] mb-4 text-[15px]">Select Kit Type</h5>
+                   <div className="flex gap-4 mt-2 mb-6">
+                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Custom Kit')}>
+                       <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Custom Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
+                           {kitType === 'Custom Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}
+                       </div>
+                       <div className="flex flex-col">
+                         <span className={`text-[13px] font-bold tracking-tight ${kitType === 'Custom Kit' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Custom Kit</span>
+                         <span className="text-[10px] text-gray-400">Build your own kit</span>
+                       </div>
+                     </label>
+                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Combo Kit')}>
+                       <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Combo Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
+                           {kitType === 'Combo Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}
+                       </div>
+                       <div className="flex flex-col">
+                          <span className={`text-[13px] font-bold tracking-tight ${kitType === 'Combo Kit' ? 'text-[#14233c]' : 'text-gray-500'}`}>Combo Kit</span>
+                          <span className="text-[10px] text-gray-400">Pre-configured kits</span>
+                       </div>
+                     </label>
+                   </div>
+
+                   <h5 className="font-bold text-[#14233c] mb-3 text-[14px]">Payment Type</h5>
+                   <div className="flex flex-wrap gap-4 mt-1">
+                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Cash')}>
+                       <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Cash' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
+                           {paymentType === 'Cash' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}
+                       </div>
+                       <span className={`text-[12px] font-bold ${paymentType === 'Cash' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Cash</span>
+                     </label>
+                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Loan')}>
+                       <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Loan' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
+                           {paymentType === 'Loan' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}
+                       </div>
+                       <span className={`text-[12px] font-bold ${paymentType === 'Loan' ? 'text-[#14233c]' : 'text-gray-500'}`}>Loan</span>
+                     </label>
+                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('EMI')}>
+                       <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'EMI' ? 'border-[#0076a8]' : 'border-gray-300'}`}>
+                           {paymentType === 'EMI' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}
+                       </div>
+                       <span className={`text-[12px] font-bold ${paymentType === 'EMI' ? 'text-[#14233c]' : 'text-gray-500'}`}>EMI</span>
+                     </label>
+                   </div>
+                </div>
             </div>
 
             {/* Bottom Row: Product & Brand Filters */}
@@ -515,13 +573,16 @@ export default function SetPrice() {
                  <div className="flex-1 w-full">
                    <label className="block text-[13px] text-gray-600 mb-1.5">Brand</label>
                    <select
-                     className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] text-gray-700 bg-white focus:outline-none focus:border-[#0076a8]"
-                     value={filters.brand}
-                     onChange={(e) => handleFilterChange('brand', e.target.value)}
-                   >
-                     <option>All Brands</option>
-                     {brandsList.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
-                   </select>
+                      className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] text-gray-700 bg-white focus:outline-none focus:border-[#0076a8]"
+                      value={filters.brand}
+                      onChange={(e) => handleFilterChange('brand', e.target.value)}
+                    >
+                      <option>All Brands</option>
+                      {brandsList.map(b => {
+                        const brandName = b.brand || b.name || b.companyName;
+                        return <option key={b._id} value={brandName}>{brandName}</option>;
+                      })}
+                    </select>
                  </div>
                  <div className="flex-1 w-full">
                    <label className="block text-[13px] text-gray-600 mb-1.5">Product Type</label>
@@ -544,6 +605,12 @@ export default function SetPrice() {
             </div>
           </div>
         )}
+
+        {kitType === 'Combo Kit' && (
+           <div className="mb-4 text-center">
+             <p className="text-red-500 font-bold text-sm tracking-tight">Created combokit as per projects type added automatically to set price for company margin</p>
+           </div>
+         )}
 
         {/* Table Area */}
         {selectedDistrictId && (
@@ -575,7 +642,7 @@ export default function SetPrice() {
                     ) : (
                        tableData.map((row, idx) => (
                           <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
-                              <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.comboKit || `${row.brand} - ${row.productType}`}</td>
+                              <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-[11px] font-medium">{row.comboKit || 'Custom Kit'}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.brand}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.productType}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.category}</td>
@@ -657,6 +724,23 @@ export default function SetPrice() {
             
             <div className="p-6 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pointer-events-auto">
+                {kitType === 'Combo Kit' && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Combo Kit Name</label>
+                    <select 
+                      className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-bold text-blue-800 bg-blue-50/50" 
+                      value={newPriceForm.comboKit} 
+                      onChange={e => setNewPriceForm({ ...newPriceForm, comboKit: e.target.value })}
+                    >
+                       <option value="">Select Combo Kit</option>
+                       {solarKitsList
+                         .filter(kit => !newPriceForm.projectType || kit.projectType === newPriceForm.projectType || projectTypesList.find(pt => pt._id === newPriceForm.projectType)?.name === kit.projectType)
+                         .map((kit, i) => <option key={i} value={kit.name}>{kit.name}</option>)
+                       }
+                    </select>
+                    <p className="mt-1.5 text-[10px] text-red-500 font-medium">Note: Combo kits are automatically filtered based on the selected Project Type.</p>
+                  </div>
+                )}
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Product Type</label>
                   <select 
@@ -676,7 +760,10 @@ export default function SetPrice() {
                     onChange={e => setNewPriceForm({ ...newPriceForm, brand: e.target.value })}
                   >
                       <option value="">Select Brand</option>
-                      {brandsList.map(b => <option key={b._id} value={b.name}>{b.name}</option>)}
+                      {brandsList.map(b => {
+                        const brandName = b.brand || b.name || b.companyName;
+                        return <option key={b._id} value={brandName}>{brandName}</option>;
+                      })}
                   </select>
                 </div>
                 <div>

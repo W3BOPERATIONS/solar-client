@@ -146,6 +146,42 @@ const salesSettingsService = {
       throw err.response?.data || err.message;
     }
   },
+
+  getSolarKits: async () => {
+    try {
+      const res = await api.get('/combokit/solarkits'); // Adjusting based on common patterns
+      return res.data?.data || res.data || [];
+    } catch (err) {
+      console.error("Error fetching solarkits:", err);
+      return [];
+    }
+  },
+
+  // --- AMC Plans (Inventory/ComboKit) ---
+  getAMCPlans: async (params) => {
+    try {
+      const res = await api.get('/combokit/amc-plans', { params });
+      return res.data?.data || res.data || [];
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  updateAMCPlan: async (id, data) => {
+    try {
+      const res = await api.put(`/combokit/amc-plans/${id}`, data);
+      return res.data?.data || res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  deleteAMCPlan: async (id) => {
+    try {
+      const res = await api.delete(`/combokit/amc-plans/${id}`);
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
 };
 
 export default salesSettingsService;
