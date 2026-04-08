@@ -4,15 +4,20 @@ import { useLocations } from '../../../../hooks/useLocations';
 import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { productApi } from '../../../../api/productApi';
 
-const LocationCard = ({ title, subtitle, isSelected, onClick, isState }) => (
+const LocationCard = ({ title, subtitle, isSelected, onClick, isState, count }) => (
   <div
     onClick={onClick}
-    className={`p-4 rounded-md transition-all cursor-pointer flex flex-col items-center justify-center text-center h-20 shadow-sm hover:shadow-md ${
+    className={`p-4 rounded-md transition-all cursor-pointer flex flex-col items-center justify-center text-center h-20 shadow-sm relative hover:shadow-md ${
       isSelected
       ? isState ? 'border-2 border-[#007bff] bg-[#8ccdfa]' : 'border-2 border-[#007bff] bg-white'
       : 'border border-gray-200 bg-white'
       }`}
   >
+    {count > 0 && (
+      <span className="absolute -top-3 -right-3 bg-red-500 text-white text-[10px] rounded-full w-6 h-6 flex items-center justify-center font-bold border-2 border-white shadow-sm z-10">
+        {count}
+      </span>
+    )}
     <div className="font-bold text-[14px] text-[#2c3e50] mb-0">{title}</div>
     <div className="text-[11px] text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
   </div>
@@ -33,6 +38,7 @@ export default function SetPriceAmc() {
   const [subProjectTypesList, setSubProjectTypesList] = useState([]);
   const [productsList, setProductsList] = useState([]);
   const [brandsList, setBrandsList] = useState([]);
+  const [allPlansForCount, setAllPlansForCount] = useState([]);
   
   const [filters, setFilters] = useState({
     category: 'All Categories',
@@ -61,7 +67,8 @@ export default function SetPriceAmc() {
           productApi.getSubProjectTypes(),
           productApi.getBrands(),
           productApi.getAll(),
-          productApi.getProjectCategoryMappings()
+          productApi.getProjectCategoryMappings(),
+          salesSettingsService.getAMCPlans({})
         ]);
         
         const safeExtract = (result) => {
@@ -80,6 +87,7 @@ export default function SetPriceAmc() {
         setBrandsList(safeExtract(results[4]));
         setProductsList(safeExtract(results[5]));
         setMappingsList(safeExtract(results[6]));
+        setAllPlansForCount(safeExtract(results[7]));
 
       } catch (error) {
         console.error("Error fetching filter data:", error);
@@ -114,13 +122,13 @@ export default function SetPriceAmc() {
 
   useEffect(() => {
     fetchPrices();
-  }, [selectedStateId, selectedClusterId, selectedDistrictId, filters]);
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, filters]);
 
   const fetchPrices = async () => {
-    if (!selectedDistrictId) return;
     setLoading(true);
     try {
       const query = {};
+      if (selectedCountryId && selectedCountryId !== 'all') query.country = selectedCountryId;
       if (selectedStateId && selectedStateId !== 'all') query.state = selectedStateId;
       if (selectedClusterId && selectedClusterId !== 'all') query.cluster = selectedClusterId;
       if (selectedDistrictId && selectedDistrictId !== 'all') query.district = selectedDistrictId;
@@ -211,7 +219,7 @@ export default function SetPriceAmc() {
               <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Country</h2>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedCountryId === 'all' || selectedCountryId === ''} onClick={() => handleCountrySelect('all')} />
-                {countries.map(c => <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedCountryId === c._id} onClick={() => handleCountrySelect(c._id)} />)}
+                {countries.map(c => <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedCountryId === c._id} onClick={() => handleCountrySelect(c._id)} count={allPlansForCount.filter(p => (p.country?._id || p.country) === c._id || (p.country?.includes?.(c._id))).length} />)}
               </div>
             </div>
 
@@ -220,7 +228,7 @@ export default function SetPriceAmc() {
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select State</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard title="All States" subtitle="ALL" isSelected={selectedStateId === 'all' || selectedStateId === ''} onClick={() => handleStateSelect('all')} />
-                  {states.map(s => <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedStateId === s._id} onClick={() => handleStateSelect(s._id)} isState={true} />)}
+                  {states.map(s => <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedStateId === s._id} onClick={() => handleStateSelect(s._id)} isState={true} count={allPlansForCount.filter(p => (p.state?._id || p.state) === s._id || (p.state?.includes?.(s._id))).length} />)}
                 </div>
               </div>
             )}
@@ -230,7 +238,7 @@ export default function SetPriceAmc() {
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Cluster</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedClusterId === 'all' || selectedClusterId === ''} onClick={() => handleClusterSelect('all')} />
-                  {clusters.map(c => <LocationCard key={c._id} title={c.name} subtitle={selectedStateObj?.code || 'CL'} isSelected={selectedClusterId === c._id} onClick={() => handleClusterSelect(c._id)} />)}
+                  {clusters.map(c => <LocationCard key={c._id} title={c.name} subtitle={selectedStateObj?.code || 'CL'} isSelected={selectedClusterId === c._id} onClick={() => handleClusterSelect(c._id)} count={allPlansForCount.filter(p => (p.cluster?._id || p.cluster) === c._id || (p.cluster?.includes?.(c._id))).length} />)}
                 </div>
               </div>
             )}
@@ -240,14 +248,13 @@ export default function SetPriceAmc() {
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select District</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard title="All Districts" subtitle="ALL" isSelected={selectedDistrictId === 'all' || selectedDistrictId === ''} onClick={() => handleDistrictSelect('all')} />
-                  {districts.map(d => <LocationCard key={d._id} title={d.name} subtitle={selectedClusterObj?.name || 'DT'} isSelected={selectedDistrictId === d._id} onClick={() => handleDistrictSelect(d._id)} />)}
+                  {districts.map(d => <LocationCard key={d._id} title={d.name} subtitle={selectedClusterObj?.name || 'DT'} isSelected={selectedDistrictId === d._id} onClick={() => handleDistrictSelect(d._id)} count={allPlansForCount.filter(p => (p.district?._id || p.district) === d._id || (p.districts?.some(dist => (dist._id || dist) === d._id))).length} />)}
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {selectedDistrictId && (
           <>
             <div className="bg-white rounded-lg shadow-sm mb-6 p-6 border border-gray-100">
               <h5 className="mb-4 text-xl font-bold text-gray-800">Selected Location</h5>
@@ -288,7 +295,7 @@ export default function SetPriceAmc() {
                   <label className="block text-[13px] text-gray-600 mb-1.5">Sub Project Type</label>
                   <select className="w-full px-2 py-1.5 border border-gray-200 rounded text-[13px] bg-white focus:outline-none" value={filters.subProjectType} onChange={(e) => handleFilterChange('subProjectType', e.target.value)} disabled={filters.projectType === 'All Project Types'}>
                     <option>All Sub Types</option>
-                    {subProjectTypesList.filter(sp => filters.projectType === 'All Project Types' || sp.projectTypeId?.name === filters.projectType).map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                    {subProjectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
               </div>
@@ -346,7 +353,7 @@ export default function SetPriceAmc() {
               </div>
             </div>
           </>
-        )}
+
       </div>
 
       <div className="py-10 border-t border-gray-200 text-center">

@@ -57,6 +57,82 @@ const CreateAmc = () => {
   const [viewModalOpen, setViewModalOpen] = useState(false);
   const [currentPlan, setCurrentPlan] = useState(null);
   const [selectedConfig, setSelectedConfig] = useState(null);
+  const [viewPlan, setViewPlan] = useState(null);
+
+  // Filter plans based on selected levels
+  const getFilteredPlans = () => {
+    return amcPlans.filter(plan => {
+      // 1. Country Filter
+      if (selectedCountries.size > 0) {
+        const countryId = plan.state?.country?._id || plan.state?.country;
+        if (countryId && !selectedCountries.has(countryId)) return false;
+      }
+
+      // 2. State Filter
+      if (selectedStates.size > 0) {
+        const stateId = plan.state?._id || plan.state;
+        if (stateId && !selectedStates.has(stateId)) return false;
+      }
+      
+      // 3. Cluster Filter
+      if (selectedClusters.size > 0) {
+        const clusterId = plan.cluster?._id || plan.cluster;
+        // If plan has a cluster, it must match. If it's state-wide (no cluster), we keep it.
+        if (clusterId && !selectedClusters.has(clusterId)) return false;
+      }
+      
+      // 4. District Filter
+      if (selectedDistricts.size > 0) {
+        const districtId = plan.district?._id || plan.district;
+        // If plan has a district, it must match. If it's cluster-wide or state-wide, we keep it.
+        if (districtId && !selectedDistricts.has(districtId)) return false;
+      }
+      
+      return true;
+    });
+  };
+
+  // Memoized table data merging solar kits and active AMC plans
+  const displayConfigurations = useMemo(() => {
+    // Index plans by their unique configuration key
+    const plansByConfig = {};
+    
+    // We only care about plans that are currently filtered by location
+    const filteredPlans = getFilteredPlans();
+    
+    filteredPlans.forEach(plan => {
+      // Configuration key: category|subCategory|projectType|subProjectType
+      const key = `${plan.category || ''}|${plan.subCategory || ''}|${plan.projectType || ''}|${plan.subProjectType || ''}`;
+      
+      // If there are multiple plans for the same config (in different locations),
+      // we take the first one found as representative for the summary/status.
+      if (!plansByConfig[key]) {
+        plansByConfig[key] = plan;
+      }
+    });
+
+    return solarKits.map(kit => {
+      const key = `${kit.category || ''}|${kit.subCategory || ''}|${kit.projectType || ''}|${kit.subProjectType || ''}`;
+      return {
+        ...kit,
+        plan: plansByConfig[key] || null
+      };
+    });
+  }, [solarKits, amcPlans, selectedCountries, selectedStates, selectedClusters, selectedDistricts]);
+
+  // Helper to generate a short summary for the row
+  const getAmcSummary = (plan) => {
+    if (!plan) return '-';
+    
+    const visits = plan.monthlyVisits > 0 
+      ? `${plan.monthlyVisits} visit/month` 
+      : (plan.annualVisits ? `${plan.annualVisits} visits/year` : '-');
+      
+    const serviceNames = plan.services?.map(s => s.serviceName).slice(0, 2).join(', ');
+    const moreServices = plan.services?.length > 2 ? '...' : '';
+    
+    return `${plan.paymentType}, ${plan.amcDuration}M, ${visits} | ${serviceNames}${moreServices}`;
+  };
 
   // Live Counts Calculation
   const locationCounts = useMemo(() => {
@@ -338,39 +414,6 @@ const CreateAmc = () => {
     }
   };
 
-  // Filter plans based on selected levels
-  const getFilteredPlans = () => {
-    return amcPlans.filter(plan => {
-      // 1. Country Filter
-      if (selectedCountries.size > 0) {
-        const countryId = plan.state?.country?._id || plan.state?.country;
-        if (countryId && !selectedCountries.has(countryId)) return false;
-      }
-
-      // 2. State Filter
-      if (selectedStates.size > 0) {
-        const stateId = plan.state?._id || plan.state;
-        if (stateId && !selectedStates.has(stateId)) return false;
-      }
-      
-      // 3. Cluster Filter
-      if (selectedClusters.size > 0) {
-        const clusterId = plan.cluster?._id || plan.cluster;
-        // If plan has a cluster, it must match. If it's state-wide (no cluster), we keep it.
-        if (clusterId && !selectedClusters.has(clusterId)) return false;
-      }
-      
-      // 4. District Filter
-      if (selectedDistricts.size > 0) {
-        const districtId = plan.district?._id || plan.district;
-        // If plan has a district, it must match. If it's cluster-wide or state-wide, we keep it.
-        if (districtId && !selectedDistricts.has(districtId)) return false;
-      }
-      
-      return true;
-    });
-  };
-
   // Derive unique options from solarKits for the dynamic dropdowns
   const uniqueCategories = [...new Set(solarKits.map(k => k.category))].filter(Boolean);
   const uniqueSubCategories = [...new Set(solarKits.map(k => k.subCategory))].filter(Boolean);
@@ -378,24 +421,25 @@ const CreateAmc = () => {
   const uniqueSubProjectTypes = [...new Set(solarKits.map(k => k.subProjectType))].filter(Boolean);
 
   // Open configuration modal
-  const openConfigureModal = (plan) => {
+  const openConfigureModal = (config) => {
     if (selectedStates.size === 0) {
       toast.error('Please select at least one state');
       return;
     }
 
-    setSelectedConfig(plan);
+    const plan = config?.plan;
+    setSelectedConfig(config);
 
     if (plan) {
-      // Editing an existing plan
+      // Editing an existing plan based on a configuration
       setCurrentPlan(plan);
       setSelectedServices(plan.services?.map(s => s._id) || []);
       setPlanForm({
         planName: plan.planName || 'Basic Plan',
-        category: plan.category || 'Solar Rooftop',
-        subCategory: plan.subCategory || 'Residential',
-        projectType: plan.projectType || '1 to 10 kW',
-        subProjectType: plan.subProjectType || 'On-Grid',
+        category: plan.category || config.category,
+        subCategory: plan.subCategory || config.subCategory,
+        projectType: plan.projectType || config.projectType,
+        subProjectType: plan.subProjectType || config.subProjectType,
         monthlyCharge: plan.monthlyCharge || 0,
         yearlyCharge: plan.yearlyCharge || 0,
         paymentType: plan.paymentType || 'Monthly',
@@ -409,15 +453,15 @@ const CreateAmc = () => {
         description: plan.description || ''
       });
     } else {
-      // Creating a new AMC from scratch
+      // Creating a new AMC for these configurations
       setCurrentPlan(null);
       setSelectedServices([]);
       setPlanForm({
         planName: 'Basic Plan',
-        category: 'Solar Rooftop',
-        subCategory: '',
-        projectType: '',
-        subProjectType: 'On-Grid',
+        category: config.category || 'Solar Rooftop',
+        subCategory: config.subCategory || '',
+        projectType: config.projectType || '',
+        subProjectType: config.subProjectType || 'On-Grid',
         monthlyCharge: 0,
         yearlyCharge: 0,
         paymentType: 'Monthly',
@@ -532,11 +576,11 @@ const CreateAmc = () => {
   // View details
   const openViewModal = (plan) => {
     if (!plan) {
-      toast.error('No configuration found for this plan');
+      toast.error('Plan not configured for this selection');
       return;
     }
 
-    setCurrentPlan(plan);
+    setViewPlan(plan);
     setViewModalOpen(true);
   };
 
@@ -872,13 +916,13 @@ const CreateAmc = () => {
                 <Loader className="animate-spin text-cyan-500 mx-auto mb-4" size={32} />
                 <p className="text-slate-500 text-xs font-medium tracking-wide italic">Fetching AMC plans...</p>
               </div>
-            ) : getFilteredPlans().length === 0 ? (
+            ) : displayConfigurations.length === 0 ? (
               <div className="py-20 text-center">
                 <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-slate-100">
                   <Package size={32} className="text-slate-300" />
                 </div>
-                <h4 className="text-slate-800 font-bold mb-1">No AMC Plans Found</h4>
-                <p className="text-slate-500 text-xs">Click the "Create AMC Plan" button above to get started.</p>
+                <h4 className="text-slate-800 font-bold mb-1">No Configurations Available</h4>
+                <p className="text-slate-500 text-xs">Ensure Solar Kits are defined in the inventory.</p>
               </div>
             ) : (
               <table className="w-full text-left border-collapse">
@@ -888,43 +932,69 @@ const CreateAmc = () => {
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Sub Category</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Project Type</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">Sub Project Type</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider">AMC Summary</th>
+                    <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Status</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Configuration</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">View</th>
                     <th className="px-6 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider text-center">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-50">
-                  {getFilteredPlans().map((plan, index) => {
+                  {displayConfigurations.map((config, index) => {
+                    const isConfigured = !!config.plan;
                     return (
                       <tr key={index} className="hover:bg-slate-50/50 transition-colors group">
                         <td className="px-6 py-5">
-                          <span className="text-sm font-bold text-slate-700">{plan.category}</span>
+                          <span className="text-sm font-bold text-slate-700">{config.category}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm font-bold text-slate-700">{plan.subCategory}</span>
+                          <span className="text-sm font-bold text-slate-700">{config.subCategory}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm font-bold text-slate-700">{plan.projectType}</span>
+                          <span className="text-sm font-bold text-slate-700">{config.projectType}</span>
                         </td>
                         <td className="px-6 py-5">
-                          <span className="text-sm font-bold text-slate-600">{plan.subProjectType}</span>
+                          <span className="text-sm font-bold text-slate-600">{config.subProjectType}</span>
                         </td>
                         <td className="px-6 py-5">
+                          <span className="text-xs font-medium text-slate-500 leading-relaxed italic">
+                            {getAmcSummary(config.plan)}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
+                          <span className={`inline-flex px-2 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${
+                            isConfigured 
+                            ? 'bg-emerald-100 text-emerald-600 border border-emerald-200' 
+                            : 'bg-slate-100 text-slate-400 border border-slate-200'
+                          }`}>
+                            {isConfigured ? 'Configured' : 'Not Configured'}
+                          </span>
+                        </td>
+                        <td className="px-6 py-5 text-center">
                           <div className="flex justify-center">
                             <button
-                              onClick={() => openConfigureModal(plan)}
-                              className="px-5 py-2 bg-[#17a2b8] text-white text-xs font-bold rounded flex items-center gap-2 hover:bg-[#138496] transition-all shadow-sm"
+                              onClick={() => openConfigureModal(config)}
+                              className={`px-5 py-2 text-white text-xs font-bold rounded flex items-center gap-2 transition-all shadow-sm ${
+                                isConfigured 
+                                ? 'bg-amber-500 hover:bg-amber-600' 
+                                : 'bg-[#17a2b8] hover:bg-[#138496]'
+                              }`}
                             >
-                              <Settings size={14} />
-                              Configure
+                              {isConfigured ? <Edit2 size={14} /> : <Settings size={14} />}
+                              {isConfigured ? 'Edit' : 'Configure'}
                             </button>
                           </div>
                         </td>
                         <td className="px-6 py-5 text-center">
                           <div className="flex justify-center">
                             <button
-                              onClick={() => openViewModal(plan)}
-                              className="px-5 py-2 bg-[#6c757d] text-white text-xs font-bold rounded flex items-center gap-2 hover:bg-[#5a6268] transition-all shadow-sm"
+                              onClick={() => openViewModal(config.plan)}
+                              className={`px-5 py-2 text-white text-xs font-bold rounded flex items-center gap-2 transition-all shadow-sm ${
+                                isConfigured 
+                                ? 'bg-[#6c757d] hover:bg-[#5a6268]' 
+                                : 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                              }`}
+                              disabled={!isConfigured}
                             >
                               <Eye size={14} />
                               View
@@ -934,9 +1004,14 @@ const CreateAmc = () => {
                         <td className="px-6 py-5 text-center">
                           <div className="flex justify-center">
                             <button
-                              onClick={() => handleDeletePlan(plan._id)}
-                              className="p-2 bg-red-50 text-red-500 hover:bg-red-500 hover:text-white rounded-lg transition-all"
-                              title="Delete Plan"
+                              onClick={() => isConfigured && handleDeletePlan(config.plan._id)}
+                              className={`p-2 rounded-lg transition-all ${
+                                isConfigured 
+                                ? 'bg-red-50 text-red-500 hover:bg-red-500 hover:text-white' 
+                                : 'bg-slate-50 text-slate-200 cursor-not-allowed'
+                              }`}
+                              title={isConfigured ? "Delete Plan" : "No Plan to Delete"}
+                              disabled={!isConfigured}
                             >
                               <Trash2 size={16} />
                             </button>
@@ -1397,14 +1472,14 @@ const CreateAmc = () => {
       )}
 
       {/* Premium View Modal */}
-      {viewModalOpen && currentPlan && (
+      {viewModalOpen && viewPlan && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md overflow-y-auto h-full w-full z-50 flex items-center justify-center p-4">
           <div className="relative mx-auto w-full max-w-3xl shadow-xl rounded-xl bg-white overflow-hidden border border-gray-100 p-8 pb-4">
             
             {/* Header Content */}
             <div className="mb-2">
-              <h2 className="text-2xl font-bold text-gray-800 tracking-tight">{currentPlan.planName}</h2>
-              <p className="text-[#3b82f6] text-sm mt-0.5">{currentPlan.description || 'Standard residential AMC plan'}</p>
+              <h2 className="text-2xl font-bold text-gray-800 tracking-tight">{viewPlan.planName}</h2>
+              <p className="text-[#3b82f6] text-sm mt-0.5">{viewPlan.description || 'Standard residential AMC plan'}</p>
             </div>
             
             {/* Thin blue separator matching screenshot perfectly */}
@@ -1417,33 +1492,33 @@ const CreateAmc = () => {
                 <div className="grid grid-cols-4 gap-6">
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Category</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.category}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.category}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Sub Category</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.subCategory}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.subCategory}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Project Type</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.projectType}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.projectType}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Sub Project Type</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.subProjectType}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.subProjectType}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Basic Price per kW</div>
-                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.basicPricePerKw || 0}</div>
+                    <div className="text-[13px] font-bold text-gray-800">₹{viewPlan.basicPricePerKw || 0}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Service Charges</div>
-                    <div className="text-[13px] font-bold text-gray-800">₹{currentPlan.amcServiceCharges || 0}</div>
+                    <div className="text-[13px] font-bold text-gray-800">₹{viewPlan.amcServiceCharges || 0}</div>
                   </div>
                 </div>
               </div>
 
               {/* Power Generation Guarantee */}
-              {currentPlan.includeOncePowerGuarantee && (
+              {viewPlan.includeOncePowerGuarantee && (
                 <div>
                   <h4 className="text-[14px] font-bold text-gray-900 mb-3">Power Generation Guarantee</h4>
                   <div className="bg-blue-50/50 border border-blue-100 rounded-xl p-4">
@@ -1453,7 +1528,7 @@ const CreateAmc = () => {
                       </div>
                       <div>
                         <div className="text-[10px] font-bold text-blue-400 uppercase tracking-wider">Annual Generation Per kW</div>
-                        <div className="text-[14px] font-black text-blue-800">{currentPlan.annual_generation_per_kw_units || 0} Units</div>
+                        <div className="text-[14px] font-black text-blue-800">{viewPlan.annual_generation_per_kw_units || 0} Units</div>
                       </div>
                     </div>
                   </div>
@@ -1466,11 +1541,11 @@ const CreateAmc = () => {
                 <div className="grid grid-cols-4 gap-6">
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Payment Type</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.paymentType || 'Monthly'}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.paymentType || 'Monthly'}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-400 mb-1">Duration</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.amcDuration ? `${currentPlan.amcDuration} Months` : 'N/A'}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.amcDuration ? `${viewPlan.amcDuration} Months` : 'N/A'}</div>
                   </div>
                 </div>
               </div>
@@ -1479,7 +1554,7 @@ const CreateAmc = () => {
               <div>
                 <h4 className="text-[14px] font-bold text-gray-900 mb-3 flex items-center gap-2">Included Services</h4>
                 <div className="flex flex-wrap gap-2">
-                  {currentPlan.services && currentPlan.services.map((service, idx) => (
+                  {viewPlan.services && viewPlan.services.map((service, idx) => (
                     <span key={idx} className="bg-gray-100/80 text-gray-600 text-xs px-3 py-1 rounded-full whitespace-nowrap">
                       {service.serviceName}
                     </span>
@@ -1493,15 +1568,15 @@ const CreateAmc = () => {
                 <div className="grid grid-cols-4 gap-6">
                   <div className="col-span-1">
                     <div className="text-xs text-gray-400 mb-1">Monthly Visits</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.monthlyVisits || 1} Nos</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.monthlyVisits || 1} Nos</div>
                   </div>
                   <div className="col-span-1">
                     <div className="text-xs text-gray-400 mb-1">Annual Visits</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.annualVisits} visits</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.annualVisits} visits</div>
                   </div>
                   <div className="col-span-2">
                     <div className="text-xs text-gray-400 mb-1">State</div>
-                    <div className="text-[13px] font-bold text-gray-800">{currentPlan.state?.name || 'Local State'}</div>
+                    <div className="text-[13px] font-bold text-gray-800">{viewPlan.state?.name || 'Local State'}</div>
                   </div>
                 </div>
               </div>
