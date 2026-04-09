@@ -241,7 +241,7 @@ export default function SetPrice() {
 
   useEffect(() => {
     fetchPrices();
-  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType, paymentType, filters, selectedPartnerType, selectedPartnerPlanId]);
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType, paymentType, filters, selectedPartnerType, selectedPartnerPlanId, selectedComboKitId, selectedConfigId]);
 
   const fetchPrices = async () => {
     setLoading(true);
@@ -284,13 +284,27 @@ export default function SetPrice() {
           filters.category !== 'All Categories' && 
           filters.projectType !== 'All Project Types') {
         
-        const matchingKit = solarKitsList.find(kit => {
-          const catMatch = filters.category === 'All Categories' || kit.category === filters.category;
-          const subCatMatch = filters.subCategory === 'All Sub Categories' || kit.subCategory === filters.subCategory;
-          const projMatch = filters.projectType === 'All Project Types' || kit.projectType === filters.projectType;
-          const subProjMatch = filters.subProjectType === 'All Sub Types' || kit.subProjectType === filters.subProjectType;
-          return catMatch && subCatMatch && projMatch && subProjMatch;
-        });
+        let matchingKit = null;
+        
+        // Priority 1: Match by name if a specific kit is selected in the dropdown
+        if (selectedComboKitId) {
+          const selectedKit = combokitsFromAddModule.find(k => k.id === selectedComboKitId || k._id === selectedComboKitId);
+          if (selectedKit) {
+            matchingKit = solarKitsList.find(k => k.name === selectedKit.name);
+            if (!matchingKit) matchingKit = selectedKit; // Fallback to dropdown kit object
+          }
+        }
+
+        // Priority 2: Fallback to current filter-based matching (existing logic)
+        if (!matchingKit) {
+          matchingKit = solarKitsList.find(kit => {
+            const catMatch = filters.category === 'All Categories' || kit.category === filters.category;
+            const subCatMatch = filters.subCategory === 'All Sub Categories' || kit.subCategory === filters.subCategory;
+            const projMatch = filters.projectType === 'All Project Types' || kit.projectType === filters.projectType;
+            const subProjMatch = filters.subProjectType === 'All Sub Types' || kit.subProjectType === filters.subProjectType;
+            return catMatch && subCatMatch && projMatch && subProjMatch;
+          });
+        }
 
         if (matchingKit && matchingKit.bom) {
           matchingKit.bom.forEach(section => {
@@ -299,12 +313,15 @@ export default function SetPrice() {
                 const brandName = extractBrand(item.name, brandsList);
                 const itemType = item.itemType || 'Solar Panel';
                 
-                // USER REQUEST: Filter logic for top table
-                const brandMatch = filters.brand === 'All Brands' || brandName === filters.brand;
-                const productMatch = filters.productType === 'All Products' || itemType === filters.productType;
+                const brandMatch = filters.brand === 'All Brands' || 
+                                   brandName.toLowerCase() === filters.brand.toLowerCase();
+                
+                const productMatch = filters.productType === 'All Products' || 
+                                     itemType.toLowerCase() === filters.productType.toLowerCase() ||
+                                     (itemType.toLowerCase().includes('panel') && filters.productType.toLowerCase().includes('panel')) ||
+                                     (itemType.toLowerCase().includes('inverter') && filters.productType.toLowerCase().includes('inverter'));
                 
                 if (brandMatch && productMatch) {
-                  // Check if this component is NOT already saved
                   const alreadyExists = savedPrices.find(d => 
                     d.comboKit === matchingKit.name && 
                     d.productType === itemType &&
@@ -335,6 +352,45 @@ export default function SetPrice() {
               });
             }
           });
+        }
+
+        // Fallback: If filters specify a Brand/Product but it's not in the BOM (or no BOM found), 
+        // still allow generating a row if the kit is selected. This matches "Custom Kit" behavior.
+        if (filters.brand !== 'All Brands' && filters.productType !== 'All Products') {
+          const kitNameForTable = matchingKit?.name || 'Selected Kit';
+          
+          const alrSaved = savedPrices.find(d => 
+            d.comboKit === kitNameForTable && 
+            d.productType === filters.productType &&
+            d.brand === filters.brand &&
+            (selectedPartnerType === 'all' || d.role === selectedPartnerType)
+          );
+
+          const alrWorking = workingData.find(w => 
+            w.comboKit === kitNameForTable && 
+            w.productType === filters.productType && 
+            w.brand === filters.brand
+          );
+
+          if (!alrSaved && !alrWorking) {
+            workingData.push({
+              id: `gen-combo-fb-${Date.now()}`,
+              comboKit: kitNameForTable,
+              brand: filters.brand,
+              productType: filters.productType,
+              category: filters.category,
+              subCategory: filters.subCategory,
+              projectType: filters.projectType,
+              subProjectType: filters.subProjectType,
+              role: selectedPartnerType !== 'all' ? selectedPartnerType : '',
+              benchmarkPrice: 0,
+              marketPrice: 0,
+              gst: 18,
+              isEditing: true,
+              isGenerated: true,
+              paymentType: paymentType !== 'All' ? paymentType : 'Cash'
+            });
+          }
         }
       }
 
@@ -412,8 +468,10 @@ export default function SetPrice() {
         subCategory: config.subCategory || 'All Sub Categories',
         projectType: config.projectType || 'All Project Types',
         subProjectType: config.subProjectType || 'All Sub Types',
-        brand: config.panels && config.panels.length > 0 ? config.panels[0] : (config.brand || 'All Brands'),
-        productType: 'Solar Panel' // Defaulting to Solar Panel when a custom kit is selected
+        brand: kitType === 'Custom Kit' 
+          ? (config.panels && config.panels.length > 0 ? config.panels[0] : (config.brand || 'All Brands'))
+          : 'All Brands',
+        productType: kitType === 'Custom Kit' ? 'Solar Panel' : 'All Products'
       });
 
       // Auto-fill Location & Partner
@@ -424,7 +482,6 @@ export default function SetPrice() {
       if (config.role) {
         setSelectedPartner(config.role);
         setSelectedPartnerType(config.role);
-        // We don't have a planId specifically in config but we can try to guess or leave it as is
       }
       
       console.log(`Details populated for ${config.solarkitName || config.panels?.[0] || 'Configuration'}`);
@@ -554,6 +611,59 @@ export default function SetPrice() {
         alert("Failed to delete price");
       }
     }
+  };
+
+  const handleOpenAddModal = () => {
+    // 1. Get current kit and config context
+    const activeConfig = configurationsList.find(c => c._id === selectedConfigId);
+    let kitName = '';
+    if (kitType === 'Combo Kit') {
+      const selectedKit = combokitsFromAddModule.find(k => k.id === selectedComboKitId || k._id === selectedComboKitId);
+      if (selectedKit) kitName = selectedKit.name;
+    } else if (kitType === 'Custom Kit') {
+      if (activeConfig) kitName = activeConfig.solarkitName || `${activeConfig.panels?.[0] || 'adani'} Kit`;
+    }
+
+    // 2. Try to pre-fill from the first row in tableData or the active config
+    const firstRow = tableData.length > 0 ? tableData[0] : null;
+
+    const modalCategory = firstRow?.category || activeConfig?.category || (filters.category !== 'All Categories' ? filters.category : '');
+    const modalSubCategory = firstRow?.subCategory || activeConfig?.subCategory || (filters.subCategory !== 'All Sub Categories' ? filters.subCategory : '');
+    const modalProjectType = firstRow?.projectType || activeConfig?.projectType || (filters.projectType !== 'All Project Types' ? filters.projectType : '');
+    const modalSubProjectType = firstRow?.subProjectType || activeConfig?.subProjectType || (filters.subProjectType !== 'All Sub Types' ? filters.subProjectType : '');
+    const modalProductType = firstRow?.productType || (filters.productType !== 'All Products' ? filters.productType : 'Solar Panel');
+    const modalBrand = firstRow?.brand || activeConfig?.brand || (filters.brand !== 'All Brands' ? filters.brand : '');
+
+    setNewPriceForm({
+      productType: modalProductType,
+      brand: modalBrand,
+      category: modalCategory,
+      subCategory: modalSubCategory,
+      projectType: modalProjectType,
+      subProjectType: modalSubProjectType,
+      benchmarkPrice: firstRow?.benchmarkPrice || 0,
+      marketPrice: firstRow?.marketPrice || 0,
+      gst: firstRow?.gst || 18,
+      status: 'Active',
+      comboKit: firstRow?.comboKit || kitName,
+      paymentType: firstRow?.paymentType || (paymentType !== 'All' ? paymentType : 'Cash')
+    });
+
+    // 3. Update modal-specific filtered lists for correct dropdown state
+    const currentCat = modalCategory;
+    if (currentCat && currentCat !== 'All Categories') {
+      const catObj = categoriesList.find(c => c.name === currentCat);
+      if (catObj) {
+        setFilteredModalSubCategories(subCategoriesList.filter(sc => 
+          (sc.categoryId === catObj._id || sc.categoryId?._id === catObj._id)
+        ));
+      }
+    } else {
+      setFilteredModalSubCategories([]);
+    }
+
+    setFilteredModalSubProjectTypes(subProjectTypesList);
+    setShowAddModal(true);
   };
 
   const handleAddNewSubmit = async (e) => {
@@ -756,8 +866,8 @@ export default function SetPrice() {
                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-500 transition-all text-xs bg-white"
                             >
                                <option value="">-- Choose Combokit --</option>
-                               {combokitsFromAddModule.map(kit => (
-                                  <option key={kit.id} value={kit.id}>{kit.name}</option>
+                                {combokitsFromAddModule.map(kit => (
+                                  <option key={kit._id || kit.id} value={kit._id || kit.id}>{kit.name}</option>
                                ))}
                             </select>
                          </div>
@@ -932,7 +1042,7 @@ export default function SetPrice() {
                 </table>
              </div>
              <div className="p-4 border-t border-gray-100 flex gap-2">
-                 <button className="bg-[#0076a8] text-white px-5 py-2 rounded shadow text-sm font-bold flex items-center gap-2 hover:bg-blue-800 transition-colors" onClick={() => setShowAddModal(true)}><CheckCircle size={16} /> Set Price</button>
+                 <button className="bg-[#0076a8] text-white px-5 py-2 rounded shadow text-sm font-bold flex items-center gap-2 hover:bg-blue-800 transition-colors" onClick={handleOpenAddModal}><CheckCircle size={16} /> Set Price</button>
                  <button className="bg-gray-500 text-white px-5 py-2 rounded shadow text-sm font-bold flex items-center gap-2 hover:bg-gray-600 transition-colors" onClick={handleResetFilters}><RefreshCw size={16} /> Reset Filters</button>
              </div>
           </div>
@@ -1083,8 +1193,18 @@ export default function SetPrice() {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Project Type</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.projectType} onChange={e => { const projName = e.target.value; setNewPriceForm({ ...newPriceForm, projectType: projName, subProjectType: '' }); setFilteredModalSubProjectTypes(subProjectTypesList); }}>
+                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.projectType} onChange={e => { const projName = e.target.value; setNewPriceForm({ ...newPriceForm, projectType: projName, subProjectType: '' }); }}>
                        <option value="">Select Project Type</option>
+                       {mappingsList
+                         .filter(m => 
+                           (!newPriceForm.category || (m.categoryId?.name || m.categoryId) === newPriceForm.category) && 
+                           (!newPriceForm.subCategory || (m.subCategoryId?.name || m.subCategoryId) === newPriceForm.subCategory)
+                         )
+                         .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                         .filter((v, i, a) => a.indexOf(v) === i)
+                         .map((range, i) => <option key={i} value={range}>{range}</option>)}
+                       
+                       {projectTypesList.length > 0 && <option disabled>──────────</option>}
                        {projectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
