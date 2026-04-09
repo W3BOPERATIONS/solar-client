@@ -1089,6 +1089,9 @@ const CreateAmc = () => {
                                 className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                               >
                                 <option value="">Select Category</option>
+                                {planForm.category && !masterCategories.some(c => c.name === planForm.category) && (
+                                  <option value={planForm.category}>{planForm.category}</option>
+                                )}
                                 {masterCategories.map((cat, i) => (
                                   <option key={i} value={cat.name}>{cat.name}</option>
                                 ))}
@@ -1110,11 +1113,15 @@ const CreateAmc = () => {
                                 disabled={!planForm.category}
                               >
                                 <option value="">Select Sub Category</option>
+                                {planForm.subCategory && !masterSubCategories.some(s => s.name === planForm.subCategory) && (
+                                  <option value={planForm.subCategory}>{planForm.subCategory}</option>
+                                )}
                                 {masterSubCategories
                                   .filter(sub => {
                                     const selectedCat = masterCategories.find(c => c.name === planForm.category);
+                                    if (!selectedCat) return true;
                                     const subCatId = sub.categoryId?._id || sub.categoryId;
-                                    return selectedCat && subCatId === selectedCat._id;
+                                    return subCatId === selectedCat._id;
                                   })
                                   .map((sub, i) => (
                                     <option key={i} value={sub.name}>{sub.name}</option>
@@ -1137,7 +1144,10 @@ const CreateAmc = () => {
                                 className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                               >
                                 <option value="">Select Project Type</option>
-                                {Array.from(new Set(projectMappings.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)))
+                                {planForm.projectType && (
+                                  <option value={planForm.projectType}>{planForm.projectType}</option>
+                                )}
+                                {Array.from(new Set(projectMappings.map(m => `${m.projectTypeFrom}kW - ${m.projectTypeTo}kW`)))
                                   .map((range, i) => (
                                     <option key={i} value={range}>{range}</option>
                                   ))
@@ -1159,6 +1169,9 @@ const CreateAmc = () => {
                                 className="w-full bg-white border-2 border-slate-100 rounded-xl px-4 py-3 text-sm font-bold text-slate-700 focus:outline-none focus:border-cyan-500 transition-all appearance-none cursor-pointer hover:border-slate-200"
                               >
                                 <option value="">Select Sub Project Type</option>
+                                {planForm.subProjectType && !masterSubProjectTypes.some(s => s.name === planForm.subProjectType) && (
+                                  <option value={planForm.subProjectType}>{planForm.subProjectType}</option>
+                                )}
                                 {masterSubProjectTypes.map((spt, i) => (
                                   <option key={i} value={spt.name}>{spt.name}</option>
                                 ))}

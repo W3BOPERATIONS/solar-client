@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Save, Plus, Trash2, Layout, Globe, IndianRupee, BarChart2, Facebook, Instagram, Twitter, Linkedin, Search, MapPin, Target, Layers, Users, CheckSquare } from 'lucide-react';
 import {
   getCampaignConfig,
@@ -376,47 +376,25 @@ const CampaignManagement = () => {
     ));
   };
 
-  const handleSaveRow = async (id) => {
-    const row = socialPlatforms.find(p => p._id === id);
-    if (!row) return;
+  const handleCampaignLocalUpdate = (id, updates) => {
+    setCampaignConfigs(campaignConfigs.map(c => 
+      c._id === id ? { ...c, ...updates, isModified: true } : c
+    ));
+  };
 
-    if (!row.platform || row.platform.trim() === '') {
-       toast.error('Platform name cannot be empty');
-       return;
-    }
+  const handleSaveCampaignBudget = async (id) => {
+    const row = campaignConfigs.find(c => c._id === id);
+    if (!row) return;
 
     try {
       setLoading(true);
-      const dataToSave = {
-        platform: row.platform,
-        status: row.status,
-        quarter: row.quarter,
-        budget: row.budget,
-        country: row.country?._id || row.country,
-        state: row.state?._id || row.state,
-        cluster: row.cluster?._id || row.cluster,
-        district: row.district?._id || row.district
-      };
-
-      if (row.isNew) {
-        const res = await createSocialPlatform(dataToSave);
-        if (res.success) {
-          setSocialPlatforms(socialPlatforms.map(p => p._id === id ? { ...res.data, isModified: false, isNew: false } : p));
-          toast.success('Platform added successfully');
-        }
-      } else {
-        if (!row.isModified) {
-          toast.success('No changes to save');
-          return;
-        }
-        const res = await updateSocialPlatform(id, dataToSave);
-        if (res.success) {
-          setSocialPlatforms(socialPlatforms.map(p => p._id === id ? { ...res.data, isModified: false } : p));
-          toast.success('Platform updated successfully');
-        }
+      const res = await updateCampaignConfig(row);
+      if (res.success) {
+        setCampaignConfigs(campaignConfigs.map(c => c._id === id ? { ...res.data, isModified: false } : c));
+        toast.success('Campaign budget updated');
       }
     } catch (error) {
-      toast.error('Failed to save platform');
+      toast.error('Failed to update campaign budget');
     } finally {
       setLoading(false);
     }
@@ -508,6 +486,26 @@ const CampaignManagement = () => {
     { id: 'budget', label: 'Budget Controls' },
   ];
 
+  const { totalBudget, totalPlatforms } = calculateBudgetSummary();
+
+  const unifiedBudgetData = useMemo(() => {
+    const social = filteredPlatforms.map(p => ({
+      ...p,
+      rowType: 'Social',
+      displayName: p.platform,
+      uniqueKey: `social-${p._id}`
+    }));
+    
+    const campaigns = filteredCampaignConfigs.map(c => ({
+      ...c,
+      rowType: 'Campaign',
+      displayName: c.partnerType || 'General Campaign',
+      uniqueKey: `campaign-${c._id}`
+    }));
+    
+    return [...social, ...campaigns];
+  }, [filteredPlatforms, filteredCampaignConfigs]);
+
   if (loading && config.campaignTypes.length === 0) {
     return (
       <div className="flex items-center justify-center min-h-[400px]">
@@ -515,8 +513,6 @@ const CampaignManagement = () => {
       </div>
     );
   }
-
-  const { totalBudget, totalPlatforms } = calculateBudgetSummary();
 
   return (
     <div className="p-4 bg-[#e9ecef] min-h-screen font-sans">
@@ -1132,36 +1128,93 @@ const CampaignManagement = () => {
               </div>
 
               <div className="border border-gray-200 rounded-lg overflow-hidden bg-white shadow-sm overflow-x-auto">
-                <table className="w-full text-left min-w-[600px]">
-                  <thead className="bg-[#f8f9fa] text-xs font-bold text-gray-600 border-b border-gray-200 uppercase tracking-wider">
+                <div className="bg-[#f8f9fa] px-6 py-3 border-b border-gray-200 flex items-center justify-between">
+                   <h3 className="text-sm font-bold text-gray-700 flex items-center gap-2">
+                      <Layers size={16} className="text-blue-500" /> Unified Budget Management
+                   </h3>
+                   <div className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
+                      Total Entries: {unifiedBudgetData.length}
+                   </div>
+                </div>
+                <table className="w-full text-left min-w-[1200px]">
+                  <thead className="bg-[#f8f9fa] text-[10px] font-bold text-gray-500 border-b border-gray-200 uppercase tracking-wider">
                     <tr>
-                      <th className="px-6 py-4">Social Platform</th>
-                      <th className="px-6 py-4 text-center">Quarter</th>
+                      <th className="px-6 py-4">Type</th>
+                      <th className="px-6 py-4">Name / Platform</th>
+                      <th className="px-6 py-4">Location Details</th>
+                      <th className="px-6 py-4">Partner & Plans</th>
+                      <th className="px-6 py-4">Conversions</th>
                       <th className="px-6 py-4 text-center">Budget (₹)</th>
-                      <th className="px-6 py-4 text-center">Save Controls</th>
+                      <th className="px-6 py-4 text-center">Actions</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200 font-medium text-sm">
-                    {filteredPlatforms.length > 0 ? filteredPlatforms.map((p) => (
-                      <tr key={p._id} className="hover:bg-gray-50/50 transition-all">
+                  <tbody className="divide-y divide-gray-200 font-medium text-[13px]">
+                    {unifiedBudgetData.length > 0 ? unifiedBudgetData.map((row) => (
+                      <tr key={row.uniqueKey} className="hover:bg-gray-50/50 transition-all">
+                        <td className="px-6 py-4">
+                           <span className={`px-2 py-0.5 rounded text-[9px] font-bold uppercase ${
+                             row.rowType === 'Social' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                           }`}>
+                              {row.rowType}
+                           </span>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center space-x-3">
-                            {renderPlatformIcon(p.platform, 18)}
-                            <span className="font-bold text-gray-700">{p.platform}</span>
+                            {row.rowType === 'Social' ? renderPlatformIcon(row.displayName, 18) : <Target size={18} className="text-orange-400" />}
+                            <span className="font-bold text-gray-800">{row.displayName}</span>
                           </div>
                         </td>
-                        <td className="px-6 py-4 text-center font-semibold text-[#00669c]">
-                           {p.quarter}
+                        <td className="px-6 py-4">
+                           {row.rowType === 'Campaign' ? (
+                             <div className="space-y-0.5">
+                                <div className="text-gray-900 font-bold">{row.country?.name || 'All'}</div>
+                                <div className="text-gray-400 text-[11px]">{row.state?.name || 'All States'}</div>
+                                <div className="text-[10px] text-gray-400 italic">
+                                   {row.cluster?.name || row.cluster?.clusterName || 'All'} / {row.district?.name || row.district?.districtName || 'All'}
+                                </div>
+                             </div>
+                           ) : <span className="text-gray-300 italic">-</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                           {row.rowType === 'Campaign' ? (
+                             <div className="flex flex-col gap-1">
+                                <span className="text-blue-600 font-bold">{row.partnerType}</span>
+                                <div className="flex flex-wrap gap-1">
+                                   {row.plans?.map((p, i) => (
+                                      <span key={i} className="text-[9px] text-gray-400 border border-gray-100 px-1 rounded bg-gray-50">{p.name || p}</span>
+                                   ))}
+                                </div>
+                             </div>
+                           ) : <span className="text-gray-300 italic">-</span>}
+                        </td>
+                        <td className="px-6 py-4">
+                           {row.rowType === 'Campaign' ? (
+                             <div className="space-y-1">
+                                {Object.entries(row.conversions || {}).map(([type, val]) => (
+                                  <div key={type} className="flex items-center justify-between text-[11px] min-w-[110px]">
+                                    <span className="text-gray-400">{type}:</span>
+                                    <span className="font-bold text-blue-500">{val}%</span>
+                                  </div>
+                                ))}
+                             </div>
+                           ) : (
+                             <div className="text-gray-400 text-[11px] italic">
+                               Quarterly: <span className="text-gray-600 font-bold">{row.quarter}</span>
+                             </div>
+                           )}
                         </td>
                         <td className="px-6 py-4 text-center">
                           <div className="flex justify-center">
                             <div className="relative w-36">
-                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold">₹</span>
+                              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 font-bold text-xs">₹</span>
                               <input
                                 type="number"
-                                value={p.budget}
-                                onChange={(e) => handleLocalUpdate(p._id, { budget: Number(e.target.value) })}
-                                className={`w-full border ${p.isModified ? 'border-blue-400 ring-2 ring-blue-100 bg-blue-50/30' : 'border-gray-300'} rounded-md py-2.5 pl-8 pr-3 text-sm outline-none text-right font-bold transition-all text-gray-800 shadow-inner`}
+                                value={row.budget || 0}
+                                onChange={(e) => row.rowType === 'Social' 
+                                  ? handleLocalUpdate(row._id, { budget: Number(e.target.value) })
+                                  : handleCampaignLocalUpdate(row._id, { budget: Number(e.target.value) })
+                                }
+                                className={`w-full border ${row.isModified ? 'border-blue-400 ring-2 ring-blue-50 bg-blue-50/30' : 'border-gray-200'} rounded-md py-2 px-8 text-sm outline-none text-right font-bold transition-all text-gray-800 shadow-inner`}
                                 placeholder="0"
                               />
                             </div>
@@ -1169,16 +1222,26 @@ const CampaignManagement = () => {
                         </td>
                         <td className="px-6 py-4 text-center">
                            <button 
-                             onClick={() => handleSaveRow(p._id)}
-                             className={`text-sm py-1.5 px-4 rounded-full font-bold transition-colors shadow-sm ${p.isModified || p.isNew ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-green-100 text-green-700 hover:bg-green-200'}`}
+                             onClick={() => row.rowType === 'Social' ? handleSaveRow(row._id) : handleSaveCampaignBudget(row._id)}
+                             disabled={!row.isModified}
+                             className={`text-xs py-1.5 px-6 rounded-md font-bold transition-all shadow-sm ${
+                               row.isModified 
+                                ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                : 'bg-gray-100 text-gray-400 cursor-default'
+                             }`}
                            >
-                             {p.isModified || p.isNew ? 'Update Budget' : 'Synced'}
+                             {row.isModified ? 'Sync Budget' : 'Synced'}
                            </button>
                         </td>
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan="4" className="px-6 py-10 text-center text-gray-400 italic">No social media platforms available for the currently selected region. Please configure them in the Social Media tab.</td>
+                        <td colSpan="7" className="px-6 py-20 text-center">
+                           <div className="flex flex-col items-center gap-2 text-gray-400">
+                              <Search size={40} className="opacity-20" />
+                              <p className="italic">No budget data available for the current selection.</p>
+                           </div>
+                        </td>
                       </tr>
                     )}
                   </tbody>

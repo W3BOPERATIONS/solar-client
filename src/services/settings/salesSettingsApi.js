@@ -182,6 +182,46 @@ const salesSettingsService = {
       throw err.response?.data || err.message;
     }
   },
+  getAssignments: async (params) => {
+    try {
+      const res = await api.get('/combokit/assignments', { params });
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  async getAllCombokits() {
+    try {
+      const res = await api.get('/combokit/all-combokits');
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  async getAllCustomizedCombokits() {
+    try {
+      const res = await api.get('/combokit/all-customized-combokits');
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  async getPartnerTypes() {
+    try {
+      const res = await api.get('/partner-settings/types');
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  async getPartnerPlans(params) {
+    try {
+      const res = await api.get('/partner-settings/plans', { params });
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
 };
 
 export default salesSettingsService;

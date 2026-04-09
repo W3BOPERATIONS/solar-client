@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, CheckCircle, RefreshCw, MapPin, Layers, Save, X, Plus, Trash2, Edit } from 'lucide-react';
+import { Eye, EyeOff, CheckCircle, RefreshCw, MapPin, Layers, Save, X, Trash2, Edit } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { productApi } from '../../../../api/productApi';
@@ -44,10 +44,13 @@ export default function SetPriceAmc() {
     category: 'All Categories',
     subCategory: 'All Sub Categories',
     projectType: 'All Project Types',
-    subProjectType: 'All Sub Types'
+    subProjectType: 'All Sub Types',
+    brand: 'All Brands',
+    productType: 'All Products'
   });
 
-  const [tableData, setTableData] = useState([]);
+  const [solarKits, setSolarKits] = useState([]);
+  const [amcPlans, setAmcPlans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -138,13 +141,58 @@ export default function SetPriceAmc() {
       if (filters.projectType !== 'All Project Types') query.projectType = filters.projectType;
       if (filters.subProjectType !== 'All Sub Types') query.subProjectType = filters.subProjectType;
 
-      const data = await salesSettingsService.getAMCPlans(query);
-      setTableData(data.map(item => ({ ...item, id: item._id, isEditing: false })));
+      const plans = await salesSettingsService.getAMCPlans(query);
+      setAmcPlans(plans || []);
+      
+      if (solarKits.length === 0) {
+        const kitsData = await salesSettingsService.getSolarKits();
+        const uniqueConfigs = [];
+        const seen = new Set();
+        (kitsData || []).forEach(kit => {
+          const key = `${kit.category}-${kit.subCategory}-${kit.projectType}-${kit.subProjectType}`;
+          if (!seen.has(key)) {
+            seen.add(key);
+            uniqueConfigs.push({
+              category: kit.category || 'Solar Rooftop',
+              subCategory: kit.subCategory || 'Residential',
+              projectType: kit.projectType || '3-5 kW',
+              subProjectType: kit.subProjectType || 'On-Grid'
+            });
+          }
+        });
+        setSolarKits(uniqueConfigs);
+      }
     } catch (error) {
-      console.error("Error fetching AMC plans:", error);
+      console.error("Error fetching AMC data:", error);
     } finally {
       setLoading(false);
     }
+  };
+
+  const displayConfigurations = React.useMemo(() => {
+    const plansByConfig = {};
+    amcPlans.forEach(plan => {
+      const key = `${plan.category || ''}|${plan.subCategory || ''}|${plan.projectType || ''}|${plan.subProjectType || ''}`;
+      if (!plansByConfig[key]) plansByConfig[key] = plan;
+    });
+
+    return solarKits.map(kit => {
+      const key = `${kit.category || ''}|${kit.subCategory || ''}|${kit.projectType || ''}|${kit.subProjectType || ''}`;
+      return {
+        ...kit,
+        plan: plansByConfig[key] || null
+      };
+    });
+  }, [solarKits, amcPlans]);
+
+  const getAmcSummary = (plan) => {
+    if (!plan) return '-';
+    const visits = plan.monthlyVisits > 0 
+      ? `${plan.monthlyVisits} visit/month` 
+      : (plan.annualVisits ? `${plan.annualVisits} visits/year` : '-');
+    const serviceNames = plan.services?.map(s => s.serviceName).slice(0, 2).join(', ');
+    const moreServices = plan.services?.length > 2 ? '...' : '';
+    return `${plan.paymentType || ''}, ${plan.amcDuration || ''}M, ${visits} | ${serviceNames}${moreServices}`;
   };
 
   const handleFilterChange = (filterName, value) => {
@@ -162,37 +210,16 @@ export default function SetPriceAmc() {
       subCategory: 'All Sub Categories',
       projectType: 'All Project Types',
       subProjectType: 'All Sub Types',
+      brand: 'All Brands',
+      productType: 'All Products'
     });
-  };
-
-  const handleTableInputChange = (id, field, value) => {
-    setTableData(prev => prev.map(item => item.id === id ? { ...item, [field]: value } : item));
-  };
-
-  const toggleRowEdit = async (id) => {
-    const item = tableData.find(i => i.id === id);
-    if (!item) return;
-
-    if (item.isEditing) {
-      try {
-        await salesSettingsService.updateAMCPlan(id, {
-          basicPricePerKw: item.basicPricePerKw
-        });
-      } catch (error) {
-        console.error("Error updating AMC plan:", error);
-        alert("Failed to update AMC plan");
-        return; 
-      }
-    }
-
-    setTableData(prev => prev.map(row => row.id === id ? { ...row, isEditing: !row.isEditing } : row));
   };
 
   const handleDeletePrice = async (id) => {
     if (window.confirm("Are you sure you want to delete this AMC plan?")) {
       try {
         await salesSettingsService.deleteAMCPlan(id);
-        setTableData(prev => prev.filter(item => item.id !== id));
+        setAmcPlans(prev => prev.filter(item => item._id !== id));
       } catch (error) {
         console.error("Error deleting AMC plan:", error);
         alert("Failed to delete AMC plan");
@@ -306,43 +333,93 @@ export default function SetPriceAmc() {
                 <table className="w-full text-left border-collapse text-sm min-w-[1200px]">
                   <thead className="bg-[#343a40] text-white">
                     <tr>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider">Plan Name</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider">Category</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider">Sub Category</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider">Project Type</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider">Sub Project Type</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider w-36">Basic Price Per KW (₹)</th>
-                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold uppercase tracking-wider w-36">AMC Service Charges (₹)</th>
-                      <th className="p-3 text-center text-xs font-bold uppercase tracking-wider w-24">Actions</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Category</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Sub Category</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Project Type</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Sub Project Type</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Services</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Pricing & Schedule</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider">Status</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider w-32">Basic Price/KW (₹)</th>
+                      <th className="p-2 border-r border-white/20 text-center text-[10px] font-bold uppercase tracking-wider w-32">AMC Charges (₹)</th>
+                      <th className="p-2 text-center text-[10px] font-bold uppercase tracking-wider w-20">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {loading ? (
-                      <tr><td colSpan="8" className="text-center py-10 text-gray-400 font-medium">Loading AMC plans...</td></tr>
-                    ) : tableData.length === 0 ? (
-                      <tr><td colSpan="8" className="text-center py-10 text-gray-400 font-medium">No AMC plans found.</td></tr>
+                      <tr><td colSpan="10" className="text-center py-10 text-gray-400 font-medium">Loading AMC plans...</td></tr>
+                    ) : displayConfigurations.length === 0 ? (
+                      <tr><td colSpan="10" className="text-center py-10 text-gray-400 font-medium">No configurations found.</td></tr>
                     ) : (
-                      tableData.map((row) => (
-                        <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors text-xs">
-                          <td className="p-3 border-r border-gray-100 text-center font-bold text-[#14233c]">{row.planName}</td>
-                          <td className="p-3 border-r border-gray-100 text-center">{row.category}</td>
-                          <td className="p-3 border-r border-gray-100 text-center">{row.subCategory}</td>
-                          <td className="p-3 border-r border-gray-100 text-center font-medium">{row.projectType}</td>
-                          <td className="p-3 border-r border-gray-100 text-center">{row.subProjectType}</td>
-                          <td className="p-3 border-r border-gray-100 text-center">
-                            <input type="number" className={`w-28 px-2 py-1.5 border rounded-lg text-center font-bold outline-none ${row.isEditing ? 'border-blue-500 bg-white' : 'border-transparent bg-transparent cursor-default'}`} value={row.basicPricePerKw} onChange={(e) => handleTableInputChange(row.id, 'basicPricePerKw', Number(e.target.value) || 0)} readOnly={!row.isEditing} />
-                          </td>
-                          <td className="p-3 border-r border-gray-100 text-center">
-                            <input type="number" className="w-28 px-2 py-1.5 border border-transparent bg-transparent rounded-lg text-center font-bold outline-none cursor-default" value={row.amcServiceCharges} readOnly />
-                          </td>
-                          <td className="p-3 text-center">
-                            <div className="flex justify-center gap-2">
-                              <button onClick={() => toggleRowEdit(row.id)} className={`p-1.5 rounded ${row.isEditing ? 'text-green-600 hover:bg-green-50' : 'text-blue-600 hover:bg-blue-50'}`} title={row.isEditing ? 'Save' : 'Edit'}>{row.isEditing ? <Save size={16} /> : <Edit size={16} />}</button>
-                              <button onClick={() => handleDeletePrice(row.id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded" title="Delete"><Trash2 size={16} /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))
+                      displayConfigurations.map((config, idx) => {
+                        const plan = config.plan;
+                        const isConfigured = !!plan;
+                        return (
+                          <tr key={idx} className="border-b border-gray-100 hover:bg-gray-50 transition-colors text-[11px]">
+                            <td className="p-2 border-r border-gray-100 text-center font-bold text-[#14233c]">{config.category}</td>
+                            <td className="p-2 border-r border-gray-100 text-center">{config.subCategory}</td>
+                            <td className="p-2 border-r border-gray-100 text-center font-medium">{config.projectType}</td>
+                            <td className="p-2 border-r border-gray-100 text-center">{config.subProjectType}</td>
+                            <td className="p-2 border-r border-gray-100 text-center">
+                              {isConfigured ? (
+                                <div className="flex flex-wrap justify-center gap-1">
+                                  {plan.services?.map((s, i) => (
+                                    <span key={i} className="bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded text-[9px] font-bold border border-blue-100 whitespace-nowrap">{s.serviceName}</span>
+                                  ))}
+                                </div>
+                              ) : '-'}
+                            </td>
+                            <td className="p-2 border-r border-gray-100 text-center">
+                              {isConfigured ? (
+                                <div className="flex flex-col gap-0.5">
+                                  <span className="font-bold text-[#14233c]">{plan.paymentType}</span>
+                                  <span className="text-[10px] text-gray-500">{plan.amcDuration} Months</span>
+                                </div>
+                              ) : '-'}
+                            </td>
+                            <td className="p-2 border-r border-gray-100 text-center">
+                              <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${isConfigured ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-400'}`}>
+                                {isConfigured ? 'Configured' : 'No Plan'}
+                              </span>
+                            </td>
+                            <td className="p-2 border-r border-gray-100 text-center">
+                              {isConfigured ? (
+                                <input 
+                                  type="number" 
+                                  className={`w-24 px-1.5 py-1 border rounded text-center font-bold outline-none ${plan.isEditing ? 'border-blue-500 bg-white shadow-sm' : 'border-transparent bg-transparent cursor-default'}`} 
+                                  value={plan.basicPricePerKw} 
+                                  onChange={(e) => {
+                                    const val = Number(e.target.value) || 0;
+                                    setAmcPlans(prev => prev.map(p => p._id === plan._id ? { ...p, basicPricePerKw: val } : p));
+                                  }} 
+                                  readOnly={!plan.isEditing} 
+                                />
+                              ) : '-'}
+                            </td>
+                            <td className="p-2 border-r border-gray-100 text-center font-bold">
+                              {isConfigured ? `₹${(plan.amcServiceCharges || 0).toLocaleString()}` : '-'}
+                            </td>
+                            <td className="p-2 text-center">
+                              {isConfigured ? (
+                                <div className="flex justify-center gap-2">
+                                  <button onClick={() => {
+                                      const planId = plan._id;
+                                      if (plan.isEditing) {
+                                        salesSettingsService.updateAMCPlan(planId, { basicPricePerKw: plan.basicPricePerKw }).catch(console.error);
+                                      }
+                                      setAmcPlans(prev => prev.map(p => p._id === planId ? { ...p, isEditing: !p.isEditing } : p));
+                                  }} className={`p-1 rounded ${plan.isEditing ? 'bg-green-100 text-green-600' : 'bg-blue-100 text-blue-600'}`}>
+                                    {plan.isEditing ? <Save size={14} /> : <Edit size={14} />}
+                                  </button>
+                                  <button onClick={() => handleDeletePrice(plan._id)} className="p-1 bg-red-100 text-red-500 rounded"><Trash2 size={14} /></button>
+                                </div>
+                              ) : (
+                                <span className="text-gray-300 italic text-[9px]">Inventory &gt; Create AMC</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>

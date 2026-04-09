@@ -164,3 +164,8 @@ export const getProjectCategoryMappings = async (params) => {
     const response = await api.get('/masters/project-category-mappings', { params });
     return response.data.data;
 };
+
+export const getAllCombokits = async () => {
+    const response = await api.get('/combokit/all-combokits');
+    return response.data;
+};

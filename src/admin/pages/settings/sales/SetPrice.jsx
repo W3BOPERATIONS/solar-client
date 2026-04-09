@@ -51,8 +51,8 @@ export default function SetPrice() {
   const [filteredModalSubCategories, setFilteredModalSubCategories] = useState([]);
   const [filteredModalSubProjectTypes, setFilteredModalSubProjectTypes] = useState([]);
 
-  const [kitType, setKitType] = useState('Custom Kit'); // Custom Kit or Combo Kit
-  const [paymentType, setPaymentType] = useState('Cash'); // Cash, Loan, or EMI
+  const [kitType, setKitType] = useState('All'); // Custom Kit, Combo Kit, or All
+  const [paymentType, setPaymentType] = useState('All'); // Cash, Loan, EMI, or All
 
   const [filters, setFilters] = useState({
     category: 'All Categories',
@@ -82,9 +82,9 @@ export default function SetPrice() {
   const [marginFilter, setMarginFilter] = useState('All');
   
   const [marginData, setMarginData] = useState([
-     { type: 'Prime', cost: 500, cashback: 150, margin: 1000, total: 1650 },
-     { type: 'Regular', cost: 400, cashback: 100, margin: 800, total: 1300 },
-     { type: 'Other', cost: 300, cashback: 80, margin: 500, total: 880 }
+     { type: 'Prime', cost: 500, margin: 1000, total: 1500 },
+     { type: 'Regular', cost: 400, margin: 800, total: 1200 },
+     { type: 'Other', cost: 300, margin: 500, total: 800 }
   ]);
 
   const [newPriceForm, setNewPriceForm] = useState({
@@ -100,6 +100,18 @@ export default function SetPrice() {
     status: 'Active',
     comboKit: ''
   });
+
+  const [configurationsList, setConfigurationsList] = useState([]);
+  const [selectedComboKitId, setSelectedComboKitId] = useState('');
+  const [selectedConfigId, setSelectedConfigId] = useState('');
+  const [combokitsFromAddModule, setCombokitsFromAddModule] = useState([]);
+  const [customizedCombokits, setCustomizedCombokits] = useState([]);
+  const [selectedPartner, setSelectedPartner] = useState('All');
+  
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [selectedPartnerType, setSelectedPartnerType] = useState('all');
+  const [partnerPlans, setPartnerPlans] = useState([]);
+  const [selectedPartnerPlanId, setSelectedPartnerPlanId] = useState('all');
 
   const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
   const selectedCountryObj = countries.find((c) => c._id === selectedCountryId) || null;
@@ -142,6 +154,30 @@ export default function SetPrice() {
         setMappingsList(safeExtract(results[7]));
         setAllPricesForCount(safeExtract(results[8]));
 
+        // Fetch dedicated Combokits from Add Module
+        try {
+           const cbData = await salesSettingsService.getAllCombokits();
+           setCombokitsFromAddModule(cbData || []);
+        } catch (err) {
+           console.error("Error fetching module kits:", err);
+        }
+
+        // Fetch Customized Combokits from Customize Module
+         try {
+            const customData = await salesSettingsService.getAllCustomizedCombokits();
+            setCustomizedCombokits(customData || []);
+         } catch (err) {
+            console.error("Error fetching customized kits:", err);
+         }
+
+         // Fetch Partner Types
+         try {
+            const pTypes = await salesSettingsService.getPartnerTypes();
+            setPartnerTypes(pTypes || []);
+         } catch (err) {
+            console.error("Error fetching partner types:", err);
+         }
+
       } catch (error) {
         console.error("Error fetching filter data:", error);
       }
@@ -181,9 +217,31 @@ export default function SetPrice() {
     setSelectedDistrictId(districtId);
   };
 
+  // 2.5 Partner Plan Fetching
+  useEffect(() => {
+    const fetchPlans = async () => {
+      if (selectedPartnerType && selectedPartnerType !== 'all') {
+        try {
+          const params = { partnerType: selectedPartnerType };
+          if (selectedCountryId && selectedCountryId !== 'all') params.countryId = selectedCountryId;
+          if (selectedStateId && selectedStateId !== 'all') params.stateId = selectedStateId;
+          if (selectedClusterId && selectedClusterId !== 'all') params.clusterId = selectedClusterId;
+          if (selectedDistrictId && selectedDistrictId !== 'all') params.districtId = selectedDistrictId;
+          const plans = await salesSettingsService.getPartnerPlans(params);
+          setPartnerPlans(plans || []);
+        } catch (err) {
+          console.error("Error fetching partner plans:", err);
+        }
+      } else {
+        setPartnerPlans([]);
+      }
+    };
+    fetchPlans();
+  }, [selectedPartnerType, selectedStateId]);
+
   useEffect(() => {
     fetchPrices();
-  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType, paymentType, filters]);
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, kitType, paymentType, filters, selectedPartnerType, selectedPartnerPlanId]);
 
   const fetchPrices = async () => {
     setLoading(true);
@@ -193,6 +251,9 @@ export default function SetPrice() {
       if (selectedStateId && selectedStateId !== 'all') query.state = selectedStateId;
       if (selectedClusterId && selectedClusterId !== 'all') query.cluster = selectedClusterId;
       if (selectedDistrictId && selectedDistrictId !== 'all') query.district = selectedDistrictId;
+      
+      if (selectedPartnerType && selectedPartnerType !== 'all') query.role = selectedPartnerType;
+      if (selectedPartnerPlanId && selectedPartnerPlanId !== 'all') query.partnerPlan = selectedPartnerPlanId;
 
       if (filters.category !== 'All Categories') query.category = filters.category;
       if (filters.subCategory !== 'All Sub Categories') query.subCategory = filters.subCategory;
@@ -202,8 +263,8 @@ export default function SetPrice() {
       // We do NOT filter the Summary API call by brand/productType 
       // because we want to see the "ENTIRE" kit status in the summary table.
       
-      query.kitType = kitType;
-      query.paymentType = paymentType;
+      if (kitType !== 'All') query.kitType = kitType;
+      if (paymentType !== 'All') query.paymentType = paymentType;
 
       const data = await salesSettingsService.getSetPrices(query);
       
@@ -247,7 +308,8 @@ export default function SetPrice() {
                   const alreadyExists = savedPrices.find(d => 
                     d.comboKit === matchingKit.name && 
                     d.productType === itemType &&
-                    d.brand === brandName
+                    d.brand === brandName &&
+                    (selectedPartnerType === 'all' || d.role === selectedPartnerType)
                   );
                   
                   if (!alreadyExists) {
@@ -255,6 +317,7 @@ export default function SetPrice() {
                       id: `gen-${matchingKit._id}-${item.name}-${Math.random().toString(36).substr(2, 5)}`,
                       comboKit: matchingKit.name,
                       brand: brandName,
+                      role: selectedPartnerType !== 'all' ? selectedPartnerType : '',
                       productType: itemType,
                       category: filters.category,
                       subCategory: filters.subCategory,
@@ -264,7 +327,8 @@ export default function SetPrice() {
                       marketPrice: 0,
                       gst: 18,
                       isEditing: true,
-                      isGenerated: true
+                      isGenerated: true,
+                      paymentType: paymentType !== 'All' ? paymentType : 'Cash'
                     });
                   }
                 }
@@ -299,7 +363,8 @@ export default function SetPrice() {
               marketPrice: 0,
               gst: 18,
               isEditing: true,
-              isGenerated: true
+              isGenerated: true,
+              paymentType: paymentType !== 'All' ? paymentType : 'Cash'
             });
           }
       }
@@ -311,6 +376,58 @@ export default function SetPrice() {
       alert("Error loading prices: " + (error.error || error.message || "Unknown error"));
     } finally {
       setLoading(false);
+    }
+  };
+
+  // 3. Configuration Logic
+  useEffect(() => {
+    if (selectedComboKitId && kitType === 'Combo Kit') {
+      const fetchConfigs = async () => {
+        try {
+          const kit = combokitsFromAddModule.find(k => k.id === selectedComboKitId);
+          if (kit) {
+            const res = await salesSettingsService.getAssignments({ kitName: kit.name });
+            setConfigurationsList(res?.data || res || []);
+          }
+        } catch (err) {
+          console.error("Error fetching configs:", err);
+        }
+      };
+      fetchConfigs();
+    } else if (kitType === 'Custom Kit') {
+      setConfigurationsList(customizedCombokits);
+    } else {
+      setConfigurationsList([]);
+      setSelectedConfigId('');
+    }
+  }, [selectedComboKitId, combokitsFromAddModule, kitType, customizedCombokits]);
+
+  const handleConfigSelect = (configId) => {
+    setSelectedConfigId(configId);
+    const config = configurationsList.find(c => c._id === configId);
+    if (config) {
+      // Auto-populate filters
+      setFilters({
+        category: config.category || 'All Categories',
+        subCategory: config.subCategory || 'All Sub Categories',
+        projectType: config.projectType || 'All Project Types',
+        subProjectType: config.subProjectType || 'All Sub Types',
+        brand: config.panels && config.panels.length > 0 ? config.panels[0] : (config.brand || 'All Brands'),
+        productType: 'Solar Panel' // Defaulting to Solar Panel when a custom kit is selected
+      });
+
+      // Auto-fill Location & Partner
+      if (config.state) handleStateSelect(config.state?._id || config.state);
+      if (config.cluster) handleClusterSelect(config.cluster?._id || config.cluster);
+      if (config.districts?.length > 0) handleDistrictSelect(config.districts[0]?._id || config.districts[0]);
+      
+      if (config.role) {
+        setSelectedPartner(config.role);
+        setSelectedPartnerType(config.role);
+        // We don't have a planId specifically in config but we can try to guess or leave it as is
+      }
+      
+      console.log(`Details populated for ${config.solarkitName || config.panels?.[0] || 'Configuration'}`);
     }
   };
 
@@ -336,8 +453,10 @@ export default function SetPrice() {
       brand: 'All Brands',
       productType: 'All Products'
     });
-    setKitType('Custom Kit');
-    setPaymentType('Cash');
+    setKitType('All');
+    setPaymentType('All');
+    setSelectedPartnerType('all');
+    setSelectedPartnerPlanId('all');
     setTimeout(() => {
       fetchPrices();
     }, 0);
@@ -367,12 +486,15 @@ export default function SetPrice() {
             marketPrice: item.marketPrice,
             gst: item.gst,
             kitType: item.kitType || (item.id.includes('custom') ? 'Custom Kit' : 'Combo Kit'),
-            paymentType: paymentType,
+            paymentType: item.paymentType || (paymentType !== 'All' ? paymentType : 'Cash'),
             comboKit: item.comboKit,
             state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
             cluster: (selectedClusterId && selectedClusterId !== 'all') ? selectedClusterId : undefined,
             district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined,
             country: (selectedCountryId && selectedCountryId !== 'all') ? selectedCountryId : undefined,
+            role: (selectedPartnerType && selectedPartnerType !== 'all') ? selectedPartnerType : undefined,
+            partnerPlan: (selectedPartnerPlanId && selectedPartnerPlanId !== 'all') ? selectedPartnerPlanId : undefined,
+            partnerPlanModel: selectedPartnerType === 'Dealer' ? 'DealerPlan' : selectedPartnerType === 'Franchisee' ? 'FranchiseePlan' : selectedPartnerType === 'Channel Partner' ? 'ChannelPartnerPlan' : undefined,
             status: 'Active'
           };
           const response = await salesSettingsService.createSetPrice(payload);
@@ -444,7 +566,7 @@ export default function SetPrice() {
       const payload = {
         ...newPriceForm,
         kitType: kitType,
-        paymentType: paymentType,
+        paymentType: newPriceForm.paymentType || (paymentType !== 'All' ? paymentType : 'Cash'),
         state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
         cluster: (selectedClusterId && selectedClusterId !== 'all') ? selectedClusterId : undefined,
         district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined,
@@ -526,6 +648,48 @@ export default function SetPrice() {
           </div>
         )}
 
+        {showLocationCards && (selectedDistrictId || selectedStateId) && (
+          <div className="mb-10 animate-in fade-in duration-500">
+            <div className="mb-8">
+               <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Partner Type</h2>
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <LocationCard title="All Partners" subtitle="ALL" isSelected={selectedPartnerType === 'all'} onClick={() => setSelectedPartnerType('all')} />
+                  {partnerTypes?.filter((type, index, self) => 
+                    index === self.findIndex((t) => t.name === type.name)
+                  ).map(p => (
+                    <LocationCard 
+                      key={p._id} 
+                      title={p.name} 
+                      subtitle={p.name.substring(0, 2).toUpperCase()} 
+                      isSelected={selectedPartnerType === p.name} 
+                      onClick={() => setSelectedPartnerType(p.name)} 
+                    />
+                  ))}
+               </div>
+            </div>
+
+            {selectedPartnerType !== 'all' && partnerPlans.length > 0 && (
+              <div className="mb-8">
+                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Partner Plan</h2>
+                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <LocationCard title="All Plans" subtitle="ALL" isSelected={selectedPartnerPlanId === 'all'} onClick={() => setSelectedPartnerPlanId('all')} />
+                    {partnerPlans?.filter((plan, index, self) => 
+                        index === self.findIndex((p) => p.name === plan.name)
+                    ).map(p => (
+                      <LocationCard 
+                        key={p._id} 
+                        title={p.planName || p.name} 
+                        subtitle="PLAN" 
+                        isSelected={selectedPartnerPlanId === p._id} 
+                        onClick={() => setSelectedPartnerPlanId(p._id)} 
+                      />
+                    ))}
+                 </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {selectedDistrictId && (
           <div className="space-y-6 mb-8">
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 flex flex-col xl:flex-row p-0 overflow-hidden">
@@ -566,31 +730,96 @@ export default function SetPrice() {
                </div>
                <div className="xl:w-[350px] shrink-0 p-5">
                    <h5 className="font-bold text-[#14233c] mb-4 text-[15px]">Select Kit Type</h5>
-                   <div className="flex gap-4 mt-2 mb-6">
-                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Custom Kit')}>
-                        <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Custom Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{kitType === 'Custom Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}</div>
-                        <div className="flex flex-col"><span className={`text-[13px] font-bold tracking-tight ${kitType === 'Custom Kit' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Custom Kit</span><span className="text-[10px] text-gray-400">Build your own kit</span></div>
-                     </label>
-                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Combo Kit')}>
-                        <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Combo Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{kitType === 'Combo Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}</div>
-                        <div className="flex flex-col"><span className={`text-[13px] font-bold tracking-tight ${kitType === 'Combo Kit' ? 'text-[#14233c]' : 'text-gray-500'}`}>Combo Kit</span><span className="text-[10px] text-gray-400">Pre-configured kits</span></div>
-                     </label>
-                   </div>
-                   <h5 className="font-bold text-[#14233c] mb-3 text-[14px]">Payment Type</h5>
-                   <div className="flex flex-wrap gap-4 mt-1">
-                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Cash')}>
-                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Cash' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'Cash' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
-                        <span className={`text-[12px] font-bold ${paymentType === 'Cash' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Cash</span>
-                     </label>
-                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Loan')}>
-                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Loan' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'Loan' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
-                        <span className={`text-[12px] font-bold ${paymentType === 'Loan' ? 'text-[#14233c]' : 'text-gray-500'}`}>Loan</span>
-                     </label>
-                     <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('EMI')}>
-                        <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'EMI' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'EMI' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
-                        <span className={`text-[12px] font-bold ${paymentType === 'EMI' ? 'text-[#14233c]' : 'text-gray-500'}`}>EMI</span>
-                     </label>
-                   </div>
+                    <div className="flex gap-4 mt-2 mb-6">
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('All')}>
+                         <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'All' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{kitType === 'All' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}</div>
+                         <div className="flex flex-col"><span className={`text-[13px] font-bold tracking-tight ${kitType === 'All' ? 'text-[#0076a8]' : 'text-gray-500'}`}>All Kits</span><span className="text-[10px] text-gray-400">Show all kit types</span></div>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Custom Kit')}>
+                         <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Custom Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{kitType === 'Custom Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}</div>
+                         <div className="flex flex-col"><span className={`text-[13px] font-bold tracking-tight ${kitType === 'Custom Kit' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Custom Kit</span><span className="text-[10px] text-gray-400">Build your own kit</span></div>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setKitType('Combo Kit')}>
+                         <div className={`mt-0.5 w-4 h-4 rounded-full border flex items-center justify-center ${kitType === 'Combo Kit' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{kitType === 'Combo Kit' && <div className="w-2.5 h-2.5 rounded-full bg-[#0076a8]"></div>}</div>
+                         <div className="flex flex-col"><span className={`text-[13px] font-bold tracking-tight ${kitType === 'Combo Kit' ? 'text-[#14233c]' : 'text-gray-500'}`}>Combo Kit</span><span className="text-[10px] text-gray-400">Pre-configured kits</span></div>
+                      </label>
+                    </div>
+
+                    {/* Combo Kit Selection (2-step) */}
+                    {kitType === 'Combo Kit' && (
+                      <div className="space-y-4 mb-6 animate-in fade-in slide-in-from-top-2 duration-300 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                         <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Select Combokit</label>
+                            <select 
+                               value={selectedComboKitId}
+                               onChange={(e) => setSelectedComboKitId(e.target.value)}
+                               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-500 transition-all text-xs bg-white"
+                            >
+                               <option value="">-- Choose Combokit --</option>
+                               {combokitsFromAddModule.map(kit => (
+                                  <option key={kit.id} value={kit.id}>{kit.name}</option>
+                               ))}
+                            </select>
+                         </div>
+                         <div>
+                            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1.5 ml-1">Select Configuration</label>
+                            <select 
+                               value={selectedConfigId}
+                               onChange={(e) => handleConfigSelect(e.target.value)}
+                               className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:border-blue-500 transition-all text-xs bg-white"
+                               disabled={!selectedComboKitId}
+                            >
+                               <option value="">{selectedComboKitId ? "-- Choose Configuration --" : "Select a kit first"}</option>
+                               {configurationsList.map(config => (
+                                  <option key={config._id} value={config._id}>
+                                     {config.solarkitName} - {config.category} ({config.projectType}) | {config.state?.name || config.state || 'Local'}
+                                  </option>
+                               ))}
+                            </select>
+                         </div>
+                      </div>
+                    )}
+
+                    {/* Custom Kit Selection (Direct) */}
+                    {kitType === 'Custom Kit' && (
+                      <div className="space-y-4 mb-6 animate-in fade-in slide-in-from-top-2 duration-300 bg-orange-50/50 p-4 rounded-xl border border-orange-100">
+                         <div>
+                            <label className="block text-[10px] font-bold text-orange-600 uppercase tracking-widest mb-1.5 ml-1">Select Customized Kit</label>
+                            <select 
+                               value={selectedConfigId}
+                               onChange={(e) => handleConfigSelect(e.target.value)}
+                               className="w-full px-3 py-2 rounded-lg border border-orange-200 focus:outline-none focus:border-orange-500 transition-all text-xs bg-white"
+                            >
+                               <option value="">-- Choose Customized Kit --</option>
+                               {configurationsList.map(config => (
+                                  <option key={config._id} value={config._id}>
+                                      {config.panels?.[0] || 'adani'} | {config.state?.name || config.state || 'Gujarat'} | {config.districts?.[0]?.name || (config.districts?.[0]) || 'Ahmedabad'} | {config.role || 'Dealer'}
+                                  </option>
+                               ))}
+                            </select>
+                         </div>
+                      </div>
+                    )}
+
+                    <h5 className="font-bold text-[#14233c] mb-3 text-[14px]">Payment Type</h5>
+                    <div className="flex flex-wrap gap-4 mt-1">
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('All')}>
+                         <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'All' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'All' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
+                         <span className={`text-[12px] font-bold ${paymentType === 'All' ? 'text-[#0076a8]' : 'text-gray-500'}`}>All</span>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Cash')}>
+                         <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Cash' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'Cash' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
+                         <span className={`text-[12px] font-bold ${paymentType === 'Cash' ? 'text-[#0076a8]' : 'text-gray-500'}`}>Cash</span>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('Loan')}>
+                         <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'Loan' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'Loan' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
+                         <span className={`text-[12px] font-bold ${paymentType === 'Loan' ? 'text-[#14233c]' : 'text-gray-500'}`}>Loan</span>
+                      </label>
+                      <label className="flex items-start gap-2 cursor-pointer group" onClick={() => setPaymentType('EMI')}>
+                         <div className={`mt-0.5 w-3.5 h-3.5 rounded-full border flex items-center justify-center ${paymentType === 'EMI' ? 'border-[#0076a8]' : 'border-gray-300'}`}>{paymentType === 'EMI' && <div className="w-2 h-2 rounded-full bg-[#0076a8]"></div>}</div>
+                         <span className={`text-[12px] font-bold ${paymentType === 'EMI' ? 'text-[#14233c]' : 'text-gray-500'}`}>EMI</span>
+                      </label>
+                    </div>
                 </div>
             </div>
             <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-5 xl:w-[500px] max-w-full">
@@ -622,9 +851,11 @@ export default function SetPrice() {
                 <table className="w-full text-left border-collapse text-sm min-w-[1200px]">
                   <thead className="bg-[#343a40] text-white">
                     <tr>
+                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight">Partner</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight">Combo Kit</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight">Brand</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight w-20">Product Type</th>
+                      <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight w-20">Payment Type</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight">Category</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight w-24">Sub Category</th>
                       <th className="p-3 border-r border-white/20 text-center text-xs font-bold leading-tight w-20">Project Type</th>
@@ -640,9 +871,9 @@ export default function SetPrice() {
                   </thead>
                   <tbody>
                     {loading ? (
-                       <tr><td colSpan="14" className="text-center py-6 text-gray-500">Loading prices...</td></tr>
+                       <tr><td colSpan="15" className="text-center py-6 text-gray-500">Loading prices...</td></tr>
                     ) : tableData.length === 0 ? (
-                       <tr><td colSpan="14" className="text-center py-10 text-gray-500 font-bold bg-gray-50/30">
+                       <tr><td colSpan="15" className="text-center py-10 text-gray-500 font-bold bg-gray-50/30">
                           {summaryData.length > 0 ? (
                             <div className="flex flex-col items-center gap-2">
                                <CheckCircle className="text-green-500" size={24} />
@@ -655,9 +886,17 @@ export default function SetPrice() {
                     ) : (
                        tableData.map((row) => (
                           <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="p-2 border-r border-gray-100 text-center text-blue-600 text-[10px] font-bold">
+                                {row.role ? row.role : (selectedPartnerType !== 'all' ? selectedPartnerType : 'All')}
+                              </td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-[11px] font-medium">{row.comboKit}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.brand}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.productType}</td>
+                              <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-[10px] font-bold">
+                                 <span className={`px-2 py-0.5 rounded-full ${row.paymentType === 'Cash' ? 'bg-green-50 text-green-600' : row.paymentType === 'Loan' ? 'bg-blue-50 text-blue-600' : 'bg-purple-50 text-purple-600'}`}>
+                                    {row.paymentType || 'Cash'}
+                                 </span>
+                              </td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.category}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.subCategory}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.projectType}</td>
@@ -708,10 +947,12 @@ export default function SetPrice() {
              </div>
              <div className="bg-white rounded-xl shadow-xl border-t-4 border-[#14233c] overflow-hidden">
                 <table className="w-full text-left border-collapse table-fixed">
-                   <thead className="bg-[#f8fafc] border-b border-gray-200">
+                    <thead className="bg-[#f8fafc] border-b border-gray-200">
                       <tr>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[30%]">Component / Product</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[15%]">Brand</th>
+                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[8%]">Partner</th>
+                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[15%]">Component / Product</th>
+                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[12%]">Brand</th>
+                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[10%] text-center">Payment</th>
                          <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[12%]">Benchmark (₹)</th>
                          <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[12%]">Market Price (₹)</th>
                          <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[10%]">Margin (₹)</th>
@@ -727,51 +968,60 @@ export default function SetPrice() {
                          const finalCompTotal = (row.marketPrice || 0) + gstAmount;
                          return (
                             <tr key={i} className="hover:bg-gray-50/50 transition-colors">
+                               <td className="p-4 border-r border-gray-50 font-bold text-blue-600 text-[11px]">
+                                 {row.role ? row.role : (selectedPartnerType !== 'all' ? selectedPartnerType : 'All')}
+                               </td>
                                <td className="p-4 border-r border-gray-50">
                                   <div className="font-black text-gray-800 text-[13px]">{row.productType}</div>
                                   <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{row.category} / {row.subCategory}</div>
                                </td>
                                <td className="p-4 font-bold text-gray-600 border-r border-gray-50 uppercase text-[11px]">{row.brand}</td>
+                               <td className="p-4 border-r border-gray-50 text-center">
+                                  <span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter ${row.paymentType === 'Cash' ? 'bg-green-100 text-green-700' : row.paymentType === 'Loan' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                     {row.paymentType || 'Cash'}
+                                  </span>
+                               </td>
                                <td className="p-4 text-right text-gray-500 font-mono text-[13px] border-r border-gray-50">{(row.benchmarkPrice || 0).toLocaleString()}</td>
                                <td className="p-4 text-right text-gray-900 font-black font-mono text-[13px] border-r border-gray-50">{(row.marketPrice || 0).toLocaleString()}</td>
                                <td className={`p-4 text-right font-black font-mono text-[13px] border-r border-gray-50 ${marginValue >= 0 ? 'text-green-600' : 'text-red-500'}`}>{marginValue.toLocaleString()}</td>
                                <td className="p-4 text-center border-r border-gray-50"><span className="text-gray-500 font-bold text-xs">{row.gst}%</span></td>
                                <td className="p-4 text-right bg-blue-50/30 font-black font-mono text-[14px] text-[#0076a8] border-r border-gray-50">{finalCompTotal.toLocaleString()}</td>
                                <td className="p-4 text-center">
-                                  <button onClick={() => handleEditExisting(row)} className="p-2 text-[#0076a8] hover:bg-blue-50 rounded-full transition-colors" title="Edit Price">
-                                     <Edit size={16} />
-                                  </button>
+                                  <div className="flex items-center justify-center gap-2">
+                                     <button onClick={() => handleEditExisting(row)} className="p-2 text-[#0076a8] hover:bg-blue-50 rounded-full transition-colors" title="Edit Price">
+                                        <Edit size={16} />
+                                     </button>
+                                     <button onClick={() => handleDeletePrice(row.id || row._id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Delete Price">
+                                        <Trash2 size={16} />
+                                     </button>
+                                  </div>
                                </td>
                             </tr>
                          );
                       })}
-                   </tbody>
-                   <tfoot className="bg-[#14233c] text-white">
-                      <tr>
-                         <td colSpan="2" className="p-6">
-                            <div className="text-[10px] text-blue-300 uppercase font-black tracking-widest mb-1 opacity-80">Calculated Totals</div>
-                            <div className="text-2xl font-black tracking-tighter uppercase">Grand Total Summary</div>
-                         </td>
-                         <td className="p-6 text-right border-l border-white/10">
-                            <span className="block text-[9px] uppercase font-bold text-blue-200 mb-1 opacity-70">Benchmark</span>
-                            <span className="font-mono text-base font-black">₹{summaryData.reduce((acc, row) => acc + (row.benchmarkPrice || 0), 0).toLocaleString()}</span>
-                         </td>
-                         <td className="p-6 text-right border-l border-white/10">
-                            <span className="block text-[9px] uppercase font-bold text-blue-200 mb-1 opacity-70">Market Price</span>
-                            <span className="font-mono text-base font-black">₹{summaryData.reduce((acc, row) => acc + (row.marketPrice || 0), 0).toLocaleString()}</span>
-                         </td>
-                         <td className="p-6 text-right border-l border-white/10">
-                            <span className="block text-[9px] uppercase font-bold text-blue-200 mb-1 opacity-70">Margin</span>
-                            <span className={`font-mono text-base font-black ${summaryData.reduce((acc, row) => acc + ((row.marketPrice || 0) - (row.benchmarkPrice || 0)), 0) >= 0 ? 'text-green-400' : 'text-red-400'}`}>₹{summaryData.reduce((acc, row) => acc + ((row.marketPrice || 0) - (row.benchmarkPrice || 0)), 0).toLocaleString()}</span>
-                         </td>
-                         <td className="p-6 border-l border-white/10"></td>
-                         <td className="p-6 text-right bg-[#0076a8] border-l border-white/10">
-                            <span className="block text-[9px] uppercase font-black text-blue-100 mb-1">Kit Final Price (Incl. GST)</span>
-                            <span className="text-3xl font-black font-mono tracking-tighter">₹{summaryData.reduce((acc, row) => { const base = row.marketPrice || 0; const tax = base * (row.gst || 0) / 100; return acc + base + tax; }, 0).toLocaleString()}</span>
-                         </td>
-                         <td className="bg-[#14233c] border-l border-white/10"></td>
-                      </tr>
-                   </tfoot>
+                    </tbody>
+                    <tfoot className="bg-[#f8fafc] border-t-2 border-gray-200">
+                       <tr>
+                          <td colSpan="9" className="p-4">
+                             <div className="flex justify-between items-center px-2">
+                                <div className="flex gap-8">
+                                   <div className="flex flex-col">
+                                      <span className="text-[10px] text-gray-400 font-bold uppercase">Total Components</span>
+                                      <span className="text-xl font-black text-[#14233c]">{summaryData.length} Items</span>
+                                   </div>
+                                   <div className="flex flex-col">
+                                      <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Brands</span>
+                                      <span className="text-xl font-black text-[#14233c]">{[...new Set(summaryData.map(d => d.brand))].length} Brands</span>
+                                   </div>
+                                </div>
+                                <div className="text-right">
+                                   <span className="text-[10px] text-[#0076a8] font-bold uppercase block mb-0.5 tracking-wider">Net Kit Valuation (Market Price)</span>
+                                   <span className="text-2xl font-black text-[#0076a8] font-mono">₹{summaryData.reduce((acc, row) => acc + (row.marketPrice || 0), 0).toLocaleString()}</span>
+                                </div>
+                             </div>
+                          </td>
+                       </tr>
+                    </tfoot>
                 </table>
              </div>
           </div>
@@ -788,12 +1038,18 @@ export default function SetPrice() {
             </div>
             <div className="p-6 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pointer-events-auto">
-                {kitType === 'Combo Kit' && (
+                {(kitType === 'Combo Kit' || kitType === 'Custom Kit') && (
                   <div className="md:col-span-2">
-                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Combo Kit Name</label>
-                    <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm font-bold text-blue-800 bg-blue-50/50" value={newPriceForm.comboKit} onChange={e => setNewPriceForm({ ...newPriceForm, comboKit: e.target.value })}>
-                       <option value="">Select Combo Kit</option>
-                       {solarKitsList.filter(kit => !newPriceForm.projectType || kit.projectType === newPriceForm.projectType || projectTypesList.find(pt => pt._id === newPriceForm.projectType)?.name === kit.projectType).map((kit, i) => <option key={i} value={kit.name}>{kit.name}</option>)}
+                    <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${kitType === 'Custom Kit' ? 'text-orange-500' : 'text-gray-500'}`}>
+                        {kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Combo Kit Name'}
+                    </label>
+                    <select className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-all text-sm font-bold ${kitType === 'Custom Kit' ? 'border-orange-200 focus:ring-orange-500 text-orange-800 bg-orange-50/50' : 'border-gray-200 focus:ring-blue-500 text-blue-800 bg-blue-50/50'}`} value={newPriceForm.comboKit} onChange={e => setNewPriceForm({ ...newPriceForm, comboKit: e.target.value })}>
+                       <option value="">{kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Select Combo Kit'}</option>
+                       {(kitType === 'Custom Kit' ? customizedCombokits : combokitsFromAddModule).map((kit, i) => (
+                           <option key={i} value={kit.name || kit.solarkitName}>
+                               {kit.name || `${kit.panels?.[0] || 'adani'} | ${kit.state?.name || 'Gujarat'} | ${kit.districts?.[0]?.name || 'Ahmedabad'}`}
+                           </option>
+                       ))}
                     </select>
                   </div>
                 )}
@@ -874,8 +1130,8 @@ export default function SetPrice() {
              <div className="p-6">
                 <div className="border border-gray-200 rounded overflow-hidden">
                    <table className="w-full text-left text-sm">
-                      <thead className="bg-[#6db3f2] text-white"><tr><th className="p-3">Delivery Type</th><th className="p-3 text-center">Cost (₹)</th><th className="p-3 text-center">Cashback (₹)</th><th className="p-3 text-center">Margin (₹)</th><th className="p-3 text-center">Total (₹)</th></tr></thead>
-                      <tbody>{marginData.map((row, idx) => (<tr key={idx} className="border-b"><td className="p-3">{row.type}</td><td className="p-3 text-center"><input type="number" value={row.cost} onChange={e => { const n = [...marginData]; n[idx].cost = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].cashback + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center"><input type="number" value={row.cashback} onChange={e => { const n = [...marginData]; n[idx].cashback = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].cashback + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center"><input type="number" value={row.margin} onChange={e => { const n = [...marginData]; n[idx].margin = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].cashback + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center font-bold">₹{row.total}</td></tr>))}</tbody>
+                      <thead className="bg-[#6db3f2] text-white"><tr><th className="p-3">Delivery Type</th><th className="p-3 text-center">Cost (₹)</th><th className="p-3 text-center">Margin (₹)</th><th className="p-3 text-center">Total (₹)</th></tr></thead>
+                      <tbody>{marginData.map((row, idx) => (<tr key={idx} className="border-b"><td className="p-3">{row.type}</td><td className="p-3 text-center"><input type="number" value={row.cost} onChange={e => { const n = [...marginData]; n[idx].cost = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center"><input type="number" value={row.margin} onChange={e => { const n = [...marginData]; n[idx].margin = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center font-bold">₹{row.total}</td></tr>))}</tbody>
                    </table>
                 </div>
              </div>

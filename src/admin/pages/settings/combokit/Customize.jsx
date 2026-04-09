@@ -117,6 +117,7 @@ const CustomizeCombokit = () => {
     subCategory: '',
     projectType: '',
     subProjectType: '',
+    combokitId: null,
     role: '',
     country: null,
     state: null,
@@ -620,6 +621,7 @@ const CustomizeCombokit = () => {
       subCategory: assignment.subCategory || '',
       projectType: assignment.projectType || '',
       subProjectType: assignment.subProjectType || '',
+      combokitId: assignment.combokitId || (typeof assignment.combokitId === 'object' ? assignment.combokitId?._id : assignment.combokitId) || null,
       role: assignment.role || (Array.isArray(assignment.cpTypes) ? assignment.cpTypes[0] : assignment.cpTypes) || '',
       country: countryObj,
       state: stateObj,
@@ -669,6 +671,7 @@ const CustomizeCombokit = () => {
         subCategory: assignmentForm.subCategory,
         projectType: assignmentForm.projectType,
         subProjectType: assignmentForm.subProjectType,
+        combokitId: getCleanId(assignmentForm.combokitId),
         country: countryId
       };
 
@@ -768,6 +771,7 @@ const CustomizeCombokit = () => {
       subCategory: '',
       projectType: '',
       subProjectType: '',
+      combokitId: null,
       country: countryObj || null,
       state: stateObj || null,
       cluster: clusterObj || null,
@@ -1575,6 +1579,19 @@ const CustomizeCombokit = () => {
                     Plan Identity
                   </h4>
                   <div className="space-y-4">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Link To Combokit</label>
+                      <Select
+                        styles={selectStyles}
+                        placeholder="Select ComboKit"
+                        value={assignmentForm.combokitId ? { 
+                          label: solarKitsList.find(k => getCleanId(k) === getCleanId(assignmentForm.combokitId))?.name || 'Selected Kit', 
+                          value: getCleanId(assignmentForm.combokitId) 
+                        } : null}
+                        onChange={(opt) => setAssignmentForm({ ...assignmentForm, combokitId: opt.value })}
+                        options={solarKitsList.map(kit => ({ label: kit.name, value: kit._id }))}
+                      />
+                    </div>
 
 
                     <div className="grid grid-cols-2 gap-4">
