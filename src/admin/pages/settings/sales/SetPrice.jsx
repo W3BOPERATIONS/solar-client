@@ -98,7 +98,8 @@ export default function SetPrice() {
     marketPrice: 0,
     gst: 18,
     status: 'Active',
-    comboKit: ''
+    comboKit: '',
+    kitType: 'All'
   });
 
   const [configurationsList, setConfigurationsList] = useState([]);
@@ -701,7 +702,8 @@ export default function SetPrice() {
       status: item.status || 'Active',
       comboKit: item.comboKit || '',
       paymentType: rawPaymentType,
-      role: rawPartnerType === 'All' ? '' : rawPartnerType
+      role: rawPartnerType === 'All' ? '' : rawPartnerType,
+      kitType: item.kitType || 'All'
     };
 
     // 1. Sync Product Type
@@ -817,7 +819,8 @@ export default function SetPrice() {
       status: 'Active',
       comboKit: firstRow?.comboKit || kitName,
       paymentType: firstRow?.paymentType || (paymentType !== 'All' ? paymentType : 'Cash'),
-      role: firstRow?.role || (selectedPartnerType !== 'all' ? selectedPartnerType : '')
+      role: firstRow?.role || (selectedPartnerType !== 'all' ? selectedPartnerType : ''),
+      kitType: kitType
     });
 
     // 3. Update modal-specific filtered lists for correct dropdown state
@@ -846,7 +849,7 @@ export default function SetPrice() {
     try {
       const payload = {
         ...newPriceForm,
-        kitType: kitType,
+        kitType: newPriceForm.kitType,
         paymentType: newPriceForm.paymentType,
         role: newPriceForm.role || (selectedPartnerType !== 'all' ? selectedPartnerType : undefined),
         state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
@@ -1464,14 +1467,14 @@ export default function SetPrice() {
             </div>
             <div className="p-6 overflow-y-auto flex-1 min-h-0">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pointer-events-auto">
-                {(kitType === 'Combo Kit' || kitType === 'Custom Kit') && (
+                {(newPriceForm.kitType === 'Combo Kit' || newPriceForm.kitType === 'Custom Kit') && (
                   <div className="md:col-span-2">
-                    <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${kitType === 'Custom Kit' ? 'text-orange-500' : 'text-gray-500'}`}>
-                        {kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Combo Kit Name'}
+                    <label className={`block text-xs font-bold uppercase tracking-widest mb-2 ${newPriceForm.kitType === 'Custom Kit' ? 'text-orange-500' : 'text-gray-500'}`}>
+                        {newPriceForm.kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Combo Kit Name'}
                     </label>
-                    <select className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-all text-sm font-bold ${kitType === 'Custom Kit' ? 'border-orange-200 focus:ring-orange-500 text-orange-800 bg-orange-50/50' : 'border-gray-200 focus:ring-blue-500 text-blue-800 bg-blue-50/50'}`} value={newPriceForm.comboKit} onChange={e => setNewPriceForm({ ...newPriceForm, comboKit: e.target.value })}>
-                       <option value="">{kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Select Combo Kit'}</option>
-                       {(kitType === 'Custom Kit' ? customizedCombokits : combokitsFromAddModule).map((kit, i) => (
+                    <select className={`w-full px-4 py-3 border rounded-lg focus:ring-2 outline-none transition-all text-sm font-bold ${newPriceForm.kitType === 'Custom Kit' ? 'border-orange-200 focus:ring-orange-500 text-orange-800 bg-orange-50/50' : 'border-gray-200 focus:ring-blue-500 text-blue-800 bg-blue-50/50'}`} value={newPriceForm.comboKit} onChange={e => setNewPriceForm({ ...newPriceForm, comboKit: e.target.value })}>
+                       <option value="">{newPriceForm.kitType === 'Custom Kit' ? 'Select Customized Kit' : 'Select Combo Kit'}</option>
+                       {(newPriceForm.kitType === 'Custom Kit' ? customizedCombokits : combokitsFromAddModule).map((kit, i) => (
                            <option key={i} value={kit.name || kit.solarkitName}>
                                {kit.name || `${kit.panels?.[0] || 'adani'} | ${kit.state?.name || 'Gujarat'} | ${kit.districts?.[0]?.name || 'Ahmedabad'}`}
                            </option>
