@@ -107,6 +107,7 @@ export default function SetPrice() {
   const [combokitsFromAddModule, setCombokitsFromAddModule] = useState([]);
   const [customizedCombokits, setCustomizedCombokits] = useState([]);
   const [selectedPartner, setSelectedPartner] = useState('All');
+  const [editingPriceId, setEditingPriceId] = useState(null);
   
   const [partnerTypes, setPartnerTypes] = useState([]);
   const [selectedPartnerType, setSelectedPartnerType] = useState('all');
@@ -589,10 +590,38 @@ export default function SetPrice() {
   };
 
   const handleEditExisting = (item) => {
-    // Move from summary to working table
-    const editingItem = { ...item, isEditing: true, isGenerated: false };
-    setTableData(prev => [editingItem, ...prev]);
-    setSummaryData(prev => prev.filter(row => row.id !== item.id));
+    // Open modal with pre-filled data instead of moving between tables
+    setEditingPriceId(item.id || item._id);
+    
+    // Set form fields from existing item
+    setNewPriceForm({
+      productType: item.productType || 'Solar Panel',
+      brand: item.brand || '',
+      category: item.category || '',
+      subCategory: item.subCategory || '',
+      projectType: item.projectType || '',
+      subProjectType: item.subProjectType || '',
+      benchmarkPrice: item.benchmarkPrice || 0,
+      marketPrice: item.marketPrice || 0,
+      gst: item.gst || 18,
+      status: item.status || 'Active',
+      comboKit: item.comboKit || '',
+      paymentType: item.paymentType || 'Cash',
+      role: item.role || ''
+    });
+
+    // Update modal-specific filtered lists
+    if (item.category) {
+      const catObj = categoriesList.find(c => c.name === item.category);
+      if (catObj) {
+        setFilteredModalSubCategories(subCategoriesList.filter(sc => 
+          (sc.categoryId === catObj._id || sc.categoryId?._id === catObj._id)
+        ));
+      }
+    }
+    
+    setFilteredModalSubProjectTypes(subProjectTypesList);
+    setShowAddModal(true);
   };
 
   const handleDeletePrice = async (id) => {
@@ -614,6 +643,7 @@ export default function SetPrice() {
   };
 
   const handleOpenAddModal = () => {
+    setEditingPriceId(null);
     // 1. Get current kit and config context
     const activeConfig = configurationsList.find(c => c._id === selectedConfigId);
     let kitName = '';
@@ -646,7 +676,8 @@ export default function SetPrice() {
       gst: firstRow?.gst || 18,
       status: 'Active',
       comboKit: firstRow?.comboKit || kitName,
-      paymentType: firstRow?.paymentType || (paymentType !== 'All' ? paymentType : 'Cash')
+      paymentType: firstRow?.paymentType || (paymentType !== 'All' ? paymentType : 'Cash'),
+      role: firstRow?.role || (selectedPartnerType !== 'all' ? selectedPartnerType : '')
     });
 
     // 3. Update modal-specific filtered lists for correct dropdown state
@@ -676,19 +707,28 @@ export default function SetPrice() {
       const payload = {
         ...newPriceForm,
         kitType: kitType,
-        paymentType: newPriceForm.paymentType || (paymentType !== 'All' ? paymentType : 'Cash'),
+        paymentType: newPriceForm.paymentType,
+        role: newPriceForm.role || (selectedPartnerType !== 'all' ? selectedPartnerType : undefined),
         state: (selectedStateId && selectedStateId !== 'all') ? selectedStateId : undefined,
         cluster: (selectedClusterId && selectedClusterId !== 'all') ? selectedClusterId : undefined,
         district: (selectedDistrictId && selectedDistrictId !== 'all') ? selectedDistrictId : undefined,
         country: (selectedCountryId && selectedCountryId !== 'all') ? selectedCountryId : undefined
       };
-      await salesSettingsService.createSetPrice(payload);
+      
+      if (editingPriceId) {
+        await salesSettingsService.updateSetPrice(editingPriceId, payload);
+        alert("Price updated successfully!");
+      } else {
+        await salesSettingsService.createSetPrice(payload);
+        alert("Price added successfully!");
+      }
+      
       setShowAddModal(false);
+      setEditingPriceId(null);
       fetchPrices(); 
-      alert("Price added successfully!");
     } catch (error) {
-      console.error("Error adding price:", error);
-      alert("Failed to add price. Please verify all fields.");
+      console.error("Error saving price:", error);
+      alert("Failed to save price. Please verify all fields.");
     }
   };
 
@@ -1143,7 +1183,7 @@ export default function SetPrice() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
             <div className="p-5 border-b border-gray-100 flex justify-between items-center bg-gray-50 flex-none">
-              <h3 className="text-xl font-bold text-[#0b386a]">Add New Price</h3>
+              <h3 className="text-xl font-bold text-[#0b386a]">{editingPriceId ? 'Edit Price Details' : 'Add New Price'}</h3>
               <button type="button" onClick={() => setShowAddModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors"><X size={20} /></button>
             </div>
             <div className="p-6 overflow-y-auto flex-1 min-h-0">
@@ -1169,6 +1209,25 @@ export default function SetPrice() {
                      <option value="">Select Product Type</option>
                      {productsList.map((p, i) => <option key={i} value={p.name}>{p.name}</option>)}
                   </select>
+                </div>
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Partner Type</label>
+                   <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.role} onChange={e => setNewPriceForm({ ...newPriceForm, role: e.target.value })}>
+                      <option value="">All Partners</option>
+                      {partnerTypes?.filter((type, index, self) => 
+                        index === self.findIndex((t) => t.name === type.name)
+                      ).map(p => (
+                        <option key={p._id} value={p.name}>{p.name}</option>
+                      ))}
+                   </select>
+                </div>
+                <div>
+                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Payment Type</label>
+                   <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.paymentType} onChange={e => setNewPriceForm({ ...newPriceForm, paymentType: e.target.value })}>
+                      <option value="Cash">Cash</option>
+                      <option value="Loan">Loan</option>
+                      <option value="EMI">EMI</option>
+                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Brand</label>
@@ -1222,7 +1281,7 @@ export default function SetPrice() {
             </div>
             <div className="p-4 border-t border-gray-100 flex gap-3 bg-white flex-none">
                 <button type="button" onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-3 bg-white border border-gray-200 text-gray-800 font-bold rounded-lg hover:bg-gray-50 transition-colors text-sm">Cancel</button>
-                <button type="button" onClick={handleAddNewSubmit} className="flex-1 px-4 py-3 bg-[#0d6efd] text-white font-bold rounded-lg shadow hover:bg-blue-600 transition-colors text-sm">Save Price</button>
+                <button type="button" onClick={handleAddNewSubmit} className="flex-1 px-4 py-3 bg-[#0d6efd] text-white font-bold rounded-lg shadow hover:bg-blue-600 transition-all text-sm">{editingPriceId ? 'Update Price' : 'Save Price'}</button>
             </div>
           </div>
         </div>
