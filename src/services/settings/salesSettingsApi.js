@@ -222,6 +222,22 @@ const salesSettingsService = {
       throw err.response?.data || err.message;
     }
   },
+  async getCompanyMargins() {
+    try {
+      const res = await api.get('/sales-settings/company-margin');
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
+  async updateCompanyMargin(data) {
+    try {
+      const res = await api.put('/sales-settings/company-margin', data);
+      return res.data;
+    } catch (err) {
+      throw err.response?.data || err.message;
+    }
+  },
 };
 
 export default salesSettingsService;

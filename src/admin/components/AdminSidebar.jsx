@@ -35,10 +35,28 @@ import {
 } from 'lucide-react';
 
 import authStore from '../../store/authStore';
+import salesSettingsService from '../../services/settings/salesSettingsApi';
 
 export default function AdminSidebar() {
   const { user } = authStore();
   const [isOpen, setIsOpen] = useState(true);
+  const [escalatedCount, setEscalatedCount] = useState(0);
+
+  // Real-time stats fetching
+  React.useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const stats = await salesSettingsService.getDashboardStats();
+        setEscalatedCount(stats.escalatedPriceCount || 0);
+      } catch (err) {
+        console.error("Error fetching sidebar stats:", err);
+      }
+    };
+
+    fetchStats();
+    const interval = setInterval(fetchStats, 30000); // Update every 30 seconds
+    return () => clearInterval(interval);
+  }, []);
 
   // Mapping of Sidebar IDs to System Module Keys
   const moduleMapping = {
@@ -296,7 +314,13 @@ export default function AdminSidebar() {
           isGroup: true,
           isExpanded: expandedSections.settingsSales,
           children: [
-            { name: '- Set Price', href: '/admin/settings/sales/set-price', icon: FileBarChart },
+            { 
+              name: '- Set Price', 
+              href: '/admin/settings/sales/set-price', 
+              icon: FileBarChart,
+              badge: escalatedCount > 0 ? escalatedCount : null,
+              badgeColor: 'bg-red-500'
+            },
             { name: '- Set Price For AMC', href: '/admin/settings/sales/set-price-amc', icon: FileBarChart },
             { name: '- Offers', href: '/admin/settings/sales/offers', icon: FileText },
             { name: '- Solar Panel Bundle Setting', href: '/admin/settings/sales/solar-panel-bundle-setting', icon: Package },
@@ -602,11 +626,18 @@ export default function AdminSidebar() {
                         <Link
                           key={item.href || item.name}
                           to={item.href}
-                          className={`flex items-center space-x-2 px-3 py-2 text-sm hover:text-white hover:bg-gray-800 rounded-lg transition ${depth > 1 ? 'text-gray-300' : 'text-gray-200'
+                          className={`flex items-center justify-between px-3 py-2 text-sm hover:text-white hover:bg-gray-800 rounded-lg transition ${depth > 1 ? 'text-gray-300' : 'text-gray-200'
                             }`}
                         >
-                          {item.icon && <item.icon size={depth > 1 ? 14 : 16} />}
-                          <span>{item.name}</span>
+                          <div className="flex items-center space-x-2">
+                             {item.icon && <item.icon size={depth > 1 ? 14 : 16} />}
+                             <span>{item.name}</span>
+                          </div>
+                          {item.badge && (
+                            <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold text-white ${item.badgeColor || 'bg-red-500'} animate-pulse`}>
+                              {item.badge}
+                            </span>
+                          )}
                         </Link>
                       );
                     };

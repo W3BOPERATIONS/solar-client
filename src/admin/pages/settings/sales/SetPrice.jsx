@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Eye, EyeOff, Filter, CheckCircle, RefreshCw, MapPin, Layers, Tag, Save, X, Plus, Trash2, Edit } from 'lucide-react';
+import { Eye, EyeOff, Filter, CheckCircle, RefreshCw, MapPin, Layers, Tag, Save, X, Plus, Trash2, Edit, Settings } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { productApi } from '../../../../api/productApi';
@@ -115,6 +115,56 @@ export default function SetPrice() {
   const [selectedPartnerPlanId, setSelectedPartnerPlanId] = useState('all');
 
   const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+
+  // --- Persistence Logic: Load from LocalStorage ---
+  useEffect(() => {
+    const savedState = localStorage.getItem('solar_setprice_state');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.countryId) {
+          setSelectedCountryId(parsed.countryId);
+          fetchStates({ countryId: parsed.countryId });
+        }
+        if (parsed.stateId) {
+          setSelectedStateId(parsed.stateId);
+          fetchClusters({ stateId: parsed.stateId });
+        }
+        if (parsed.clusterId) {
+          setSelectedClusterId(parsed.clusterId);
+          fetchDistricts({ clusterId: parsed.clusterId });
+        }
+        if (parsed.districtId) setSelectedDistrictId(parsed.districtId);
+        if (parsed.filters) setFilters(parsed.filters);
+        if (parsed.kitType) setKitType(parsed.kitType);
+        if (parsed.paymentType) setPaymentType(parsed.paymentType);
+        if (parsed.partnerType) setSelectedPartnerType(parsed.partnerType);
+        if (parsed.partnerPlanId) setSelectedPartnerPlanId(parsed.partnerPlanId);
+        if (parsed.selectedComboKitId) setSelectedComboKitId(parsed.selectedComboKitId);
+        if (parsed.selectedConfigId) setSelectedConfigId(parsed.selectedConfigId);
+      } catch (e) {
+        console.error("Failed to load persisted Pricing state", e);
+      }
+    }
+  }, []);
+
+  // --- Persistence Logic: Save to LocalStorage ---
+  useEffect(() => {
+    const stateToSave = {
+      countryId: selectedCountryId,
+      stateId: selectedStateId,
+      clusterId: selectedClusterId,
+      districtId: selectedDistrictId,
+      filters,
+      kitType,
+      paymentType,
+      partnerType: selectedPartnerType,
+      partnerPlanId: selectedPartnerPlanId,
+      selectedComboKitId,
+      selectedConfigId
+    };
+    localStorage.setItem('solar_setprice_state', JSON.stringify(stateToSave));
+  }, [selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, filters, kitType, paymentType, selectedPartnerType, selectedPartnerPlanId, selectedComboKitId, selectedConfigId]);
   const selectedCountryObj = countries.find((c) => c._id === selectedCountryId) || null;
   const selectedStateObj = states.find((s) => s._id === selectedStateId) || null;
   const selectedClusterObj = clusters.find((c) => c._id === selectedClusterId) || null;
@@ -170,13 +220,23 @@ export default function SetPrice() {
          } catch (err) {
             console.error("Error fetching customized kits:", err);
          }
-
          // Fetch Partner Types
          try {
             const pTypes = await salesSettingsService.getPartnerTypes();
             setPartnerTypes(pTypes || []);
          } catch (err) {
             console.error("Error fetching partner types:", err);
+         }
+
+         // Fetch Dynamic Company Margins
+         try {
+            const mData = await salesSettingsService.getCompanyMargins();
+            if (mData && mData.length > 0) setMarginData(mData.map(m => ({
+              ...m,
+              id: m._id // Standardizing ID for consistency if needed
+            })));
+         } catch (err) {
+            console.error("Error fetching margins:", err);
          }
 
       } catch (error) {
@@ -261,8 +321,8 @@ export default function SetPrice() {
       if (filters.projectType !== 'All Project Types') query.projectType = filters.projectType;
       if (filters.subProjectType !== 'All Sub Types') query.subProjectType = filters.subProjectType;
       
-      // We do NOT filter the Summary API call by brand/productType 
-      // because we want to see the "ENTIRE" kit status in the summary table.
+      if (filters.brand !== 'All Brands') query.brand = filters.brand;
+      if (filters.productType !== 'All Products') query.productType = filters.productType;
       
       if (kitType !== 'All') query.kitType = kitType;
       if (paymentType !== 'All') query.paymentType = paymentType;
@@ -426,7 +486,33 @@ export default function SetPrice() {
           }
       }
 
-      setTableData(workingData);
+      const latestHistoryPrice = 24500; // Mock latest purchase price
+
+      setTableData(prev => {
+        // Merge workingData with current tableData to preserve active edits
+        return workingData.map(newRow => {
+          const existingRow = prev.find(p => 
+            p.brand === newRow.brand && 
+            p.productType === newRow.productType && 
+            p.comboKit === newRow.comboKit
+          );
+          
+          if (existingRow && existingRow.isEditing) {
+            return {
+              ...newRow,
+              benchmarkPrice: existingRow.benchmarkPrice,
+              marketPrice: existingRow.marketPrice,
+              gst: existingRow.gst,
+              isEditing: true
+            };
+          }
+          
+          return {
+            ...newRow,
+            marketPrice: newRow.marketPrice || latestHistoryPrice
+          };
+        });
+      });
       setSummaryData(savedPrices);
     } catch (error) {
       console.error("Error fetching prices:", error);
@@ -593,40 +679,91 @@ export default function SetPrice() {
     // Open modal with pre-filled data instead of moving between tables
     setEditingPriceId(item.id || item._id);
     
-    // Set form fields from existing item
-    setNewPriceForm({
-      productType: item.productType || 'Solar Panel',
-      brand: item.brand || '',
-      category: item.category || '',
-      subCategory: item.subCategory || '',
-      projectType: item.projectType || '',
-      subProjectType: item.subProjectType || '',
-      benchmarkPrice: item.benchmarkPrice || 0,
-      marketPrice: item.marketPrice || 0,
+    // Prepare a clean copy of the data
+    const rawCategory = (item.category || '').toString().trim();
+    const rawSubCategory = (item.subCategory || '').toString().trim();
+    const rawProjectType = (item.projectType || '').toString().trim();
+    const rawProductType = (item.productType || 'Solar Panel').toString().trim();
+    const rawBrand = (item.brand || '').toString().trim();
+    const rawPartnerType = (item.role || item.partnerType || 'All').toString().trim();
+    const rawPaymentType = (item.paymentType || 'Cash').toString().trim();
+
+    const currentForm = {
+      productType: rawProductType,
+      brand: rawBrand,
+      category: rawCategory,
+      subCategory: rawSubCategory,
+      projectType: rawProjectType,
+      subProjectType: (item.subProjectType || '').toString().trim(),
+      benchmarkPrice: typeof item.benchmarkPrice === 'number' ? item.benchmarkPrice : 0,
+      marketPrice: typeof item.marketPrice === 'number' ? item.marketPrice : 0,
       gst: item.gst || 18,
       status: item.status || 'Active',
       comboKit: item.comboKit || '',
-      paymentType: item.paymentType || 'Cash',
-      role: item.role || ''
-    });
+      paymentType: rawPaymentType,
+      role: rawPartnerType === 'All' ? '' : rawPartnerType
+    };
 
-    // Update modal-specific filtered lists
-    if (item.category) {
-      const catObj = categoriesList.find(c => c.name === item.category);
-      if (catObj) {
-        setFilteredModalSubCategories(subCategoriesList.filter(sc => 
-          (sc.categoryId === catObj._id || sc.categoryId?._id === catObj._id)
-        ));
-      }
-    }
+    // 1. Sync Product Type
+    const matchedProduct = productsList.find(p => p.name && p.name.toLowerCase() === rawProductType.toLowerCase());
+    if (matchedProduct) currentForm.productType = matchedProduct.name;
+
+    // 2. Sync Category & Sub-Category
+    const catObj = categoriesList.find(c => 
+      (c.name && c.name.toLowerCase() === rawCategory.toLowerCase()) || 
+      c._id === rawCategory
+    );
     
+    if (catObj) {
+      currentForm.category = catObj.name;
+      const filteredSubs = subCategoriesList.filter(sc => 
+        (sc.categoryId === catObj._id || sc.categoryId?._id === catObj._id || sc.categoryId?.name === catObj.name)
+      );
+      setFilteredModalSubCategories(filteredSubs);
+
+      const subObj = filteredSubs.find(s => 
+        s.name && s.name.toLowerCase() === rawSubCategory.toLowerCase()
+      );
+      if (subObj) currentForm.subCategory = subObj.name;
+    }
+
+    // 3. Sync Partner Type
+    const partnerOptions = ['Dealer', 'Franchise', 'test', 'All Partners'];
+    const matchedPartner = partnerOptions.find(p => p.toLowerCase() === rawPartnerType.toLowerCase());
+    if (matchedPartner) currentForm.role = matchedPartner === 'All Partners' ? '' : matchedPartner;
+
+    // 4. Sync Payment Type
+    const paymentOptions = ['Cash', 'Loan', 'EMI'];
+    const matchedPayment = paymentOptions.find(p => p.toLowerCase() === rawPaymentType.toLowerCase());
+    if (matchedPayment) currentForm.paymentType = matchedPayment;
+
+    // 5. Sync Project Type
+    const allProjectOptions = [
+      ...mappingsList.map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`),
+      ...projectTypesList.map(p => p.name)
+    ];
+    const matchedProj = allProjectOptions.find(opt => 
+      opt && opt.toLowerCase() === rawProjectType.toLowerCase()
+    );
+    if (matchedProj) currentForm.projectType = matchedProj;
+
+    // Finally set the state and show modal
+    const margin = (typeof item.marketPrice === 'number' && typeof item.benchmarkPrice === 'number') 
+      ? item.marketPrice - item.benchmarkPrice 
+      : 0;
+
+    setNewPriceForm({ ...currentForm, margin });
     setFilteredModalSubProjectTypes(subProjectTypesList);
     setShowAddModal(true);
   };
 
   const handleDeletePrice = async (id) => {
-    const item = tableData.find(i => i.id === id);
-    if (!item) return;
+    // Look in both lists to find the item metadata
+    const item = tableData.find(i => i.id === id) || summaryData.find(i => i.id === id);
+    if (!item) {
+       console.warn("Item not found for deletion:", id);
+       return;
+    }
 
     if (window.confirm("Are you sure you want to delete this price setting?")) {
       try {
@@ -654,6 +791,8 @@ export default function SetPrice() {
       if (activeConfig) kitName = activeConfig.solarkitName || `${activeConfig.panels?.[0] || 'adani'} Kit`;
     }
 
+    const latestHistoryPrice = 24500;
+    
     // 2. Try to pre-fill from the first row in tableData or the active config
     const firstRow = tableData.length > 0 ? tableData[0] : null;
 
@@ -672,7 +811,8 @@ export default function SetPrice() {
       projectType: modalProjectType,
       subProjectType: modalSubProjectType,
       benchmarkPrice: firstRow?.benchmarkPrice || 0,
-      marketPrice: firstRow?.marketPrice || 0,
+      marketPrice: firstRow?.marketPrice || latestHistoryPrice,
+      margin: (firstRow?.marketPrice || latestHistoryPrice) - (firstRow?.benchmarkPrice || 0),
       gst: firstRow?.gst || 18,
       status: 'Active',
       comboKit: firstRow?.comboKit || kitName,
@@ -732,6 +872,22 @@ export default function SetPrice() {
     }
   };
 
+  const handleSaveMargins = async () => {
+    try {
+      setLoading(true);
+      await Promise.all(marginData.map(item => 
+        salesSettingsService.updateCompanyMargin(item)
+      ));
+      alert("Marginal settings updated successfully!");
+      setShowMarginModal(false);
+    } catch (err) {
+      console.error("Error saving margins:", err);
+      alert("Failed to save margins.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="bg-[#f4f7fa] min-h-screen font-sans">
       <div className="bg-white p-6 border-b border-gray-200 mb-8 px-12">
@@ -749,9 +905,23 @@ export default function SetPrice() {
           <div className="space-y-10 mb-8">
             <div className="mb-6">
               <h2 className="text-xl font-bold text-[#14233c] mb-4">Select Country</h2>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedCountryId === 'all' || selectedCountryId === ''} onClick={() => handleCountrySelect('all')} />
-                {countries.map(c => <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedCountryId === c._id} onClick={() => handleCountrySelect(c._id)} count={allPricesForCount.filter(p => (p.country?._id || p.country) === c._id || (p.country?.includes?.(c._id))).length} />)}
+                {countries.map(c => {
+                  const filteredCount = allPricesForCount.filter(p => {
+                    const locMatch = (p.country?._id || p.country) === c._id || (p.countries?.includes?.(c._id));
+                    const roleMatch = selectedPartnerType === 'all' || (p.role === selectedPartnerType);
+                    const paymentMatch = paymentType === 'All' || (p.paymentType === paymentType);
+                    const kitMatch = kitType === 'All' || (p.kitType === kitType);
+                    const catMatch = filters.category === 'All Categories' || p.category === filters.category;
+                    const subCatMatch = filters.subCategory === 'All Sub Categories' || p.subCategory === filters.subCategory;
+                    const brandMatch = filters.brand === 'All Brands' || p.brand === filters.brand;
+                    const prodMatch = filters.productType === 'All Products' || p.productType === filters.productType;
+                    
+                    return locMatch && roleMatch && paymentMatch && kitMatch && catMatch && subCatMatch && brandMatch && prodMatch;
+                  }).length;
+                  return <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedCountryId === c._id} onClick={() => handleCountrySelect(c._id)} count={filteredCount} />;
+                })}
               </div>
             </div>
             {(selectedCountryId && selectedCountryId !== 'all') && (
@@ -759,7 +929,21 @@ export default function SetPrice() {
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select State</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard title="All States" subtitle="ALL" isSelected={selectedStateId === 'all' || selectedStateId === ''} onClick={() => handleStateSelect('all')} />
-                  {states.map(s => <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedStateId === s._id} onClick={() => handleStateSelect(s._id)} isState={true} count={allPricesForCount.filter(p => (p.state?._id || p.state) === s._id || (p.state?.includes?.(s._id))).length} />)}
+                  {states.map(s => {
+                    const filteredCount = allPricesForCount.filter(p => {
+                      const locMatch = (p.state?._id || p.state) === s._id || (p.states?.includes?.(s._id));
+                      const roleMatch = selectedPartnerType === 'all' || (p.role === selectedPartnerType);
+                      const paymentMatch = paymentType === 'All' || (p.paymentType === paymentType);
+                      const kitMatch = kitType === 'All' || (p.kitType === kitType);
+                      const catMatch = filters.category === 'All Categories' || p.category === filters.category;
+                      const subCatMatch = filters.subCategory === 'All Sub Categories' || p.subCategory === filters.subCategory;
+                      const brandMatch = filters.brand === 'All Brands' || p.brand === filters.brand;
+                      const prodMatch = filters.productType === 'All Products' || p.productType === filters.productType;
+                      
+                      return locMatch && roleMatch && paymentMatch && kitMatch && catMatch && subCatMatch && brandMatch && prodMatch;
+                    }).length;
+                    return <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedStateId === s._id} onClick={() => handleStateSelect(s._id)} isState={true} count={filteredCount} />;
+                  })}
                 </div>
               </div>
             )}
@@ -770,7 +954,30 @@ export default function SetPrice() {
                   <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedClusterId === 'all' || selectedClusterId === ''} onClick={() => handleClusterSelect('all')} />
                   {clusters.map(c => {
                     const parentState = states.find(s => s._id === c.state || s._id === c.state?._id) || selectedStateObj;
-                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0,2).toUpperCase()) : 'CL'} isSelected={selectedClusterId === c._id} onClick={() => handleClusterSelect(c._id)} count={allPricesForCount.filter(p => (p.cluster?._id || p.cluster) === c._id || (p.cluster?.includes?.(c._id))).length} />;
+                    const filteredCount = allPricesForCount.filter(p => {
+                      // Direct match by Cluster ID
+                      let locMatch = (p.cluster?._id || p.cluster) === c._id || (p.clusters?.includes?.(c._id)) || (p.cluster === c.name);
+                      
+                      // Aggregation match: if item has a district, check if that district belongs to this cluster
+                      if (!locMatch && (p.district || p.districts)) {
+                        const distId = p.district?._id || p.district || (p.districts?.[0]);
+                        const distObj = districts.find(d => d._id === distId);
+                        if (distObj && (distObj.clusterId === c._id || distObj.cluster === c._id)) {
+                           locMatch = true;
+                        }
+                      }
+
+                      const roleMatch = selectedPartnerType === 'all' || (p.role === selectedPartnerType);
+                      const paymentMatch = paymentType === 'All' || (p.paymentType === paymentType);
+                      const kitMatch = kitType === 'All' || (p.kitType === kitType);
+                      const catMatch = filters.category === 'All Categories' || p.category === filters.category;
+                      const subCatMatch = filters.subCategory === 'All Sub Categories' || p.subCategory === filters.subCategory;
+                      const brandMatch = filters.brand === 'All Brands' || p.brand === filters.brand;
+                      const prodMatch = filters.productType === 'All Products' || p.productType === filters.productType;
+                      
+                      return locMatch && roleMatch && paymentMatch && kitMatch && catMatch && subCatMatch && brandMatch && prodMatch;
+                    }).length;
+                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0,2).toUpperCase()) : 'CL'} isSelected={selectedClusterId === c._id} onClick={() => handleClusterSelect(c._id)} count={filteredCount} />;
                   })}
                 </div>
               </div>
@@ -780,7 +987,21 @@ export default function SetPrice() {
                 <h2 className="text-xl font-bold text-[#14233c] mb-4">Select District</h2>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                   <LocationCard title="All Districts" subtitle="ALL" isSelected={selectedDistrictId === 'all' || selectedDistrictId === ''} onClick={() => handleDistrictSelect('all')} />
-                  {districts.map(d => <LocationCard key={d._id} title={d.name} subtitle={'DT'} isSelected={selectedDistrictId === d._id} onClick={() => handleDistrictSelect(d._id)} count={allPricesForCount.filter(p => (p.district?._id || p.district) === d._id || (p.districts?.some(dist => (dist._id || dist) === d._id))).length} />)}
+                  {districts.map(d => {
+                    const filteredCount = allPricesForCount.filter(p => {
+                      const locMatch = (p.district?._id || p.district) === d._id || (p.districts?.some(dist => (dist._id || dist) === d._id));
+                      const roleMatch = selectedPartnerType === 'all' || (p.role === selectedPartnerType);
+                      const paymentMatch = paymentType === 'All' || (p.paymentType === paymentType);
+                      const kitMatch = kitType === 'All' || (p.kitType === kitType);
+                      const catMatch = filters.category === 'All Categories' || p.category === filters.category;
+                      const subCatMatch = filters.subCategory === 'All Sub Categories' || p.subCategory === filters.subCategory;
+                      const brandMatch = filters.brand === 'All Brands' || p.brand === filters.brand;
+                      const prodMatch = filters.productType === 'All Products' || p.productType === filters.productType;
+                      
+                      return locMatch && roleMatch && paymentMatch && kitMatch && catMatch && subCatMatch && brandMatch && prodMatch;
+                    }).length;
+                    return <LocationCard key={d._id} title={d.name} subtitle={'DT'} isSelected={selectedDistrictId === d._id} onClick={() => handleDistrictSelect(d._id)} count={filteredCount} />;
+                  })}
                 </div>
               </div>
             )}
@@ -806,15 +1027,30 @@ export default function SetPrice() {
                   <LocationCard title="All Partners" subtitle="ALL" isSelected={selectedPartnerType === 'all'} onClick={() => setSelectedPartnerType('all')} />
                   {partnerTypes?.filter((type, index, self) => 
                     index === self.findIndex((t) => t.name === type.name)
-                  ).map(p => (
-                    <LocationCard 
-                      key={p._id} 
-                      title={p.name} 
-                      subtitle={p.name.substring(0, 2).toUpperCase()} 
-                      isSelected={selectedPartnerType === p.name} 
-                      onClick={() => setSelectedPartnerType(p.name)} 
-                    />
-                  ))}
+                  ).map(p => {
+                    const filteredCount = allPricesForCount.filter(item => {
+                      const locMatch = (!selectedDistrictId || selectedDistrictId === 'all') 
+                        ? true 
+                        : ((item.district?._id || item.district) === selectedDistrictId || item.districts?.includes?.(selectedDistrictId));
+                      
+                      const roleMatch = item.role === p.name;
+                      const paymentMatch = paymentType === 'All' || (item.paymentType === paymentType);
+                      const kitMatch = kitType === 'All' || (item.kitType === kitType);
+                      
+                      return locMatch && roleMatch && paymentMatch && kitMatch;
+                    }).length;
+                    
+                    return (
+                      <LocationCard 
+                        key={p._id} 
+                        title={p.name} 
+                        subtitle={p.name.substring(0, 2).toUpperCase()} 
+                        isSelected={selectedPartnerType === p.name} 
+                        onClick={() => setSelectedPartnerType(p.name)} 
+                        count={filteredCount}
+                      />
+                    );
+                  })}
                </div>
             </div>
 
@@ -825,15 +1061,27 @@ export default function SetPrice() {
                     <LocationCard title="All Plans" subtitle="ALL" isSelected={selectedPartnerPlanId === 'all'} onClick={() => setSelectedPartnerPlanId('all')} />
                     {partnerPlans?.filter((plan, index, self) => 
                         index === self.findIndex((p) => p.name === plan.name)
-                    ).map(p => (
-                      <LocationCard 
-                        key={p._id} 
-                        title={p.planName || p.name} 
-                        subtitle="PLAN" 
-                        isSelected={selectedPartnerPlanId === p._id} 
-                        onClick={() => setSelectedPartnerPlanId(p._id)} 
-                      />
-                    ))}
+                    ).map(p => {
+                      const filteredCount = allPricesForCount.filter(item => {
+                        const locMatch = (!selectedDistrictId || selectedDistrictId === 'all') 
+                           ? true 
+                           : ((item.district?._id || item.district) === selectedDistrictId || item.districts?.includes?.(selectedDistrictId));
+                        
+                        const planMatch = (item.partnerPlan?._id || item.partnerPlan) === p._id;
+                        return locMatch && planMatch;
+                      }).length;
+
+                      return (
+                        <LocationCard 
+                          key={p._id} 
+                          title={p.planName || p.name} 
+                          subtitle="PLAN" 
+                          isSelected={selectedPartnerPlanId === p._id} 
+                          onClick={() => setSelectedPartnerPlanId(p._id)} 
+                          count={filteredCount}
+                        />
+                      );
+                    })}
                  </div>
               </div>
             )}
@@ -1035,7 +1283,7 @@ export default function SetPrice() {
                        </td></tr>
                     ) : (
                        tableData.map((row) => (
-                          <tr key={row.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                           <tr key={row.id} className={`border-b border-gray-100 transition-all duration-300 ${row.marketPrice > row.benchmarkPrice ? 'bg-red-50 hover:bg-red-100/80 border-l-4 border-red-500' : 'hover:bg-gray-50'}`}>
                               <td className="p-2 border-r border-gray-100 text-center text-blue-600 text-[10px] font-bold">
                                 {row.role ? row.role : (selectedPartnerType !== 'all' ? selectedPartnerType : 'All')}
                               </td>
@@ -1051,14 +1299,37 @@ export default function SetPrice() {
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.subCategory}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.projectType}</td>
                               <td className="p-2 border-r border-gray-100 text-center text-gray-600 text-xs">{row.subProjectType}</td>
+                              <td className="p-2 border-r border-gray-100 text-center relative group">
+                                  <input 
+                                    type="number" 
+                                    className={`w-28 px-2 py-1.5 border rounded-full text-center text-xs mx-auto focus:outline-none transition-all ${
+                                      row.isEditing 
+                                      ? (row.benchmarkPrice < row.marketPrice ? 'border-red-500 bg-red-50 text-red-700 font-bold' : 'border-blue-400 bg-white') 
+                                      : (row.benchmarkPrice < row.marketPrice ? 'border-red-300 bg-red-50 text-red-600' : 'border-gray-200 bg-gray-50')
+                                    }`} 
+                                    value={row.benchmarkPrice} 
+                                    onChange={(e) => handleTableInputChange(row.id, 'benchmarkPrice', Number(e.target.value) || 0)} 
+                                    disabled={!row.isEditing} 
+                                  />
+                                  {row.benchmarkPrice < row.marketPrice && (
+                                    <div className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full p-0.5 shadow-sm transform scale-75 animate-pulse" title="Outdated Benchmark! Real cost is higher.">
+                                      <RefreshCw size={10} />
+                                    </div>
+                                  )}
+                               </td>
                               <td className="p-2 border-r border-gray-100 text-center">
-                                 <input type="number" className={`w-28 px-2 py-1.5 border rounded-full text-center text-xs mx-auto focus:outline-none ${row.isEditing ? 'border-blue-400 bg-white' : 'border-gray-200 bg-gray-50'}`} value={row.benchmarkPrice} onChange={(e) => handleTableInputChange(row.id, 'benchmarkPrice', Number(e.target.value) || 0)} disabled={!row.isEditing} />
-                              </td>
-                              <td className="p-2 border-r border-gray-100 text-center">
-                                 <input type="number" className={`w-28 px-2 py-1.5 border rounded-full text-center text-xs mx-auto focus:outline-none ${row.isEditing ? 'border-blue-400 bg-white' : 'border-gray-200 bg-gray-50'}`} value={row.marketPrice} onChange={(e) => handleTableInputChange(row.id, 'marketPrice', Number(e.target.value) || 0)} disabled={!row.isEditing} />
-                              </td>
+                                  <div className="w-28 px-2 py-1.5 border border-gray-200 bg-gray-100 rounded-full text-center text-xs mx-auto text-gray-500 font-bold select-none cursor-not-allowed">
+                                     {row.marketPrice}
+                                  </div>
+                               </td>
                               <td className="p-2 border-r border-gray-100 text-center"><button onClick={() => setShowHistoryModal(true)} className="bg-[#17a2b8] text-white px-3 py-1 rounded font-bold text-[10px] hover:bg-[#138496]">View</button></td>
-                              <td className="p-2 border-r border-gray-100 text-center"><button onClick={() => setShowMarginModal(true)} className="bg-[#ffc107] text-[#212529] px-3 py-1 rounded font-bold text-[10px] hover:bg-[#e0a800]">Set Margin</button></td>
+                              <td className="p-2 border-r border-gray-100 text-center">
+                                 <button onClick={() => setShowMarginModal(true)} className={`px-3 py-1 rounded font-bold text-[10px] transition-all ${
+                                    row.benchmarkPrice < row.marketPrice ? 'bg-orange-500 hover:bg-orange-600 text-white animate-bounce' : 'bg-[#ffc107] text-[#212529] hover:bg-[#e0a800]'
+                                  }`}>
+                                    {row.benchmarkPrice < row.marketPrice ? 'Update Margin' : 'Set Margin'}
+                                  </button>
+                              </td>
                               <td className="p-2 border-r border-gray-100 text-center">
                                  <input type="number" className={`w-16 px-2 py-1.5 border rounded-full text-center text-xs mx-auto focus:outline-none ${row.isEditing ? 'border-blue-400 bg-white' : 'border-gray-200 bg-gray-50'}`} value={row.gst} onChange={(e) => handleTableInputChange(row.id, 'gst', Number(e.target.value) || 0)} disabled={!row.isEditing} />
                               </td>
@@ -1082,7 +1353,6 @@ export default function SetPrice() {
                 </table>
              </div>
              <div className="p-4 border-t border-gray-100 flex gap-2">
-                 <button className="bg-[#0076a8] text-white px-5 py-2 rounded shadow text-sm font-bold flex items-center gap-2 hover:bg-blue-800 transition-colors" onClick={handleOpenAddModal}><CheckCircle size={16} /> Set Price</button>
                  <button className="bg-gray-500 text-white px-5 py-2 rounded shadow text-sm font-bold flex items-center gap-2 hover:bg-gray-600 transition-colors" onClick={handleResetFilters}><RefreshCw size={16} /> Reset Filters</button>
              </div>
           </div>
@@ -1098,53 +1368,63 @@ export default function SetPrice() {
              <div className="bg-white rounded-xl shadow-xl border-t-4 border-[#14233c] overflow-hidden">
                 <table className="w-full text-left border-collapse table-fixed">
                     <thead className="bg-[#f8fafc] border-b border-gray-200">
-                      <tr>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[8%]">Partner</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[15%]">Component / Product</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[12%]">Brand</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider w-[10%] text-center">Payment</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[12%]">Benchmark (₹)</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[12%]">Market Price (₹)</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-right w-[10%]">Margin (₹)</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-center w-[8%]">GST (%)</th>
-                         <th className="p-4 font-bold text-[#0076a8] text-xs uppercase tracking-widest text-right w-[13%] bg-blue-50/50">Final Price (₹)</th>
-                         <th className="p-4 font-bold text-[#14233c] text-xs uppercase tracking-wider text-center w-[8%]">Action</th>
-                      </tr>
-                   </thead>
+                       <tr>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[6%]">Partner</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[10%]">Component</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[10%]">Category</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[10%]">Sub Category</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[11%]">Project Info</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[8%] text-center">Brand</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider w-[6%] text-center">Payment</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[8%]">Benchmark (₹)</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[12%]">Latest Buying Price (per Kw)</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[8%]">Margin</th>
+                          <th className="p-3 font-bold text-[#0076a8] text-[10px] uppercase tracking-widest text-right w-[10%] bg-blue-50/50">Final (₹)</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-center w-[5%]">Action</th>
+                       </tr>
+                    </thead>
                    <tbody className="divide-y divide-gray-100">
                       {summaryData.map((row, i) => {
                          const marginValue = (row.marketPrice || 0) - (row.benchmarkPrice || 0);
                          const gstAmount = (row.marketPrice || 0) * (row.gst || 0) / 100;
                          const finalCompTotal = (row.marketPrice || 0) + gstAmount;
                          return (
-                            <tr key={i} className="hover:bg-gray-50/50 transition-colors">
-                               <td className="p-4 border-r border-gray-50 font-bold text-blue-600 text-[11px]">
-                                 {row.role ? row.role : (selectedPartnerType !== 'all' ? selectedPartnerType : 'All')}
-                               </td>
-                               <td className="p-4 border-r border-gray-50">
-                                  <div className="font-black text-gray-800 text-[13px]">{row.productType}</div>
-                                  <div className="text-[10px] text-gray-400 font-bold uppercase tracking-tighter">{row.category} / {row.subCategory}</div>
-                               </td>
-                               <td className="p-4 font-bold text-gray-600 border-r border-gray-50 uppercase text-[11px]">{row.brand}</td>
-                               <td className="p-4 border-r border-gray-50 text-center">
-                                  <span className={`px-2 py-1 rounded text-[9px] font-black uppercase tracking-tighter ${row.paymentType === 'Cash' ? 'bg-green-100 text-green-700' : row.paymentType === 'Loan' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                                     {row.paymentType || 'Cash'}
-                                  </span>
-                               </td>
-                               <td className="p-4 text-right text-gray-500 font-mono text-[13px] border-r border-gray-50">{(row.benchmarkPrice || 0).toLocaleString()}</td>
-                               <td className="p-4 text-right text-gray-900 font-black font-mono text-[13px] border-r border-gray-50">{(row.marketPrice || 0).toLocaleString()}</td>
-                               <td className={`p-4 text-right font-black font-mono text-[13px] border-r border-gray-50 ${marginValue >= 0 ? 'text-green-600' : 'text-red-500'}`}>{marginValue.toLocaleString()}</td>
-                               <td className="p-4 text-center border-r border-gray-50"><span className="text-gray-500 font-bold text-xs">{row.gst}%</span></td>
-                               <td className="p-4 text-right bg-blue-50/30 font-black font-mono text-[14px] text-[#0076a8] border-r border-gray-50">{finalCompTotal.toLocaleString()}</td>
-                               <td className="p-4 text-center">
-                                  <div className="flex items-center justify-center gap-2">
-                                     <button onClick={() => handleEditExisting(row)} className="p-2 text-[#0076a8] hover:bg-blue-50 rounded-full transition-colors" title="Edit Price">
-                                        <Edit size={16} />
-                                     </button>
-                                     <button onClick={() => handleDeletePrice(row.id || row._id)} className="p-2 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Delete Price">
-                                        <Trash2 size={16} />
-                                     </button>
-                                  </div>
+                             <tr key={i} className={`transition-all duration-300 ${row.marketPrice > row.benchmarkPrice ? 'bg-red-50 hover:bg-red-100/80 border-l-4 border-red-500' : 'hover:bg-gray-50/50'}`}>
+                               <td className="p-3 border-r border-gray-50 font-bold text-blue-600 text-[10px]">
+                                  {row.role ? row.role : (selectedPartnerType !== 'all' ? selectedPartnerType : 'All')}
+                                </td>
+                                <td className="p-3 border-r border-gray-50">
+                                   <div className="font-bold text-gray-800 text-[11px] leading-tight">{row.productType}</div>
+                                </td>
+                                <td className="p-3 border-r border-gray-50">
+                                   <div className="text-[10px] text-gray-600 font-medium">{row.category || '-'}</div>
+                                </td>
+                                <td className="p-3 border-r border-gray-50">
+                                   <div className="text-[10px] text-gray-500">{row.subCategory || '-'}</div>
+                                </td>
+                                <td className="p-3 border-r border-gray-50">
+                                   <div className="text-[10px] font-bold text-gray-700 leading-none mb-1">{row.projectType || '-'}</div>
+                                   <div className="text-[8px] text-indigo-500 font-black uppercase tracking-tighter">{row.subProjectType || '-'}</div>
+                                </td>
+                                <td className="p-3 font-bold text-gray-600 border-r border-gray-50 uppercase text-[10px] text-center">{row.brand}</td>
+                                <td className="p-3 border-r border-gray-50 text-center">
+                                   <span className={`px-1 rounded text-[8px] font-black uppercase tracking-tighter ${row.paymentType === 'Cash' ? 'bg-green-100 text-green-700' : row.paymentType === 'Loan' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                      {row.paymentType || 'Cash'}
+                                   </span>
+                                </td>
+                                <td className="p-3 text-right text-gray-500 font-mono text-[11px] border-r border-gray-50">{(row.benchmarkPrice || 0).toLocaleString()}</td>
+                                <td className="p-3 text-right text-gray-900 font-black font-mono text-[11px] border-r border-gray-50">{(row.marketPrice || 0).toLocaleString()}</td>
+                                <td className={`p-3 text-right font-black font-mono text-[11px] border-r border-gray-50 ${marginValue >= 0 ? 'text-green-600' : 'text-red-500'}`}>{marginValue.toLocaleString()}</td>
+                                <td className="p-3 text-right bg-blue-50/30 font-black font-mono text-[12px] text-[#0076a8] border-r border-gray-50">{finalCompTotal.toLocaleString()}</td>
+                                <td className="p-3 text-center">
+                                   <div className="flex items-center justify-center gap-1">
+                                      <button onClick={() => handleEditExisting(row)} className="p-1.5 text-[#0076a8] hover:bg-blue-50 rounded-full transition-colors" title="Edit Price">
+                                         <Edit size={14} />
+                                      </button>
+                                      <button onClick={() => handleDeletePrice(row.id || row._id)} className="p-1.5 text-red-500 hover:bg-red-50 rounded-full transition-colors" title="Delete Price">
+                                         <Trash2 size={14} />
+                                      </button>
+                                   </div>
                                </td>
                             </tr>
                          );
@@ -1163,10 +1443,6 @@ export default function SetPrice() {
                                       <span className="text-[10px] text-gray-400 font-bold uppercase">Unique Brands</span>
                                       <span className="text-xl font-black text-[#14233c]">{[...new Set(summaryData.map(d => d.brand))].length} Brands</span>
                                    </div>
-                                </div>
-                                <div className="text-right">
-                                   <span className="text-[10px] text-[#0076a8] font-bold uppercase block mb-0.5 tracking-wider">Net Kit Valuation (Market Price)</span>
-                                   <span className="text-2xl font-black text-[#0076a8] font-mono">₹{summaryData.reduce((acc, row) => acc + (row.marketPrice || 0), 0).toLocaleString()}</span>
                                 </div>
                              </div>
                           </td>
@@ -1251,21 +1527,30 @@ export default function SetPrice() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Project Type</label>
-                  <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.projectType} onChange={e => { const projName = e.target.value; setNewPriceForm({ ...newPriceForm, projectType: projName, subProjectType: '' }); }}>
-                       <option value="">Select Project Type</option>
-                       {mappingsList
-                         .filter(m => 
-                           (!newPriceForm.category || (m.categoryId?.name || m.categoryId) === newPriceForm.category) && 
-                           (!newPriceForm.subCategory || (m.subCategoryId?.name || m.subCategoryId) === newPriceForm.subCategory)
-                         )
-                         .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
-                         .filter((v, i, a) => a.indexOf(v) === i)
-                         .map((range, i) => <option key={i} value={range}>{range}</option>)}
-                       
-                       {projectTypesList.length > 0 && <option disabled>──────────</option>}
-                       {projectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
-                  </select>
+                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Project Type</label>
+                   <select className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.projectType} onChange={e => { const projName = e.target.value; setNewPriceForm({ ...newPriceForm, projectType: projName, subProjectType: '' }); }}>
+                        <option value="">Select Project Type</option>
+                        {mappingsList
+                          .filter(m => {
+                            const catMatch = !newPriceForm.category || 
+                              (m.categoryId?.name === newPriceForm.category) || 
+                              (m.categoryId?._id === newPriceForm.category) || 
+                              (m.categoryId === newPriceForm.category);
+                            
+                            const subMatch = !newPriceForm.subCategory || 
+                              (m.subCategoryId?.name === newPriceForm.subCategory) || 
+                              (m.subCategoryId?._id === newPriceForm.subCategory) || 
+                              (m.subCategoryId === newPriceForm.subCategory);
+                            
+                            return catMatch && subMatch;
+                          })
+                          .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                          .filter((v, i, a) => a.indexOf(v) === i)
+                          .map((range, i) => <option key={i} value={range}>{range}</option>)}
+                        
+                        {projectTypesList.length > 0 && <option disabled>──────────</option>}
+                        {projectTypesList.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
+                   </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Sub Project Type</label>
@@ -1274,8 +1559,40 @@ export default function SetPrice() {
                        {filteredModalSubProjectTypes.map(c => <option key={c._id} value={c.name}>{c.name}</option>)}
                   </select>
                 </div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Benchmark Price</label><input type="number" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.benchmarkPrice} onChange={e => setNewPriceForm({ ...newPriceForm, benchmarkPrice: Number(e.target.value) })} /></div>
-                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Market Price</label><input type="number" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.marketPrice} onChange={e => setNewPriceForm({ ...newPriceForm, marketPrice: Number(e.target.value) })} /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Benchmark Price</label><input type="number" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.benchmarkPrice} onChange={e => {
+                  const bench = Number(e.target.value);
+                  setNewPriceForm({ ...newPriceForm, benchmarkPrice: bench, margin: newPriceForm.marketPrice - bench });
+                }} /></div>
+                 <div>
+                   <label className="block text-xs font-bold text-gray-400 uppercase tracking-widest mb-2 flex items-center gap-1.5">
+                     Latest Buying Price <span className="text-[10px] bg-gray-100 text-gray-500 px-1 rounded font-black italic">History Locked</span>
+                   </label>
+                   <input 
+                     type="number" 
+                     className="w-full px-4 py-3 border border-gray-200 bg-gray-50 rounded-lg outline-none text-sm font-bold text-gray-500 cursor-not-allowed" 
+                     value={newPriceForm.marketPrice} 
+                     readOnly 
+                   />
+                 </div>
+                <div className="md:col-span-2">
+                   <div className="flex justify-between items-end mb-2">
+                      <label className="block text-xs font-bold text-orange-600 uppercase tracking-widest">Company Margin (per KW)</label>
+                      <button 
+                        type="button" 
+                        onClick={() => setShowMarginModal(true)}
+                        className="text-[10px] bg-[#ffc107] hover:bg-yellow-500 text-black font-black px-2 py-0.5 rounded shadow-sm transition-all flex items-center gap-1 uppercase"
+                      >
+                        <Settings size={10} /> View Detailed Margin
+                      </button>
+                   </div>
+                   <div className="relative">
+                      <input type="number" className="w-full px-4 py-3 border border-orange-200 bg-orange-50/30 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none transition-all text-sm font-bold text-orange-900" value={newPriceForm.margin || 0} onChange={e => {
+                        const mgn = Number(e.target.value);
+                        setNewPriceForm({ ...newPriceForm, margin: mgn, marketPrice: (newPriceForm.benchmarkPrice || 0) + mgn });
+                      }} />
+                      <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-black text-orange-400 uppercase">Margin</div>
+                   </div>
+                </div>
                 <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">GST (%)</label><input type="number" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.gst} onChange={e => setNewPriceForm({ ...newPriceForm, gst: Number(e.target.value) })} /></div>
               </div>
             </div>
@@ -1303,7 +1620,7 @@ export default function SetPrice() {
       )}
 
       {showMarginModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded shadow-2xl max-w-3xl w-full flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
              <div className="p-4 bg-[#ffc107] flex justify-between items-center"><h3 className="text-lg font-bold">Set Company Margin</h3><button type="button" onClick={() => setShowMarginModal(false)}><X size={20} /></button></div>
              <div className="p-6">
@@ -1314,7 +1631,7 @@ export default function SetPrice() {
                    </table>
                 </div>
              </div>
-             <div className="p-4 flex justify-end gap-2"><button type="button" onClick={() => setShowMarginModal(false)} className="px-5 py-2 bg-gray-500 text-white rounded font-bold text-sm">Close</button><button type="button" onClick={() => setShowMarginModal(false)} className="px-5 py-2 bg-blue-600 text-white rounded font-bold text-sm">Save Changes</button></div>
+             <div className="p-4 flex justify-end gap-2"><button type="button" onClick={() => setShowMarginModal(false)} className="px-5 py-2 bg-gray-500 text-white rounded font-bold text-sm">Close</button><button type="button" onClick={handleSaveMargins} className="px-5 py-2 bg-blue-600 text-white rounded font-bold text-sm" disabled={loading}>{loading ? 'Saving...' : 'Save Changes'}</button></div>
           </div>
         </div>
       )}
