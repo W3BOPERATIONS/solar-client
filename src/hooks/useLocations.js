@@ -135,7 +135,6 @@ export const useLocations = () => {
     if (selectedCountry && selectedCountry !== 'all') {
       fetchStates({ countryId: selectedCountry });
     } else {
-      // If no country selected, fetch all states (hierarchy)
       fetchStates();
     }
     setSelectedState('');
@@ -146,12 +145,12 @@ export const useLocations = () => {
 
   // Update Clusters when State changes
   useEffect(() => {
-    if (selectedState) {
+    if (selectedState && selectedState !== 'all') {
       fetchClusters(selectedState);
     } else {
-      setClusters([]);
+      // Fetch all clusters hierarchy if no state selected (Select All mode)
+      fetchClusters();
     }
-    // Only reset children if the parent actually changed
     setSelectedCluster('');
     setSelectedDistrict('');
     setSelectedCity('');
@@ -159,10 +158,11 @@ export const useLocations = () => {
 
   // Update Districts when Cluster changes
   useEffect(() => {
-    if (selectedCluster) {
+    if (selectedCluster && selectedCluster !== 'all') {
       fetchDistricts(selectedCluster);
     } else {
-      setDistricts([]);
+      // Fetch all districts if no cluster selected
+      fetchDistricts();
     }
     setSelectedDistrict('');
     setSelectedCity('');
@@ -170,10 +170,11 @@ export const useLocations = () => {
 
   // Update Cities when District changes
   useEffect(() => {
-    if (selectedDistrict) {
+    if (selectedDistrict && selectedDistrict !== 'all') {
       fetchCities(selectedDistrict);
     } else {
-      setCities([]);
+      // Fetch all cities if no district selected
+      fetchCities();
     }
     setSelectedCity('');
   }, [selectedDistrict, fetchCities]);
