@@ -2,9 +2,9 @@ import api from '../../api/axios';
 
 const salesSettingsService = {
   // --- Dashboard Stats ---
-  getDashboardStats: async () => {
+  getDashboardStats: async (config = {}) => {
     try {
-      const res = await api.get('/sales-settings/dashboard-stats');
+      const res = await api.get('/sales-settings/dashboard-stats', config);
       return res.data;
     } catch (err) {
       throw err.response?.data || err.message;

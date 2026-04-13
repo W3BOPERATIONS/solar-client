@@ -113,6 +113,11 @@ export const createDiscom = async (data) => {
     return response.data;
 };
 
+export const getDiscoms = async (params = {}) => {
+    const response = await axios.get(`${API_URL}/discoms`, { params });
+    return response.data;
+};
+
 export const getDiscomsByState = async (stateId) => {
     const response = await axios.get(`${API_URL}/discoms/state/${stateId}`);
     return response.data;
@@ -127,3 +132,4 @@ export const deleteDiscom = async (id) => {
     const response = await axios.delete(`${API_URL}/discoms/${id}`);
     return response.data;
 };
+

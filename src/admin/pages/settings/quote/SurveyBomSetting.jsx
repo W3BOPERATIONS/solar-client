@@ -43,7 +43,7 @@ import { CSS } from '@dnd-kit/utilities';
 export default function SurveyBomSetting() {
   const [projectTypes, setProjectTypes] = useState([]);
   const [surveyBoms, setSurveyBoms] = useState([]);
-  const [autoRefresh, setAutoRefresh] = useState(false); // Default to off as requested
+  const [autoRefresh, setAutoRefresh] = useState(false); // Forced to false to prevent any background refreshing
 
   // Dynamic Option Lists
   const [terraceTypes, setTerraceTypes] = useState([]);
@@ -489,9 +489,10 @@ export default function SurveyBomSetting() {
       }
       setShowCreateModal(false);
       setEditingId(null);
-      if (autoRefresh) {
-        fetchInitialData(); // Only refresh if auto is on
-      }
+      // Auto-refresh disabled to prevent UI disruption
+      // if (autoRefresh) {
+      //   fetchInitialData();
+      // }
     } catch (error) {
       console.error("Error saving BOM:", error);
       toast.error("Failed to save BOM");
@@ -527,9 +528,10 @@ export default function SurveyBomSetting() {
         // Update state locally
         setSurveyBoms(prev => prev.filter(b => b._id !== id));
         // Also update project counts (refresh or manual)
-        if (autoRefresh) {
-            fetchInitialData();
-        }
+        // Auto-refresh disabled to prevent UI disruption
+        // if (autoRefresh) {
+        //     fetchInitialData();
+        // }
         if (currentBom?._id === id) {
           setCurrentBom(null);
           setShowDetailedView(false);
@@ -572,16 +574,14 @@ export default function SurveyBomSetting() {
               CREATE NEW CONFIGURATION
             </button>
             <div className="h-8 w-[1px] bg-gray-200 mx-2" />
-            <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100">
-              <span className={`text-[10px] font-black uppercase tracking-widest ${autoRefresh ? 'text-green-500' : 'text-gray-400'}`}>
-                Auto Refresh: {autoRefresh ? 'ON' : 'OFF'}
+            {/* Auto Refresh toggle removed per user request to stop 25s auto-refresh behavior */}
+            <div className="flex items-center gap-3 bg-gray-50 px-4 py-2 rounded-2xl border border-gray-100 opacity-50 cursor-not-allowed">
+              <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">
+                Manual Refresh Mode
               </span>
-              <button 
-                onClick={() => setAutoRefresh(!autoRefresh)}
-                className={`w-12 h-6 rounded-full p-1 transition-all duration-300 ${autoRefresh ? 'bg-green-500' : 'bg-gray-300'}`}
-              >
-                <div className={`w-4 h-4 bg-white rounded-full transition-all duration-300 ${autoRefresh ? 'ml-6' : 'ml-0'}`} />
-              </button>
+              <div className="w-12 h-6 bg-gray-300 rounded-full p-1 transition-all duration-300">
+                <div className="w-4 h-4 bg-white rounded-full transition-all duration-300 ml-0" />
+              </div>
             </div>
             
             <button 

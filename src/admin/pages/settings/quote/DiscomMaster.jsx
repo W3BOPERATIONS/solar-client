@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   MapPin,
   Building2,
@@ -7,22 +7,22 @@ import {
   Trash2,
   Save,
   X,
-  Download,
-  Upload,
-  PlusCircle
+  Globe,
+  Map,
+  Navigation
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import {
   createDiscom,
-  getDiscomsByState,
+  getDiscoms,
   updateDiscom,
   deleteDiscom,
   getQuoteSettings
 } from '../../../../services/quote/quoteApi';
+import { getProjectCategoryMappings } from '../../../../services/core/masterApi';
 import toast from 'react-hot-toast';
 
 export default function DiscomMaster() {
-  const [selectedStateId, setSelectedStateId] = useState('');
   const [discomName, setDiscomName] = useState('');
   const [discomId, setDiscomId] = useState(null); // For editing
   const [showDiscomSection, setShowDiscomSection] = useState(false);
@@ -31,72 +31,105 @@ export default function DiscomMaster() {
   // Data for the Input Table (derived from QuoteSettings)
   const [projectData, setProjectData] = useState([]);
 
-  // Existing Discoms for the selected state
+  // Existing Discoms for the selected filters
   const [existingDiscoms, setExistingDiscoms] = useState([]);
+  const [editingDiscom, setEditingDiscom] = useState(null);
 
-  const { states } = useLocations();
-  const selectedStateName = states.find((s) => s._id === selectedStateId)?.name || '';
-  const colorClasses = [
-    'bg-blue-500 hover:bg-blue-600',
-    'bg-green-500 hover:bg-green-600',
-    'bg-orange-500 hover:bg-orange-600',
-    'bg-purple-500 hover:bg-purple-600',
-  ];
+  const {
+    countries, states, clusters, districts,
+    selectedCountry, setSelectedCountry,
+    selectedState, setSelectedState,
+    selectedCluster, setSelectedCluster,
+    selectedDistrict, setSelectedDistrict,
+    loading: locationsLoading
+  } = useLocations();
 
-  // Fetch QuoteSettings to populate Project Types
+  const selectedStateName = states.find((s) => s._id === selectedState)?.name || '';
+
+  // Fetch Project Category Mappings to populate Project Types
   const fetchProjectTemplates = async () => {
     try {
-      const settings = await getQuoteSettings();
-      // Transform settings into the format needed for the table
-      const templates = settings.map((s, index) => ({
-        id: s._id || index, // Use _id if available, else index
-        category: s.category,
-        subCategory: s.subCategory,
-        projectType: s.projectType,
-        subProjectType: s.subProjectType,
-        unitPrice: '',
-        billTariff: '',
-        isEditing: false
-      }));
+      const params = {
+        stateId: selectedState,
+        clusterId: selectedCluster,
+        districtId: selectedDistrict
+      };
+      
+      // Only fetch if at least state is selected
+      if (!selectedState) {
+        setProjectData([]);
+        return;
+      }
+
+      const res = await getProjectCategoryMappings(params);
+      const rawData = res?.data || [];
+      
+      // If we are editing, we might want to NOT overwrite, but the user requested dynamic from 2nd image.
+      // So we fetch the mappings and create the template.
+      const templates = rawData.map((m, index) => {
+        const matchingProject = editingDiscom?.projects?.find(p => 
+            p.category === (m.categoryId?.name || '-') &&
+            p.subCategory === (m.subCategoryId?.name || '-') &&
+            p.projectType === `${m.projectTypeFrom} to ${m.projectTypeTo} kW` &&
+            p.subProjectType === (m.subProjectTypeId?.name || 'On-Grid')
+        );
+
+        return {
+          id: m._id || index,
+          category: m.categoryId?.name || '-',
+          subCategory: m.subCategoryId?.name || '-',
+          projectType: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`,
+          subProjectType: m.subProjectTypeId?.name || 'On-Grid',
+          unitPrice: matchingProject ? matchingProject.unitPrice : '',
+          billTariff: matchingProject ? matchingProject.billTariff : '',
+          isEditing: false
+        };
+      });
       setProjectData(templates);
     } catch (error) {
-      console.error("Error fetching quote settings:", error);
-      toast.error("Failed to load project templates");
+      console.error("Error fetching project mappings:", error);
+      toast.error("Failed to load dynamic project templates");
     }
   };
 
   useEffect(() => {
     fetchProjectTemplates();
-  }, []);
+  }, [selectedState, selectedCluster, selectedDistrict, editingDiscom]);
 
-  // Fetch Existing Discoms when State changes
+  // Fetch Existing Discoms when Filters change
   useEffect(() => {
-    if (selectedStateId) {
-      fetchDiscoms(selectedStateId);
-    }
-  }, [selectedStateId]);
+    fetchDiscoms();
+  }, [selectedCountry, selectedState, selectedCluster, selectedDistrict]);
 
-  const fetchDiscoms = async (stateId) => {
+  const fetchDiscoms = async () => {
     try {
-      const data = await getDiscomsByState(stateId);
-      setExistingDiscoms(data);
+      const params = {
+        country: selectedCountry,
+        state: selectedState,
+        cluster: selectedCluster,
+        district: selectedDistrict
+      };
+
+      // Filter out empty params
+      const cleanParams = Object.fromEntries(Object.entries(params).filter(([_, v]) => v));
+
+      const data = await getDiscoms(cleanParams);
+      // Backend returns array of Discoms
+      setExistingDiscoms(Array.isArray(data) ? data : (data.data || []));
     } catch (error) {
       console.error("Error fetching discoms:", error);
-      toast.error("Failed to load existing discoms");
+      if (selectedState) toast.error("Failed to load existing discoms");
     }
   };
 
-  // Handle state selection
-  const handleStateSelect = (stateId) => {
-    setSelectedStateId(stateId);
-    setShowDiscomSection(true);
-    // Reset form
-    setDiscomName('');
-    setDiscomId(null);
-    setShowProjectTable(false);
-    // Reset project data values
-    fetchProjectTemplates();
-  };
+  // Handle Location selection update
+  useEffect(() => {
+    if (selectedState) {
+        setShowDiscomSection(true);
+    } else {
+        setShowDiscomSection(false);
+    }
+  }, [selectedState]);
 
   // Handle show project table
   const handleShowProjectTable = () => {
@@ -123,8 +156,16 @@ export default function DiscomMaster() {
       return;
     }
 
+    if (!selectedState) {
+        toast.error("Please select a state first");
+        return;
+    }
+
     const payload = {
-      state: selectedStateId,
+      state: selectedState,
+      country: selectedCountry,
+      cluster: selectedCluster,
+      district: selectedDistrict,
       name: discomName,
       projects: projectData.map(item => ({
         category: item.category,
@@ -138,21 +179,20 @@ export default function DiscomMaster() {
 
     try {
       if (discomId) {
-        // Update
         await updateDiscom(discomId, payload);
         toast.success("Discom updated successfully");
       } else {
-        // Create
         await createDiscom(payload);
         toast.success("Discom created successfully");
       }
 
       // Refresh list and reset form
-      fetchDiscoms(selectedStateId);
+      fetchDiscoms();
       setDiscomName('');
       setDiscomId(null);
+      setEditingDiscom(null);
       setShowProjectTable(false);
-      fetchProjectTemplates(); // Reset inputs
+      fetchProjectTemplates();
 
     } catch (error) {
       console.error("Error saving discom:", error);
@@ -162,44 +202,31 @@ export default function DiscomMaster() {
 
   // Edit Existing Discom
   const handleEditDiscom = (discom) => {
+    setEditingDiscom(discom);
     setDiscomId(discom._id);
     setDiscomName(discom.name);
     setShowProjectTable(true);
     setShowDiscomSection(true);
 
-    // Merge existing project values into projectData template
-    const mergedData = projectData.map(template => {
-      const existing = discom.projects.find(p =>
-        p.category === template.category &&
-        p.subCategory === template.subCategory &&
-        p.projectType === template.projectType &&
-        p.subProjectType === template.subProjectType
-      );
-      if (existing) {
-        return {
-          ...template,
-          unitPrice: existing.unitPrice,
-          billTariff: existing.billTariff
-        };
-      }
-      return template;
-    });
-    setProjectData(mergedData);
+    // Sync filters
+    if (discom.country) setSelectedCountry(discom.country?._id || discom.country);
+    if (discom.state) setSelectedState(discom.state?._id || discom.state);
+    if (discom.cluster) setSelectedCluster(discom.cluster?._id || discom.cluster);
+    if (discom.district) setSelectedDistrict(discom.district?._id || discom.district);
 
-    // Scroll to form
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // Delete Discom
   const handleDeleteDiscom = async (id) => {
     if (window.confirm("Are you sure you want to delete this Discom?")) {
       try {
         await deleteDiscom(id);
         toast.success("Discom deleted successfully");
-        fetchDiscoms(selectedStateId);
+        fetchDiscoms();
         if (discomId === id) {
           setDiscomName('');
           setDiscomId(null);
+          setEditingDiscom(null);
           setShowProjectTable(false);
         }
       } catch (error) {
@@ -214,11 +241,11 @@ export default function DiscomMaster() {
       {/* Header */}
       <div className="mb-6">
         <nav className="flex" aria-label="Breadcrumb">
-          <ol className="inline-flex items-center space-x-1 md:space-x-3">
-            <li className="inline-flex items-center">
+          <ol className="inline-flex items-center space-x-1 md:space-x-3 w-full">
+            <li className="inline-flex items-center w-full">
               <div className="inline-flex items-center bg-white p-4 shadow-sm rounded-lg w-full">
                 <h3 className="text-2xl font-bold text-gray-800 flex items-center">
-                  <Building2 className="mr-3" size={28} />
+                  <Building2 className="mr-3 text-blue-600" size={28} />
                   Discom Master
                 </h3>
               </div>
@@ -227,33 +254,160 @@ export default function DiscomMaster() {
         </nav>
       </div>
 
-      {/* State Cards Section */}
-      <div className="container mx-auto mb-8">
-        <h4 className="text-xl font-bold text-gray-700 mb-4 flex items-center">
-          <MapPin className="mr-2" size={24} />
-          Select State
-        </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {states.length > 0 ? (
-            states.map((state, index) => (
-              <div
-                key={state._id}
-                className={`cursor-pointer rounded-lg shadow-md transition-all duration-300 transform hover:scale-105 ${selectedStateId === state._id ? 'ring-4 ring-offset-2 ring-blue-400' : ''
-                  } ${colorClasses[index % colorClasses.length]} text-white p-6 text-center`}
-                onClick={() => handleStateSelect(state._id)}
-              >
-                <div className="text-xl font-bold">{state.name}</div>
-                <div className="mt-2 text-sm opacity-90">
-                  {selectedStateId === state._id ? 'Selected' : 'Click to select'}
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="col-span-full bg-white border border-gray-200 rounded-lg p-6 text-center text-gray-500">
-              No states available. Please add them in Settings → Location Management.
+      {/* Hierarchy Selection Filters */}
+      <div className="container mx-auto space-y-8 mb-12 bg-white p-8 rounded-[2rem] shadow-xl shadow-blue-100/30 border border-blue-50/50">
+        
+        {/* Country Picker */}
+        <section>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="flex items-center gap-2">
+              <Globe size={18} className="text-blue-500" />
+              <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Select Country</h3>
             </div>
-          )}
-        </div>
+            <button 
+              onClick={() => setSelectedCountry('')}
+              className="text-[10px] font-bold text-gray-400 hover:text-blue-500 uppercase tracking-widest transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedCountry('')}
+              className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                !selectedCountry 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+              }`}
+            >
+              ALL COUNTRIES
+            </button>
+            {countries.map(country => (
+              <button
+                key={country._id}
+                onClick={() => setSelectedCountry(country._id)}
+                className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                  selectedCountry === country._id 
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                  : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+                }`}
+              >
+                {country.name}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* State Picker */}
+        <section>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="flex items-center gap-2">
+              <MapPin size={18} className="text-blue-500" />
+              <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Select State</h3>
+            </div>
+            <button 
+              onClick={() => setSelectedState('')}
+              className="text-[10px] font-bold text-gray-400 hover:text-blue-500 uppercase tracking-widest transition-colors"
+            >
+              Clear
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedState('')}
+              className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                !selectedState 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+              }`}
+            >
+              ALL STATES
+            </button>
+            {states.map(state => (
+              <button
+                key={state._id}
+                onClick={() => setSelectedState(state._id)}
+                className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                  selectedState === state._id 
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                  : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+                }`}
+              >
+                {state.name}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Cluster Picker */}
+        <section>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="flex items-center gap-2">
+              <Map size={18} className="text-blue-500" />
+              <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Select Cluster</h3>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedCluster('')}
+              className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                !selectedCluster 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+              }`}
+            >
+              ALL CLUSTERS
+            </button>
+            {clusters.map(cluster => (
+              <button
+                key={cluster._id}
+                onClick={() => setSelectedCluster(cluster._id)}
+                className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                  selectedCluster === cluster._id 
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                  : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+                }`}
+              >
+                {cluster.name}
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* District Picker */}
+        <section>
+          <div className="flex items-center justify-between mb-4 px-2">
+            <div className="flex items-center gap-2">
+              <Navigation size={18} className="text-blue-500" />
+              <h3 className="text-xs font-black text-gray-800 uppercase tracking-widest">Select District</h3>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedDistrict('')}
+              className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                !selectedDistrict 
+                ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+              }`}
+            >
+              ALL DISTRICTS
+            </button>
+            {districts.map(district => (
+              <button
+                key={district._id}
+                onClick={() => setSelectedDistrict(district._id)}
+                className={`px-5 py-2.5 rounded-2xl text-[11px] font-black transition-all border-2 ${
+                  selectedDistrict === district._id 
+                  ? 'bg-blue-600 text-white border-blue-600 shadow-lg shadow-blue-100 scale-105' 
+                  : 'bg-white text-gray-400 border-gray-50 hover:border-blue-100 hover:text-gray-600'
+                }`}
+              >
+                {district.name}
+              </button>
+            ))}
+          </div>
+        </section>
       </div>
 
       {/* Discom Input Section */}
@@ -265,12 +419,11 @@ export default function DiscomMaster() {
           </h4>
 
           <div className="mb-4">
-            <label className="block text-gray-700 text-sm font-bold mb-2" htmlFor="discomName">
+            <label className="block text-gray-700 text-sm font-bold mb-2">
               Discom Name
             </label>
             <input
               type="text"
-              id="discomName"
               value={discomName}
               onChange={(e) => setDiscomName(e.target.value)}
               placeholder="Enter Discom Name"
@@ -306,55 +459,39 @@ export default function DiscomMaster() {
                 </tr>
               </thead>
               <tbody>
-                {projectData.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="py-8 text-center text-gray-500">
-                      No Project Types defined in Quote Settings. Please configure Quote Settings first.
+                {projectData.map((item) => (
+                  <tr key={item.id} className="hover:bg-gray-50 transition duration-150">
+                    <td className="py-3 px-4 border-b">{item.category}</td>
+                    <td className="py-3 px-4 border-b">{item.subCategory}</td>
+                    <td className="py-3 px-4 border-b">{item.projectType}</td>
+                    <td className="py-3 px-4 border-b">{item.subProjectType}</td>
+                    <td className="py-3 px-4 border-b">
+                      <input
+                        type="number"
+                        value={item.unitPrice}
+                        onChange={(e) => handleProjectDataChange(item.id, 'unitPrice', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        placeholder="0"
+                      />
+                    </td>
+                    <td className="py-3 px-4 border-b">
+                      <input
+                        type="number"
+                        value={item.billTariff}
+                        onChange={(e) => handleProjectDataChange(item.id, 'billTariff', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded"
+                        placeholder="0"
+                      />
                     </td>
                   </tr>
-                ) : (
-                  projectData.map((item) => (
-                    <tr key={item.id} className="hover:bg-gray-50 transition duration-150">
-                      <td className="py-3 px-4 border-b">
-                        <div className="font-medium text-gray-800">{item.category}</div>
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <div className="font-medium text-gray-800">{item.subCategory}</div>
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <div className="font-medium text-gray-800">{item.projectType}</div>
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <div className="font-medium text-gray-800">{item.subProjectType}</div>
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <input
-                          type="number"
-                          value={item.unitPrice}
-                          onChange={(e) => handleProjectDataChange(item.id, 'unitPrice', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Enter price"
-                        />
-                      </td>
-                      <td className="py-3 px-4 border-b">
-                        <input
-                          type="number"
-                          value={item.billTariff}
-                          onChange={(e) => handleProjectDataChange(item.id, 'billTariff', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                          placeholder="Enter tariff"
-                        />
-                      </td>
-                    </tr>
-                  ))
-                )}
+                ))}
               </tbody>
             </table>
           </div>
 
           <button
             onClick={handleSaveDiscom}
-            className="bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-6 rounded-lg mt-6 flex items-center transition duration-200"
+            className="bg-gray-800 hover:bg-gray-900 text-white font-bold py-3 px-6 rounded-lg mt-6 flex items-center"
           >
             <Save className="mr-2" size={20} />
             {discomId ? 'Update Discom' : 'Save Discom'}
@@ -362,8 +499,8 @@ export default function DiscomMaster() {
         </div>
       )}
 
-      {/* Existing Discoms List (Restyled as Summary Mockup) */}
-      {selectedStateId && (
+      {/* Existing Discoms List - REVERTED TO IMAGE 2 STYLE */}
+      {selectedState && (
         <div className="container mx-auto mb-8 bg-gray-50/50">
           <div className="flex flex-col space-y-4 mb-6">
             <button
@@ -399,19 +536,20 @@ export default function DiscomMaster() {
                 {existingDiscoms.length === 0 ? (
                   <tr>
                     <td colSpan="9" className="py-12 text-center text-gray-500 italic">
-                      No Discoms found for this state.
+                      No Discoms found for this selection.
                     </td>
                   </tr>
                 ) : (
-                  existingDiscoms.flatMap((discom, dIndex) =>
-                    (discom.projects && discom.projects.length > 0 ? discom.projects : [{}]).map((proj, pIndex) => (
+                  existingDiscoms.flatMap((discom, dIndex) => {
+                    const projects = discom.projects && discom.projects.length > 0 ? discom.projects : [{}];
+                    return projects.map((proj, pIndex) => (
                       <tr key={`${discom._id}-${pIndex}`} className="hover:bg-blue-50/30 transition-colors duration-200">
                         {pIndex === 0 ? (
                           <>
-                            <td rowSpan={Math.max(1, discom.projects?.length || 0)} className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-600 border-r border-gray-100 align-top">
+                            <td rowSpan={projects.length} className="px-4 py-5 whitespace-nowrap text-xs font-medium text-gray-600 border-r border-gray-100 align-top">
                               {dIndex + 1}
                             </td>
-                            <td rowSpan={Math.max(1, discom.projects?.length || 0)} className="px-4 py-5 whitespace-nowrap text-xs font-bold text-gray-800 border-r border-gray-100 align-top">
+                            <td rowSpan={projects.length} className="px-4 py-5 whitespace-nowrap text-xs font-bold text-gray-800 border-r border-gray-100 align-top">
                               {discom.name}
                             </td>
                           </>
@@ -424,23 +562,23 @@ export default function DiscomMaster() {
                         <td className="px-4 py-5 whitespace-nowrap text-xs font-semibold text-gray-800 border-r border-gray-100">{proj.billTariff || '-'}</td>
                         <td className="px-4 py-5 whitespace-nowrap text-center">
                           <div className="flex flex-col items-center space-y-2">
-                            <button
-                              onClick={() => handleEditDiscom(discom)}
-                              className="w-14 bg-[#ffc107] hover:bg-yellow-500 text-gray-800 text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleDeleteDiscom(discom._id)}
-                              className="w-14 bg-[#dc3545] hover:bg-red-600 text-white text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
-                            >
-                              Delete
-                            </button>
+                             <button
+                               onClick={() => handleEditDiscom(discom)}
+                               className="w-14 bg-[#ffc107] hover:bg-yellow-500 text-gray-800 text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
+                             >
+                               Edit
+                             </button>
+                             <button
+                               onClick={() => handleDeleteDiscom(discom._id)}
+                               className="w-14 bg-[#dc3545] hover:bg-red-600 text-white text-[9px] font-bold py-1 px-1 rounded transition-colors shadow-sm"
+                             >
+                               Delete
+                             </button>
                           </div>
                         </td>
                       </tr>
-                    ))
-                  )
+                    ));
+                  })
                 )}
               </tbody>
             </table>

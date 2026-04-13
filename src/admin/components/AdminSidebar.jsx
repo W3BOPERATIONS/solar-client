@@ -46,7 +46,7 @@ export default function AdminSidebar() {
   React.useEffect(() => {
     const fetchStats = async () => {
       try {
-        const stats = await salesSettingsService.getDashboardStats();
+        const stats = await salesSettingsService.getDashboardStats({ silent: true });
         setEscalatedCount(stats.escalatedPriceCount || 0);
       } catch (err) {
         console.error("Error fetching sidebar stats:", err);
@@ -54,7 +54,7 @@ export default function AdminSidebar() {
     };
 
     fetchStats();
-    const interval = setInterval(fetchStats, 30000); // Update every 30 seconds
+    const interval = setInterval(fetchStats, 60000); // Update every 60 seconds (silent)
     return () => clearInterval(interval);
   }, []);
 
