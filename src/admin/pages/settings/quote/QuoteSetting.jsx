@@ -4,7 +4,7 @@ import {
   Save, Calculator, Eye, Upload, X,
   BarChart3, LineChart, Settings, CheckCircle,
   MapPin, GripVertical, FileText, Image, Zap, Shield,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, Square, CheckSquare
 } from 'lucide-react';
 import {
   DndContext,
@@ -31,7 +31,7 @@ import {
 } from '../../../../services/quote/quoteApi';
 import toast from 'react-hot-toast';
 import { productApi } from '../../../../api/productApi';
-import { getAMCServices } from '../../../../services/combokit/combokitApi';
+import { getAMCServices, getSolarKits, getAssignments } from '../../../../services/combokit/combokitApi';
 import salesSettingsService from '../../../../services/settings/salesSettingsApi';
 import { useLocations } from '../../../../hooks/useLocations';
 
@@ -91,17 +91,17 @@ export default function QuoteSetting() {
 
 
   const [filters, setFilters] = useState({
-    category: '',
-    subCategory: '',
-    projectType: '',
-    subProjectType: ''
+    categories: [],
+    subCategories: [],
+    projectTypes: [],
+    subProjectTypes: []
   });
 
-  const [quoteType, setQuoteType] = useState('Survey Quote');
-  const [partnerType, setPartnerType] = useState('');
-  const [planType, setPlanType] = useState('');
-  const [kitType, setKitType] = useState('Combo Kit');
-  const [paymentMode, setPaymentMode] = useState('Cash');
+  const [quoteTypesSelected, setQuoteTypesSelected] = useState(['Survey Quote']);
+  const [partnerTypesSelected, setPartnerTypesSelected] = useState([]);
+  const [planTypesSelected, setPlanTypesSelected] = useState([]);
+  const [kitTypesSelected, setKitTypesSelected] = useState(['Combo Kit']);
+  const [paymentModesSelected, setPaymentModesSelected] = useState(['Cash']);
   const [selectedPages, setSelectedPages] = useState(['Front Page']);
   const [colorSettings, setColorSettings] = useState({
     brandColor: false,
@@ -134,6 +134,82 @@ export default function QuoteSetting() {
     ],
     heightNote: 'Structure Height 6 x 8 Feet is included. Extra pipes beyond this will be paid by the customer.'
   });
+  const [availableKits, setAvailableKits] = useState([]);
+  const [selectedKitId, setSelectedKitId] = useState(null);
+  const [kitLoading, setKitLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchAvailableKits = async () => {
+      if (kitTypesSelected.length === 0) {
+        setAvailableKits([]);
+        setSelectedKitId(null);
+        return;
+      }
+
+      setKitLoading(true);
+      try {
+        let allKits = [];
+        if (kitTypesSelected.includes('Combo Kit')) {
+           const kits = await getSolarKits();
+           allKits = [...allKits, ...(kits || []).map(k => ({ 
+             ...k, 
+             name: k.name || 'Untitled Combo Kit',
+             type: 'Combo Kit' 
+           }))];
+        }
+        if (kitTypesSelected.includes('Customised Kit')) {
+           const res = await getAssignments();
+           const assignments = res?.data || (Array.isArray(res) ? res : []);
+           allKits = [...allKits, ...assignments.map(a => ({ 
+             ...a, 
+             name: a.solarkitName || `Custom Kit - ${getCleanId(a.cluster) || 'Universal'}`,
+             type: 'Customised Kit' 
+           }))];
+        }
+        setAvailableKits(allKits);
+      } catch (err) {
+        console.error("Failed to fetch available kits", err);
+      } finally {
+        setKitLoading(false);
+      }
+    };
+
+    fetchAvailableKits();
+  }, [kitTypesSelected]);
+
+  const handleKitSelect = (kit) => {
+    setSelectedKitId(kit._id);
+    
+    // Load BOM from kit if available
+    if (kit.type === 'Combo Kit' && kit.bom && kit.bom.length > 0) {
+      const firstBom = kit.bom[0];
+      const newItems = (firstBom.items || []).map(item => ({
+        label: item.name || 'Component',
+        value: `${item.qty || 'N/A'} ${item.unit || ''}`.trim()
+      }));
+      if (newItems.length > 0) {
+        setBomData(prev => ({ ...prev, items: newItems }));
+      }
+    } else if (kit.type === 'Customised Kit') {
+      // For customized kits, we might have panels/inverters/boskits arrays
+      const items = [];
+      if (kit.panels?.length) items.push({ label: 'Solar Panels', value: kit.panels.join(', ') });
+      if (kit.inverters?.length) items.push({ label: 'Inverters', value: kit.inverters.join(', ') });
+      if (kit.boskits?.length) items.push({ label: 'BOS Kits', value: kit.boskits.join(', ') });
+      
+      if (items.length > 0) {
+        setBomData(prev => ({ ...prev, items }));
+      }
+    }
+    toast.success(`Loaded configuration from ${kit.name}`);
+  };
+
+  const getCleanId = (v) => {
+    if (!v) return "";
+    if (typeof v === 'string') return v;
+    return v._id || v.id || String(v);
+  };
+
   const [fieldSettings, setFieldSettings] = useState({
     proposalNo: true,
     customerName: true,
@@ -205,7 +281,21 @@ export default function QuoteSetting() {
     netCost: 117008
   });
 
+  // Sync netCost dynamically whenever constituent parts change
+  useEffect(() => {
+    setPricingData(prev => ({
+      ...prev,
+      netCost: prev.totalCost - prev.mnreSubsidy - prev.stateSubsidy + prev.additionalCharges
+    }));
+  }, [pricingData.totalCost, pricingData.mnreSubsidy, pricingData.stateSubsidy, pricingData.additionalCharges]);
+
   const [frontPageSettings, setFrontPageSettings] = useState(defaultFrontPageSettings);
+  
+  // Dynamic Theme Color based on Brand Color selection
+  const themeAccent = colorSettings.brandColor ? (frontPageSettings?.styling?.themeColor || '#2563eb') : '#2563eb';
+  const themeBgLight = `${themeAccent}10`; // 10% opacity version
+  const themeBgFaint = `${themeAccent}05`; // 5% opacity version
+
   const [isFrontPageModalOpen, setIsFrontPageModalOpen] = useState(false);
 
   const [solarSettings, setSolarSettings] = useState({
@@ -230,7 +320,24 @@ export default function QuoteSetting() {
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
 
   const handleDownloadQuote = (quote) => {
-    setDownloadQuote(quote);
+    let genImage = null;
+    let roiImage = null;
+    
+    try {
+      if (generationChartInstance.current && generationChartInstance.current.canvas) {
+        genImage = generationChartInstance.current.toBase64Image();
+      }
+      if (roiChartInstance.current && roiChartInstance.current.canvas) {
+        roiImage = roiChartInstance.current.toBase64Image();
+      }
+    } catch (err) {
+      console.warn("Could not capture chart images for PDF:", err);
+    }
+
+    setDownloadQuote({ 
+      ...quote, 
+      chartImages: { gen: genImage, roi: roiImage } 
+    });
     setIsDownloadModalOpen(true);
   };
 
@@ -303,6 +410,44 @@ export default function QuoteSetting() {
     fetchQuotes();
     fetchDynamicFilters();
 
+    // Restore state from localStorage if it exists
+    const savedState = localStorage.getItem('activeQuoteSetup');
+    if (savedState) {
+      try {
+        const parsed = JSON.parse(savedState);
+        if (parsed.filters) setFilters(parsed.filters);
+        if (parsed.solarSettings) setSolarSettings(parsed.solarSettings);
+        if (parsed.monthlyIsolation) setMonthlyIsolation(parsed.monthlyIsolation);
+        if (parsed.bomData) setBomData(parsed.bomData);
+        if (parsed.selectedKitId) setSelectedKitId(parsed.selectedKitId);
+        
+        let restoredPages = parsed.selectedPages || [];
+        if (!restoredPages.includes('Front Page')) {
+          restoredPages = ['Front Page', ...restoredPages];
+        }
+        setSelectedPages(restoredPages);
+
+        if (parsed.frontPageSettings) setFrontPageSettings(parsed.frontPageSettings);
+        if (parsed.colorSettings) setColorSettings(parsed.colorSettings);
+        if (parsed.advancedOptions) setAdvancedOptions(parsed.advancedOptions);
+        if (parsed.unitPrice) setUnitPrice(parsed.unitPrice);
+        if (parsed.inflationRate) setInflationRate(parsed.inflationRate);
+        if (parsed.degradationRate) setDegradationRate(parsed.degradationRate);
+        if (parsed.quoteTypesSelected) setQuoteTypesSelected(parsed.quoteTypesSelected);
+        if (parsed.partnerTypesSelected) setPartnerTypesSelected(parsed.partnerTypesSelected);
+        if (parsed.planTypesSelected) setPlanTypesSelected(parsed.planTypesSelected);
+        if (parsed.kitTypesSelected) setKitTypesSelected(parsed.kitTypesSelected);
+        if (parsed.paymentModesSelected) setPaymentModesSelected(parsed.paymentModesSelected);
+        if (parsed.packageImage) setPackageImage(parsed.packageImage);
+        if (parsed.fieldSettings) setFieldSettings(parsed.fieldSettings);
+      } catch (e) {
+        console.warn("Failed to restore saved quote setup:", e);
+      }
+    } else {
+      // Default: Ensure Front Page is selected if no saved state
+      setSelectedPages(['Front Page']);
+    }
+
     // One-time cleanup for specific unwanted pages
     const unwanted = ['EEEE', 'SWWSW', 'FOTTER', 'JJIIK'];
     setPagesOptions(prev => {
@@ -313,11 +458,41 @@ export default function QuoteSetting() {
         return filtered;
       }
       return prev;
-    });
-
-    // Ensure Front Page is always selected
-    setSelectedPages(prev => prev.includes('Front Page') ? prev : ['Front Page', ...prev]);
+    }
+    );
   }, []);
+
+  // Save current setup to localStorage on changes
+  useEffect(() => {
+    const setup = {
+      filters,
+      solarSettings,
+      monthlyIsolation,
+      bomData,
+      selectedKitId,
+      selectedPages,
+      frontPageSettings,
+      colorSettings,
+      advancedOptions,
+      unitPrice,
+      inflationRate,
+      degradationRate,
+      quoteTypesSelected,
+      partnerTypesSelected,
+      planTypesSelected,
+      kitTypesSelected,
+      paymentModesSelected,
+      packageImage,
+      fieldSettings
+    };
+    localStorage.setItem('activeQuoteSetup', JSON.stringify(setup));
+  }, [
+    filters, solarSettings, monthlyIsolation, bomData, selectedKitId, 
+    selectedPages, frontPageSettings, colorSettings, advancedOptions, 
+    unitPrice, inflationRate, degradationRate, quoteTypesSelected, 
+    partnerTypesSelected, planTypesSelected, kitTypesSelected, 
+    paymentModesSelected, packageImage, fieldSettings
+  ]);
 
   const handleDeletePage = (pageId) => {
     if (['f1', 'f2', 'f3', 'f4', 'f5'].includes(pageId)) {
@@ -368,7 +543,7 @@ export default function QuoteSetting() {
     }
   };
 
-  const SortablePageCard = ({ page, selectedPages, setSelectedPages, quoteType, setActiveEditingPage, setTempPageConfig, setIsPageModalOpen, pageConfigs, onDelete }) => {
+  const SortablePageCard = ({ page, selectedPages, setSelectedPages, quoteType = quoteTypesSelected[0], setActiveEditingPage, setTempPageConfig, setIsPageModalOpen, pageConfigs, onDelete }) => {
     const {
       attributes,
       listeners,
@@ -521,48 +696,204 @@ export default function QuoteSetting() {
 
   const {
     countries, states, clusters, districts,
-    selectedCountry, setSelectedCountry,
-    selectedState, setSelectedState,
-    selectedCluster, setSelectedCluster,
-    selectedDistrict, setSelectedDistrict,
     fetchStates, fetchClusters, fetchDistricts
   } = useLocations();
 
-  // Filter Sub Categories when Category changes
-  useEffect(() => {
-    if (filters.category) {
-      const selectedCatObj = categories.find(c => c.name === filters.category || c._id === filters.category);
-      if (selectedCatObj) {
-        const filtered = allSubCategories.filter(sc =>
-          sc.categoryId === selectedCatObj._id ||
-          sc.categoryId?._id === selectedCatObj._id ||
-          sc.categoryId?.name === selectedCatObj.name
-        );
-        const uniqueSubs = [...new Set(filtered.map(s => s.name || s))];
-        setSubcategories(uniqueSubs);
-      } else {
-        setSubcategories([]);
-      }
-    }
-  }, [filters.category, categories, allSubCategories]);
+  // ── Multi-select location arrays ──────────────────────────────────────────
+  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [selectedStates, setSelectedStates] = useState([]);
+  const [selectedClusters, setSelectedClusters] = useState([]);
+  const [selectedDistricts, setSelectedDistricts] = useState([]);
 
-  // Filter Sub Project Types when Project Type changes
+  // Cascade: when countries change, reload states and clear lower levels
+  useEffect(() => {
+    const activeIds = selectedCountries.filter(id => id && id !== 'all');
+    if (selectedCountries.includes('all') || activeIds.length === 0) {
+      fetchStates();
+    } else {
+      fetchStates({ countryId: activeIds.join(',') });
+    }
+    setSelectedStates([]);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
+  }, [selectedCountries]);
+
+  // Cascade: when states change, reload clusters and clear lower levels
+  useEffect(() => {
+    const activeIds = selectedStates.filter(id => id && id !== 'all');
+    if (selectedStates.includes('all') || activeIds.length === 0) {
+      fetchClusters();
+    } else {
+      fetchClusters({ stateId: activeIds.join(',') });
+    }
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
+  }, [selectedStates]);
+
+  // Cascade: when clusters change, reload districts and clear lower level
+  useEffect(() => {
+    const activeIds = selectedClusters.filter(id => id && id !== 'all');
+    if (selectedClusters.includes('all') || activeIds.length === 0) {
+      fetchDistricts();
+    } else {
+      fetchDistricts({ clusterId: activeIds.join(',') });
+    }
+    setSelectedDistricts([]);
+  }, [selectedClusters]);
+
+  // Toggle helpers
+  const toggleSelection = (setter, id, currentArray) => {
+    const arr = Array.isArray(currentArray) ? currentArray : [];
+    if (arr.includes(id)) {
+      setter(arr.filter(item => item !== id));
+    } else {
+      setter([...arr, id]);
+    }
+  };
+
+  const toggleLocation = (setter, id, allItems) => {
+    setter(prev => {
+      if (id === 'all') {
+        if (prev.includes('all')) return [];
+        return ['all', ...allItems.map(i => i._id)];
+      }
+      const activeIds = prev.filter(i => i !== 'all');
+      if (activeIds.includes(id)) {
+        return activeIds.filter(i => i !== id);
+      } else {
+        const next = [...activeIds, id];
+        if (next.length === allItems.length) return ['all', ...next];
+        return next;
+      }
+    });
+  };
+
+  const selectAllLocations = (setter, allItems) => {
+    setter(prev => {
+      const allIds = allItems.map(i => i._id);
+      const allSelected = allIds.every(id => prev.includes(id));
+      if (allSelected) return [];
+      return ['all', ...allIds];
+    });
+  };
+
+  // Reusable MultiSelectDropdown Component
+  const MultiSelectDropdown = ({ label, options, selected, onToggle, placeholder = "Select Items", colorClass = "blue" }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    // Close dropdown on outside click
+    useEffect(() => {
+      if (!isOpen) return;
+      const handleClick = () => setIsOpen(false);
+      window.addEventListener('click', handleClick);
+      return () => window.removeEventListener('click', handleClick);
+    }, [isOpen]);
+
+    const colors = {
+      blue: "text-blue-600 bg-blue-50 border-blue-100",
+      indigo: "text-indigo-600 bg-indigo-50 border-indigo-100",
+      emerald: "text-emerald-600 bg-emerald-50 border-emerald-100",
+      amber: "text-amber-600 bg-amber-50 border-amber-100"
+    };
+
+    return (
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
+        <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">{label}</label>
+        <button
+          onClick={() => setIsOpen(!isOpen)}
+          className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-left flex items-center justify-between hover:border-gray-300 transition-all shadow-sm"
+        >
+          <div className="flex items-center gap-2 overflow-hidden">
+            {selected.length > 0 ? (
+              <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-bold ${colors[colorClass] || colors.blue}`}>
+                {selected.length} Selected
+              </div>
+            ) : (
+              <span className="text-sm font-bold text-gray-400">{placeholder}</span>
+            )}
+            <span className="text-xs font-bold text-gray-700 truncate">
+              {selected.length > 0 ? selected.join(', ') : ''}
+            </span>
+          </div>
+          <ChevronDown size={16} className={`text-gray-400 transition-transform duration-300 ${isOpen ? 'rotate-180' : ''}`} />
+        </button>
+
+        {isOpen && (
+          <div className="absolute z-[100] mt-2 w-full bg-white border border-gray-100 rounded-2xl shadow-2xl p-2 animate-in fade-in slide-in-from-top-2 duration-200 max-h-[300px] overflow-y-auto">
+            {options.length > 1 && (
+                <button 
+                  onClick={() => {
+                    const allVals = options.map(o => o.name || o);
+                    const isAllSelected = allVals.every(v => selected.includes(v));
+                    if (isAllSelected) {
+                      options.forEach(o => { if (selected.includes(o.name || o)) onToggle(o.name || o) });
+                    } else {
+                      options.forEach(o => { if (!selected.includes(o.name || o)) onToggle(o.name || o) });
+                    }
+                  }}
+                  className="w-full text-left px-3 py-2 text-[10px] font-black text-blue-600 uppercase hover:bg-blue-50 rounded-lg mb-1 flex items-center justify-between"
+                >
+                  {options.map(o => o.name || o).every(v => selected.includes(v)) ? "Deselect All" : "Select All"}
+                  <CheckSquare size={14} />
+                </button>
+            )}
+            {options.map((opt, idx) => {
+              const name = opt.name || opt;
+              const isSelected = selected.includes(name);
+              return (
+                <div
+                  key={idx}
+                  onClick={() => onToggle(name)}
+                  className={`flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer transition-all ${isSelected ? 'bg-blue-50 text-blue-700' : 'hover:bg-gray-50 text-gray-600'}`}
+                >
+                  <div className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all ${isSelected ? 'bg-blue-600 border-blue-600' : 'bg-white border-gray-200'}`}>
+                    {isSelected && <CheckSquare size={14} className="text-white" />}
+                  </div>
+                  <span className="text-xs font-bold">{name}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // Filter Sub Categories when Categories change
+  useEffect(() => {
+    if (filters.categories.length > 0) {
+      const selectedCatObjs = categories.filter(c => filters.categories.includes(c.name) || filters.categories.includes(c._id));
+      const filtered = allSubCategories.filter(sc =>
+        selectedCatObjs.some(cat => 
+          sc.categoryId === cat._id || 
+          sc.categoryId?._id === cat._id || 
+          sc.categoryId?.name === cat.name
+        )
+      );
+      const uniqueSubs = [...new Set(filtered.map(s => s.name || s))];
+      setSubcategories(uniqueSubs);
+    } else {
+      setSubcategories([]);
+    }
+  }, [filters.categories, categories, allSubCategories]);
+
+  // Filter Sub Project Types when Project Types change
   useEffect(() => {
     const uniqueSubPTypes = [...new Set(allSubProjectTypes.map(s => s.name || s))];
     setSubProjectTypes(uniqueSubPTypes);
     
-    // Trigger pricing fetch only when core filters are set
-    if (filters.category && filters.projectType && !editingId) {
+    // Trigger pricing fetch only when core filters are set (arbitrarily check firsts for preview)
+    if (filters.categories.length > 0 && filters.projectTypes.length > 0 && !editingId) {
         fetchPricing();
     }
-  }, [filters.category, filters.projectType, allSubProjectTypes]); // Removed subCategory to prevent double-firing
+  }, [filters.categories, filters.projectTypes, allSubProjectTypes]);
 
   const fetchPricing = async () => {
     try {
         const response = await productApi.getProductPrices({
-            category: filters.category,
-            subCategory: filters.subCategory,
-            projectType: filters.projectType
+            category: filters.categories[0],
+            subCategory: filters.subCategories[0],
+            projectType: filters.projectTypes[0]
         });
         
         const data = response.data;
@@ -598,31 +929,30 @@ export default function QuoteSetting() {
   // Filter Plan Types when Partner Type or Location changes
   useEffect(() => {
     const fetchPlans = async () => {
-      if (partnerType) {
+      if (partnerTypesSelected.length > 0) {
         try {
-          const plans = await salesSettingsService.getPartnerPlans({ 
-            partnerType,
-            countryId: selectedCountry,
-            stateId: selectedState,
-            clusterId: selectedCluster,
-            districtId: selectedDistrict 
+          const plans = await salesSettingsService.getPartnerPlans({
+            partnerType: partnerTypesSelected.join(','),
+            countryId: selectedCountries.filter(id => id !== 'all').join(',') || undefined,
+            stateId: selectedStates.filter(id => id !== 'all').join(',') || undefined,
+            clusterId: selectedClusters.filter(id => id !== 'all').join(',') || undefined,
+            districtId: selectedDistricts.filter(id => id !== 'all').join(',') || undefined
           });
           const uniquePlans = [...new Set(plans.map(p => p.planName || p.name || p))];
           setPlanTypes(uniquePlans);
-
-          if (planType && !uniquePlans.includes(planType)) {
-            setPlanType('');
-          }
+          
+          // Re-validate selected plan types
+          setPlanTypesSelected(prev => prev.filter(p => uniquePlans.includes(p)));
         } catch (err) {
           console.error("Error fetching partner plans:", err);
-          setPlanTypes(['Startup', 'Basic', 'Enterprise', 'Solar Business']); // Fallback
+          setPlanTypes(['Startup', 'Basic', 'Enterprise', 'Solar Business']);
         }
       } else {
         setPlanTypes([]);
       }
     };
     fetchPlans();
-  }, [partnerType, selectedCountry, selectedState, selectedCluster, selectedDistrict]);
+  }, [partnerTypesSelected, selectedCountries, selectedStates, selectedClusters, selectedDistricts]);
 
   const fetchQuotes = async () => {
     try {
@@ -635,12 +965,43 @@ export default function QuoteSetting() {
   };
 
   const getQuoteCount = (type, id) => {
-    if (!id || id === 'all') return quotes.length;
+    if (!id) return 0;
+    if (id === 'all') return quotes.length;
+    
     return quotes.filter(q => {
-        const target = q[type];
-        if (!target) return false;
-        const targetId = target._id || target;
-        return targetId === id;
+        // 1. Check Location Match (Specific ID or 'All')
+        const pluralType = type === 'country' ? 'countries' : (type === 'category' ? 'categories' : type + 's');
+        const targetArray = q[pluralType] || (q[type] ? [q[type]] : []);
+        
+        const locationMatch = targetArray.some(item => {
+          const targetId = (item._id || item).toString();
+          return targetId === id.toString() || targetId === 'all';
+        });
+
+        if (!locationMatch) return false;
+
+        // 2. Cross-filter by current Targeting Configuration (if any selected)
+        const hasCategoryFilter = filters.categories.length > 0;
+        const hasProjectTypeFilter = filters.projectTypes.length > 0;
+
+        if (hasCategoryFilter) {
+          const catMatch = filters.categories.some(cat => {
+            // Check in array or single field
+            const qCats = q.categories || (q.category ? [q.category] : []);
+            return qCats.includes(cat);
+          });
+          if (!catMatch) return false;
+        }
+
+        if (hasProjectTypeFilter) {
+          const typeMatch = filters.projectTypes.some(pt => {
+             const qTypes = q.projectTypes || (q.projectType ? [q.projectType] : []);
+             return qTypes.includes(pt);
+          });
+          if (!typeMatch) return false;
+        }
+
+        return true;
     }).length;
   };
 
@@ -654,11 +1015,12 @@ export default function QuoteSetting() {
       setAnnualTotal(parseFloat(calculatedTotal.toFixed(2)));
       
       // Delay chart initialization to ensure DOM is ready
-      setTimeout(initializeCharts, 100);
+      // Use a slightly longer delay on first load/refresh
+      setTimeout(initializeCharts, 500);
     }
-  }, [selectedPages, monthlyIsolation, solarSettings, pricingData, advancedOptions, unitPrice]); 
+  }, [selectedPages, monthlyIsolation, solarSettings, pricingData, advancedOptions, unitPrice, themeAccent]); 
 
-
+  // Remove the old calculateGeneration duplicate that was here
   const calculateGeneration = () => {
     const { projectKW } = solarSettings;
     let total = 0;
@@ -679,10 +1041,9 @@ export default function QuoteSetting() {
     // BUT the original code did setMonthlyIsolation.
     // Let's just calculate total here for annualTotal state, and rely on the rendered values for display.
 
-    const calculatedTotal = updatedMonths.reduce((sum, m) => sum + m.total, 0);
-    setAnnualTotal(parseFloat(calculatedTotal.toFixed(2)));
+    setAnnualTotal(parseFloat(total.toFixed(2)));
     // Also update charts manually only when requested
-    setTimeout(initializeCharts, 100);
+    setTimeout(initializeCharts, 300);
   };
 
   const getCalculatedMonthlyData = () => {
@@ -692,6 +1053,14 @@ export default function QuoteSetting() {
       total: parseFloat((month.isolation * projectKW * 0.8).toFixed(2))
     }));
   };
+
+  // Re-initialize charts when project parameters or theme colors change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      initializeCharts();
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [themeAccent, annualTotal, pricingData.netCost, unitPrice, inflationRate, degradationRate, selectedPages]);
 
   const initializeCharts = () => {
     // Destroy existing charts
@@ -705,7 +1074,7 @@ export default function QuoteSetting() {
     const calculatedData = getCalculatedMonthlyData();
 
     // Generation Chart
-    const generationCtx = document.getElementById('generationChart');
+    const generationCtx = generationChartRef.current;
     if (generationCtx) {
       generationChartInstance.current = new Chart(generationCtx, {
         type: 'bar',
@@ -714,14 +1083,15 @@ export default function QuoteSetting() {
           datasets: [{
             label: 'Units Generated (kWh)',
             data: calculatedData.map(m => m.total),
-            backgroundColor: 'rgba(54, 162, 235, 0.7)',
-            borderColor: 'rgba(54, 162, 235, 1)',
+            backgroundColor: `${themeAccent}CC`,
+            borderColor: themeAccent,
             borderWidth: 1
           }]
         },
         options: {
           responsive: true,
           maintainAspectRatio: false,
+          animation: { duration: 0 },
           scales: {
             y: {
               beginAtZero: true,
@@ -735,14 +1105,13 @@ export default function QuoteSetting() {
       });
     }
 
-    // ROI Chart (Static Data as placeholder, dynamic would require more inputs)
     // ROI Chart (Dynamic calculation)
-    const roiCtx = document.getElementById('roiChart');
+    const roiCtx = roiChartRef.current;
     if (roiCtx) {
       const years = Array.from({ length: 11 }, (_, i) => i);
       let cumulative = 0;
       const cumulativeSavings = [];
-      const costBaseline = years.map(() => currentSystemCost);
+      const costBaseline = years.map(() => pricingData.netCost);
       
       let yearlySavings = annualTotal * unitPrice;
       
@@ -764,17 +1133,17 @@ export default function QuoteSetting() {
           datasets: [{
             label: 'Cumulative Savings (₹)',
             data: cumulativeSavings,
-            borderColor: 'rgba(75, 192, 192, 1)',
-            backgroundColor: 'rgba(75, 192, 192, 0.1)',
+            borderColor: '#10b981',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
             borderWidth: 3,
             fill: true,
             tension: 0.4,
-            pointBackgroundColor: 'rgba(75, 192, 192, 1)',
+            pointBackgroundColor: '#10b981',
             pointRadius: 4
           }, {
             label: 'System Cost (₹)',
             data: costBaseline,
-            borderColor: 'rgba(255, 99, 132, 1)',
+            borderColor: themeAccent,
             borderWidth: 2,
             borderDash: [5, 5],
             fill: false,
@@ -799,20 +1168,20 @@ export default function QuoteSetting() {
   };
 
   const handleSaveQuote = async () => {
-    if (!filters.category || !filters.subCategory || !filters.projectType || !filters.subProjectType || !quoteType || !partnerType || !planType) {
+    if (filters.categories.length === 0 || filters.subCategories.length === 0 || filters.projectTypes.length === 0 || filters.subProjectTypes.length === 0 || quoteTypesSelected.length === 0 || partnerTypesSelected.length === 0 || planTypesSelected.length === 0) {
       toast.error("Please fill all fields before saving the quote.");
       return;
     }
 
     const payload = {
-      country: selectedCountry,
-      state: selectedState,
-      cluster: selectedCluster,
-      district: selectedDistrict,
+      countries: selectedCountries,
+      states: selectedStates,
+      clusters: selectedClusters,
+      districts: selectedDistricts,
       ...filters,
-      quoteType,
-      partnerType,
-      planType,
+      quoteTypes: quoteTypesSelected,
+      partnerTypes: partnerTypesSelected,
+      planTypes: planTypesSelected,
       selectedPages,
       solarSettings,
       monthlyIsolation: monthlyIsolation.map(m => ({
@@ -822,8 +1191,8 @@ export default function QuoteSetting() {
       })),
       colorSettings,
       fieldSettings,
-      kitType,
-      paymentMode,
+      kitTypes: kitTypesSelected,
+      paymentModes: paymentModesSelected,
       pageConfigs,
       frontPageSettings,
       advancedOptions,
@@ -839,15 +1208,12 @@ export default function QuoteSetting() {
         await updateQuoteSetting(editingId, payload);
         toast.success("Quote setting updated");
       } else {
-        await createQuoteSetting(payload);
+        const res = await createQuoteSetting(payload);
+        if (res?._id) setEditingId(res._id);
         toast.success("Quote setting created");
       }
 
-      // Reset and Fetch
-      setEditingId(null);
-      resetForm();
       fetchQuotes();
-
     } catch (error) {
       console.error("Error saving quote:", error);
       toast.error("Failed to save quote");
@@ -874,15 +1240,22 @@ export default function QuoteSetting() {
 
   const resetForm = () => {
     setFilters({
-      category: '',
-      subCategory: '',
-      projectType: '',
-      subProjectType: ''
+      categories: [],
+      subCategories: [],
+      projectTypes: [],
+      subProjectTypes: []
     });
-    setQuoteType('');
-    setPartnerType('');
-    setPlanType('');
+    setQuoteTypesSelected(['Survey Quote']);
+    setPartnerTypesSelected([]);
+    setPlanTypesSelected([]);
+    setKitTypesSelected(['Combo Kit']);
+    setPaymentModesSelected(['Cash']);
     setSelectedPages([]);
+    // Clear multi-select location arrays
+    setSelectedCountries([]);
+    setSelectedStates([]);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
     setSolarSettings({
       projectKW: 10
     });
@@ -916,20 +1289,6 @@ export default function QuoteSetting() {
       ],
       heightNote: 'Structure Height 6 x 8 Feet is included. Extra pipes beyond this will be paid by the customer.'
     });
-    setMonthlyIsolation([
-      { month: 'January', isolation: 4.8, total: 0 },
-      { month: 'February', isolation: 5.2, total: 0 },
-      { month: 'March', isolation: 6.1, total: 0 },
-      { month: 'April', isolation: 6.8, total: 0 },
-      { month: 'May', isolation: 7.2, total: 0 },
-      { month: 'June', isolation: 5.8, total: 0 },
-      { month: 'July', isolation: 4.5, total: 0 },
-      { month: 'August', isolation: 4.3, total: 0 },
-      { month: 'September', isolation: 5.1, total: 0 },
-      { month: 'October', isolation: 5.6, total: 0 },
-      { month: 'November', isolation: 5.0, total: 0 },
-      { month: 'December', isolation: 4.6, total: 0 }
-    ]);
     setFieldSettings({
       proposalNo: true,
       customerName: true,
@@ -950,8 +1309,6 @@ export default function QuoteSetting() {
       paymentMode: true,
       generationSummary: true
     });
-    setKitType('Combo Kit');
-    setPaymentMode('Cash');
     setPageConfigs({});
     setFrontPageSettings(defaultFrontPageSettings);
   };
@@ -976,44 +1333,51 @@ export default function QuoteSetting() {
   const handleEditQuote = async (quote) => {
     setEditingId(quote._id);
 
-    // Set Locations first to trigger cascading fetches
-    setSelectedCountry(quote.country?._id || quote.country || '');
-    // We need to wait a bit for states/clusters/districts to load or manually trigger them
-    // But since setSelectedState triggers useEffect in useLocations, we should set them with a slight delay or directly if data is available
-    // Better yet, useLocations should handle it if we pass values, but it resets them on parent change.
-    // So we need to manually fetch them to ensure they are available for selection.
+    // Restore multi-select arrays from saved quote
+    const savedCountries = (Array.isArray(quote.countries) ? quote.countries.map(c => c?._id || c)
+      : (quote.country ? [quote.country?._id || quote.country] : [])).filter(Boolean);
+    const savedStates = (Array.isArray(quote.states) ? quote.states.map(s => s?._id || s)
+      : (quote.state ? [quote.state?._id || quote.state] : [])).filter(Boolean);
+    const savedClusters = (Array.isArray(quote.clusters) ? quote.clusters.map(cl => cl?._id || cl)
+      : (quote.cluster ? [quote.cluster?._id || quote.cluster] : [])).filter(Boolean);
+    const savedDistricts = (Array.isArray(quote.districts) ? quote.districts.map(d => d?._id || d)
+      : (quote.district ? [quote.district?._id || quote.district] : [])).filter(Boolean);
 
     try {
-      if (quote.country) await fetchStates({ countryId: quote.country._id || quote.country });
-      setSelectedState(quote.state?._id || quote.state || '');
+      const activeCountry = savedCountries.filter(id => id && id !== 'all')[0];
+      if (activeCountry) await fetchStates({ countryId: activeCountry });
+      setSelectedCountries(savedCountries);
 
-      if (quote.state) await fetchClusters(quote.state._id || quote.state);
-      setSelectedCluster(quote.cluster?._id || quote.cluster || '');
+      const activeState = savedStates.filter(id => id && id !== 'all')[0];
+      if (activeState) await fetchClusters(activeState);
+      setSelectedStates(savedStates);
 
-      if (quote.cluster) await fetchDistricts(quote.cluster._id || quote.cluster);
-      setSelectedDistrict(quote.district?._id || quote.district || '');
+      const activeCluster = savedClusters.filter(id => id && id !== 'all')[0];
+      if (activeCluster) await fetchDistricts(activeCluster);
+      setSelectedClusters(savedClusters);
+
+      setSelectedDistricts(savedDistricts);
     } catch (err) {
       console.error("Error loading location hierarchy for edit:", err);
     }
 
     setFilters({
-      category: quote.category,
-      subCategory: quote.subCategory, // Note casing: subCategory in DB
-      projectType: quote.projectType,
-      subProjectType: quote.subProjectType
+      categories: Array.isArray(quote.categories) ? quote.categories : (quote.category ? [quote.category] : []),
+      subCategories: Array.isArray(quote.subCategories) ? quote.subCategories : (quote.subCategory ? [quote.subCategory] : []),
+      projectTypes: Array.isArray(quote.projectTypes) ? quote.projectTypes : (quote.projectType ? [quote.projectType] : []),
+      subProjectTypes: Array.isArray(quote.subProjectTypes) ? quote.subProjectTypes : (quote.subProjectType ? [quote.subProjectType] : [])
     });
-    setQuoteType(quote.quoteType);
-    setPartnerType(quote.partnerType || '');
-    setPlanType(quote.planType || '');
-    const savedPages = quote.selectedPages || [];
-    setSelectedPages(savedPages);
+    setQuoteTypesSelected(quote.quoteTypes || []);
+    setPartnerTypesSelected(quote.partnerTypes || []);
+    setPlanTypesSelected(quote.planTypes || []);
+    setSelectedPages(quote.selectedPages || []);
 
     // Add any pages from the saved quote that aren't in current options
     setPagesOptions(prev => {
       const existingValues = new Set(prev.map(p => p.value));
       const newOptions = [...prev];
       let added = false;
-      savedPages.forEach(pageVal => {
+      (quote.selectedPages || []).forEach(pageVal => {
         if (!existingValues.has(pageVal)) {
           newOptions.push({
             id: `f${newOptions.length + 1}`,
@@ -1055,9 +1419,6 @@ export default function QuoteSetting() {
     if (quote.bomData) {
       setBomData(quote.bomData);
     }
-    if (quote.monthlyIsolation && quote.monthlyIsolation.length > 0) {
-      setMonthlyIsolation(quote.monthlyIsolation);
-    }
     if (quote.fieldSettings) {
       setFieldSettings(quote.fieldSettings);
     } else {
@@ -1072,8 +1433,8 @@ export default function QuoteSetting() {
       });
     }
 
-    if (quote.kitType) setKitType(quote.kitType);
-    if (quote.paymentMode) setPaymentMode(quote.paymentMode);
+    if (quote.kitTypes) setKitTypesSelected(quote.kitTypes);
+    if (quote.paymentModes) setPaymentModesSelected(quote.paymentModes);
     if (quote.pageConfigs) setPageConfigs(quote.pageConfigs);
     if (quote.frontPageSettings) setFrontPageSettings(quote.frontPageSettings);
 
@@ -1135,16 +1496,11 @@ export default function QuoteSetting() {
     }
   };
 
-  const updateBOMVisibility = () => {
-    // BOM Survey enabled for all quote types
-  };
-
-  useEffect(() => {
-    updateBOMVisibility();
-  }, [quoteType]);
-
-  const isAdvancedSettingsEnabled = true; // Enabled for all plans as per user request
-  const isLocationSelected = selectedCountry && selectedState && selectedCluster && selectedDistrict;
+  const isLocationSelected =
+    selectedCountries.length > 0 &&
+    selectedStates.length > 0 &&
+    selectedClusters.length > 0 &&
+    selectedDistricts.length > 0;
 
   const advancedTotal = advancedOptions.reduce((acc, opt) => acc + (opt.enabled ? (opt.price || 0) : 0), 0);
   const annualSavings = annualTotal * unitPrice;
@@ -1185,108 +1541,206 @@ export default function QuoteSetting() {
         </div>
         <div className="p-8 space-y-10">
 
-          {/* Country Selection */}
+          {/* ── Country Selection ────────────────────── */}
           <section>
             <div className="flex justify-between items-center mb-4">
-              <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Select Country</h3>
-              <button className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Select All</button>
+              <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                Select Country
+                {selectedCountries.length > 0 && (
+                  <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black">
+                    {selectedCountries.includes('all') ? 'All' : selectedCountries.length} selected
+                  </span>
+                )}
+              </h3>
+              <button
+                onClick={() => selectAllLocations(setSelectedCountries, countries)}
+                className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest"
+              >
+                {countries.every(c => selectedCountries.includes(c._id)) ? 'Deselect All' : 'Select All'}
+              </button>
             </div>
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-              {[{ _id: 'all', name: 'All Countries', code: 'ALL' }, ...countries].map((c, idx) => (
-                <button
-                  key={c._id || idx}
-                  onClick={() => setSelectedCountry(c._id)}
-                  className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${selectedCountry === c._id ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50' : 'border-gray-100 bg-white hover:border-blue-200'}`}
-                >
-                  {getQuoteCount('country', c._id) > 0 && (
+              {[{ _id: 'all', name: 'All Countries', code: 'ALL' }, ...countries].map((c, idx) => {
+                const isActive = selectedCountries.includes(c._id);
+                return (
+                  <button
+                    key={c._id || idx}
+                    onClick={() => toggleLocation(setSelectedCountries, c._id, countries)}
+                    className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${
+                      isActive
+                        ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50 ring-2 ring-blue-200'
+                        : 'border-gray-100 bg-white hover:border-blue-200'
+                    }`}
+                  >
+                    {getQuoteCount('country', c._id) > 0 && (
                       <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-md z-10">
-                          {getQuoteCount('country', c._id)} CFG
+                        {getQuoteCount('country', c._id)} CFG
                       </span>
-                  )}
-                  <span className={`text-sm font-bold ${selectedCountry === c._id ? 'text-blue-700' : 'text-gray-700'}`}>{c.name}</span>
-                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{c.code || (c._id === 'all' ? 'ALL' : 'IN')}</span>
-                </button>
-              ))}
+                    )}
+                    {isActive && (
+                      <span className="absolute top-2 left-2 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow">
+                        <CheckCircle size={10} className="text-white" />
+                      </span>
+                    )}
+                    <span className={`text-sm font-bold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{c.name}</span>
+                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{c.code || (c._id === 'all' ? 'ALL' : 'IN')}</span>
+                  </button>
+                );
+              })}
             </div>
           </section>
 
-          {/* State Selection */}
-          {selectedCountry && (
+          {/* ── State Selection ─────────────────────── */}
+          {selectedCountries.length > 0 && (
             <section className="animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex justify-between items-center mb-4 pt-4 border-t border-gray-100">
-                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Select State</h3>
-                <button className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Select All</button>
+                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                  Select State
+                  {selectedStates.length > 0 && (
+                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black">
+                      {selectedStates.includes('all') ? 'All' : selectedStates.length} selected
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => selectAllLocations(setSelectedStates, states)}
+                  className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest"
+                >
+                  {states.every(s => selectedStates.includes(s._id)) ? 'Deselect All' : 'Select All'}
+                </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {[{ _id: 'all', name: 'All States', code: 'ALL' }, ...states].map((s, idx) => (
-                  <button
-                    key={s._id || idx}
-                    onClick={() => setSelectedState(s._id)}
-                    className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${selectedState === s._id ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50' : 'border-gray-100 bg-white hover:border-blue-200'}`}
-                  >
-                    {getQuoteCount('state', s._id) > 0 && (
+                {[{ _id: 'all', name: 'All States', code: 'ALL' }, ...states].map((s, idx) => {
+                  const isActive = selectedStates.includes(s._id);
+                  return (
+                    <button
+                      key={s._id || idx}
+                      onClick={() => toggleLocation(setSelectedStates, s._id, states)}
+                      className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50 ring-2 ring-blue-200'
+                          : 'border-gray-100 bg-white hover:border-blue-200'
+                      }`}
+                    >
+                      {getQuoteCount('state', s._id) > 0 && (
                         <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-md z-10">
-                            {getQuoteCount('state', s._id)} CFG
+                          {getQuoteCount('state', s._id)} CFG
                         </span>
-                    )}
-                    <span className={`text-sm font-bold ${selectedState === s._id ? 'text-blue-700' : 'text-gray-700'}`}>{s.name}</span>
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{s.code || (s._id === 'all' ? 'ALL' : (s.name ? s.name.substring(0, 2).toUpperCase() : 'ST'))}</span>
-                  </button>
-                ))}
+                      )}
+                      {isActive && (
+                        <span className="absolute top-2 left-2 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow">
+                          <CheckCircle size={10} className="text-white" />
+                        </span>
+                      )}
+                      <span className={`text-sm font-bold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{s.name}</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">
+                        {s.code || (s._id === 'all' ? 'ALL' : (s.name ? s.name.substring(0, 2).toUpperCase() : 'ST'))}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
 
-          {/* Cluster Selection */}
-          {selectedState && (
+          {/* ── Cluster Selection ───────────────────── */}
+          {selectedStates.length > 0 && (
             <section className="animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex justify-between items-center mb-4 pt-4 border-t border-gray-100">
-                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Select Cluster</h3>
-                <button className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Select All</button>
+                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                  Select Cluster
+                  {selectedClusters.length > 0 && (
+                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black">
+                      {selectedClusters.includes('all') ? 'All' : selectedClusters.length} selected
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => selectAllLocations(setSelectedClusters, clusters)}
+                  className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest"
+                >
+                  {clusters.every(cl => selectedClusters.includes(cl._id)) ? 'Deselect All' : 'Select All'}
+                </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {[{ _id: 'all', name: 'All Clusters', code: 'ALL' }, ...clusters].map((cl, idx) => (
-                  <button
-                    key={cl._id || idx}
-                    onClick={() => setSelectedCluster(cl._id)}
-                    className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${selectedCluster === cl._id ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50' : 'border-gray-100 bg-white hover:border-blue-200'}`}
-                  >
-                    {getQuoteCount('cluster', cl._id) > 0 && (
+                {[{ _id: 'all', name: 'All Clusters', code: 'ALL' }, ...clusters].map((cl, idx) => {
+                  const isActive = selectedClusters.includes(cl._id);
+                  return (
+                    <button
+                      key={cl._id || idx}
+                      onClick={() => toggleLocation(setSelectedClusters, cl._id, clusters)}
+                      className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50 ring-2 ring-blue-200'
+                          : 'border-gray-100 bg-white hover:border-blue-200'
+                      }`}
+                    >
+                      {getQuoteCount('cluster', cl._id) > 0 && (
                         <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-md z-10">
-                            {getQuoteCount('cluster', cl._id)} CFG
+                          {getQuoteCount('cluster', cl._id)} CFG
                         </span>
-                    )}
-                    <span className={`text-sm font-bold ${selectedCluster === cl._id ? 'text-blue-700' : 'text-gray-700'}`}>{cl.name}</span>
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{cl.code || (cl._id === 'all' ? 'ALL' : 'GU')}</span>
-                  </button>
-                ))}
+                      )}
+                      {isActive && (
+                        <span className="absolute top-2 left-2 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow">
+                          <CheckCircle size={10} className="text-white" />
+                        </span>
+                      )}
+                      <span className={`text-sm font-bold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{cl.name}</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{cl.code || (cl._id === 'all' ? 'ALL' : 'CL')}</span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
 
-          {/* District Selection */}
-          {selectedCluster && (
+          {/* ── District Selection ──────────────────── */}
+          {selectedClusters.length > 0 && (
             <section className="animate-in fade-in slide-in-from-top-4 duration-500">
               <div className="flex justify-between items-center mb-4 pt-4 border-t border-gray-100">
-                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">Select District</h3>
-                <button className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">Select All</button>
+                <h3 className="text-sm font-black text-gray-800 uppercase tracking-tight">
+                  Select District
+                  {selectedDistricts.length > 0 && (
+                    <span className="ml-2 text-[10px] bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-black">
+                      {selectedDistricts.includes('all') ? 'All' : selectedDistricts.length} selected
+                    </span>
+                  )}
+                </h3>
+                <button
+                  onClick={() => selectAllLocations(setSelectedDistricts, districts)}
+                  className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest"
+                >
+                  {districts.every(d => selectedDistricts.includes(d._id)) ? 'Deselect All' : 'Select All'}
+                </button>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
-                {[{ _id: 'all', name: 'All Districts', code: 'ALL' }, ...districts].map((d, idx) => (
-                  <button
-                    key={d._id || idx}
-                    onClick={() => setSelectedDistrict(d._id)}
-                    className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${selectedDistrict === d._id ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50' : 'border-gray-100 bg-white hover:border-blue-200'}`}
-                  >
-                    {getQuoteCount('district', d._id) > 0 && (
+                {[{ _id: 'all', name: 'All Districts', code: 'ALL' }, ...districts].map((d, idx) => {
+                  const isActive = selectedDistricts.includes(d._id);
+                  return (
+                    <button
+                      key={d._id || idx}
+                      onClick={() => toggleLocation(setSelectedDistricts, d._id, districts)}
+                      className={`relative flex flex-col items-center justify-center p-6 rounded-2xl border-2 transition-all duration-300 ${
+                        isActive
+                          ? 'border-blue-500 bg-blue-50 shadow-lg shadow-blue-100/50 ring-2 ring-blue-200'
+                          : 'border-gray-100 bg-white hover:border-blue-200'
+                      }`}
+                    >
+                      {getQuoteCount('district', d._id) > 0 && (
                         <span className="absolute -top-2 -right-2 bg-blue-600 text-white text-[9px] font-black px-2 py-1 rounded-full shadow-md z-10">
-                            {getQuoteCount('district', d._id)} CFG
+                          {getQuoteCount('district', d._id)} CFG
                         </span>
-                    )}
-                    <span className={`text-sm font-bold ${selectedDistrict === d._id ? 'text-blue-700' : 'text-gray-700'}`}>{d.name}</span>
-                    <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{d.code || (d._id === 'all' ? 'ALL' : (selectedCluster === 'all' ? 'GU' : clusters.find(c => c._id === selectedCluster)?.name || 'DISTRICT'))}</span>
-                  </button>
-                ))}
+                      )}
+                      {isActive && (
+                        <span className="absolute top-2 left-2 w-4 h-4 bg-blue-600 rounded-full flex items-center justify-center shadow">
+                          <CheckCircle size={10} className="text-white" />
+                        </span>
+                      )}
+                      <span className={`text-sm font-bold ${isActive ? 'text-blue-700' : 'text-gray-700'}`}>{d.name}</span>
+                      <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest mt-1">{d.code || (d._id === 'all' ? 'ALL' : 'DT')}</span>
+                    </button>
+                  );
+                })}
               </div>
             </section>
           )}
@@ -1294,7 +1748,7 @@ export default function QuoteSetting() {
           {!isLocationSelected && (
             <div className="flex items-center gap-3 text-amber-600 bg-amber-50/50 p-4 rounded-2xl border-2 border-dashed border-amber-200 text-sm font-bold animate-pulse justify-center">
               <div className="w-2 h-2 bg-amber-500 rounded-full"></div>
-              PLEASE SELECT LOCATION TO UNLOCK QUOTE SETTINGS
+              SELECT AT LEAST ONE COUNTRY · STATE · CLUSTER · DISTRICT TO UNLOCK
             </div>
           )}
         </div>
@@ -1319,7 +1773,12 @@ export default function QuoteSetting() {
               isOpen={openSections.targeting}
               onToggle={toggleSection}
               icon={MapPin}
-              badge={`${states.find(s => s._id === (selectedState))?.name || '-'} / ${clusters.find(c => c._id === (selectedCluster))?.name || '-'} / ${districts.find(d => d._id === (selectedDistrict))?.name || '-'}`}
+              badge={[
+                selectedCountries.includes('all') ? 'All Countries' : countries.filter(c => selectedCountries.includes(c._id)).map(c => c.name).join(', ') || '-',
+                selectedStates.includes('all') ? 'All States' : states.filter(s => selectedStates.includes(s._id)).map(s => s.name).join(', ') || '-',
+                selectedClusters.includes('all') ? 'All Clusters' : clusters.filter(cl => selectedClusters.includes(cl._id)).map(cl => cl.name).join(', ') || '-',
+                selectedDistricts.includes('all') ? 'All Districts' : districts.filter(d => selectedDistricts.includes(d._id)).map(d => d.name).join(', ') || '-'
+              ].join(' / ')}
             >
                {editingId && (
                 <div className="flex justify-end mb-6">
@@ -1333,75 +1792,48 @@ export default function QuoteSetting() {
                 </div>
               )}
                 {/* Filters */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Category</label>
-                    <select
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-                      value={filters.category}
-                      onChange={(e) => setFilters({ ...filters, category: e.target.value })}
-                    >
-                      <option value="" disabled>Select Category</option>
-                      {categories.map(cat => (
-                        <option key={cat._id || cat.name} value={cat.name}>{cat.name}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sub Category</label>
-                    <select
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-                      value={filters.subCategory}
-                      onChange={(e) => setFilters({ ...filters, subCategory: e.target.value })}
-                    >
-                      <option value="" disabled>Select Sub Category</option>
-                      {subcategories.map(sub => (
-                        <option key={sub} value={sub}>{sub}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Project Type</label>
-                    <select
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-                      value={filters.projectType}
-                      onChange={(e) => setFilters({ ...filters, projectType: e.target.value })}
-                    >
-                      <option value="" disabled>Select Type</option>
-                      {projectTypes.map((type, idx) => (
-                        <option key={idx} value={type}>{type}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1.5 ml-1">Sub Proj Type</label>
-                    <select
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all outline-none"
-                      value={filters.subProjectType}
-                      onChange={(e) => setFilters({ ...filters, subProjectType: e.target.value })}
-                    >
-                      <option value="" disabled>Select Type</option>
-                      {subProjectTypes.map((sub, idx) => (
-                        <option key={idx} value={sub}>{sub}</option>
-                      ))}
-                    </select>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                  <MultiSelectDropdown 
+                    label="Categories"
+                    options={categories}
+                    selected={filters.categories}
+                    onToggle={(val) => toggleSelection((newArr) => setFilters(prev => ({ ...prev, categories: newArr })), val, filters.categories)}
+                    colorClass="blue"
+                  />
+                  <MultiSelectDropdown 
+                    label="Sub Categories"
+                    options={subcategories}
+                    selected={filters.subCategories}
+                    onToggle={(val) => toggleSelection((newArr) => setFilters(prev => ({ ...prev, subCategories: newArr })), val, filters.subCategories)}
+                    colorClass="indigo"
+                  />
+                  <MultiSelectDropdown 
+                    label="Project Types"
+                    options={projectTypes}
+                    selected={filters.projectTypes}
+                    onToggle={(val) => toggleSelection((newArr) => setFilters(prev => ({ ...prev, projectTypes: newArr })), val, filters.projectTypes)}
+                    colorClass="emerald"
+                  />
+                  <MultiSelectDropdown 
+                    label="Sub Proj Types"
+                    options={subProjectTypes}
+                    selected={filters.subProjectTypes}
+                    onToggle={(val) => toggleSelection((newArr) => setFilters(prev => ({ ...prev, subProjectTypes: newArr })), val, filters.subProjectTypes)}
+                    colorClass="amber"
+                  />
                 </div>
 
                 {/* Selections Section */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8 items-stretch">
                   {/* Quote Type */}
                   <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Quote Type</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Quote Types</label>
                     <div className="grid grid-cols-2 gap-2 flex-1">
                       {quoteTypes.map(type => (
                         <button
                           key={type}
-                          className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${quoteType === type ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'}`}
-                          onClick={() => setQuoteType(type)}
+                          className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${quoteTypesSelected.includes(type) ? 'bg-blue-600 text-white border-blue-600' : 'bg-white border-gray-100 text-gray-600 hover:border-blue-200'}`}
+                          onClick={() => toggleSelection(setQuoteTypesSelected, type, quoteTypesSelected)}
                         >
                           {type}
                         </button>
@@ -1411,13 +1843,13 @@ export default function QuoteSetting() {
 
                   {/* Kit Type */}
                   <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Solution Type</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Solution Types</label>
                     <div className="grid grid-cols-2 gap-2 flex-1">
                       {['Combo Kit', 'Customised Kit'].map(type => (
                         <button
                           key={type}
-                          className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${kitType === type ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-100 text-gray-600 hover:border-indigo-200'}`}
-                          onClick={() => setKitType(type)}
+                          className={`flex flex-col items-center justify-center gap-1.5 px-2 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${kitTypesSelected.includes(type) ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white border-gray-100 text-gray-600 hover:border-indigo-200'}`}
+                          onClick={() => toggleSelection(setKitTypesSelected, type, kitTypesSelected)}
                         >
                           {type}
                         </button>
@@ -1427,13 +1859,13 @@ export default function QuoteSetting() {
 
                   {/* Finance Mode */}
                   <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Finance Mode</label>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Finance Modes</label>
                     <div className="grid grid-cols-3 gap-2 flex-1">
                       {['Cash', 'Loan', 'EMI'].map(type => (
                         <button
                           key={type}
-                          className={`flex flex-col items-center justify-center gap-1.5 px-1 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${paymentMode === type ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-gray-100 text-gray-600 hover:border-emerald-200'}`}
-                          onClick={() => setPaymentMode(type)}
+                          className={`flex flex-col items-center justify-center gap-1.5 px-1 py-3 rounded-xl border-2 transition-all duration-200 text-[10px] font-bold shadow-sm ${paymentModesSelected.includes(type) ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white border-gray-100 text-gray-600 hover:border-emerald-200'}`}
+                          onClick={() => toggleSelection(setPaymentModesSelected, type, paymentModesSelected)}
                         >
                           {type}
                         </button>
@@ -1443,36 +1875,98 @@ export default function QuoteSetting() {
 
                   {/* Partner Type */}
                   <div className="bg-gray-50/50 p-4 rounded-xl border border-gray-100 flex flex-col">
-                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Partner Type</label>
-                    <div className="flex-1 flex flex-col justify-center">
-                      <select
-                        className="w-full bg-white border-2 border-gray-100 rounded-xl px-4 py-2.5 focus:outline-none focus:border-blue-500 font-bold text-gray-700 shadow-sm text-xs"
-                        value={partnerType}
-                        onChange={(e) => setPartnerType(e.target.value)}
-                      >
-                        <option value="" disabled>Select Partner</option>
-                        {partnerTypes.map(type => (
-                          <option key={type._id || type.name || type} value={type.name || type}>{type.name || type}</option>
-                        ))}
-                      </select>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 text-center">Partner Types</label>
+                    <div className="flex-1 flex flex-wrap gap-1 content-center justify-center">
+                      {partnerTypes.map((type, idx) => {
+                         const name = type.name || type;
+                         return (
+                           <button
+                             key={idx}
+                             onClick={() => toggleSelection(setPartnerTypesSelected, name, partnerTypesSelected)}
+                             className={`px-3 py-2 rounded-lg text-[9px] font-black uppercase transition-all ${partnerTypesSelected.includes(name) ? 'bg-blue-600 text-white shadow-md' : 'bg-white text-gray-500 border border-gray-100 hover:bg-gray-100'}`}
+                           >
+                             {name}
+                           </button>
+                         );
+                       })}
                     </div>
                   </div>
                 </div>
+
+                {/* Specific Kit Selection */}
+                {kitTypesSelected.length > 0 && (
+                  <div className="bg-gray-50/50 p-6 rounded-2xl border border-gray-100 mb-8 overflow-hidden group">
+                    <div className="flex items-center justify-between mb-5 px-1">
+                      <div className="flex flex-col">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none mb-1">Step 2: Specific Selection</label>
+                        <span className="text-xs font-black text-gray-800 uppercase tracking-tight">Available Configurations</span>
+                      </div>
+                      {kitLoading && (
+                        <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100">
+                          <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping" />
+                          <span className="text-[9px] font-black text-blue-600 uppercase tracking-widest">Fetching Kits...</span>
+                        </div>
+                      )}
+                    </div>
+                    
+                    {availableKits.length === 0 && !kitLoading ? (
+                      <div className="text-center py-10 bg-white rounded-2xl border-2 border-dashed border-gray-100">
+                        <div className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-3">
+                          <Zap size={18} className="text-gray-300" />
+                        </div>
+                        <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">No kits found for selected solution types</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {availableKits.map(kit => {
+                          const isSelected = selectedKitId === kit._id;
+                          return (
+                            <button
+                              key={kit._id}
+                              onClick={() => handleKitSelect(kit)}
+                              className={`relative flex flex-col items-center justify-center p-5 rounded-2xl border-2 transition-all duration-300 ${
+                                isSelected
+                                  ? 'border-indigo-600 bg-indigo-50 shadow-indigo-100/50 shadow-lg ring-4 ring-indigo-50'
+                                  : 'border-white bg-white hover:border-indigo-200 shadow-sm'
+                              } group/kit h-full min-h-[90px]`}
+                            >
+                              <span className={`text-[11px] font-black text-center leading-tight mb-2 transition-colors ${isSelected ? 'text-indigo-700' : 'text-gray-700 group-hover/kit:text-indigo-600'}`}>
+                                {kit.name}
+                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[8px] font-black px-2.5 py-1 rounded-lg uppercase tracking-widest ${
+                                  kit.type === 'Combo Kit' ? 'bg-blue-600/10 text-blue-600' : 'bg-emerald-600/10 text-emerald-600'
+                                } shadow-sm`}>
+                                  {kit.type}
+                                </span>
+                              </div>
+                              {isSelected && (
+                                <div className="absolute -top-2 -right-2 w-6 h-6 bg-indigo-600 rounded-xl flex items-center justify-center shadow-lg shadow-indigo-200 border-2 border-white animate-in zoom-in duration-300">
+                                  <CheckCircle size={14} className="text-white" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Plan Type Selection */}
                 <div className="bg-gray-50/50 p-6 rounded-2xl border-2 border-dashed border-gray-200 mb-8">
                   <label className="block text-sm font-bold text-gray-700 mb-4 flex items-center gap-2">
                     <div className="w-2 h-2 bg-blue-500 rounded-full" />
-                    Select Plan Type
+                    Select Plan Types
                   </label>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {planTypes.map((type, idx) => (
                       <button
                         key={idx}
-                        className={`relative px-4 py-5 rounded-xl border-2 transition-all duration-300 text-[11px] font-black flex flex-col items-center justify-center gap-2 shadow-sm uppercase tracking-wider ${planType === type ? 'bg-blue-600 text-white border-blue-600 scale-[1.05] z-10 shadow-blue-200 shadow-lg' : 'bg-white border-gray-100 text-gray-500 hover:border-blue-400 hover:bg-blue-50/50'}`}
-                        onClick={() => setPlanType(type)}
+                        className={`relative px-4 py-5 rounded-xl border-2 transition-all duration-300 text-[11px] font-black flex flex-col items-center justify-center gap-2 shadow-sm uppercase tracking-wider ${planTypesSelected.includes(type) ? 'bg-blue-600 text-white border-blue-600 scale-[1.05] z-10 shadow-blue-200 shadow-lg' : 'bg-white border-gray-100 text-gray-500 hover:border-blue-400 hover:bg-blue-50/50'}`}
+                        onClick={() => toggleSelection(setPlanTypesSelected, type, planTypesSelected)}
                       >
-                        {planType === type && (
+                        {planTypesSelected.includes(type) && (
                           <div className="absolute -top-2 -right-2 bg-green-500 text-white p-1 rounded-full shadow-md">
                             <CheckCircle size={12} className="text-white" />
                           </div>
@@ -1548,6 +2042,25 @@ export default function QuoteSetting() {
               badge="Material Specifications & Tables"
             >
 
+              {!selectedKitId ? (
+                <div className="flex flex-col items-center justify-center py-16 px-8 text-center bg-gray-50/30 rounded-3xl border-2 border-dashed border-gray-100">
+                  <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
+                    <Settings size={32} className="text-gray-300" />
+                  </div>
+                  <h4 className="text-sm font-black text-gray-600 uppercase tracking-widest mb-2">BOM Configuration Locked</h4>
+                  <p className="text-xs font-bold text-gray-400 max-w-xs mx-auto mb-6">Please select a specific kit or configuration in the Targeting section to unlock and load material specifications.</p>
+                  <button 
+                    onClick={() => {
+                      setOpenSections(prev => ({ ...prev, targeting: true }));
+                      // Optional scroll to targeting
+                    }}
+                    className="px-6 py-2.5 bg-blue-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-95"
+                  >
+                    Select Kit Now
+                  </button>
+                </div>
+              ) : (
+                <div className="animate-in fade-in zoom-in-95 duration-500">
                   {/* BOM Material Items */}
                   <div className="mb-8">
                     <label className="block text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4">Material Specifications</label>
@@ -1644,6 +2157,8 @@ export default function QuoteSetting() {
                       onChange={(e) => setBomData({...bomData, heightNote: e.target.value})}
                     />
                   </div>
+                </div>
+              )}
 
             </AccordionSection>
 
@@ -1702,11 +2217,42 @@ export default function QuoteSetting() {
                         onChange={(e) => setInflationRate(parseFloat(e.target.value) / 100 || 0)}
                       />
                     </div>
-                    
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 col-span-1 md:col-span-2 mt-4">
                     <div>
-                      <label className="block text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 px-1">Panel Degradation (% Yearly)</label>
+                      <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 px-1">MNRE Subsidy Adjustment</label>
                       <input 
                         type="number"
+                        className="w-full bg-emerald-50/30 border border-emerald-100 rounded-2xl px-4 py-3 text-sm font-black text-gray-800 focus:bg-white focus:border-emerald-400 outline-none transition-all"
+                        value={pricingData.mnreSubsidy}
+                        onChange={(e) => setPricingData({...pricingData, mnreSubsidy: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-emerald-600 uppercase tracking-widest mb-2 px-1">State Subsidy Adjustment</label>
+                      <input 
+                        type="number"
+                        className="w-full bg-emerald-50/30 border border-emerald-100 rounded-2xl px-4 py-3 text-sm font-black text-gray-800 focus:bg-white focus:border-emerald-400 outline-none transition-all"
+                        value={pricingData.stateSubsidy}
+                        onChange={(e) => setPricingData({...pricingData, stateSubsidy: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 px-1">Additional Charges</label>
+                      <input 
+                        type="number"
+                        className="w-full bg-red-50/30 border border-red-100 rounded-2xl px-4 py-3 text-sm font-black text-gray-800 focus:bg-white focus:border-red-400 outline-none transition-all"
+                        value={pricingData.additionalCharges}
+                        onChange={(e) => setPricingData({...pricingData, additionalCharges: parseFloat(e.target.value) || 0})}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-[10px] font-black text-red-600 uppercase tracking-widest mb-2 px-1">Panel Degradation (% Yearly)</label>
+                    <input 
+                      type="number"
                         step="0.1"
                         className="w-full bg-red-50/50 border border-red-100 rounded-2xl px-4 py-3.5 text-sm font-black text-gray-800 focus:bg-white focus:border-red-400 outline-none transition-all shadow-inner"
                         value={degradationRate * 100}
@@ -1715,21 +2261,37 @@ export default function QuoteSetting() {
                     </div>
                   </div>
                   
-                  <div className="mt-6 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-                    <div className="flex items-center justify-between">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-6">
+                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100 flex items-center justify-between group hover:bg-white hover:shadow-md transition-all">
                       <div className="flex flex-col">
                         <span className="text-[10px] font-black text-gray-800 uppercase tracking-wide">Calculated Annual Generation</span>
-                        <span className="text-[8px] font-bold text-gray-400 uppercase">Based on Monthly Multipliers</span>
+                        <span className="text-[8px] font-bold text-gray-400 uppercase">Total Yearly Potential</span>
                       </div>
                       <div className="text-right">
                         <span className="text-lg font-black text-blue-600">{annualTotal.toLocaleString()}</span>
-                        <span className="text-[10px] font-black text-blue-400 ml-1">UNITS</span>
+                        <span className="text-[10px] font-black text-blue-300 ml-1.5 uppercase">Units</span>
+                      </div>
+                    </div>
+
+                    <div className="p-4 bg-blue-600 rounded-2xl shadow-xl shadow-blue-100 flex items-center justify-between group overflow-hidden relative ring-4 ring-blue-50">
+                      <div className="absolute inset-0 bg-gradient-to-r from-blue-700 to-indigo-700 opacity-100 transition-opacity duration-500" />
+                      <div className="flex flex-col relative z-10 w-full">
+                        <span className="text-[10px] font-black text-white/70 uppercase tracking-widest leading-none mb-2">Net Project Cost (Editable)</span>
+                        <div className="flex items-center">
+                          <span className="text-xl font-black text-white mr-1.5">₹</span>
+                          <input 
+                            type="number"
+                            className="bg-transparent border-none outline-none text-xl font-black text-white w-full focus:ring-0 p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            value={pricingData.netCost}
+                            onChange={(e) => setPricingData({...pricingData, netCost: parseFloat(e.target.value) || 0})}
+                          />
+                        </div>
+                        <span className="text-[8px] font-black text-white/40 uppercase mt-1 leading-none tracking-tight">Direct Manual Override Enabled</span>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                <div className="bg-blue-50/30 border-2 border-blue-100 rounded-3xl p-8 relative overflow-hidden group shadow-sm transition-all hover:border-blue-200">
+                  <div className="bg-blue-50/30 border-2 border-blue-100 rounded-3xl p-8 relative overflow-hidden group shadow-sm transition-all hover:border-blue-200">
                   <div className="absolute top-0 right-0 bg-blue-600 text-white text-[8px] font-black px-4 py-1 rounded-bl-xl uppercase tracking-widest group-hover:scale-110 transition-transform">Generation Settings</div>
                     {/* Formula Note */}
                     <div className="mb-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-r-lg">
@@ -1874,7 +2436,7 @@ export default function QuoteSetting() {
                             page={page}
                             selectedPages={selectedPages}
                             setSelectedPages={setSelectedPages}
-                            quoteType={quoteType}
+                            quoteType={quoteTypesSelected[0]}
                             setActiveEditingPage={setActiveEditingPage}
                             setTempPageConfig={setTempPageConfig}
                             setIsPageModalOpen={setIsPageModalOpen}
@@ -1925,18 +2487,52 @@ export default function QuoteSetting() {
                   <div className="bg-gray-50/50 border-2 border-dashed border-gray-200 rounded-3xl p-6 mt-2">
                   
                     <h5 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-4 ml-1">Visual Appearance Overrides</h5>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="flex flex-col gap-3">
                       {['brandColor', 'backgroundColor', 'pageSequence'].map((key) => (
-                        <div key={key} className="flex items-center gap-3 bg-white p-3 rounded-2xl border border-gray-100 shadow-sm transition-all hover:border-blue-200 group">
-                          <input
-                            type="checkbox"
-                            className="h-5 w-5 text-blue-600 border-gray-300 rounded-lg focus:ring-blue-500 cursor-pointer"
-                            checked={colorSettings[key]}
-                            onChange={(e) => {
-                              setColorSettings({ ...colorSettings, [key]: e.target.checked });
-                            }}
-                          />
-                          <label className="text-[10px] font-black text-gray-600 uppercase tracking-tight cursor-pointer group-hover:text-blue-600 transition-colors">{key.replace(/([A-Z])/g, ' $1')}</label>
+                        <div key={key} className="flex flex-col bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-all hover:border-blue-200 group">
+                          <div className="flex items-center gap-3">
+                            <input
+                              type="checkbox"
+                              className="h-5 w-5 text-blue-600 border-gray-300 rounded-lg focus:ring-blue-500 cursor-pointer"
+                              checked={colorSettings[key]}
+                              onChange={(e) => {
+                                setColorSettings({ ...colorSettings, [key]: e.target.checked });
+                              }}
+                            />
+                            <label className="text-[10px] font-black text-gray-600 uppercase tracking-tight cursor-pointer group-hover:text-blue-600 transition-colors uppercase">{key.replace(/([A-Z])/g, ' $1')}</label>
+                          </div>
+                          
+                          {key === 'brandColor' && colorSettings.brandColor && (
+                            <div className="mt-4 pl-8 border-t border-gray-50 pt-4 animate-in slide-in-from-top-2 duration-300">
+                               <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Select Brand Color</p>
+                               <div className="flex flex-wrap gap-2.5 items-center">
+                                  {['#2563eb', '#dc2626', '#16a34a', '#8b5cf6', '#ea580c', '#000000'].map(c => (
+                                    <button 
+                                      key={c}
+                                      onClick={() => setFrontPageSettings(prev => ({
+                                        ...prev,
+                                        styling: { ...prev.styling, themeColor: c }
+                                      }))}
+                                      className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${frontPageSettings.styling.themeColor === c ? 'border-white ring-2 ring-blue-500 shadow-lg' : 'border-transparent shadow-sm'}`}
+                                      style={{ backgroundColor: c }}
+                                    />
+                                  ))}
+                                  <div className="w-px h-6 bg-gray-200 mx-1" />
+                                  <div className="relative group/color">
+                                    <input 
+                                      type="color" 
+                                      value={frontPageSettings.styling.themeColor} 
+                                      onChange={(e) => setFrontPageSettings(prev => ({
+                                        ...prev,
+                                        styling: { ...prev.styling, themeColor: e.target.value }
+                                      }))}
+                                      className="w-8 h-8 rounded-full border-0 p-0 overflow-hidden cursor-pointer"
+                                    />
+                                    <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[8px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover/color:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Custom Color</div>
+                                  </div>
+                               </div>
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -2056,28 +2652,28 @@ export default function QuoteSetting() {
                         <tr key={quote._id}>
                           <td className="border border-gray-300 px-4 py-3 text-center">{index + 1}</td>
                           <td className="border border-gray-300 px-4 py-3 text-center">
-                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${quote.quoteType === 'Survey Quote' ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
-                              {quote.quoteType}
+                            <span className={`px-2 py-1 rounded-full text-xs font-medium ${(quote.quoteTypes?.includes('Survey Quote') || quote.quoteType === 'Survey Quote') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                              {quote.quoteTypes?.join(', ') || quote.quoteType}
                             </span>
                           </td>
-                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.category}</td>
-                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.subCategory}</td>
-                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.projectType}</td>
-                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.subProjectType}</td>
-                          <td className="border border-gray-300 px-4 py-3 text-center text-xs font-semibold text-blue-700">{quote.partnerType}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.categories?.join(', ') || quote.category}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.subCategories?.join(', ') || quote.subCategory}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.projectTypes?.join(', ') || quote.projectType}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center">{quote.subProjectTypes?.join(', ') || quote.subProjectType}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center text-xs font-semibold text-blue-700">{quote.partnerTypes?.join(', ') || quote.partnerType}</td>
                           <td className="border border-gray-300 px-4 py-3 text-center">
                             <div className="flex flex-col items-center gap-0.5">
                               <span className="text-[9px] font-black text-gray-400 uppercase tracking-tighter">
-                                {quote.state?.name || (states.find(s => s._id === (quote.state?._id || quote.state))?.name) || '-'}
+                                {quote.states?.map(s => s.name || s).join(', ') || quote.state?.name || (states.find(s => s._id === (quote.state?._id || quote.state))?.name) || '-'}
                               </span>
                               <span className="text-[10px] font-bold text-gray-600">
-                                {quote.district?.name || (districts.find(d => d._id === (quote.district?._id || quote.district))?.name) || '-'}
+                                {quote.districts?.map(d => d.name || d).join(', ') || quote.district?.name || (districts.find(d => d._id === (quote.district?._id || quote.district))?.name) || '-'}
                               </span>
                             </div>
                           </td>
                           <td className="border border-gray-300 px-4 py-3 text-center">
                             <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded-md text-[10px] font-bold uppercase">
-                              {quote.planType}
+                              {quote.planTypes?.join(', ') || quote.planType}
                             </span>
                           </td>
                           {/* <td className="border border-gray-300 px-4 py-3">{quote.pages || '-'}</td> */}
@@ -2164,19 +2760,19 @@ export default function QuoteSetting() {
                       <div className="mb-10 text-center">
                          <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">
                             {filters.category} {filters.projectType} ({filters.subProjectType}) 
-                            <span className="text-blue-600 ml-2">Proposal</span>
+                            <span className="ml-2 transition-colors" style={{ color: themeAccent }}>Proposal</span>
                          </h2>
-                         <div className="w-20 h-1 bg-red-500 mx-auto mt-2" />
+                         <div className="w-20 h-1 mx-auto mt-2 transition-all" style={{ backgroundColor: themeAccent }} />
                       </div>
 
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
                         <div className="space-y-6">
                           {fieldSettings.proposalNo && (
                             <div className="group transition-all">
-                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 group-hover:text-blue-500">Proposal No</p>
-                              <p className="text-sm font-black text-blue-600 border-b-2 border-transparent group-hover:border-blue-100 pb-1">
+                              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 group-hover:opacity-80 transition-opacity">Proposal No</p>
+                              <p className="text-sm font-black text-blue-600 border-b-2 border-transparent pb-1">
                                 # QUA/{filters.category ? filters.category.substring(0, 3).toUpperCase() : 'PRD'}/
-                                {states.find(s => s._id === selectedState)?.code || 'ST'}/
+                                {states.find(s => selectedStates.includes(s._id))?.code || 'ST'}/
                                 {(new Date().getFullYear()).toString().slice(-2)}/
                                 {Math.floor(Math.random() * 900 + 100)}
                               </p>
@@ -2195,7 +2791,7 @@ export default function QuoteSetting() {
                                 <p className="text-sm font-bold text-gray-700">{solarSettings.projectKW} KW</p>
                                 {fieldSettings.paymentMode && (
                                   <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
-                                    {paymentMode || 'Cash'}
+                                    {paymentModesSelected.join(', ') || 'Cash'}
                                   </span>
                                 )}
                               </div>
@@ -2214,9 +2810,9 @@ export default function QuoteSetting() {
                             <div>
                               <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">City</p>
                               <p className="text-sm font-bold text-gray-700">
-                                {selectedDistrict === 'all'
+                                {selectedDistricts.includes('all')
                                   ? 'All Districts'
-                                  : districts.find(d => d._id === selectedDistrict)?.name || 'Rajkot'}
+                                  : districts.filter(d => selectedDistricts.includes(d._id)).map(d => d.name).join(', ') || 'District'}
                               </p>
                             </div>
                           )}
@@ -2229,7 +2825,7 @@ export default function QuoteSetting() {
                       {fieldSettings.preparedBy && (
                         <div className="p-8 border-r border-gray-100">
                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Prepared by</p>
-                           <p className="text-xs font-black text-gray-700 uppercase">{partnerType || 'Demo'} User</p>
+                           <p className="text-xs font-black text-gray-700 uppercase">{partnerTypesSelected.join(', ') || 'Demo'} User</p>
                         </div>
                       )}
                       {fieldSettings.date && (
@@ -2249,15 +2845,15 @@ export default function QuoteSetting() {
 
                   {/* Page 2: Commercial (Conditional) */}
                   {selectedPages.includes('Commercial Page') && (
-                  <div className="mb-8 p-8 border-b border-gray-100 last:border-0">
-                     <div className="flex justify-between items-center mb-6 border-b-4 border-red-500 pb-2">
+                  <div className="mb-8 p-8 border-b border-gray-100 last:border-0 transition-colors">
+                     <div className="flex justify-between items-center mb-6 border-b-4 pb-2" style={{ borderBottomColor: themeAccent }}>
                         <div>
-                           <h5 className="text-xl font-black text-blue-700 uppercase tracking-tighter">{quoteType || 'Quote Type'}</h5>
-                           <p className="text-xs font-bold text-gray-500 uppercase">{kitType}</p>
+                           <h5 className="text-xl font-black uppercase tracking-tighter transition-colors" style={{ color: themeAccent }}>{quoteTypesSelected.join(', ') || 'Quote Type'}</h5>
+                           <p className="text-xs font-bold text-gray-500 uppercase">{kitTypesSelected.join(', ')}</p>
                         </div>
                         {fieldSettings.kitType && (
-                           <div className="bg-red-500 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest">
-                              {kitType}
+                           <div className="text-white px-4 py-1 rounded-full text-[10px] font-black uppercase tracking-widest transition-all" style={{ backgroundColor: themeAccent }}>
+                              {kitTypesSelected.join(', ')}
                            </div>
                         )}
                      </div>
@@ -2277,7 +2873,7 @@ export default function QuoteSetting() {
                                  </tr>
                                ))}
                                {(pageConfigs['Commercial Page']?.visibility?.showNetCost !== false) && (
-                                 <tr className="bg-blue-600 text-white">
+                                 <tr className="text-white transition-all shadow-inner" style={{ backgroundColor: themeAccent }}>
                                    <td className="p-4 text-[11px] font-black uppercase tracking-widest">Net Cost</td>
                                    <td className="p-4 text-xl font-black text-right whitespace-nowrap leading-none">Rs. {pricingData.netCost.toLocaleString()} /-</td>
                                  </tr>
@@ -2324,8 +2920,8 @@ export default function QuoteSetting() {
 
                   {/* Page 3: BOM (Conditional) */}
                   {selectedPages.includes('Financial Summary') && (
-                    <div className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
-                       <div className="bg-blue-600 px-8 py-4 text-white">
+                    <div className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8 transition-colors">
+                       <div className="px-8 py-4 text-white transition-all shadow-md" style={{ backgroundColor: themeAccent }}>
                           <h5 className="text-lg font-black uppercase tracking-tighter">Residential Solar BOM</h5>
                        </div>
                        <div className="p-8">
@@ -2345,11 +2941,11 @@ export default function QuoteSetting() {
                            {(pageConfigs['Financial Summary']?.visibility?.showPipesTable !== false) && (
                            <div className="bg-gray-50 rounded-2xl overflow-hidden border border-gray-100 mb-6">
                               <table className="w-full text-[10px] text-center">
-                                 <thead className="bg-blue-500 text-white">
+                                 <thead className="text-white transition-all" style={{ backgroundColor: themeAccent }}>
                                     <tr>
-                                       <th className="py-2 px-1 font-black uppercase border-r border-blue-400">No. of Solar Panels</th>
-                                       <th className="py-2 px-1 font-black uppercase border-r border-blue-400">DC K.W.</th>
-                                       <th className="py-2 px-1 font-black uppercase border-r border-blue-400">GI pipe 2 mm 60x40</th>
+                                       <th className="py-2 px-1 font-black uppercase" style={{ borderRight: '1px solid rgba(255,255,255,0.1)' }}>No. of Solar Panels</th>
+                                       <th className="py-2 px-1 font-black uppercase" style={{ borderRight: '1px solid rgba(255,255,255,0.1)' }}>DC K.W.</th>
+                                       <th className="py-2 px-1 font-black uppercase" style={{ borderRight: '1px solid rgba(255,255,255,0.1)' }}>GI pipe 2 mm 60x40</th>
                                        <th className="py-2 px-1 font-black uppercase">GI pipe 2 mm 40x40</th>
                                     </tr>
                                  </thead>
@@ -2374,7 +2970,7 @@ export default function QuoteSetting() {
                            <div className="grid grid-cols-2 gap-8">
                               {(pageConfigs['Financial Summary']?.visibility?.showNotes !== false) && (
                               <div>
-                                 <h6 className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-3 border-b-2 border-blue-600 pb-1 w-fit">Notes</h6>
+                                 <h6 className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-3 border-b-2 pb-1 w-fit" style={{ borderBottomColor: themeAccent }}>Notes</h6>
                                  <ul className="space-y-1.5">
                                     {[
                                       'Bi-directional meter charges as per GUVNL.',
@@ -2383,7 +2979,7 @@ export default function QuoteSetting() {
                                       '25-year linear performance warranty in solar panel.'
                                     ].map((note, i) => (
                                       <li key={i} className="text-[9px] font-bold text-gray-500 flex items-start gap-1.5">
-                                         <div className="w-1 h-1 bg-blue-500 rounded-full mt-1 shrink-0" />
+                                         <div className="w-1 h-1 rounded-full mt-1 shrink-0" style={{ backgroundColor: themeAccent }} />
                                          {note}
                                       </li>
                                     ))}
@@ -2392,7 +2988,7 @@ export default function QuoteSetting() {
                               )}
                               {(pageConfigs['Financial Summary']?.visibility?.showDocuments !== false) && (
                               <div>
-                                 <h6 className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-3 border-b-2 border-blue-600 pb-1 w-fit">Documents Required</h6>
+                                 <h6 className="text-[10px] font-black text-gray-800 uppercase tracking-widest mb-3 border-b-2 pb-1 w-fit" style={{ borderBottomColor: themeAccent }}>Documents Required</h6>
                                  <ul className="space-y-1.5">
                                     {[
                                       'Electricity Bill - Latest',
@@ -2418,7 +3014,7 @@ export default function QuoteSetting() {
                   {/* Page 4: Generation Graph and ROI Chart (Conditional) */}
                   {selectedPages.includes('Generation Graph') && (
                     <div className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
-                       <div className="bg-gradient-to-r from-blue-700 to-blue-500 px-8 py-6 text-white text-center">
+                       <div className="px-8 py-6 text-white text-center transition-all" style={{ background: `linear-gradient(to right, ${themeAccent}, ${themeAccent}CC)` }}>
                           <h3 className="text-2xl font-black uppercase tracking-tighter">Performance Analysis</h3>
                           <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Projected Energy Generation & Financial Benefits</p>
                        </div>
@@ -2426,9 +3022,15 @@ export default function QuoteSetting() {
                        <div className="p-8">
                           {(pageConfigs['Generation Graph']?.visibility?.showGenChart !== false) && (
                           <div className="mb-10">
-                            <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Monthly Generation (Units)</h5>
-                            <div className="h-64 w-full bg-gray-50 rounded-2xl border border-dashed border-gray-200 p-4">
-                              <canvas id="generationChart" />
+                            <div className="flex items-center justify-between mb-4 px-1">
+                              <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Monthly Generation (Units)</h5>
+                              <div className="px-3 py-1.5 rounded-xl text-white shadow-lg transition-all flex items-center gap-2 border" style={{ backgroundColor: themeAccent, borderSecondaryColor: themeAccent, shadowColor: `${themeAccent}33` }}>
+                                <Zap size={10} className="text-yellow-400 fill-yellow-400" />
+                                <span className="text-[10px] font-black uppercase tracking-tighter">{annualTotal.toLocaleString()} Annual Units</span>
+                              </div>
+                            </div>
+                            <div className="h-64 w-full bg-gray-50 rounded-2xl border border-dashed border-gray-200 p-4 relative">
+                              <canvas ref={generationChartRef} />
                             </div>
                           </div>
                           )}
@@ -2437,7 +3039,7 @@ export default function QuoteSetting() {
                           <div className="mb-10">
                             <h5 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">ROI Analysis (Payback Period)</h5>
                             <div className="h-64 w-full bg-gray-50 rounded-2xl border border-dashed border-gray-200 p-4">
-                              <canvas id="roiChart" />
+                              <canvas ref={roiChartRef} />
                             </div>
                           </div>
                           )}
@@ -2445,16 +3047,17 @@ export default function QuoteSetting() {
                           <div className="grid grid-cols-2 gap-4">
                              {[
                                { label: 'Total System Cost', value: `Rs. ${pricingData.totalCost.toLocaleString()} /-`, color: 'blue' },
+                               { label: 'Annual Generation', value: `${annualTotal.toLocaleString()} Units`, color: 'blue' },
                                { label: 'Annual Savings', value: `Rs. ${annualSavings.toLocaleString()} /-`, color: 'emerald' },
                                { label: 'Payback Period', value: `${paybackPeriod.toFixed(1)} Years`, color: 'amber' },
                                { label: '25-Year Savings', value: `Rs. ${savings25Year.toLocaleString()} /-`, color: 'blue', full: true }
                              ].map((stat, i) => (
-                               <div key={i} className={`${stat.full ? 'col-span-2' : ''} p-5 rounded-2xl border border-gray-100 ${stat.color === 'blue' ? 'bg-blue-50/50' : stat.color === 'emerald' ? 'bg-emerald-50/50' : 'bg-amber-50/50'} shadow-sm hover:scale-[1.02] transition-transform`}>
+                               <div key={i} className={`${stat.full ? 'col-span-2' : ''} p-5 rounded-2xl border border-gray-100 shadow-sm hover:scale-[1.02] transition-transform`} style={{ backgroundColor: stat.color === 'blue' ? themeBgLight : stat.color === 'emerald' ? 'rgba(16, 185, 129, 0.05)' : 'rgba(245, 158, 11, 0.05)' }}>
                                   <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                                  <p className={`text-lg font-black ${stat.color === 'blue' ? 'text-blue-700' : stat.color === 'emerald' ? 'text-emerald-700' : 'text-amber-700'}`}>{stat.value}</p>
+                                  <p className="text-lg font-black transition-colors" style={{ color: stat.color === 'blue' ? themeAccent : stat.color === 'emerald' ? 'rgb(5, 150, 105)' : 'rgb(217, 119, 6)' }}>{stat.value}</p>
                                </div>
                              ))}
-                             <div className="col-span-2 bg-blue-600 p-6 rounded-2xl shadow-xl shadow-blue-100 flex flex-col justify-center items-center text-center mt-2">
+                             <div className="col-span-2 p-6 rounded-2xl shadow-xl flex flex-col justify-center items-center text-center mt-2 transition-all" style={{ backgroundColor: themeAccent, boxShadow: `0 20px 25px -5px ${themeAccent}33` }}>
                                 <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Total Estimated ROI Benefits</p>
                                 <p className="text-xl font-black text-white uppercase tracking-tighter">Over 25 Year Lifecycle</p>
                              </div>
@@ -2466,25 +3069,25 @@ export default function QuoteSetting() {
                   {/* Page 5: Advanced Options (Conditional) */}
                   {selectedPages.includes('Advanced Settings') && (
                     <div className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
-                       <div className="bg-gray-800 px-8 py-5 text-white">
+                       <div className="bg-gray-800 px-8 py-5 text-white" style={{ backgroundColor: themeAccent }}>
                           <h3 className="text-xl font-black uppercase tracking-tighter">Advanced Options</h3>
                        </div>
                        
                        <div className="p-8">
                           <div className="mb-8">
-                            <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest mb-4 flex items-center gap-2">
-                               <div className="w-1.5 h-1.5 bg-blue-600 rounded-full animate-ping" />
+                            <label className="text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: themeAccent }}>
+                               <div className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: themeAccent }} />
                                Selected Options Breakout
                             </label>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 {advancedOptions.filter(opt => opt.enabled).map((opt, idx) => (
                                   <div key={opt.key || idx} className="p-5 bg-gray-50 rounded-2xl border border-gray-100 relative overflow-hidden group">
-                                     <div className={`absolute top-0 right-0 ${idx % 3 === 0 ? 'bg-blue-600' : idx % 3 === 1 ? 'bg-emerald-600' : 'bg-indigo-600'} text-white text-[8px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest`}>
+                                     <div className={`absolute top-0 right-0 ${idx % 3 === 0 ? 'bg-blue-600' : idx % 3 === 1 ? 'bg-emerald-600' : 'bg-indigo-600'} text-white text-[8px] font-black px-3 py-1 rounded-bl-xl uppercase tracking-widest`} style={{ backgroundColor: themeAccent }}>
                                         {idx % 3 === 0 ? 'Premium' : idx % 3 === 1 ? 'Protection' : 'Add-on'}
                                      </div>
                                      <h6 className="text-[11px] font-black text-gray-800 uppercase mb-2">{opt.type}</h6>
-                                     <p className={`text-[10px] font-black ${idx % 3 === 0 ? 'text-blue-600' : idx % 3 === 1 ? 'text-emerald-600' : 'text-indigo-600'} mb-3`}>₹{opt.price.toLocaleString()}{opt.key !== 'cleaningKit' ? '/year' : ''}</p>
+                                     <p className={`text-[10px] font-black mb-3`} style={{ color: themeAccent }}>₹{opt.price.toLocaleString()}{opt.key !== 'cleaningKit' ? '/year' : ''}</p>
                                      <p className="text-[9px] font-bold text-gray-500 leading-relaxed uppercase">
                                         {opt.description}
                                      </p>
@@ -2500,30 +3103,30 @@ export default function QuoteSetting() {
 
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8 pt-6 border-t border-gray-100">
                              {advancedOptions.map((opt, idx) => (
-                               <div key={opt.key || idx} className={`flex flex-col items-center text-center p-4 rounded-2xl transition-all ${opt.enabled ? 'bg-blue-50/50 shadow-inner' : 'bg-gray-50 opacity-40 grayscale'}`}>
+                               <div key={opt.key || idx} className="flex flex-col items-center text-center p-4 rounded-2xl transition-all" style={{ backgroundColor: opt.enabled ? themeBgLight : '#f9fafb', opacity: opt.enabled ? 1 : 0.4 }}>
                                   <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{opt.key?.toUpperCase() || 'SERVICE'}</p>
                                   <div className="bg-white p-2 rounded-lg mb-2 shadow-sm">
-                                     {idx % 3 === 0 ? <Settings size={16} className="text-indigo-600" /> : idx % 3 === 1 ? <Shield size={16} className="text-emerald-600" /> : <Zap size={16} className="text-blue-600" />}
+                                     {idx % 3 === 0 ? <Settings size={16} style={{ color: themeAccent }} /> : idx % 3 === 1 ? <Shield size={16} className="text-emerald-600" /> : <Zap size={16} style={{ color: themeAccent }} />}
                                   </div>
                                   <p className="text-[10px] font-black text-gray-700 uppercase">{opt.type}</p>
-                                  <p className={`text-[9px] font-bold ${idx % 3 === 0 ? 'text-indigo-600' : idx % 3 === 1 ? 'text-emerald-600' : 'text-blue-600'}`}>
+                                  <p className="text-[9px] font-bold" style={{ color: themeAccent }}>
                                      ₹{opt.price.toLocaleString()}{opt.key !== 'cleaningKit' ? '/YR' : ''}
                                   </p>
                                </div>
                              ))}
                           </div>
 
-                          <div className="bg-gray-900 rounded-3xl p-8 flex flex-col gap-4 shadow-2xl shadow-gray-200">
+                          <div className="rounded-3xl p-8 flex flex-col gap-4 shadow-2xl transition-all" style={{ backgroundColor: '#111827', boxShadow: `0 20px 25px -5px ${themeAccent}22`, border: `1px solid ${themeAccent}33` }}>
                              <div className="flex justify-between items-center text-white/60">
                                 <span className="text-[10px] font-black uppercase tracking-widest">Solar System Cost</span>
                                 <span className="text-sm font-bold tracking-tighter text-white">Rs. {pricingData.totalCost.toLocaleString()} /-</span>
                              </div>
                              <div className="flex justify-between items-center text-white/60 border-b border-white/10 pb-4">
                                 <span className="text-[10px] font-black uppercase tracking-widest">Advanced Options Total</span>
-                                <span className="text-sm font-bold tracking-tighter text-blue-400">Rs. {advancedTotal.toLocaleString()} /-</span>
+                                <span className="text-sm font-bold tracking-tighter" style={{ color: themeAccent }}>Rs. {advancedTotal.toLocaleString()} /-</span>
                              </div>
                              <div className="flex justify-between items-center">
-                                <span className="text-xs font-black text-yellow-500 uppercase tracking-tighter">Grand Total</span>
+                                <span className="text-xs font-black uppercase tracking-tighter" style={{ color: themeAccent }}>Grand Total</span>
                                 <span className="text-2xl font-black text-white tracking-widest">Rs. {(pricingData.totalCost + advancedTotal).toLocaleString()} /-</span>
                              </div>
                              <p className="text-[9px] font-bold text-center text-white/40 uppercase tracking-widest mt-2 border-t border-white/5 pt-4">All Prices are inclusive of GST and Govt Incentives</p>
@@ -2549,10 +3152,10 @@ export default function QuoteSetting() {
                                 {activeSections.map((s) => (
                                   <div key={s.id} className="bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 flex items-center justify-between animate-in fade-in slide-in-from-bottom-2">
                                      <div className="flex items-center gap-3">
-                                        <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                                        <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: themeAccent }} />
                                         <span className="text-xs font-black text-gray-700 uppercase tracking-widest">{s.label}</span>
                                      </div>
-                                     <span className="text-[9px] font-black text-blue-500 uppercase bg-blue-50 px-2 py-0.5 rounded-full">Included</span>
+                                     <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full transition-all" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Included</span>
                                   </div>
                                 ))}
                               </div>
@@ -2578,7 +3181,7 @@ export default function QuoteSetting() {
                           )}
                           <div className="space-y-4">
                              {pageConfigs[pageName]?.header && (
-                                <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest border-b pb-2">{pageConfigs[pageName].header}</h4>
+                                <h4 className="text-sm font-black uppercase tracking-widest border-b pb-2 transition-colors" style={{ color: themeAccent, borderBottomColor: themeBgLight }}>{pageConfigs[pageName].header}</h4>
                              )}
                              <p className="text-xs font-bold text-gray-600 leading-relaxed whitespace-pre-wrap">
                                 {pageConfigs[pageName]?.content || 'This page was dynamically added to the quote. You can configure its content in the Settings panel above.'}
@@ -2628,8 +3231,8 @@ export default function QuoteSetting() {
           setFrontPageSettings(settings);
           toast.success("Settings updated!");
         }}
-        selectedState={selectedState}
-        selectedDistrict={selectedDistrict}
+        selectedStates={selectedStates}
+        selectedDistricts={selectedDistricts}
         states={states}
         districts={districts}
         quoteCount={quotes.length}
@@ -2652,7 +3255,7 @@ export default function QuoteSetting() {
         onLiveChange={(config) => {
           setPageConfigs({ ...pageConfigs, [activeEditingPage.value]: config });
         }}
-        quoteType={quoteType}
+        quoteType={quoteTypesSelected[0]}
         advancedOptions={advancedOptions}
         setAdvancedOptions={setAdvancedOptions}
         dbAmcServices={dbAmcServices}
@@ -2728,6 +3331,21 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
 
   const pages = quote.selectedPages || [];
+  const chartImages = quote.chartImages || {};
+  
+  // Brand Color Logic for Export
+  const themeAccent = quote.colorSettings?.brandColor ? (quote.frontPageSettings?.styling?.themeColor || '#2563eb') : '#2563eb';
+  const themeBgLight = `${themeAccent}10`;
+
+  // Performance calculations
+  const kw = quote.solarSettings?.projectKW || 10;
+  const annTotal = (quote.monthlyIsolation || []).reduce((sum, m) => sum + (m.total || 0), 0);
+  const uPrice = quote.unitPrice || 8;
+  const annSavings = annTotal * uPrice;
+  const netC = quote.pricingData?.netCost || 1;
+  const payP = netC / annSavings;
+  const sav25 = annSavings * 25;
+
   const pricing = {
     totalCost: quote.pricingData?.totalCost || 195008,
     mnreSubsidy: quote.pricingData?.mnreSubsidy || 78000,
@@ -2834,7 +3452,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                     {fieldSettings.residentialCommercial && (
                       <div>
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Category</p>
-                        <p className="text-xs font-bold text-gray-700">{quote.category} {quote.projectType}</p>
+                        <p className="text-xs font-bold text-gray-700">{(quote.categories?.join(', ') || quote.category)} {(quote.projectTypes?.join(', ') || quote.projectType)}</p>
                       </div>
                     )}
                     {fieldSettings.city && (
@@ -2846,7 +3464,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                     {fieldSettings.quoteType && (
                       <div>
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Quote Type</p>
-                        <p className="text-xs font-bold text-gray-700">{quote.quoteType}</p>
+                        <p className="text-xs font-bold text-gray-700">{quote.quoteTypes?.join(', ') || quote.quoteType}</p>
                       </div>
                     )}
                   </div>
@@ -2855,7 +3473,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                   {fieldSettings.preparedBy && (
                     <div>
                       <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Prepared By</p>
-                      <p className="text-xs font-black text-gray-700 uppercase">{quote.partnerType || 'Demo'} User</p>
+                      <p className="text-xs font-black text-gray-700 uppercase">{quote.partnerTypes?.join(', ') || quote.partnerType || 'Demo'} User</p>
                     </div>
                   )}
                   {fieldSettings.date && (
@@ -2878,13 +3496,13 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
           {/* ── COMMERCIAL PAGE ── */}
           {pages.includes('Commercial Page') && (
             <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 p-8 print:rounded-none print:shadow-none print:page-break-after-always">
-              <div className="flex justify-between items-center mb-6 border-b-4 border-red-500 pb-2">
+              <div className="flex justify-between items-center mb-6 border-b-4 pb-2" style={{ borderBottomColor: themeAccent }}>
                 <div>
-                  <h5 className="text-xl font-black text-blue-700 uppercase tracking-tighter">{quote.quoteType}</h5>
-                  <p className="text-xs font-bold text-gray-500 uppercase">{quote.kitType || 'Combo Kit'}</p>
+                  <h5 className="text-xl font-black uppercase tracking-tighter" style={{ color: themeAccent }}>{quote.quoteTypes?.join(', ') || quote.quoteType}</h5>
+                  <p className="text-xs font-bold text-gray-500 uppercase">{quote.kitTypes?.join(', ') || quote.kitType || 'Combo Kit'}</p>
                 </div>
                 {fieldSettings.kitType && (
-                  <div className="bg-red-500 text-white px-4 py-1 rounded-full text-[10px] font-black uppercase">{quote.kitType || 'Combo Kit'}</div>
+                  <div className="text-white px-4 py-1 rounded-full text-[10px] font-black uppercase" style={{ backgroundColor: themeAccent }}>{quote.kitTypes?.join(', ') || quote.kitType || 'Combo Kit'}</div>
                 )}
               </div>
               <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden mx-auto max-w-md">
@@ -2902,7 +3520,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                       </tr>
                     ))}
                     {(pageConfigs['Commercial Page']?.visibility?.showNetCost !== false) && (
-                      <tr className="bg-blue-600 text-white">
+                      <tr className="text-white" style={{ backgroundColor: themeAccent }}>
                         <td className="p-4 text-[11px] font-black uppercase tracking-widest">Net Cost</td>
                         <td className="p-4 text-xl font-black text-right">Rs. {pricing.netCost.toLocaleString()} /-</td>
                       </tr>
@@ -2924,10 +3542,10 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                     {customSections.map((s) => (
                       <div key={s.id} className="border border-gray-200 rounded-xl px-6 py-4 flex items-center justify-between">
                          <div className="flex items-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-blue-500" />
+                            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: themeAccent }} />
                             <span className="text-xs font-black text-gray-700 uppercase tracking-widest">{s.label}</span>
                          </div>
-                         <span className="text-[9px] font-black text-blue-500 uppercase">Included</span>
+                         <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Included</span>
                       </div>
                     ))}
                   </div>
@@ -2936,10 +3554,51 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
             </div>
           )}
 
-          {/* ── BOM SURVEY SUMMARY ── */}
-          {pages.includes('Financial Summary') && bom.items.length > 0 && (
+          {/* ── GENERATION GRAPH ── */}
+          {pages.includes('Generation Graph') && (
             <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
-              <div className="bg-blue-600 px-8 py-4 text-white">
+               <div className="px-8 py-5 text-white" style={{ backgroundColor: themeAccent }}>
+                  <h3 className="text-lg font-black uppercase tracking-tighter">Performance Analysis</h3>
+               </div>
+               <div className="p-8">
+                  {chartImages.gen && (
+                    <div className="mb-8">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Monthly Generation (Units)</p>
+                      <img src={chartImages.gen} className="w-full h-auto max-h-[300px] object-contain rounded-2xl" />
+                    </div>
+                  )}
+                  {chartImages.roi && (
+                    <div className="mb-8">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">ROI Analysis (Payback Period)</p>
+                      <img src={chartImages.roi} className="w-full h-auto max-h-[300px] object-contain rounded-2xl" />
+                    </div>
+                  )}
+                  
+                  <div className="grid grid-cols-2 gap-4 mt-8">
+                     {[
+                       { label: 'Total System Cost', value: `Rs. ${quote.pricingData?.totalCost?.toLocaleString()} /-` },
+                       { label: 'Annual Generation', value: `${annTotal.toLocaleString()} Units` },
+                       { label: 'Annual Savings', value: `Rs. ${annSavings.toLocaleString()} /-` },
+                       { label: 'Payback Period', value: `${payP.toFixed(1)} Years` }
+                     ].map((stat, i) => (
+                       <div key={i} className="p-5 rounded-2xl border border-gray-100" style={{ backgroundColor: themeBgLight }}>
+                          <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
+                          <p className="text-lg font-black" style={{ color: themeAccent }}>{stat.value}</p>
+                       </div>
+                     ))}
+                     <div className="col-span-2 p-6 rounded-2xl text-center" style={{ backgroundColor: themeAccent }}>
+                        <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Total Estimated ROI Benefits</p>
+                        <p className="text-xl font-black text-white uppercase tracking-tighter">Rs. {sav25.toLocaleString()} /- Over 25 years</p>
+                     </div>
+                  </div>
+               </div>
+            </div>
+          )}
+
+          {/* ── BOM SURVEY SUMMARY ── */}
+          {pages.includes('Financial Summary') && (
+            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
+              <div className="px-8 py-4 text-white" style={{ backgroundColor: themeAccent }}>
                 <h5 className="text-lg font-black uppercase tracking-tighter">Residential Solar BOM</h5>
               </div>
               <div className="p-8">
@@ -2965,7 +3624,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
           {/* ── ADVANCED OPTIONS ── */}
           {pages.includes('Advanced Settings') && (
             <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
-              <div className="bg-gray-800 px-8 py-4 text-white">
+              <div className="px-8 py-4 text-white" style={{ backgroundColor: themeAccent }}>
                 <h3 className="text-lg font-black uppercase tracking-tighter">Advanced Options</h3>
               </div>
               <div className="p-8">
@@ -2973,22 +3632,22 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                   {advancedOptions.filter(opt => opt.enabled).map((opt, idx) => (
                     <div key={opt.key || idx} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
                       <h6 className="text-[11px] font-black text-gray-800 uppercase mb-1">{opt.type}</h6>
-                      <p className="text-[10px] font-black text-blue-600 mb-2">₹{(opt.price || 0).toLocaleString()}</p>
+                      <p className="text-[10px] font-black mb-2" style={{ color: themeAccent }}>₹{(opt.price || 0).toLocaleString()}</p>
                       <p className="text-[9px] font-bold text-gray-500 leading-relaxed">{opt.description}</p>
                     </div>
                   ))}
                 </div>
-                <div className="bg-gray-900 rounded-2xl p-6 flex flex-col gap-3">
+                <div className="bg-gray-900 rounded-2xl p-6 flex flex-col gap-3" style={{ border: `1px solid ${themeAccent}33` }}>
                   <div className="flex justify-between items-center text-white/60 text-xs font-bold">
                     <span>Solar System Cost</span>
                     <span className="text-white">Rs. {pricing.totalCost.toLocaleString()} /-</span>
                   </div>
                   <div className="flex justify-between items-center text-white/60 text-xs font-bold border-b border-white/10 pb-3">
                     <span>Advanced Options Total</span>
-                    <span className="text-blue-400">Rs. {advancedTotal.toLocaleString()} /-</span>
+                    <span style={{ color: themeAccent }}>Rs. {advancedTotal.toLocaleString()} /-</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-xs font-black text-yellow-500 uppercase">Grand Total</span>
+                    <span className="text-xs font-black uppercase" style={{ color: themeAccent }}>Grand Total</span>
                     <span className="text-xl font-black text-white">Rs. {(pricing.totalCost + advancedTotal).toLocaleString()} /-</span>
                   </div>
                 </div>
@@ -3013,10 +3672,10 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                       {activeSections.map((s) => (
                         <div key={s.id} className="border border-gray-200 rounded-xl px-6 py-4 flex items-center justify-between">
                            <div className="flex items-center gap-3">
-                              <div className="w-2 h-2 rounded-full bg-blue-500 flex-shrink-0" />
+                              <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: themeAccent }} />
                               <span className="text-xs font-black text-gray-700 uppercase tracking-widest">{s.label}</span>
                            </div>
-                           <span className="text-[9px] font-black text-blue-500 uppercase">Included</span>
+                           <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Included</span>
                         </div>
                       ))}
                     </div>
@@ -3039,7 +3698,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                   <img src={pageConfigs[pageName].media} className="w-full h-40 object-cover rounded-xl mb-6" alt="" />
                 )}
                 {pageConfigs[pageName]?.header && (
-                  <h4 className="text-sm font-black text-blue-600 uppercase tracking-widest border-b pb-2 mb-4">{pageConfigs[pageName].header}</h4>
+                  <h4 className="text-sm font-black uppercase tracking-widest border-b pb-2 mb-4" style={{ color: themeAccent, borderBottomColor: themeBgLight }}>{pageConfigs[pageName].header}</h4>
                 )}
                 <p className="text-xs font-bold text-gray-600 leading-relaxed whitespace-pre-wrap">
                   {pageConfigs[pageName]?.content || 'Custom page content. Configure in Settings panel.'}
@@ -3061,10 +3720,10 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                       {customSections.map((s) => (
                         <div key={s.id} className="border border-gray-200 rounded-xl px-6 py-4 flex items-center justify-between">
                            <div className="flex items-center gap-3">
-                              <div className="w-2 h-2 rounded-full bg-blue-500" />
+                              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: themeAccent }} />
                               <span className="text-xs font-black text-gray-700 uppercase tracking-widest">{s.label}</span>
                            </div>
-                           <span className="text-[9px] font-black text-blue-500 uppercase">Included</span>
+                           <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Included</span>
                         </div>
                       ))}
                     </div>
@@ -3073,269 +3732,6 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
               </div>
             </div>
           ))}
-
-          {pages.length === 0 && (
-            <div className="bg-white rounded-3xl p-20 text-center shadow-xl border border-gray-100">
-              <FileText size={48} className="mx-auto text-gray-200 mb-4" />
-              <p className="text-sm font-black text-gray-400 uppercase tracking-widest">No pages selected for this quote</p>
-              <p className="text-xs font-bold text-gray-300 mt-2">Go to Quote Layout &amp; Visuals to enable pages.</p>
-            </div>
-          )}
-
-        </div>
-      </div>
-    </div>
-  );
-};
-
-// Sub-component for Front Page Settings (Localized state to fix "auto refresh" feel)
-const FrontPageSettingsDrawer = ({ isOpen, onClose, initialSettings, onSave, filters, defaultFrontPageSettings, selectedState, selectedDistrict, states, districts, quoteCount, solarSettings, quotes }) => {
-  const [activeTab, setActiveTab] = useState('Header');
-  const [tempSettings, setTempSettings] = useState(initialSettings);
-  const logoInputRef = useRef(null);
-  const bannerInputRef = useRef(null);
-
-  useEffect(() => {
-    if (isOpen) setTempSettings(initialSettings);
-  }, [isOpen, initialSettings]);
-
-  if (!isOpen) return null;
-
-  const handleLogoUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setTempSettings(prev => ({
-          ...prev,
-          header: { ...prev.header, logoUrl: reader.result }
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleBannerUpload = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setTempSettings(prev => ({
-          ...prev,
-          banner: { ...prev.banner, imageUrl: reader.result }
-        }));
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-[110] flex items-center justify-center p-4 lg:p-8 animate-in fade-in duration-300">
-      <div className="bg-white rounded-[2.5rem] w-full max-w-[95%] h-[90vh] shadow-2xl overflow-hidden flex flex-col animate-in zoom-in-95 duration-300 border border-white/20">
-        <div className="bg-gradient-to-r from-blue-700 to-blue-500 px-10 py-6 flex justify-between items-center shrink-0">
-          <div>
-            <h3 className="text-white text-2xl font-black uppercase tracking-tighter flex items-center gap-3">
-              <Settings className="animate-spin-slow" size={28} />
-              Front Page Settings
-            </h3>
-            <p className="text-blue-100 text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 decoration-0">Customize cover branding and content</p>
-          </div>
-          <button onClick={onClose} className="text-white hover:bg-white/20 p-2 rounded-2xl transition-all"><X size={24} /></button>
-        </div>
-        
-        <div className="flex-1 overflow-hidden flex">
-          <div className="w-64 bg-gray-50/50 border-r border-gray-100 p-6 flex flex-col gap-2 shrink-0 overflow-y-auto">
-            {['Header', 'Banner', 'Visibility', 'Custom Text', 'Footer', 'Design'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`w-full text-left px-5 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-400 hover:text-blue-500'}`}
-              >
-                {tab}
-              </button>
-            ))}
-            <div className="mt-auto space-y-4 pt-10">
-               <button onClick={() => setTempSettings(defaultFrontPageSettings)} className="w-full py-3 rounded-xl border-2 border-dashed border-gray-200 text-gray-400 text-[9px] font-black uppercase hover:text-red-500 transition-all">Reset to Default</button>
-               <button
-                onClick={() => { onSave(tempSettings); onClose(); }}
-                className="w-full bg-green-600 text-white py-4 rounded-2xl text-xs font-black uppercase tracking-widest shadow-xl hover:bg-green-700 transition-all"
-               >
-                 Save Changes
-               </button>
-            </div>
-          </div>
-
-          <div className="flex-1 flex overflow-hidden">
-            <div className="flex-1 overflow-y-auto p-10 space-y-12">
-              {activeTab === 'Header' && (
-                <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-                  <h4 className="text-xl font-black text-gray-800 uppercase">Header Settings</h4>
-                  <div className="grid grid-cols-2 gap-6">
-                    {[
-                      { key: 'showLogo', label: 'Show Company Logo' },
-                      { key: 'showName', label: 'Show Company Name' },
-                      { key: 'showTagline', label: 'Show Company Tagline' },
-                      { key: 'showContact', label: 'Show Contact Number' },
-                      { key: 'showEmail', label: 'Show Email Address' },
-                      { key: 'showWebsite', label: 'Show Website URL' },
-                      { key: 'showAddress', label: 'Show Company Address' }
-                    ].map(item => (
-                      <div key={item.key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                        <span className="text-[10px] font-black text-gray-500 uppercase">{item.label}</span>
-                        <input type="checkbox" checked={tempSettings.header[item.key]} onChange={e => setTempSettings({...tempSettings, header: {...tempSettings.header, [item.key]: e.target.checked}})} className="w-5 h-5 accent-blue-600" />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="grid grid-cols-2 gap-10">
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Alignment</label>
-                      <div className="flex bg-gray-100 p-1 rounded-xl">
-                          {['Left', 'Center', 'Right'].map(a => (
-                            <button key={a} onClick={() => setTempSettings({...tempSettings, header: {...tempSettings.header, alignment: a}})} className={`flex-1 py-3 text-[9px] font-black uppercase rounded-lg ${tempSettings.header.alignment === a ? 'bg-white text-blue-600' : 'text-gray-400'}`}>{a}</button>
-                          ))}
-                      </div>
-                    </div>
-                    <div>
-                      <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Logo Upload</label>
-                      <input type="file" ref={logoInputRef} className="hidden" accept="image/*" onChange={handleLogoUpload} />
-                      <div className="flex items-center gap-4">
-                        <div className="w-14 h-14 bg-gray-50 border-2 border-dashed flex items-center justify-center rounded-xl overflow-hidden">
-                           {tempSettings.header.logoUrl ? <img src={tempSettings.header.logoUrl} className="w-full h-full object-contain p-1" /> : <Settings size={20} className="text-gray-300" />}
-                        </div>
-                        <button onClick={() => logoInputRef.current.click()} className="flex-1 bg-blue-50 text-blue-600 py-3 rounded-xl text-[9px] font-black uppercase">Upload Logo</button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Banner' && (
-                <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-                  <h4 className="text-xl font-black text-gray-800 uppercase">Banner Settings</h4>
-                  <input type="file" ref={bannerInputRef} className="hidden" accept="image/*" onChange={handleBannerUpload} />
-                  <div className="relative h-48 bg-gray-50 rounded-3xl border-2 border-dashed overflow-hidden flex items-center justify-center group">
-                     {tempSettings.banner.imageUrl ? (
-                       <>
-                         <img src={tempSettings.banner.imageUrl} className="w-full h-full object-cover" />
-                         <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all"><button onClick={() => bannerInputRef.current.click()} className="bg-white text-blue-600 px-6 py-2 rounded-xl text-[10px] font-black uppercase">Change Image</button></div>
-                       </>
-                     ) : (
-                       <button onClick={() => bannerInputRef.current.click()} className="text-gray-400 flex flex-col items-center gap-2"><Upload size={32} /><span className="text-[10px] font-black uppercase">Upload Cover Banner</span></button>
-                     )}
-                  </div>
-                  <div className="grid grid-cols-2 gap-10">
-                     <div>
-                       <label className="block text-[10px] font-black text-gray-400 uppercase mb-4">Overlay Opacity ({Math.round(tempSettings.banner.overlayOpacity * 100)}%)</label>
-                       <input type="range" min="0" max="1" step="0.1" value={tempSettings.banner.overlayOpacity} onChange={e => setTempSettings({...tempSettings, banner: {...tempSettings.banner, overlayOpacity: parseFloat(e.target.value)}})} className="w-full accent-blue-600" />
-                     </div>
-                     <div>
-                       <label className="block text-[10px] font-black text-gray-400 uppercase mb-4">Text Color</label>
-                       <input type="color" value={tempSettings.banner.textColor} onChange={e => setTempSettings({...tempSettings, banner: {...tempSettings.banner, textColor: e.target.value}})} className="w-full h-10 border-0 cursor-pointer" />
-                     </div>
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Visibility' && (
-                <div className="space-y-8 animate-in slide-in-from-right-4 duration-300">
-                  <h4 className="text-xl font-black text-gray-800 uppercase">Content Visibility</h4>
-                  <div className="grid grid-cols-2 gap-6">
-                    {Object.keys(tempSettings.contentVisibility).map(key => typeof tempSettings.contentVisibility[key] === 'boolean' && (
-                      <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                         <span className="text-[10px] font-black text-gray-400 uppercase">{key.replace(/([A-Z])/g, ' $1')}</span>
-                         <input type="checkbox" checked={tempSettings.contentVisibility[key]} onChange={e => setTempSettings({...tempSettings, contentVisibility: {...tempSettings.contentVisibility, [key]: e.target.checked}})} className="w-5 h-5 accent-blue-600" />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === 'Custom Text' && (
-                <div className="space-y-8">
-                   <h4 className="text-xl font-black text-gray-800 uppercase">Custom Labels</h4>
-                   <div>
-                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Custom Proposal Title</label>
-                     <input type="text" value={tempSettings.contentVisibility.customTitle} onChange={e => setTempSettings({...tempSettings, contentVisibility: {...tempSettings.contentVisibility, customTitle: e.target.value}})} className="w-full bg-gray-50 border p-4 rounded-2xl font-bold" placeholder="Defaults to Residential Solar Proposal" />
-                   </div>
-                </div>
-              )}
-
-              {activeTab === 'Footer' && (
-                <div className="space-y-8">
-                   <h4 className="text-xl font-black text-gray-800 uppercase">Footer Settings</h4>
-                   <div className="grid grid-cols-2 gap-6">
-                     {Object.keys(tempSettings.footer).filter(k => typeof tempSettings.footer[k] === 'boolean').map(key => (
-                       <div key={key} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                         <span className="text-[10px] font-black text-gray-400 uppercase">{key.replace(/([A-Z])/g, ' $1')}</span>
-                         <input type="checkbox" checked={tempSettings.footer[key]} onChange={e => setTempSettings({...tempSettings, footer: {...tempSettings.footer, [key]: e.target.checked}})} className="w-5 h-5 accent-blue-600" />
-                       </div>
-                     ))}
-                   </div>
-                   <div>
-                     <label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Copyright Text</label>
-                     <input type="text" value={tempSettings.footer.copyrightText} onChange={e => setTempSettings({...tempSettings, footer: {...tempSettings.footer, copyrightText: e.target.value}})} className="w-full bg-gray-50 border p-4 rounded-2xl font-bold" />
-                   </div>
-                </div>
-              )}
-
-              {activeTab === 'Design' && (
-                <div className="space-y-8">
-                   <h4 className="text-xl font-black text-gray-800 uppercase">Styling</h4>
-                   <div className="grid grid-cols-2 gap-6">
-                      <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Header BG</label><input type="color" value={tempSettings.header.bgColor} onChange={e => setTempSettings({...tempSettings, header: {...tempSettings.header, bgColor: e.target.value}})} className="w-full h-12 cursor-pointer" /></div>
-                      <div><label className="block text-[10px] font-black text-gray-400 uppercase mb-2">Header Text</label><input type="color" value={tempSettings.header.textColor} onChange={e => setTempSettings({...tempSettings, header: {...tempSettings.header, textColor: e.target.value}})} className="w-full h-12 cursor-pointer" /></div>
-                   </div>
-                </div>
-              )}
-            </div>
-
-            <div className="w-[400px] bg-gray-50 p-10 border-l overflow-y-auto hidden xl:block">
-               <div className="mb-6 flex justify-between items-center"><h4 className="text-[10px] font-black text-gray-400 uppercase flex items-center gap-2"><Eye size={12}/> Live Preview</h4><div className="bg-blue-100 text-blue-600 text-[8px] font-black px-2 py-0.5 rounded">MODAL ONLY</div></div>
-               <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden flex flex-col" style={{ fontFamily: tempSettings.styling.fontFamily }}>
-                  <div className="p-6 flex justify-between items-center" style={{ backgroundColor: tempSettings.header.bgColor, justifyContent: tempSettings.header.alignment === 'Left' ? 'flex-start' : tempSettings.header.alignment === 'Right' ? 'flex-end' : 'center' }}>
-                     {tempSettings.header.showLogo && <div className="w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-blue-50/50 shadow-inner">{tempSettings.header.logoUrl ? <img src={tempSettings.header.logoUrl} className="w-full h-full object-contain p-1" /> : <span className="text-[6px] font-black text-blue-400">LOGO</span>}</div>}
-                     <div className="ml-3">{tempSettings.header.showName && <p className="text-[10px] font-black uppercase tracking-tight text-gray-800">SOLARKITS ERP</p>}</div>
-                  </div>
-                  <div className="relative h-40 overflow-hidden">
-                     <img src={tempSettings.banner.imageUrl} className="w-full h-full object-cover" />
-                     <div className="absolute inset-0 flex flex-col items-center justify-center p-4 text-center" style={{ backgroundColor: `rgba(0,0,0,${tempSettings.banner.overlayOpacity})` }}>
-                       {tempSettings.contentVisibility.proposalTitle && (
-                         <h1 className="text-sm font-black uppercase tracking-tight" style={{ color: tempSettings.banner.textColor }}>
-                           {tempSettings.contentVisibility.customTitle || 
-                             `${(filters.category || 'RESIDENTIAL').toUpperCase()} ${filters.projectType || '3 TO 10 KW'} PROPOSAL`}
-                         </h1>
-                       )}
-                       <div className="w-8 h-0.5 bg-yellow-400 my-2" />
-                       <p className="text-[6px] font-black tracking-widest uppercase opacity-70" style={{ color: tempSettings.banner.textColor }}>PROPOSAL</p>
-                     </div>
-                   </div>
-                  <div className="p-6 space-y-4">
-                     <div className="space-y-1">{tempSettings.contentVisibility.customerName && <><p className="text-[6px] font-black text-gray-400 uppercase">Customer Name</p><p className="text-[10px] font-black uppercase text-gray-800">Pradip Sharma</p></>}</div>
-                     <div className="flex gap-4">
-                       {tempSettings.contentVisibility.proposalNo && (
-                         <div>
-                           <p className="text-[6px] font-black text-gray-400 uppercase">Proposal No</p>
-                           <p className="text-[8px] font-black text-blue-600 uppercase">
-                             #QUA/{filters.category ? filters.category.substring(0, 3).toUpperCase() : 'PRD'}/
-                             {filters.subCategory ? filters.subCategory.substring(0, 3).toUpperCase() : 'SUB'}/
-                             {states.find(s => s._id === selectedState)?.code || 'ST'}/
-                             {districts.find(d => d._id === selectedDistrict)?.code || 'DST'}/
-                             {(new Date().getFullYear()).toString().slice(-2)}/
-                             {(quotes.filter(q => (q.state?._id || q.state) === selectedState && (q.district?._id || q.district) === selectedDistrict).length + 1).toString().padStart(3, '0')}
-                           </p>
-                         </div>
-                       )}
-                       {tempSettings.contentVisibility.systemSize && (
-                         <div>
-                           <p className="text-[6px] font-black text-gray-400 uppercase">System Size</p>
-                           <p className="text-[8px] font-black text-gray-800 Uppercase">{solarSettings?.projectKW || 10} kW</p>
-                         </div>
-                       )}
-                     </div>
-                  </div>
-               </div>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -3649,12 +4045,345 @@ const PageConfigDrawer = ({ isOpen, onClose, activePage, initialConfig, onSave, 
           </button>
           <button
             onClick={() => { onSave(config); onClose(); }}
-            className="bg-blue-600 text-white px-8 py-2.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
+            className="bg-blue-600 text-white px-8 py-3.5 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-blue-700 shadow-lg shadow-blue-200 active:scale-95 transition-all"
           >
             Apply Config
           </button>
         </div>
 
+      </div>
+    </div>
+  );
+};
+
+const FrontPageSettingsDrawer = ({ 
+  isOpen, 
+  onClose, 
+  initialSettings, 
+  onSave, 
+  selectedStates, 
+  selectedDistricts, 
+  states, 
+  districts, 
+  quoteCount, 
+  solarSettings, 
+  filters, 
+  quotes 
+}) => {
+  const [settings, setSettings] = React.useState(initialSettings);
+  const [activeTab, setActiveTab] = React.useState('layout');
+
+  React.useEffect(() => {
+    if (isOpen) setSettings(initialSettings);
+  }, [isOpen, initialSettings]);
+
+  if (!isOpen) return null;
+
+  const update = (path, value) => {
+    const keys = path.split('.');
+    const next = { ...settings };
+    let current = next;
+    for (let i = 0; i < keys.length - 1; i++) {
+      current[keys[i]] = { ...current[keys[i]] };
+      current = current[keys[i]];
+    }
+    current[keys[keys.length - 1]] = value;
+    setSettings(next);
+  };
+
+  const TabButton = ({ id, label, icon: Icon }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${
+        activeTab === id ? 'bg-blue-600 text-white shadow-lg shadow-blue-200' : 'text-gray-400 hover:bg-gray-100 hover:text-gray-600'
+      }`}
+    >
+      <Icon size={14} />
+      {label}
+    </button>
+  );
+
+  return (
+    <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black/60 backdrop-blur-md p-4 animate-in fade-in duration-300">
+      <div className="bg-white rounded-[2.5rem] w-full max-w-6xl h-[90vh] shadow-2xl overflow-hidden flex animate-in zoom-in-95 duration-300">
+        
+        {/* Left Column: Settings Panel */}
+        <div className="w-[400px] border-r border-gray-100 flex flex-col bg-gray-50/50">
+          <div className="p-8 pb-4">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="p-2.5 bg-blue-600 rounded-2xl shadow-lg shadow-blue-200">
+                <Layout size={20} className="text-white" />
+              </div>
+              <div>
+                <h3 className="text-gray-900 text-lg font-black uppercase tracking-tight">Front Page</h3>
+                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-widest leading-none mt-0.5">Custom Branding & Content</p>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2 mb-6">
+              <TabButton id="layout" label="Layout" icon={Layout} />
+              <TabButton id="header" label="Header" icon={Type} />
+              <TabButton id="banner" label="Banner" icon={Image} />
+              <TabButton id="content" label="Content" icon={CheckCircle} />
+              <TabButton id="styling" label="Style" icon={Zap} />
+            </div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto px-8 pb-8 space-y-6">
+            {activeTab === 'layout' && (
+              <div className="space-y-6 animate-in slide-in-from-left-4 duration-300">
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 leading-none">Global Alignment</label>
+                    <div className="grid grid-cols-3 gap-2">
+                       {['left', 'center', 'right'].map(align => (
+                         <button
+                           key={align}
+                           onClick={() => update('styling.alignment', align)}
+                           className={`py-2.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${settings.styling.alignment === align ? 'border-blue-600 bg-blue-50 text-blue-700' : 'border-gray-100 bg-white text-gray-400 hover:border-gray-200'}`}
+                         >
+                           {align}
+                         </button>
+                       ))}
+                    </div>
+                 </div>
+                 <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                    <div className="flex items-center justify-between">
+                       <span className="text-[11px] font-black text-gray-700 uppercase tracking-tight">Full Width Layout</span>
+                       <input 
+                         type="checkbox" 
+                         checked={settings.styling.spacing === 'wide'} 
+                         onChange={(e) => update('styling.spacing', e.target.checked ? 'wide' : 'compact')}
+                         className="h-5 w-5 text-blue-600 rounded-lg"
+                       />
+                    </div>
+                 </div>
+              </div>
+            )}
+
+            {activeTab === 'header' && (
+              <div className="space-y-6 animate-in slide-in-from-left-4 duration-300">
+                 <div className="grid grid-cols-2 gap-3">
+                    {[
+                      { key: 'showLogo', label: 'Company Logo' },
+                      { key: 'showName', label: 'Company Name' },
+                      { key: 'showTagline', label: 'Tagline' },
+                      { key: 'showContact', label: 'Contact Info' }
+                    ].map(item => (
+                      <div key={item.key} className="p-3 bg-white rounded-xl border border-gray-100 flex items-center gap-3">
+                         <input 
+                           type="checkbox" 
+                           checked={settings.header[item.key]} 
+                           onChange={(e) => update(`header.${item.key}`, e.target.checked)}
+                           className="h-4 w-4 text-blue-600 rounded"
+                         />
+                         <span className="text-[9px] font-black text-gray-600 uppercase">{item.label}</span>
+                      </div>
+                    ))}
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Logo URL</label>
+                    <input 
+                      type="text" 
+                      value={settings.header.logoUrl} 
+                      onChange={(e) => update('header.logoUrl', e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-700"
+                      placeholder="https://..."
+                    />
+                 </div>
+              </div>
+            )}
+
+            {activeTab === 'banner' && (
+              <div className="space-y-6 animate-in slide-in-from-left-4 duration-300">
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Banner Image URL</label>
+                    <input 
+                      type="text" 
+                      value={settings.banner.imageUrl} 
+                      onChange={(e) => update('banner.imageUrl', e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-700"
+                    />
+                 </div>
+                 <div>
+                    <div className="flex justify-between mb-2">
+                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest leading-none">Overlay Opacity</label>
+                       <span className="text-[10px] font-black text-blue-600">{Math.round(settings.banner.overlayOpacity * 100)}%</span>
+                    </div>
+                    <input 
+                      type="range" min="0" max="1" step="0.1" 
+                      value={settings.banner.overlayOpacity} 
+                      onChange={(e) => update('banner.overlayOpacity', parseFloat(e.target.value))}
+                      className="w-full accent-blue-600"
+                    />
+                 </div>
+              </div>
+            )}
+
+            {activeTab === 'content' && (
+              <div className="space-y-4 animate-in slide-in-from-left-4 duration-300">
+                 {[
+                   { key: 'proposalTitle', label: 'Proposal Title' },
+                   { key: 'customerName', label: 'Customer Name' },
+                   { key: 'proposalNo', label: 'Proposal Serial No' },
+                   { key: 'city', label: 'Installation City' },
+                   { key: 'systemSize', label: 'System kW Output' },
+                   { key: 'validUpto', label: 'Validity Period' }
+                 ].map(item => (
+                    <div key={item.key} className="flex items-center justify-between p-4 bg-white rounded-2xl border border-gray-100">
+                       <span className="text-[11px] font-black text-gray-700 uppercase tracking-tight">{item.label}</span>
+                       <input 
+                         type="checkbox" 
+                         checked={settings.contentVisibility[item.key]} 
+                         onChange={(e) => update(`contentVisibility.${item.key}`, e.target.checked)}
+                         className="h-5 w-5 text-blue-600 rounded-lg"
+                       />
+                    </div>
+                 ))}
+              </div>
+            )}
+
+            {activeTab === 'styling' && (
+              <div className="space-y-6 animate-in slide-in-from-left-4 duration-300">
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3 leading-none">Theme Accent Color</label>
+                    <div className="flex gap-3">
+                       {['#2563eb', '#dc2626', '#16a34a', '#8b5cf6', '#ea580c'].map(c => (
+                         <button 
+                           key={c}
+                           onClick={() => update('styling.themeColor', c)}
+                           className={`w-10 h-10 rounded-full border-4 transition-all ${settings.styling.themeColor === c ? 'border-white ring-4 ring-blue-100 scale-110' : 'border-transparent opacity-60'}`}
+                           style={{ backgroundColor: c }}
+                         />
+                       ))}
+                       <input 
+                         type="color" 
+                         value={settings.styling.themeColor} 
+                         onChange={(e) => update('styling.themeColor', e.target.value)}
+                         className="w-10 h-10 rounded-full border-0 p-0 overflow-hidden cursor-pointer"
+                       />
+                    </div>
+                 </div>
+                 <div>
+                    <label className="block text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2 leading-none">Font Family</label>
+                    <select 
+                      value={settings.styling.fontFamily} 
+                      onChange={(e) => update('styling.fontFamily', e.target.value)}
+                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 text-xs font-bold text-gray-700 outline-none focus:ring-2 focus:ring-blue-100"
+                    >
+                       <option value="Inter">Inter (Sans)</option>
+                       <option value="Poppins">Poppins (Geometric)</option>
+                       <option value="Montserrat">Montserrat (Modern)</option>
+                    </select>
+                 </div>
+              </div>
+            )}
+          </div>
+
+          <div className="p-8 border-t border-gray-100 flex gap-3">
+            <button
+              onClick={onClose}
+              className="flex-1 px-6 py-3.5 rounded-2xl text-[11px] font-black text-gray-400 hover:text-gray-600 uppercase tracking-widest transition-all hover:bg-white"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={() => { onSave(settings); onClose(); }}
+              className="flex-[2] bg-blue-600 text-white px-8 py-3.5 rounded-2xl text-[11px] font-black uppercase tracking-widest hover:bg-blue-700 shadow-xl shadow-blue-200 active:scale-95 transition-all"
+            >
+              Save Brand Policy
+            </button>
+          </div>
+        </div>
+
+        {/* Right Column: Live Preview Area */}
+        <div className="flex-1 bg-gray-100 p-8 overflow-y-auto">
+          <div className="max-w-xl mx-auto space-y-8 animate-in fade-in duration-500 delay-150">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] ml-2">Live WYSIWYG Preview</span>
+              <div className="flex gap-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-200" />
+                <div className="w-1.5 h-1.5 rounded-full bg-blue-100" />
+              </div>
+            </div>
+
+            {/* Simulated Page Frame */}
+            <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 transition-all duration-500" style={{ fontFamily: settings.styling.fontFamily }}>
+              
+              {/* Preview Banner */}
+              <div className="relative h-64 w-full">
+                <img src={settings.banner.imageUrl} alt="Banner" className="w-full h-full object-cover" />
+                <div className="absolute inset-0 transition-opacity duration-500" style={{ backgroundColor: `rgba(0,0,0,${settings.banner.overlayOpacity})` }} />
+                <div className={`absolute inset-0 flex flex-col justify-center p-12 ${settings.styling.alignment === 'center' ? 'items-center text-center' : settings.styling.alignment === 'right' ? 'items-end text-right' : 'items-start text-left'}`}>
+                  {settings.header.showLogo && <img src={settings.header.logoUrl} className="h-12 w-auto mb-6 bg-white/20 p-2 rounded-lg backdrop-blur-sm" alt="Logo" />}
+                  {settings.contentVisibility.proposalTitle && (
+                    <h4 className="text-white text-3xl font-black uppercase tracking-tight mb-2 drop-shadow-md">Solar Power Proposal</h4>
+                  )}
+                  <div className="w-16 h-1.5 rounded-full" style={{ backgroundColor: settings.styling.themeColor }} />
+                </div>
+              </div>
+
+              {/* Preview Content */}
+              <div className="p-12 space-y-10 bg-white">
+                <div className="grid grid-cols-2 gap-10">
+                  <div className="space-y-6">
+                    {settings.contentVisibility.proposalNo && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Proposal No</p>
+                        <p className="text-sm font-black text-blue-600">
+                          # QUA/{filters?.category?.substring(0,3)?.toUpperCase() || 'PRD'}/{states?.find(s => selectedStates?.includes(s._id))?.code || 'ST'}/26/001
+                        </p>
+                      </div>
+                    )}
+                    {settings.contentVisibility.customerName && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Customer Name</p>
+                        <p className="text-sm font-black text-gray-800">Pradip Sharma</p>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-6">
+                    {settings.contentVisibility.city && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Installation City</p>
+                        <p className="text-sm font-black text-gray-800">
+                          {selectedDistricts?.includes('all') 
+                            ? 'All Districts' 
+                            : districts?.filter(d => selectedDistricts?.includes(d._id))?.map(d => d.name)?.join(', ') || 'Select District'}
+                        </p>
+                      </div>
+                    )}
+                    {settings.contentVisibility.systemSize && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Proposed System</p>
+                        <p className="text-sm font-black text-gray-800">{solarSettings?.projectKW || 10} kW Solar Plant</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Simulated Footer */}
+                <div className="pt-10 border-t border-gray-100 flex justify-between items-center opacity-40">
+                  <div className="flex items-center gap-2">
+                    <div className="w-3 h-3 rounded-full bg-gray-200" />
+                    <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">Project Authorized</span>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-gray-400">Page 01 — Front Matter</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Notification Tip */}
+            <div className="bg-yellow-50 border border-yellow-100 p-4 rounded-2xl flex gap-3 items-center">
+              <div className="w-8 h-8 rounded-full bg-yellow-400 flex items-center justify-center text-white shadow-sm flex-shrink-0">
+                <Zap size={16} />
+              </div>
+              <p className="text-[10px] font-bold text-yellow-800 leading-normal">
+                Changes made here reflect across all Generated PDF proposals for this configuration set.
+              </p>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
