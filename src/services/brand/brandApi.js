@@ -17,7 +17,7 @@ export const getAllManufacturers = async (filters = {}) => {
     if (filters.product) params.append('product', filters.product);
 
     const response = await axios.get(`${API_URL}/manufacturer`, { params });
-    return response.data;
+    return response.data.data || response.data;
 };
 
 export const updateManufacturer = async (id, data) => {
@@ -43,7 +43,7 @@ export const getAllSuppliers = async (filters = {}) => {
     // Add other filters if backend supports them directly, otherwise frontend filters.
 
     const response = await axios.get(`${API_URL}/supplier`, { params });
-    return response.data;
+    return response.data.data || response.data;
 };
 
 export const updateSupplier = async (id, data) => {

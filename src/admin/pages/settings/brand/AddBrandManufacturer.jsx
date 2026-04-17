@@ -136,6 +136,9 @@ const AddBrandManufacturer = () => {
 
   // Calculate summary statistics
   const calculateSummary = () => {
+    if (!Array.isArray(manufacturers)) {
+      return { total: 0, indiaCompanies: 0, foreignCompanies: 0, comboKitCount: 0 };
+    }
     const total = manufacturers.length;
     const indiaCompanies = manufacturers.filter(m => m.companyOriginCountry === 'India').length;
     const foreignCompanies = manufacturers.filter(m => m.companyOriginCountry !== 'India').length;
