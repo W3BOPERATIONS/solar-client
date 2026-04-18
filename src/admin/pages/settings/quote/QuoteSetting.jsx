@@ -72,6 +72,7 @@ const AccordionSection = ({ title, section, isOpen, onToggle, children, icon: Ic
 );
 
 export default function QuoteSetting() {
+  const PROTECTED_IDS = ['f1', 'f2', 'f3', 'f4', 'f5', 'p_terms'];
   const [dbAmcServices, setDbAmcServices] = useState([]);
   useEffect(() => {
     const fetchAmcServices = async () => {
@@ -106,6 +107,7 @@ export default function QuoteSetting() {
   const [colorSettings, setColorSettings] = useState({
     brandColor: false,
     backgroundColor: false,
+    fontSize: false,
     pageSequence: false
   });
 
@@ -137,6 +139,8 @@ export default function QuoteSetting() {
   const [availableKits, setAvailableKits] = useState([]);
   const [selectedKitId, setSelectedKitId] = useState(null);
   const [kitLoading, setKitLoading] = useState(false);
+  const [currentProposalNo, setCurrentProposalNo] = useState('');
+  const [summarySearch, setSummarySearch] = useState('');
 
   useEffect(() => {
     const fetchAvailableKits = async () => {
@@ -269,7 +273,8 @@ export default function QuoteSetting() {
     },
     styling: {
       themeColor: '#2563eb', fontFamily: 'Inter', fontSize: '14px',
-      bgColor: '#ffffff', spacing: '20px', alignment: 'Center'
+      bgColor: '#ffffff', spacing: '20px', alignment: 'Center',
+      headerFontSize: 24, footerFontSize: 10, sectionTitleFontSize: 18, contentFontSize: 12
     }
   };
 
@@ -293,8 +298,18 @@ export default function QuoteSetting() {
   
   // Dynamic Theme Color based on Brand Color selection
   const themeAccent = colorSettings.brandColor ? (frontPageSettings?.styling?.themeColor || '#2563eb') : '#2563eb';
-  const themeBgLight = `${themeAccent}10`; // 10% opacity version
-  const themeBgFaint = `${themeAccent}05`; // 5% opacity version
+  const themeBgColor = colorSettings.backgroundColor ? (frontPageSettings?.styling?.bgColor || '#ffffff') : '#ffffff';
+  
+  // Dynamic Font Sizes
+  const headerFontSize = colorSettings.fontSize ? `${frontPageSettings?.styling?.headerFontSize || 24}px` : '24px';
+  const footerFontSize = colorSettings.fontSize ? `${frontPageSettings?.styling?.footerFontSize || 10}px` : '10px';
+  const sectionTitleFontSize = colorSettings.fontSize ? `${frontPageSettings?.styling?.sectionTitleFontSize || 18}px` : '18px';
+  const contentFontSize = colorSettings.fontSize ? `${frontPageSettings?.styling?.contentFontSize || 12}px` : '12px';
+
+  const themeBgLight = `${themeAccent}15`; // 8% opacity version
+  const themeBgSemi = `${themeAccent}33`; // 20% opacity version
+  const themeBgFaint = `${themeAccent}08`; // 5% opacity version
+  const themeBgStrong = `${themeAccent}CC`; // 80% opacity version
 
   const [isFrontPageModalOpen, setIsFrontPageModalOpen] = useState(false);
 
@@ -466,18 +481,27 @@ export default function QuoteSetting() {
       setSelectedPages(['Front Page']);
     }
 
-    // One-time cleanup for specific unwanted pages
+    // One-time cleanup for specific unwanted pages and potential duplicates
     const unwanted = ['EEEE', 'SWWSW', 'FOTTER', 'JJIIK'];
     setPagesOptions(prev => {
+      // 1. Filter out unwanted labels
       const filtered = prev.filter(p => !p.label || !unwanted.includes(p.label.toUpperCase()));
-      if (filtered.length !== prev.length) {
-        const customOnly = filtered.filter(p => !['f1', 'f2', 'f3', 'f4', 'f5'].includes(p.id));
+      
+      // 2. Ensure NO duplicates (especially p_terms which might have leaked into storage)
+      const seenIds = new Set();
+      const unique = filtered.filter(p => {
+        if (!p.id || seenIds.has(p.id)) return false;
+        seenIds.add(p.id);
+        return true;
+      });
+
+      if (unique.length !== prev.length) {
+        const customOnly = unique.filter(p => !PROTECTED_IDS.includes(p.id));
         localStorage.setItem('customQuotePages', JSON.stringify(customOnly));
-        return filtered;
+        return unique;
       }
       return prev;
-    }
-    );
+    });
   }, []);
 
   // Auto-save state to localStorage on changes
@@ -541,7 +565,7 @@ export default function QuoteSetting() {
         const newOrder = arrayMove(items, oldIndex, newIndex);
         
         // Update localStorage for custom discovery too
-        const customOnly = newOrder.filter(p => !['f1', 'f2', 'f3', 'f4', 'f5'].includes(p.id));
+        const customOnly = newOrder.filter(p => !PROTECTED_IDS.includes(p.id));
         localStorage.setItem('customQuotePages', JSON.stringify(customOnly));
         
         return newOrder;
@@ -553,7 +577,7 @@ export default function QuoteSetting() {
     if (index <= 0) return;
     setPagesOptions((items) => {
       const newOrder = arrayMove(items, index, index - 1);
-      const customOnly = newOrder.filter(p => !['f1', 'f2', 'f3', 'f4', 'f5'].includes(p.id));
+      const customOnly = newOrder.filter(p => !PROTECTED_IDS.includes(p.id));
       localStorage.setItem('customQuotePages', JSON.stringify(customOnly));
       return newOrder;
     });
@@ -563,7 +587,7 @@ export default function QuoteSetting() {
     if (index >= pagesOptions.length - 1) return;
     setPagesOptions((items) => {
       const newOrder = arrayMove(items, index, index + 1);
-      const customOnly = newOrder.filter(p => !['f1', 'f2', 'f3', 'f4', 'f5'].includes(p.id));
+      const customOnly = newOrder.filter(p => !PROTECTED_IDS.includes(p.id));
       localStorage.setItem('customQuotePages', JSON.stringify(customOnly));
       return newOrder;
     });
@@ -655,7 +679,7 @@ export default function QuoteSetting() {
               </div>
             )}
 
-            {!['f1', 'f2', 'f3', 'f4', 'f5'].includes(page.id) && (
+            {!PROTECTED_IDS.includes(page.id) && (
               <button
                 onClick={(e) => {
                   e.stopPropagation();
@@ -1333,7 +1357,10 @@ export default function QuoteSetting() {
         toast.success("Quote setting updated");
       } else {
         const res = await createQuoteSetting(payload);
-        if (res?._id) setEditingId(res._id);
+        if (res?._id) {
+            setEditingId(res._id);
+            if (res.proposalNo) setCurrentProposalNo(res.proposalNo);
+        }
         toast.success("Quote setting created");
       }
 
@@ -1355,7 +1382,7 @@ export default function QuoteSetting() {
     setPagesOptions(updatedOptions);
 
     // Save custom pages to localStorage
-    const customPages = updatedOptions.filter(p => !['f1', 'f2', 'f3', 'f4', 'f5'].includes(p.id));
+    const customPages = updatedOptions.filter(p => !PROTECTED_IDS.includes(p.id));
     localStorage.setItem('customQuotePages', JSON.stringify(customPages));
 
     setNewPageName('');
@@ -1442,6 +1469,7 @@ export default function QuoteSetting() {
         additionalCharges: 0,
         netCost: 0
     });
+    setCurrentProposalNo('');
   };
 
   const handleDeleteQuote = async (id) => {
@@ -1463,6 +1491,7 @@ export default function QuoteSetting() {
 
   const handleEditQuote = async (quote) => {
     setEditingId(quote._id);
+    setCurrentProposalNo(quote.proposalNo || '');
 
     // Restore multi-select arrays from saved quote
     const savedCountries = (Array.isArray(quote.countries) ? quote.countries.map(c => c?._id || c)
@@ -2709,6 +2738,81 @@ export default function QuoteSetting() {
                           />
                           <label htmlFor="bgColorToggle" className="text-[10px] font-black text-gray-600 uppercase tracking-tight cursor-pointer group-hover:text-blue-600 transition-colors">Background Color</label>
                         </div>
+                        {colorSettings.backgroundColor && (
+                          <div className="mt-4 pl-8 border-t border-gray-50 pt-4 animate-in slide-in-from-top-2 duration-300">
+                             <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-3">Select Background Color</p>
+                             <div className="flex flex-wrap gap-2.5 items-center">
+                                {['#ffffff', '#f8fafc', '#f1f5f9', '#eff6ff', '#fdf2f8', '#0f172a'].map(c => (
+                                  <button 
+                                    key={c}
+                                    onClick={() => setFrontPageSettings(prev => ({
+                                      ...prev,
+                                      styling: { ...prev.styling, bgColor: c }
+                                    }))}
+                                    className={`w-7 h-7 rounded-full border-2 transition-all hover:scale-110 ${frontPageSettings.styling.bgColor === c ? 'border-white ring-2 ring-blue-500 shadow-lg' : 'border-gray-200 shadow-sm'}`}
+                                    style={{ backgroundColor: c }}
+                                  />
+                                ))}
+                                <div className="w-px h-6 bg-gray-200 mx-1" />
+                                <div className="relative group/color">
+                                  <input 
+                                    type="color" 
+                                    value={frontPageSettings.styling.bgColor || '#ffffff'} 
+                                    onChange={(e) => setFrontPageSettings(prev => ({
+                                      ...prev,
+                                      styling: { ...prev.styling, bgColor: e.target.value }
+                                    }))}
+                                    className="w-8 h-8 rounded-full border-0 p-0 overflow-hidden cursor-pointer"
+                                  />
+                                  <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 bg-gray-800 text-white text-[8px] font-bold px-1.5 py-0.5 rounded opacity-0 group-hover/color:opacity-100 transition-opacity whitespace-nowrap pointer-events-none">Custom Color</div>
+                                </div>
+                             </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Font Sizes Override */}
+                      <div className="flex flex-col bg-white p-4 rounded-2xl border border-gray-100 shadow-sm transition-all hover:border-blue-200 group">
+                        <div className="flex items-center gap-3">
+                          <input
+                            type="checkbox"
+                            id="fontSizeToggle"
+                            className="h-5 w-5 text-blue-600 border-gray-300 rounded-lg focus:ring-blue-500 cursor-pointer"
+                            checked={colorSettings.fontSize}
+                            onChange={(e) => setColorSettings({ ...colorSettings, fontSize: e.target.checked })}
+                          />
+                          <label htmlFor="fontSizeToggle" className="text-[10px] font-black text-gray-600 uppercase tracking-tight cursor-pointer group-hover:text-blue-600 transition-colors">Font Sizes</label>
+                        </div>
+                        {colorSettings.fontSize && (
+                          <div className="mt-4 pl-8 border-t border-gray-50 pt-4 animate-in slide-in-from-top-2 duration-300">
+                             <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                                {[
+                                  { label: 'Header Size', key: 'headerFontSize', min: 12, max: 48 },
+                                  { label: 'Footer Size', key: 'footerFontSize', min: 6, max: 20 },
+                                  { label: 'Section Title', key: 'sectionTitleFontSize', min: 12, max: 36 },
+                                  { label: 'Content Size', key: 'contentFontSize', min: 8, max: 24 }
+                                ].map((item) => (
+                                  <div key={item.key}>
+                                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1.5 block">{item.label}</label>
+                                    <div className="flex items-center gap-3">
+                                      <input 
+                                        type="range"
+                                        min={item.min}
+                                        max={item.max}
+                                        value={frontPageSettings.styling[item.key] || item.min}
+                                        onChange={(e) => setFrontPageSettings(prev => ({
+                                          ...prev,
+                                          styling: { ...prev.styling, [item.key]: parseInt(e.target.value) }
+                                        }))}
+                                        className="flex-1 h-1 bg-gray-100 rounded-lg appearance-none cursor-pointer accent-blue-600"
+                                      />
+                                      <span className="text-[10px] font-black text-blue-600 w-7 text-right">{frontPageSettings.styling[item.key]}</span>
+                                    </div>
+                                  </div>
+                                ))}
+                             </div>
+                          </div>
+                        )}
                       </div>
 
                       {/* Page Sequence Interactive Manager */}
@@ -2879,6 +2983,7 @@ export default function QuoteSetting() {
                     <thead className="bg-gray-50">
                       <tr>
                         <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">#</th>
+                        <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Proposal No</th>
                         <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Quote Type</th>
                         <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Category</th>
                         <th className="border border-gray-300 px-4 py-3 text-sm font-medium text-gray-700">Sub Category</th>
@@ -2892,9 +2997,23 @@ export default function QuoteSetting() {
                       </tr>
                     </thead>
                     <tbody>
-                      {quotes.map((quote, index) => (
+                      {quotes.filter(q => {
+                        if (!summarySearch) return true;
+                        const search = summarySearch.toLowerCase();
+                        return (
+                          (q.proposalNo || '').toLowerCase().includes(search) ||
+                          (q.category || '').toLowerCase().includes(search) ||
+                          (Array.isArray(q.categories) && q.categories.some(c => c.toLowerCase().includes(search))) ||
+                          (q.district?.name || '').toLowerCase().includes(search) ||
+                          (Array.isArray(q.districts) && q.districts.some(d => (d.name || d).toLowerCase().includes(search))) ||
+                          (q.customerName || '').toLowerCase().includes(search)
+                        );
+                      }).map((quote, index) => (
                         <tr key={quote._id}>
                           <td className="border border-gray-300 px-4 py-3 text-center">{index + 1}</td>
+                          <td className="border border-gray-300 px-4 py-3 text-center text-[10px] font-black uppercase tracking-tighter" style={{ color: themeAccent }}>
+                            {quote.proposalNo || '-'}
+                          </td>
                           <td className="border border-gray-300 px-4 py-3 text-center">
                             <span className={`px-2 py-1 rounded-full text-xs font-medium ${(quote.quoteTypes?.includes('Survey Quote') || quote.quoteType === 'Survey Quote') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
                               {quote.quoteTypes?.join(', ') || quote.quoteType}
@@ -2925,7 +3044,8 @@ export default function QuoteSetting() {
                             <div className="flex justify-center gap-2">
                               <button
                                 title="Download Quote PDF"
-                                className="bg-blue-600 text-white p-1.5 rounded hover:bg-blue-700 transition-colors"
+                                className="text-white p-1.5 rounded transition-colors"
+                                style={{ backgroundColor: themeAccent }}
                                 onClick={() => handleDownloadQuote(quote)}
                               >
                                 <Download size={16} />
@@ -2951,8 +3071,8 @@ export default function QuoteSetting() {
 
                       {quotes.length === 0 && (
                         <tr>
-                          <td colSpan="9" className="border border-gray-300 px-4 py-8 text-center text-gray-500">
-                            No quotes saved yet
+                          <td colSpan="10" className="border border-gray-300 px-4 py-8 text-center text-gray-500">
+                            {summarySearch ? 'No quotes matching your search' : 'No quotes saved yet'}
                           </td>
                         </tr>
                       )}
@@ -2970,7 +3090,8 @@ export default function QuoteSetting() {
                 <span>Quote Preview</span>
                 <button 
                   onClick={() => handleDownloadQuote(getCurrentQuoteForExport())}
-                  className="bg-blue-600 text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 hover:bg-blue-700 transition-all active:scale-95 shadow-sm"
+                  className="text-white px-3 py-1 rounded-lg text-[10px] font-black uppercase flex items-center gap-1.5 transition-all active:scale-95 shadow-sm"
+                  style={{ backgroundColor: themeAccent }}
                 >
                   <Download size={14} /> PDF Preview
                 </button>
@@ -2984,7 +3105,7 @@ export default function QuoteSetting() {
                     
                     if (pageName === 'Front Page') {
                       return (
-                        <div key={page.id} className="bg-white border rounded-3xl overflow-hidden shadow-2xl mb-8 border-gray-100">
+                        <div key={page.id} className="pdf-page rounded-3xl overflow-hidden shadow-2xl mb-8 border border-gray-100" style={{ backgroundColor: themeBgColor }}>
                           {/* Hero Banner Section */}
                           <div className="relative h-64 w-full">
                             <img
@@ -2993,7 +3114,7 @@ export default function QuoteSetting() {
                               className="w-full h-full object-cover"
                             />
                             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-6">
-                              <h2 className="text-3xl font-black text-white mb-1 uppercase tracking-tighter drop-shadow-lg">
+                              <h2 className="font-black text-white mb-1 uppercase tracking-tighter drop-shadow-lg" style={{ fontSize: headerFontSize }}>
                                 {pageConfigs['Front Page']?.header || `${filters.category || 'Residential'} ${filters.projectType || '3 To 10 KW'}`}
                               </h2>
                               <h3 className="text-2xl font-black text-yellow-400 mb-2 uppercase tracking-wide drop-shadow-md">
@@ -3007,13 +3128,13 @@ export default function QuoteSetting() {
                           </div>
 
                           {/* Customer Info Section */}
-                          <div className="p-10 bg-white">
+                          <div className="p-10" style={{ backgroundColor: themeBgColor }}>
                             <div className="mb-10 text-center">
-                               <h2 className="text-xl font-black text-gray-800 uppercase tracking-tighter">
+                               <h2 className="font-black text-gray-800 uppercase tracking-tighter" style={{ fontSize: sectionTitleFontSize }}>
                                   {filters.category} {filters.projectType} ({filters.subProjectType}) 
                                   <span className="ml-2 transition-colors" style={{ color: themeAccent }}>Proposal</span>
                                </h2>
-                               <div className="w-20 h-1 mx-auto mt-2 transition-all" style={{ backgroundColor: themeAccent }} />
+                                <div className="w-20 h-1 mx-auto mt-2 transition-all" style={{ backgroundColor: themeAccent }} />
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
@@ -3021,27 +3142,29 @@ export default function QuoteSetting() {
                                 {fieldSettings.proposalNo && (
                                   <div className="group transition-all">
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1 group-hover:opacity-80 transition-opacity">Proposal No</p>
-                                    <p className="text-sm font-black text-blue-600 border-b-2 border-transparent pb-1">
-                                      # QUA/{filters.category ? filters.category.substring(0, 3).toUpperCase() : 'PRD'}/
-                                      {states.find(s => selectedStates.includes(s._id))?.code || 'ST'}/
-                                      {(new Date().getFullYear()).toString().slice(-2)}/
-                                      {Math.floor(Math.random() * 900 + 100)}
+                                    <p className="text-sm font-black border-b-2 border-transparent pb-1" style={{ color: themeAccent }}>
+                                      {currentProposalNo || (
+                                        `SK/${districts.find(d => selectedDistricts.includes(d._id))?.name?.substring(0, 3).toUpperCase() || 'GEN'}/${
+                                          partnerTypesSelected[0]?.toUpperCase().includes('FRANCHISE') ? 'FR' : 
+                                          partnerTypesSelected[0]?.toUpperCase().includes('CHANNEL') ? 'CP' : 'DL'
+                                        }XXXX`
+                                      )}
                                     </p>
                                   </div>
                                 )}
                                 {fieldSettings.customerName && (
                                   <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Name of Customer</p>
-                                    <p className="text-sm font-bold text-gray-700">Valued Customer</p>
+                                    <p className="text-gray-700 font-bold" style={{ fontSize: contentFontSize }}>Valued Customer</p>
                                   </div>
                                 )}
                                 {fieldSettings.kwRequired && (
                                   <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">KW Required</p>
                                     <div className="flex items-center gap-3">
-                                      <p className="text-sm font-bold text-gray-700">{solarSettings.projectKW} KW</p>
+                                      <p className="text-gray-700 font-bold" style={{ fontSize: contentFontSize }}>{solarSettings.projectKW} KW</p>
                                       {fieldSettings.paymentMode && (
-                                        <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-100">
+                                        <span className="text-[10px] font-black px-2 py-0.5 rounded-md border" style={{ color: themeAccent, backgroundColor: themeBgLight, borderColor: themeBgSemi }}>
                                           {paymentModesSelected.join(', ') || 'Cash'}
                                         </span>
                                       )}
@@ -3054,13 +3177,13 @@ export default function QuoteSetting() {
                                  {fieldSettings.residentialCommercial && (
                                   <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Residential / Commercial</p>
-                                    <p className="text-sm font-bold text-gray-700">{filters.category} {filters.projectType} ({filters.subProjectType})</p>
+                                    <p className="text-gray-700 font-bold" style={{ fontSize: contentFontSize }}>{filters.category} {filters.projectType} ({filters.subProjectType})</p>
                                   </div>
                                 )}
                                 {fieldSettings.city && (
                                   <div>
                                     <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">City</p>
-                                    <p className="text-sm font-bold text-gray-700">
+                                    <p className="text-gray-700 font-bold" style={{ fontSize: contentFontSize }}>
                                       {selectedDistricts.includes('all')
                                         ? 'All Districts'
                                         : districts.filter(d => selectedDistricts.includes(d._id)).map(d => d.name).join(', ') || 'District'}
@@ -3076,19 +3199,19 @@ export default function QuoteSetting() {
                             {fieldSettings.preparedBy && (
                               <div className="p-8 border-r border-gray-100">
                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Prepared by</p>
-                                 <p className="text-xs font-black text-gray-700 uppercase">{partnerTypesSelected.join(', ') || 'Demo'} User</p>
+                                 <p className="font-black text-gray-700 uppercase" style={{ fontSize: footerFontSize }}>{partnerTypesSelected.join(', ') || 'Demo'} User</p>
                               </div>
                             )}
                             {fieldSettings.date && (
                               <div className="p-8 border-r border-gray-100">
                                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Date</p>
-                                 <p className="text-xs font-black text-gray-700">{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
+                                 <p className="font-black text-gray-700" style={{ fontSize: footerFontSize }}>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</p>
                               </div>
                             )}
                             {fieldSettings.validUpto && (
                               <div className="p-8">
                                  <p className="text-[10px] font-black text-red-400 uppercase tracking-widest mb-1">Valid Upto</p>
-                                 <p className="text-xs font-black text-red-600 bg-red-100 px-3 py-1 rounded-full w-fit">
+                                 <p className="font-black text-red-600 bg-red-100 px-3 py-1 rounded-full w-fit" style={{ fontSize: footerFontSize }}>
                                    {pageConfigs?.['Front Page']?.validUptoValue || '15'} Days
                                  </p>
                               </div>
@@ -3100,10 +3223,10 @@ export default function QuoteSetting() {
 
                     if (pageName === 'Commercial Page') {
                       return (
-                        <div key={page.id} className="mb-8 p-8 border-b border-gray-100 last:border-0 transition-colors bg-white rounded-[2rem] shadow-xl">
+                        <div key={page.id} className="pdf-page mb-8 p-8 border-b border-gray-100 last:border-0 rounded-[2rem] shadow-xl" style={{ backgroundColor: themeBgColor }}>
                            <div className="flex justify-between items-center mb-6 border-b-4 pb-2" style={{ borderBottomColor: themeAccent }}>
                               <div>
-                                 <h5 className="text-xl font-black uppercase tracking-tighter transition-colors" style={{ color: themeAccent }}>{quoteTypesSelected.join(', ') || 'Quote Type'}</h5>
+                                 <h5 className="font-black uppercase tracking-tighter transition-colors" style={{ color: themeAccent, fontSize: sectionTitleFontSize }}>{quoteTypesSelected.join(', ') || 'Quote Type'}</h5>
                                  <p className="text-xs font-bold text-gray-500 uppercase">{kitTypesSelected.join(', ')}</p>
                               </div>
                               {fieldSettings.kitType && (
@@ -3113,7 +3236,7 @@ export default function QuoteSetting() {
                               )}
                            </div>
 
-                              <div className="bg-white border-2 border-gray-100 rounded-[2.5rem] overflow-hidden shadow-2xl mx-auto max-w-xl w-full">
+                              <div className="border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-2xl mx-auto max-w-xl w-full" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.05)' }}>
                                  <table className="w-full border-collapse">
                                    <tbody>
                                      {[
@@ -3123,8 +3246,8 @@ export default function QuoteSetting() {
                                        { key: 'showAdditionalCharges', label: 'Additional Charges', value: pricingData.additionalCharges }
                                      ].map((row, i) => (pageConfigs['Commercial Page']?.visibility?.[row.key] !== false) && (
                                        <tr key={i} className="border-b border-gray-100 last:border-0">
-                                         <td className="p-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{row.label}</td>
-                                         <td className="p-4 text-sm font-black text-gray-700 text-right whitespace-nowrap leading-none">Rs. {row.value.toLocaleString()} /-</td>
+                                         <td className="p-4 font-black text-gray-400 uppercase tracking-widest" style={{ fontSize: `calc(${contentFontSize} - 4px)` }}>{row.label}</td>
+                                         <td className="p-4 font-black text-gray-700 text-right whitespace-nowrap leading-none" style={{ fontSize: contentFontSize }}>Rs. {row.value.toLocaleString()} /-</td>
                                        </tr>
                                      ))}
                                      {(pageConfigs['Commercial Page']?.visibility?.showNetCost !== false) && (
@@ -3178,7 +3301,8 @@ export default function QuoteSetting() {
                       return (
                         <div key={page.id} className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8 transition-colors">
                            <div className="px-8 py-4 text-white transition-all shadow-md" style={{ backgroundColor: themeAccent }}>
-                              <h5 className="text-lg font-black uppercase tracking-tighter">Residential Solar BOM</h5>
+                              <h5 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFontSize }}>Residential Solar BOM</h5>
+
                            </div>
                            <div className="p-8">
                                {(pageConfigs['Financial Summary']?.visibility?.showBomTable !== false) && (
@@ -3186,8 +3310,8 @@ export default function QuoteSetting() {
                                 <tbody>
                                   {bomData.items.map((row, i) => (
                                     <tr key={i} className="border-b border-gray-100">
-                                      <td className="py-3 text-[11px] font-black text-gray-400 uppercase tracking-widest">{row.label}</td>
-                                      <td className="py-3 text-sm font-bold text-gray-700 text-right">{row.value}</td>
+                                      <td className="py-3 font-black text-gray-400 uppercase tracking-widest" style={{ fontSize: `calc(${contentFontSize} - 2px)` }}>{row.label}</td>
+                                      <td className="py-3 font-bold text-gray-700 text-right" style={{ fontSize: contentFontSize }}>{row.value}</td>
                                     </tr>
                                   ))}
                                 </tbody>
@@ -3270,13 +3394,13 @@ export default function QuoteSetting() {
 
                     if (pageName === 'Generation Graph') {
                       return (
-                        <div key={page.id} className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
+                        <div key={page.id} className="pdf-page rounded-[2rem] overflow-hidden shadow-xl mb-8 border-2 border-gray-100" style={{ backgroundColor: themeBgColor }}>
                            <div className="px-8 py-6 text-white text-center transition-all" style={{ background: `linear-gradient(to right, ${themeAccent}, ${themeAccent}CC)` }}>
-                              <h3 className="text-2xl font-black uppercase tracking-tighter">Performance Analysis</h3>
-                              <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Projected Energy Generation & Financial Benefits</p>
+                              <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFontSize }}>Performance Analysis</h3>
+                              <p className="font-bold uppercase tracking-widest opacity-80" style={{ fontSize: `calc(${contentFontSize} - 4px)` }}>Projected Energy Generation & Financial Benefits</p>
                            </div>
                            
-                           <div className="p-8">
+                           <div className="p-8" style={{ backgroundColor: themeBgColor }}>
                               {(pageConfigs['Generation Graph']?.visibility?.showGenChart !== false) && (
                               <div className="mb-10">
                                 <div className="flex items-center justify-between mb-4 px-1">
@@ -3328,12 +3452,12 @@ export default function QuoteSetting() {
 
                     if (pageName === 'Advanced Settings') {
                       return (
-                        <div key={page.id} className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
+                        <div key={page.id} className="pdf-page rounded-[2rem] overflow-hidden shadow-xl mb-8 border-2 border-gray-100" style={{ backgroundColor: themeBgColor }}>
                            <div className="bg-gray-800 px-8 py-5 text-white" style={{ backgroundColor: themeAccent }}>
-                              <h3 className="text-xl font-black uppercase tracking-tighter">Advanced Options</h3>
+                              <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFontSize }}>Advanced Options</h3>
                            </div>
                            
-                           <div className="p-8">
+                           <div className="p-8" style={{ backgroundColor: themeBgColor }}>
                               <div className="mb-8">
                                 <label className="text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: themeAccent }}>
                                    <div className="w-1.5 h-1.5 rounded-full animate-ping" style={{ backgroundColor: themeAccent }} />
@@ -3370,7 +3494,7 @@ export default function QuoteSetting() {
                                    <div key={opt.key || idx} className="flex flex-col items-center text-center p-4 rounded-2xl transition-all" style={{ backgroundColor: opt.enabled ? themeBgLight : '#f9fafb', opacity: opt.enabled ? 1 : 0.4 }}>
                                       <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">{opt.key?.toUpperCase() || 'SERVICE'}</p>
                                       <div className="bg-white p-2 rounded-lg mb-2 shadow-sm">
-                                         {idx % 3 === 0 ? <Settings size={16} style={{ color: themeAccent }} /> : idx % 3 === 1 ? <Shield size={16} className="text-emerald-600" /> : <Zap size={16} style={{ color: themeAccent }} />}
+                                         {idx % 3 === 0 ? <Settings size={16} style={{ color: themeAccent }} /> : idx % 3 === 1 ? <Shield size={16} style={{ color: themeAccent }} /> : <Zap size={16} style={{ color: themeAccent }} />}
                                       </div>
                                       <p className="text-[10px] font-black text-gray-700 uppercase">{opt.type}</p>
                                       <p className="text-[9px] font-bold" style={{ color: themeAccent }}>
@@ -3433,27 +3557,27 @@ export default function QuoteSetting() {
                   if (pageName === 'Payment Terms') {
                     if (paymentModesSelected.length === 0) return null;
                     return (
-                      <div key={page.id} className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
-                         <div className="px-8 py-6 text-white text-center transition-all" style={{ background: `linear-gradient(to right, #059669, #10b981)` }}>
-                            <h3 className="text-2xl font-black uppercase tracking-tighter">Payment Options</h3>
-                            <p className="text-[10px] font-bold uppercase tracking-widest opacity-80">Flexible Financing & Secured Payment Methods</p>
+                      <div key={page.id} className="pdf-page rounded-[2rem] overflow-hidden shadow-xl mb-8 border-2 border-gray-100" style={{ backgroundColor: themeBgColor }}>
+                         <div className="px-8 py-6 text-white text-center transition-all" style={{ background: `linear-gradient(to right, ${themeAccent}, ${themeBgStrong})` }}>
+                            <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFontSize }}>Payment Options</h3>
+                            <p className="font-bold uppercase tracking-widest opacity-80" style={{ fontSize: `calc(${contentFontSize} - 4px)` }}>Flexible Financing & Secured Payment Methods</p>
                          </div>
                          
                          <div className="p-8">
                             <div className="grid grid-cols-1 gap-6">
                                {paymentModesSelected.includes('Cash') && (
-                                 <div className="p-6 rounded-3xl border border-emerald-100 bg-emerald-50/30 animate-in zoom-in-95 duration-500">
+                                 <div className="p-6 rounded-3xl border animate-in zoom-in-95 duration-500" style={{ borderColor: `${themeAccent}33`, backgroundColor: `${themeAccent}10` }}>
                                     <div className="flex items-center gap-3 mb-4">
-                                       <div className="p-2 bg-emerald-600 rounded-xl text-white shadow-lg">
+                                       <div className="p-2 rounded-xl text-white shadow-lg" style={{ backgroundColor: themeAccent }}>
                                           <Calculator size={18} />
                                        </div>
                                        <div>
                                           <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest">Full Cash Payment</h4>
-                                          <p className="text-[9px] font-bold text-emerald-600 uppercase tracking-tighter">Upfront Payment Benefit Available</p>
+                                          <p className="text-[9px] font-bold uppercase tracking-tighter" style={{ color: themeAccent }}>Upfront Payment Benefit Available</p>
                                        </div>
                                     </div>
                                     <div className="space-y-3">
-                                       <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-emerald-100 shadow-sm">
+                                       <div className="flex justify-between items-center p-4 rounded-2xl border shadow-sm" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: `${themeAccent}20` }}>
                                           <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lumpsum Amount</span>
                                           <span className="text-base font-black text-gray-800">₹ {(pricingData.netCost + advancedTotal).toLocaleString()} /-</span>
                                        </div>
@@ -3470,22 +3594,22 @@ export default function QuoteSetting() {
 
                                {/* Loan Section */}
                                {paymentModesSelected.includes('Loan') && (
-                                 <div className="p-6 rounded-3xl border border-blue-100 bg-blue-50/30 animate-in zoom-in-95 duration-500 delay-75">
+                                 <div className="p-6 rounded-3xl border animate-in zoom-in-95 duration-500 delay-75" style={{ borderColor: `${themeAccent}33`, backgroundColor: `${themeAccent}10` }}>
                                     <div className="flex items-center gap-3 mb-4">
-                                       <div className="p-2 bg-blue-600 rounded-xl text-white shadow-lg">
+                                       <div className="p-2 rounded-xl text-white shadow-lg" style={{ backgroundColor: themeAccent }}>
                                           <Shield size={18} />
                                        </div>
                                        <div>
                                           <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest">Bank Finance / Loan</h4>
-                                          <p className="text-[9px] font-bold text-blue-600 uppercase tracking-tighter">Low Interest Solar Financing</p>
+                                          <p className="text-[9px] font-bold uppercase tracking-tighter" style={{ color: themeAccent }}>Low Interest Solar Financing</p>
                                        </div>
                                     </div>
                                     <div className="grid grid-cols-2 gap-3">
-                                       <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
+                                       <div className="p-4 rounded-2xl border shadow-sm" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.05)', borderColor: `${themeAccent}20` }}>
                                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Down Payment</p>
                                           <p className="text-sm font-black text-gray-800">₹ {Math.round((pricingData.netCost + advancedTotal) * 0.2).toLocaleString()}</p>
                                        </div>
-                                       <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-sm">
+                                       <div className="p-4 rounded-2xl border shadow-sm" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.05)', borderColor: `${themeAccent}20` }}>
                                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">Max tenure</p>
                                           <p className="text-sm font-black text-gray-800">7 Years</p>
                                        </div>
@@ -3498,36 +3622,36 @@ export default function QuoteSetting() {
 
                                {/* EMI Section */}
                                {paymentModesSelected.includes('EMI') && (
-                                 <div className="p-6 rounded-3xl border border-indigo-100 bg-indigo-50/30 animate-in zoom-in-95 duration-500 delay-150">
+                                 <div className="p-6 rounded-3xl border animate-in zoom-in-95 duration-500 delay-150" style={{ borderColor: `${themeAccent}33`, backgroundColor: `${themeAccent}10` }}>
                                     <div className="flex items-center gap-3 mb-4">
-                                       <div className="p-2 bg-indigo-600 rounded-xl text-white shadow-lg">
+                                       <div className="p-2 rounded-xl text-white shadow-lg" style={{ backgroundColor: themeAccent }}>
                                           <Zap size={18} />
                                        </div>
                                        <div>
                                           <h4 className="text-sm font-black text-gray-800 uppercase tracking-widest">Easy EMI Installments</h4>
-                                          <p className="text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">Monthly Payment Flexibility</p>
+                                          <p className="text-[9px] font-bold uppercase tracking-tighter" style={{ color: themeAccent }}>Monthly Payment Flexibility</p>
                                        </div>
                                     </div>
-                                    <div className="bg-white rounded-2xl border border-indigo-100 overflow-hidden shadow-sm">
+                                    <div className="rounded-2xl border overflow-hidden shadow-sm" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: `${themeAccent}20` }}>
                                        <table className="w-full text-[10px]">
-                                          <thead className="bg-indigo-600 text-white font-black uppercase tracking-widest">
+                                          <thead className="text-white font-black uppercase tracking-widest" style={{ backgroundColor: themeAccent }}>
                                              <tr>
                                                 <th className="py-3 px-4 text-left">Tenure Plan</th>
                                                 <th className="py-3 px-4 text-right">Approx. EMI Plan</th>
                                              </tr>
                                           </thead>
                                           <tbody className="font-bold text-gray-700">
-                                             <tr className="border-b border-indigo-50">
+                                             <tr className="border-b" style={{ borderBottomColor: `${themeAccent}10` }}>
                                                 <td className="py-3 px-4 uppercase tracking-tighter">12 Months (Standard)</td>
                                                 <td className="py-3 px-4 text-right">₹ {Math.round((pricingData.netCost + advancedTotal) / 12).toLocaleString()}</td>
                                              </tr>
-                                             <tr className="bg-indigo-50/20 border-b border-indigo-50">
+                                             <tr className="border-b" style={{ backgroundColor: `${themeAccent}05`, borderBottomColor: `${themeAccent}10` }}>
                                                 <td className="py-3 px-4 uppercase tracking-tighter">24 Months (Saver)</td>
                                                 <td className="py-3 px-4 text-right">₹ {Math.round((pricingData.netCost + advancedTotal) / 24).toLocaleString()}</td>
                                              </tr>
                                              <tr>
-                                                <td className="py-3 px-4 uppercase tracking-tighter text-indigo-600 font-black">36 Months (Budget)</td>
-                                                <td className="py-3 px-4 text-right text-indigo-600 font-black">₹ {Math.round((pricingData.netCost + advancedTotal) / 36).toLocaleString()}</td>
+                                                <td className="py-3 px-4 uppercase tracking-tighter font-black" style={{ color: themeAccent }}>36 Months (Budget)</td>
+                                                <td className="py-3 px-4 text-right font-black" style={{ color: themeAccent }}>₹ {Math.round((pricingData.netCost + advancedTotal) / 36).toLocaleString()}</td>
                                              </tr>
                                           </tbody>
                                        </table>
@@ -3550,10 +3674,10 @@ export default function QuoteSetting() {
 
                     // Dynamic Custom Pages Preview
                     return (
-                      <div key={page.id} className="bg-white border-2 border-gray-100 rounded-[2rem] overflow-hidden shadow-xl mb-8">
-                         <div className="bg-gray-100 px-8 py-5 border-b flex justify-between items-center">
-                            <h3 className="text-xl font-black uppercase tracking-tighter text-gray-700">{pageName}</h3>
-                            <div className="px-3 py-1 bg-yellow-400 text-black text-[9px] font-black uppercase rounded-full">Custom Page</div>
+                      <div key={page.id} className="pdf-page rounded-[2rem] overflow-hidden shadow-xl mb-8 border-2 border-gray-100" style={{ backgroundColor: themeBgColor }}>
+                         <div className="px-8 py-5 border-b flex justify-between items-center" style={{ backgroundColor: themeBgFaint, borderBottomColor: themeBgSemi }}>
+                            <h3 className="text-xl font-black uppercase tracking-tighter" style={{ color: themeAccent }}>{pageName}</h3>
+                            <div className="px-3 py-1 text-white text-[9px] font-black uppercase rounded-full shadow-sm" style={{ backgroundColor: themeAccent }}>Custom Page</div>
                          </div>
                          
                          <div className="p-8">
@@ -3585,10 +3709,10 @@ export default function QuoteSetting() {
                                      <p className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mb-3 text-center">Sections Provided</p>
                                      {customSections.map((s) => (
                                        <div key={s.id} className="bg-gray-50 border border-gray-100 rounded-2xl px-6 py-4 flex items-center gap-3 animate-in fade-in slide-in-from-bottom-2">
-                                         <div className="w-2 h-2 rounded-full bg-blue-400 flex-shrink-0" />
+                                         <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: themeAccent }} />
                                          <span className="text-xs font-black text-gray-600 uppercase tracking-widest">{s.label}</span>
                                          <div className="flex-1 h-px bg-gray-200" />
-                                         <span className="text-[9px] font-black text-blue-400 bg-blue-50 px-2 py-0.5 rounded-full">Included</span>
+                                         <span className="text-[9px] font-black px-2 py-0.5 rounded-full" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Included</span>
                                        </div>
                                      ))}
                                    </div>
@@ -3604,15 +3728,16 @@ export default function QuoteSetting() {
                 {/* Live Action Buttons at bottom of Preview column */}
                 <div className="flex flex-col gap-3 mt-10 pb-10 border-t pt-8 px-4 animate-in fade-in slide-in-from-bottom-4 duration-700">
                    <div className="text-center mb-4">
-                      <div className="inline-block px-4 py-1.5 rounded-full bg-blue-50 border border-blue-100 mb-2">
-                         <p className="text-[10px] font-black text-blue-600 uppercase tracking-[0.2em]">Proposal Ready</p>
+                      <div className="inline-block px-4 py-1.5 rounded-full mb-2 border" style={{ backgroundColor: themeBgFaint, borderColor: themeBgSemi }}>
+                         <p className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: themeAccent }}>Proposal Ready</p>
                       </div>
                       <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">Final layout is synchronized with your settings</p>
                    </div>
                    
                    <button 
                       onClick={() => handleDownloadQuote(getCurrentQuoteForExport())}
-                      className="w-full bg-blue-600 text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 hover:bg-blue-700 transition-all shadow-xl shadow-blue-200 active:scale-[0.98]"
+                      className="w-full text-white py-4 rounded-2xl text-[11px] font-black uppercase tracking-[0.2em] flex items-center justify-center gap-3 transition-all active:scale-[0.98] shadow-xl"
+                      style={{ backgroundColor: themeAccent, boxShadow: `0 10px 15px -3px ${themeAccent}44` }}
                    >
                       <Download size={18} /> Download Generated PDF
                    </button>
@@ -3725,12 +3850,66 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
         ${styleLinks}
         ${inlineStyles}
         <script src="https://cdn.tailwindcss.com"></script>
+        <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet" />
         <style>
-          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          body { background: white; margin: 0; padding: 24px; font-family: Inter, sans-serif; }
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
+          
+          * { 
+            -webkit-print-color-adjust: exact !important; 
+            print-color-adjust: exact !important; 
+            box-sizing: border-box;
+          }
+          
+          body { 
+            background: white; 
+            margin: 0; 
+            padding: 0; 
+            font-family: 'Inter', sans-serif;
+            -webkit-font-smoothing: antialiased;
+          }
+
+          .pdf-page {
+            width: 100%;
+            min-height: 297mm; /* A4 Height */
+            padding: 40px;
+            background: white;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            page-break-after: always;
+            break-after: page;
+          }
+
           @media print {
-            body { padding: 0; }
+            body { background: none; }
             .no-print { display: none !important; }
+            .pdf-page {
+              padding: 0;
+              margin: 0;
+              min-height: auto;
+              height: 100vh;
+              page-break-after: always;
+              break-after: page;
+            }
+            .print-shadow-none { box-shadow: none !important; }
+            .print-border-none { border: none !important; }
+            .print-rounded-none { border-radius: 0 !important; }
+            
+            /* Force new page for each section */
+            .section-break {
+              page-break-before: always;
+              break-before: page;
+            }
+          }
+
+          /* Premium Typography */
+          h1, h2, h3, h4, h5, h6 {
+            letter-spacing: -0.02em;
+          }
+
+          .gradient-overlay {
+            background: linear-gradient(to top, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.4) 60%, transparent 100%);
           }
         </style>
       </head>
@@ -3756,7 +3935,18 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
   
   // Brand Color Logic for Export
   const themeAccent = (quote.colorSettings?.brandColor) ? (quote.frontPageSettings?.styling?.themeColor || '#2563eb') : '#2563eb';
-  const themeBgLight = `${themeAccent}10`;
+  const themeBgColor = (quote.colorSettings?.backgroundColor) ? (quote.frontPageSettings?.styling?.bgColor || '#ffffff') : '#ffffff';
+  
+  // Dynamic Font Sizes for Export
+  const headerFS = (quote.colorSettings?.fontSize) ? `${quote.frontPageSettings?.styling?.headerFontSize || 24}px` : '24px';
+  const footerFS = (quote.colorSettings?.fontSize) ? `${quote.frontPageSettings?.styling?.footerFontSize || 10}px` : '10px';
+  const sectionTitleFS = (quote.colorSettings?.fontSize) ? `${quote.frontPageSettings?.styling?.sectionTitleFontSize || 18}px` : '18px';
+  const contentFS = (quote.colorSettings?.fontSize) ? `${quote.frontPageSettings?.styling?.contentFontSize || 12}px` : '12px';
+
+  const themeBgLight = `${themeAccent}15`;
+  const themeBgSemi = `${themeAccent}33`;
+  const themeBgFaint = `${themeAccent}08`;
+  const themeBgStrong = `${themeAccent}CC`;
 
   // Performance calculations
   const kw = quote.solarSettings?.projectKW || 0;
@@ -3836,24 +4026,27 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
       {/* Scrollable Print Area */}
       <div className="w-full max-w-4xl bg-gray-200 rounded-2xl overflow-y-auto mt-14 max-h-[88vh] shadow-2xl" id="quote-print-area">
 
-        <div className="p-6 space-y-6">
+        <div className="p-0">
 
           {/* ── FRONT PAGE ── */}
           {pages.includes('Front Page') && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-2xl border border-gray-100 print:rounded-none print:shadow-none print:border-0 print:page-break-after-always">
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-2xl border border-gray-100 print:rounded-none print:shadow-none print:border-0" style={{ backgroundColor: themeBgColor }}>
               <div className="relative h-56 w-full">
                 <img
                   src={pageConfigs['Front Page']?.media || "https://images.unsplash.com/photo-1508514177221-188b1cf16e9d?ixlib=rb-1.2.1&auto=format&fit=crop&w=1350&q=80"}
                   alt="Solar"
                   className="w-full h-full object-cover"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent flex flex-col items-center justify-center text-center px-6">
-                  <h2 className="text-2xl font-black text-white mb-1 uppercase tracking-tighter drop-shadow-lg">
+                <div className="absolute inset-0 gradient-overlay flex flex-col items-center justify-center text-center px-6">
+                  <h2 className="font-black text-white mb-2 uppercase tracking-tighter drop-shadow-2xl" style={{ fontSize: headerFS }}>
                     {pageConfigs['Front Page']?.header || `${quote.category || 'Residential'} ${quote.projectType || ''}`}
                   </h2>
-                  <h3 className="text-xl font-black text-yellow-400 mb-2 uppercase tracking-wide">({quote.subProjectType || 'National Portal'})</h3>
-                  <h4 className="text-3xl font-extrabold text-white mb-1 tracking-[0.2em]">PROPOSAL</h4>
-                  <p className="text-xs font-bold text-gray-200 tracking-widest uppercase border-t border-gray-400/50 pt-2">
+                  <div className="bg-yellow-400 text-black px-4 py-1 rounded-full text-xs font-black uppercase tracking-widest mb-4 shadow-lg">
+                    {quote.subProjectType || 'National Portal'}
+                  </div>
+                  <h4 className="text-5xl font-black text-white mb-3 tracking-[0.3em] opacity-90">PROPOSAL</h4>
+                  <div className="w-20 h-1.5 bg-white/30 rounded-full mb-4"></div>
+                  <p className="text-[10px] font-black text-gray-200 tracking-[0.2em] uppercase">
                     {pageConfigs['Front Page']?.footer || 'SOLAR ENERGY FOR A BETTER TOMORROW'}
                   </p>
                 </div>
@@ -3864,7 +4057,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                     {fieldSettings.proposalNo && (
                       <div>
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Proposal No</p>
-                        <p className="text-xs font-black text-blue-600"># QUA/{quote.category?.substring(0,3)?.toUpperCase() || 'PRD'}/{new Date(quote.createdAt || Date.now()).getFullYear().toString().slice(-2)}/{quote._id?.toString().slice(-5).toUpperCase() || '001'}</p>
+                        <p className="text-[10px] font-black" style={{ color: themeAccent }}>{quote.proposalNo || 'SK/GEN/DL0001'}</p>
                       </div>
                     )}
                     {fieldSettings.customerName && (
@@ -3935,7 +4128,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── COMMERCIAL PAGE ── */}
           {pages.includes('Commercial Page') && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 p-8 print:rounded-none print:shadow-none print:page-break-after-always">
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 p-8 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
               <div className="flex justify-between items-center mb-6 border-b-4 pb-2" style={{ borderBottomColor: themeAccent }}>
                 <div>
                   <h5 className="text-xl font-black uppercase tracking-tighter" style={{ color: themeAccent }}>{quote.quoteTypes?.join(', ') || quote.quoteType}</h5>
@@ -3945,24 +4138,30 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                   <div className="text-white px-4 py-1 rounded-full text-[10px] font-black uppercase" style={{ backgroundColor: themeAccent }}>{quote.kitTypes?.join(', ') || quote.kitType || 'Combo Kit'}</div>
                 )}
               </div>
-              <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden mx-auto max-w-md">
+              <div className="border border-gray-100 rounded-3xl overflow-hidden mx-auto max-w-lg shadow-sm" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.05)' }}>
                 <table className="w-full border-collapse">
                   <tbody>
                     {[
-                      { key: 'showTotalCost', label: 'Total Cost', value: pricing.totalCost },
-                      { key: 'showMnreSubsidy', label: 'Govt MNRE Subsidy', value: pricing.mnreSubsidy },
-                      { key: 'showStateSubsidy', label: 'Govt State Subsidy', value: pricing.stateSubsidy },
-                      { key: 'showAdditionalCharges', label: 'Additional Charges', value: pricing.additionalCharges },
+                      { key: 'showTotalCost', label: 'Total Project Cost', value: pricing.totalCost },
+                      { key: 'showMnreSubsidy', label: 'Expected MNRE Subsidy', value: pricing.mnreSubsidy },
+                      { key: 'showStateSubsidy', label: 'Expected State Subsidy', value: pricing.stateSubsidy },
+                      { key: 'showAdditionalCharges', label: 'Additional Service Charges', value: pricing.additionalCharges },
                     ].map((row, i) => (pageConfigs['Commercial Page']?.visibility?.[row.key] !== false) && (
-                      <tr key={i} className="border-b border-gray-50">
-                        <td className="p-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">{row.label}</td>
-                        <td className="p-4 text-sm font-black text-gray-700 text-right">Rs. {(row.value || 0).toLocaleString()} /-</td>
+                      <tr key={i} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                        <td className="p-5">
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">{row.label}</p>
+                          <p className="text-[11px] font-bold text-gray-500 italic uppercase">Based on standard system sizing</p>
+                        </td>
+                        <td className="p-5 text-lg font-black text-gray-800 text-right">₹ {(row.value || 0).toLocaleString()} /-</td>
                       </tr>
                     ))}
                     {(pageConfigs['Commercial Page']?.visibility?.showNetCost !== false) && (
                       <tr className="text-white" style={{ backgroundColor: themeAccent }}>
-                        <td className="p-4 text-[11px] font-black uppercase tracking-widest">Net Cost</td>
-                        <td className="p-4 text-xl font-black text-right">Rs. {pricing.netCost.toLocaleString()} /-</td>
+                        <td className="p-6">
+                            <p className="text-[11px] font-black uppercase tracking-[0.2em] opacity-80 mb-1">Total Investment</p>
+                            <p className="text-xl font-black uppercase tracking-tight">Net Payable Cost</p>
+                        </td>
+                        <td className="p-6 text-3xl font-black text-right tracking-tighter">₹ {pricing.netCost.toLocaleString()} /-</td>
                       </tr>
                     )}
                   </tbody>
@@ -3996,9 +4195,9 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── GENERATION GRAPH ── */}
           {pages.includes('Generation Graph') && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
                <div className="px-8 py-5 text-white" style={{ backgroundColor: themeAccent }}>
-                  <h3 className="text-lg font-black uppercase tracking-tighter">Performance Analysis</h3>
+                  <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFS }}>Performance Analysis</h3>
                </div>
                <div className="p-8">
                   {chartImages.gen && (
@@ -4014,22 +4213,26 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                     </div>
                   )}
                   
-                  <div className="grid grid-cols-2 gap-4 mt-8">
+                  <div className="grid grid-cols-2 gap-6 mt-8">
                       {(pageConfigs['Generation Graph']?.visibility?.showStatsTable !== false) && [
-                        { label: 'Total System Cost', value: `Rs. ${pricing.totalCost.toLocaleString()} /-` },
+                        { label: 'Total System Cost', value: `₹ ${pricing.totalCost.toLocaleString()} /-` },
                         { label: 'Annual Generation', value: `${annTotal.toLocaleString()} Units` },
-                        { label: 'Annual Savings', value: `Rs. ${annSavings.toLocaleString()} /-` },
+                        { label: 'Annual Savings', value: `₹ ${annSavings.toLocaleString()} /-` },
                         { label: 'Payback Period', value: `${payP.toFixed(1)} Years` }
                       ].map((stat, i) => (
-                        <div key={i} className="p-5 rounded-2xl border border-gray-100" style={{ backgroundColor: themeBgLight }}>
-                           <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-1">{stat.label}</p>
-                           <p className="text-lg font-black" style={{ color: themeAccent }}>{stat.value}</p>
+                        <div key={i} className="p-6 rounded-[2rem] border border-gray-100 flex flex-col justify-center" style={{ backgroundColor: themeBgLight }}>
+                           <p className="font-black text-gray-400 uppercase tracking-widest mb-2 text-center" style={{ fontSize: `calc(${contentFS} - 2px)` }}>{stat.label}</p>
+
+                           <p className="font-black text-center" style={{ color: themeAccent, fontSize: sectionTitleFS }}>{stat.value}</p>
+
                         </div>
                       ))}
                       {(pageConfigs['Generation Graph']?.visibility?.showRoiBanner !== false) && (
-                        <div className="col-span-2 p-6 rounded-2xl text-center" style={{ backgroundColor: themeAccent }}>
-                           <p className="text-[10px] font-black text-white/70 uppercase tracking-widest mb-1">Total Estimated ROI Benefits</p>
-                           <p className="text-xl font-black text-white uppercase tracking-tighter">Rs. {sav25.toLocaleString()} /- Over 25 years</p>
+                        <div className="col-span-2 p-8 rounded-[2rem] text-center shadow-lg shadow-blue-500/20" style={{ backgroundColor: themeAccent }}>
+                           <p className="text-[11px] font-black text-white/70 uppercase tracking-[0.2em] mb-2">Total Estimated ROI Benefits</p>
+                           <p className="font-black text-white uppercase tracking-tighter" style={{ fontSize: `calc(${sectionTitleFS} + 8px)` }}>₹ {sav25.toLocaleString()} /- Over 25 years</p>
+
+                           <div className="mt-4 w-12 h-1 bg-white/30 mx-auto rounded-full"></div>
                         </div>
                       )}
                   </div>
@@ -4039,16 +4242,16 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── BOM SURVEY SUMMARY ── */}
           {pages.includes('Financial Summary') && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
               <div className="px-8 py-4 text-white" style={{ backgroundColor: themeAccent }}>
-                <h5 className="text-lg font-black uppercase tracking-tighter">Residential Solar BOM</h5>
+                <h5 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFS }}>Residential Solar BOM</h5>
               </div>
               <div className="p-8">
                 <table className="w-full border-collapse mb-6">
                   <tbody>
                     {bom.items.map((row, i) => (
                       <tr key={i} className="border-b border-gray-100">
-                        <td className="py-3 text-[10px] font-black text-gray-400 uppercase tracking-widest">{row.label}</td>
+                        <td className="py-3 font-black text-gray-400 uppercase tracking-widest" style={{ fontSize: `calc(${contentFS} - 2px)` }}>{row.label}</td>
                         <td className="py-3 text-sm font-bold text-gray-700 text-right">{row.value}</td>
                       </tr>
                     ))}
@@ -4065,15 +4268,17 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── ADVANCED OPTIONS ── */}
           {pages.includes('Advanced Settings') && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
               <div className="px-8 py-4 text-white" style={{ backgroundColor: themeAccent }}>
-                <h3 className="text-lg font-black uppercase tracking-tighter">Advanced Options</h3>
+                <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFS }}>Advanced Options</h3>
               </div>
               <div className="p-8">
                  {(pageConfigs['Advanced Settings']?.visibility?.showAddonsGrid !== false) && (
                    <div className="grid grid-cols-2 gap-4 mb-6">
                      {advancedOptions.filter(opt => opt.enabled).map((opt, idx) => (
-                       <div key={opt.key ? `pdf_${opt.key}_${idx}` : `pdf_${idx}`} className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                               <div key={opt.key ? `pdf_${opt.key}_${idx}` : `pdf_${idx}`} className="p-4 rounded-2xl border border-gray-100" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#f9fafb' : 'rgba(255,255,255,0.05)' }}>
+
+
                          <h6 className="text-[11px] font-black text-gray-800 uppercase mb-1">{opt.type}</h6>
                          <p className="text-[10px] font-black mb-2" style={{ color: themeAccent }}>₹{(opt.price || 0).toLocaleString()}</p>
                          <p className="text-[9px] font-bold text-gray-500 leading-relaxed">{opt.description}</p>
@@ -4134,20 +4339,20 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── PAYMENT TERMS ── */}
           {pages.includes('Payment Terms') && quote.paymentModes && quote.paymentModes.length > 0 && (
-            <div className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
-              <div className="px-8 py-4 text-white text-center" style={{ backgroundColor: '#059669' }}>
-                <h5 className="text-lg font-black uppercase tracking-tighter">Payment Options</h5>
-                <p className="text-[9px] font-bold uppercase tracking-widest opacity-80">Flexible Financing & Secured Payment Methods</p>
+            <div className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
+              <div className="px-8 py-4 text-white text-center" style={{ backgroundColor: themeAccent }}>
+                <h5 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFS }}>Payment Options</h5>
+                <p className="text-[9px] font-bold uppercase tracking-widest opacity-80" style={{ fontSize: `calc(${contentFS} - 4px)` }}>Flexible Financing & Secured Payment Methods</p>
               </div>
               <div className="p-8">
                 <div className="space-y-6">
                    {quote.paymentModes.includes('Cash') && (
-                     <div className="p-6 rounded-2xl border border-emerald-100 bg-emerald-50/20">
+                     <div className="p-6 rounded-2xl border" style={{ borderColor: themeBgSemi, backgroundColor: themeBgFaint }}>
                         <div className="flex justify-between items-center mb-4">
                            <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest">Full Cash Payment</h4>
-                           <span className="text-[8px] font-black text-emerald-600 bg-emerald-100 px-2 py-0.5 rounded-full uppercase">Benefit Applied</span>
+                           <span className="text-[8px] font-black uppercase px-2 py-0.5 rounded-full" style={{ color: themeAccent, backgroundColor: themeBgLight }}>Benefit Applied</span>
                         </div>
-                        <div className="flex justify-between items-center bg-white p-4 rounded-xl border border-emerald-100">
+                        <div className="flex justify-between items-center p-4 rounded-xl border" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: themeBgSemi }}>
                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Lumpsum Amount</span>
                            <span className="text-base font-black text-gray-800">₹ {(pricing.netCost + advancedTotal).toLocaleString()} /-</span>
                         </div>
@@ -4162,14 +4367,14 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                    )}
 
                    {quote.paymentModes.includes('Loan') && (
-                     <div className="p-6 rounded-2xl border border-blue-100 bg-blue-50/20">
+                     <div className="p-6 rounded-2xl border" style={{ borderColor: themeBgSemi, backgroundColor: themeBgFaint }}>
                         <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-4">Bank Finance / Loan</h4>
                         <div className="grid grid-cols-2 gap-4">
-                           <div className="bg-white p-4 rounded-xl border border-blue-100">
+                           <div className="p-4 rounded-xl border" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: themeBgSemi }}>
                               <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Down Payment</p>
                               <p className="text-sm font-black text-gray-800">₹ {Math.round((pricing.netCost + advancedTotal) * 0.2).toLocaleString()}</p>
                            </div>
-                           <div className="bg-white p-4 rounded-xl border border-blue-100">
+                           <div className="p-4 rounded-xl border" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: themeBgSemi }}>
                               <p className="text-[9px] font-black text-gray-400 uppercase mb-1">Max tenure</p>
                               <p className="text-sm font-black text-gray-800">7 Years</p>
                            </div>
@@ -4178,28 +4383,28 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                    )}
 
                    {quote.paymentModes.includes('EMI') && (
-                     <div className="p-6 rounded-2xl border border-indigo-100 bg-indigo-50/20">
+                     <div className="p-6 rounded-2xl border" style={{ borderColor: themeBgSemi, backgroundColor: themeBgFaint }}>
                         <h4 className="text-xs font-black text-gray-800 uppercase tracking-widest mb-4">Easy EMI Installments</h4>
-                        <div className="bg-white rounded-xl border border-indigo-100 overflow-hidden">
+                        <div className="rounded-xl border overflow-hidden" style={{ backgroundColor: themeBgColor === '#ffffff' ? '#ffffff' : 'rgba(255,255,255,0.1)', borderColor: themeBgSemi }}>
                            <table className="w-full text-[10px]">
-                              <thead className="bg-indigo-600 text-white font-black uppercase">
+                              <thead className="text-white font-black uppercase" style={{ backgroundColor: themeAccent }}>
                                  <tr>
                                     <th className="py-2 px-4 text-left">Tenure</th>
                                     <th className="py-2 px-4 text-right">Approx. EMI Content</th>
                                  </tr>
                               </thead>
                               <tbody className="font-bold text-gray-700">
-                                 <tr className="border-b border-indigo-50">
+                                 <tr className="border-b" style={{ borderBottomColor: themeBgSemi }}>
                                     <td className="py-2 px-4 uppercase">12 Months</td>
                                     <td className="py-2 px-4 text-right">₹ {Math.round((pricing.netCost + advancedTotal) / 12).toLocaleString()}</td>
                                  </tr>
-                                 <tr className="border-b border-indigo-50">
+                                 <tr className="border-b" style={{ borderBottomColor: themeBgSemi }}>
                                     <td className="py-2 px-4 uppercase">24 Months</td>
                                     <td className="py-2 px-4 text-right">₹ {Math.round((pricing.netCost + advancedTotal) / 24).toLocaleString()}</td>
                                  </tr>
                                  <tr>
-                                    <td className="py-2 px-4 uppercase text-indigo-600 font-black">36 Months</td>
-                                    <td className="py-2 px-4 text-right text-indigo-600 font-black">₹ {Math.round((pricing.netCost + advancedTotal) / 36).toLocaleString()}</td>
+                                    <td className="py-2 px-4 uppercase font-black" style={{ color: themeAccent }}>36 Months</td>
+                                    <td className="py-2 px-4 text-right font-black" style={{ color: themeAccent }}>₹ {Math.round((pricing.netCost + advancedTotal) / 36).toLocaleString()}</td>
                                  </tr>
                               </tbody>
                            </table>
@@ -4208,7 +4413,7 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
                    )}
                 </div>
 
-                <div className="mt-8 p-6 bg-gray-900 rounded-2xl text-center">
+                <div className="mt-8 p-6 bg-gray-900 rounded-2xl text-center" style={{ borderTop: `4px solid ${themeAccent}` }}>
                    <p className="text-[10px] font-black text-white uppercase tracking-[0.2em] mb-2">Notice & Terms</p>
                    <p className="text-[9px] font-bold text-gray-400 uppercase tracking-tighter">
                       Prices include site survey, installation, and commissioning. <br/>
@@ -4221,23 +4426,23 @@ const QuoteDownloadModal = ({ isOpen, onClose, quote }) => {
 
           {/* ── CUSTOM PAGES ── */}
           {pages.filter(p => !['Front Page', 'Commercial Page', 'Generation Graph', 'Advanced Settings', 'Financial Summary', 'Payment Terms'].includes(p)).map((pageName, idx) => (
-            <div key={idx} className="bg-white rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none print:page-break-after-always">
-              <div className="bg-gray-100 px-8 py-4 flex justify-between items-center border-b">
-                <h3 className="text-lg font-black uppercase tracking-tighter text-gray-700">{pageName}</h3>
-                <div className="px-3 py-1 bg-yellow-400 text-black text-[9px] font-black uppercase rounded-full">Custom</div>
+            <div key={idx} className="pdf-page rounded-3xl overflow-hidden shadow-xl border border-gray-100 print:rounded-none print:shadow-none" style={{ backgroundColor: themeBgColor }}>
+              <div className="px-8 py-4 flex justify-between items-center border-b" style={{ backgroundColor: themeBgFaint, borderBottomColor: themeBgSemi }}>
+                <h3 className="font-black uppercase tracking-tighter" style={{ fontSize: sectionTitleFS, color: themeAccent }}>{pageName}</h3>
+                <div className="px-3 py-1 text-white text-[9px] font-black uppercase rounded-full" style={{ backgroundColor: themeAccent }}>Custom</div>
               </div>
               <div className="p-8">
                 {pageConfigs[pageName]?.media && (
                   <img src={pageConfigs[pageName].media} className="w-full h-40 object-cover rounded-xl mb-6" alt="" />
                 )}
                 {pageConfigs[pageName]?.header && (
-                  <h4 className="text-sm font-black uppercase tracking-widest border-b pb-2 mb-4" style={{ color: themeAccent, borderBottomColor: themeBgLight }}>{pageConfigs[pageName].header}</h4>
+                  <h4 className="font-black uppercase tracking-widest border-b pb-2 mb-4" style={{ color: themeAccent, borderBottomColor: themeBgLight, fontSize: `calc(${sectionTitleFS} - 4px)` }}>{pageConfigs[pageName].header}</h4>
                 )}
-                <p className="text-xs font-bold text-gray-600 leading-relaxed whitespace-pre-wrap">
+                <p className="font-bold text-gray-600 leading-relaxed whitespace-pre-wrap" style={{ fontSize: contentFS }}>
                   {pageConfigs[pageName]?.content || 'Custom page content. Configure in Settings panel.'}
                 </p>
                 {pageConfigs[pageName]?.footer && (
-                  <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] pt-4 border-t mt-4">{pageConfigs[pageName].footer}</p>
+                  <p className="font-black text-gray-400 uppercase tracking-[0.2em] pt-4 border-t mt-4" style={{ fontSize: footerFS }}>{pageConfigs[pageName].footer}</p>
                 )}
 
                 {/* Dynamic Custom Sections for Custom Page Download */}
@@ -4905,7 +5110,7 @@ const FrontPageSettingsDrawer = ({
             </div>
 
             {/* Simulated Page Frame */}
-            <div className="bg-white rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 transition-all duration-500" style={{ fontFamily: settings.styling.fontFamily }}>
+            <div className="rounded-[2rem] shadow-2xl overflow-hidden border border-gray-100 transition-all duration-500" style={{ fontFamily: settings.styling.fontFamily, backgroundColor: settings.styling.bgColor || '#ffffff' }}>
               
               {/* Preview Banner */}
               <div className="relative h-64 w-full">
@@ -4921,7 +5126,7 @@ const FrontPageSettingsDrawer = ({
               </div>
 
               {/* Preview Content */}
-              <div className="p-12 space-y-10 bg-white">
+              <div className="p-12 space-y-10" style={{ backgroundColor: settings.styling.bgColor || '#ffffff' }}>
                 <div className="grid grid-cols-2 gap-10">
                   <div className="space-y-6">
                     {settings.contentVisibility.proposalNo && (
