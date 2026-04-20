@@ -50,9 +50,18 @@ export const seedApprovalRules = async () => {
 
 const OVERDUE_TASK_API_URL = '/overdue-task-settings';
 
-export const fetchOverdueTaskSettings = async () => {
+export const fetchOverdueTaskSettings = async (params) => {
     try {
-        const response = await axios.get(OVERDUE_TASK_API_URL);
+        const response = await axios.get(OVERDUE_TASK_API_URL, { params });
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const fetchAllOverdueTaskSettings = async () => {
+    try {
+        const response = await axios.get(`${OVERDUE_TASK_API_URL}/all`);
         return response.data;
     } catch (error) {
         throw error;
@@ -69,11 +78,29 @@ export const updateOverdueTaskSettings = async (data) => {
     }
 };
 
+export const deleteOverdueTaskSettings = async (id) => {
+    try {
+        const response = await axios.delete(`${OVERDUE_TASK_API_URL}/${id}`);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
 const OVERDUE_STATUS_API_URL = '/overdue-status-settings';
 
 export const fetchOverdueStatusSettings = async (params) => {
     try {
         const response = await axios.get(OVERDUE_STATUS_API_URL, { params });
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const fetchAllOverdueStatusSettings = async () => {
+    try {
+        const response = await axios.get(`${OVERDUE_STATUS_API_URL}/all`);
         return response.data;
     } catch (error) {
         throw error;

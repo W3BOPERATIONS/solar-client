@@ -194,12 +194,15 @@ export default function ProjectReport() {
   }, [selectedCountry, selectedState, selectedCluster, selectedDistrict, filters]);
 
   const stats = useMemo(() => {
-    const total = projects.length || 128;
-    const inProgress = projects.filter(p => ['in-progress', 'active'].includes(p.status?.toLowerCase())).length || 32;
-    const completed = projects.filter(p => p.status?.toLowerCase() === 'completed').length || 84;
-    const overdue = projects.filter(p => (p.overdueDays || 0) > 0).length || 12;
-
-    return { total, inProgress, completed, overdue };
+    if (!projects.length) return { total: 128, inProgress: 32, completed: 84, overdue: 12 };
+    
+    return {
+      total: projects.length,
+      inProgress: projects.filter(p => ['in-progress', 'active'].includes(p.status?.toLowerCase())).length,
+      completed: projects.filter(p => p.status?.toLowerCase() === 'completed').length,
+      overdue: projects.filter(p => p.taskStatusTag === 'overdue').length,
+      pending: projects.filter(p => p.taskStatusTag === 'pending').length
+    };
   }, [projects]);
 
   const mockProjects = [
@@ -471,7 +474,13 @@ export default function ProjectReport() {
                     <td className="px-4 py-4 text-xs font-bold text-gray-600">{row.totalKw || '0'}</td>
                     <td className="px-4 py-4 text-xs font-bold text-gray-600 text-blue-500">{row.status}</td>
                     <td className="px-4 py-4 text-xs font-bold text-gray-600">{row.dueDate ? new Date(row.dueDate).toLocaleDateString() : 'N/A'}</td>
-                    <td className={`px-4 py-4 text-xs font-bold ${row.overdueDays > 0 ? 'text-red-500' : 'text-green-500'}`}>{row.overdueDays || 0} Days</td>
+                    <td className="px-4 py-4 text-xs font-bold">
+                      {row.taskStatusTag === 'overdue' && <span className="text-red-500 bg-red-50 px-2 py-1 rounded-md border border-red-100 flex items-center gap-1 w-fit"><AlertCircle size={10} /> Overdue {row.overdueDays > 0 ? `(${row.overdueDays}d)` : ''}</span>}
+                      {row.taskStatusTag === 'pending' && <span className="text-yellow-600 bg-yellow-50 px-2 py-1 rounded-md border border-yellow-100 flex items-center gap-1 w-fit"><Clock size={10} /> Pending</span>}
+                      {row.taskStatusTag === 'today' && <span className="text-blue-600 bg-blue-50 px-2 py-1 rounded-md border border-blue-100 flex items-center gap-1 w-fit"><Clock size={10} /> Today</span>}
+                      {row.taskStatusTag === 'upcoming' && <span className="text-green-600 bg-green-50 px-2 py-1 rounded-md border border-green-100 flex items-center gap-1 w-fit">Upcoming</span>}
+                      {!row.taskStatusTag && <span className="text-gray-400">---</span>}
+                    </td>
                     <td className="px-4 py-4 text-center"><button className="text-blue-500 text-xs font-bold border-b border-blue-500 hover:text-blue-700 hover:border-blue-700">View</button></td>
                   </tr>
                 ))}

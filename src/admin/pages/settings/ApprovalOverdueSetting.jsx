@@ -29,6 +29,8 @@ export default function ApprovalOverdueSetting() {
     overdueDays: 1,
     status: 'Active'
   });
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentRuleId, setCurrentRuleId] = useState(null);
 
   // Fetch rules
   const loadRules = async () => {
@@ -91,23 +93,45 @@ export default function ApprovalOverdueSetting() {
     }
 
     try {
-      // Generate key efficiently
-      const key = newRule.ruleName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
+      if (isEditing) {
+        await updateApprovalRule(currentRuleId, {
+          ruleName: newRule.ruleName,
+          overdueDays: newRule.overdueDays,
+          status: newRule.status
+        });
+        toast.success('Rule updated successfully');
+      } else {
+        // Generate key efficiently
+        const key = newRule.ruleName.toLowerCase().replace(/\s+/g, '_') + '_' + Date.now();
 
-      await createApprovalRule({
-        ...newRule,
-        type: activeTab,
-        key
-      });
+        await createApprovalRule({
+          ...newRule,
+          type: activeTab,
+          key
+        });
+        toast.success('Rule added successfully');
+      }
 
-      toast.success('Rule added successfully');
       setIsAddingMetric(false);
+      setIsEditing(false);
+      setCurrentRuleId(null);
       setNewRule({ ruleName: '', overdueDays: 1, status: 'Active' });
       loadRules();
     } catch (error) {
-      console.error('Error adding rule:', error);
-      toast.error(error.response?.data?.message || 'Failed to add rule');
+      console.error('Error saving rule:', error);
+      toast.error(error.response?.data?.message || 'Failed to save rule');
     }
+  };
+
+  const handleEditClick = (rule) => {
+    setNewRule({
+      ruleName: rule.ruleName,
+      overdueDays: rule.overdueDays,
+      status: rule.status
+    });
+    setCurrentRuleId(rule._id);
+    setIsEditing(true);
+    setIsAddingMetric(true);
   };
 
   const filteredRules = rules.filter(rule => rule.type === activeTab);
@@ -137,21 +161,10 @@ export default function ApprovalOverdueSetting() {
               {filteredRules.map((rule) => (
                 <tr key={rule._id}>
                   <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                    <input
-                      type="text"
-                      className="form-input rounded-md border-transparent hover:border-gray-300 focus:border-blue-500"
-                      value={rule.ruleName}
-                      onChange={(e) => handleUpdateRule(rule._id, 'ruleName', e.target.value)}
-                    />
+                    {rule.ruleName}
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    <input
-                      type="number"
-                      className="form-input w-24 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                      value={rule.overdueDays}
-                      min="1"
-                      onChange={(e) => handleUpdateRule(rule._id, 'overdueDays', parseInt(e.target.value) || 1)}
-                    />
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 text-center">
+                    {rule.overdueDays}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <button
@@ -165,12 +178,22 @@ export default function ApprovalOverdueSetting() {
                     </button>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <button
-                      onClick={() => handleDeleteRule(rule._id)}
-                      className="text-red-600 hover:text-red-900"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center space-x-3">
+                      <button
+                        onClick={() => handleEditClick(rule)}
+                        className="text-blue-600 hover:text-blue-900 transition-colors"
+                        title="Edit Rule"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteRule(rule._id)}
+                        className="text-red-600 hover:text-red-900 transition-colors"
+                        title="Delete Rule"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -205,7 +228,12 @@ export default function ApprovalOverdueSetting() {
           </ol>
         </nav>
         <button
-          onClick={() => setIsAddingMetric(true)}
+          onClick={() => {
+            setIsEditing(false);
+            setCurrentRuleId(null);
+            setNewRule({ ruleName: '', overdueDays: 1, status: 'Active' });
+            setIsAddingMetric(true);
+          }}
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
         >
           <Plus className="mr-2 h-4 w-4" />
@@ -248,60 +276,6 @@ export default function ApprovalOverdueSetting() {
             {/* Main Configuration Tables */}
             {renderTable()}
 
-            {/* Summary Section (Read-Only view of the same data, kept for UI consistency with original) */}
-            <div className="card shadow-sm mt-4">
-              <div className="card-header bg-white">
-                <h5 className="text-lg font-medium text-gray-900 mb-0">
-                  {activeTab === 'onboarding' ? 'Onboarding' : 'Company'} Approval Overdue Days Summary
-                </h5>
-              </div>
-              <div className="card-body">
-                <div className="table-responsive">
-                  <table className="table min-w-full divide-y divide-gray-200">
-                    <thead className="bg-gray-50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Approval
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Days
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                          Status
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredRules.map((rule) => (
-                        <tr key={`summary-${rule._id}`}>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm font-semibold text-gray-900">
-                            {rule.ruleName}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                            {rule.overdueDays}
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap text-sm">
-                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${rule.status === 'Active'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-red-100 text-red-800'
-                              }`}>
-                              {rule.status}
-                            </span>
-                          </td>
-                        </tr>
-                      ))}
-                      {filteredRules.length === 0 && (
-                        <tr>
-                          <td colSpan="3" className="px-6 py-4 text-center text-gray-500">
-                            No rules found.
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            </div>
           </>
         )}
       </div>
@@ -311,9 +285,16 @@ export default function ApprovalOverdueSetting() {
         <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full flex items-center justify-center z-50">
           <div className="relative bg-white rounded-lg shadow-xl p-8 max-w-md w-full">
             <div className="flex justify-between items-center mb-6">
-              <h3 className="text-xl font-semibold text-gray-900">Add New Rule</h3>
+              <h3 className="text-xl font-semibold text-gray-900">
+                {isEditing ? 'Edit Rule' : 'Add New Rule'}
+              </h3>
               <button
-                onClick={() => setIsAddingMetric(false)}
+                onClick={() => {
+                  setIsAddingMetric(false);
+                  setIsEditing(false);
+                  setCurrentRuleId(null);
+                  setNewRule({ ruleName: '', overdueDays: 1, status: 'Active' });
+                }}
                 className="text-gray-400 hover:text-gray-500"
               >
                 <X className="h-6 w-6" />
@@ -366,7 +347,7 @@ export default function ApprovalOverdueSetting() {
                   onClick={handleAddRule}
                   className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700"
                 >
-                  Add Rule
+                  {isEditing ? 'Update Rule' : 'Add Rule'}
                 </button>
               </div>
             </div>

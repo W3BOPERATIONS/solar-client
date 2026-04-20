@@ -9,7 +9,11 @@ import {
   AlertCircle,
   Filter,
   Eye,
-  Loader2
+  Loader2,
+  LineChart,
+  ShieldAlert,
+  ArrowDownCircle,
+  Award
 } from 'lucide-react';
 import { Chart } from 'react-google-charts';
 import { organizationApi } from '../../../services/organization/organizationApi';
@@ -196,8 +200,22 @@ export default function OrganizationChart() {
     <div className="space-y-6 bg-gray-50 min-h-screen p-4">
       {/* Header */}
       <div className="bg-gradient-to-r from-blue-600 to-cyan-500 text-white p-4 rounded-lg shadow-lg">
-        <div className="flex items-center justify-center">
+        <div className="flex items-center justify-between">
           <h1 className="text-2xl md:text-3xl font-bold text-white">Dynamic Organization Chart</h1>
+          <div className="hidden md:flex items-center gap-4 text-xs font-bold uppercase tracking-wider">
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
+              <span className="w-2 h-2 rounded-full bg-green-400"></span>
+              <span>Efficiency ≥ 90%</span>
+            </div>
+            <div className="flex items-center gap-2 bg-white/10 px-3 py-1.5 rounded-full border border-white/20">
+              <span className="w-2 h-2 rounded-full bg-yellow-400"></span>
+              <span>Near Benchmark</span>
+            </div>
+            <div className="flex items-center gap-2 bg-red-500 px-3 py-1.5 rounded-full border border-white/20 shadow-lg">
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse"></span>
+              <span>Risk (Below Benchmark)</span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -499,10 +517,13 @@ export default function OrganizationChart() {
                         Efficiency Score
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider sticky top-0">
-                        Productivity
+                        Penalty
                       </th>
                       <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider sticky top-0">
                         Overdue Tasks
+                      </th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-white uppercase tracking-wider sticky top-0">
+                        Status
                       </th>
                     </tr>
                   </thead>
@@ -539,48 +560,45 @@ export default function OrganizationChart() {
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
                           <div className="flex items-center">
-                            <div className="w-24 bg-gray-200 rounded-full h-2.5">
+                            <div className="w-20 bg-gray-200 rounded-full h-2 mr-2">
                               <div
-                                className={`h-2.5 rounded-full ${employee.efficiency >= 90 ? 'bg-green-500' :
-                                  employee.efficiency >= 80 ? 'bg-yellow-500' :
+                                className={`h-2 rounded-full ${employee.efficiency >= 90 ? 'bg-green-500' :
+                                  employee.efficiency >= (employee.benchmark || 70) ? 'bg-yellow-500' :
                                     'bg-red-500'
                                   }`}
                                 style={{ width: `${employee.efficiency}%` }}
                               ></div>
                             </div>
-                            <span className="ml-2 text-gray-700 font-semibold">
+                            <span className={`text-sm font-black ${employee.efficiency < (employee.benchmark || 70) ? 'text-red-600' : 'text-gray-700'}`}>
                               {employee.efficiency}%
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className="flex items-center">
-                            <div className="w-24 bg-gray-200 rounded-full h-2.5">
-                              <div
-                                className={`h-2.5 rounded-full ${employee.productivity >= 90 ? 'bg-green-500' :
-                                  employee.productivity >= 80 ? 'bg-yellow-500' :
-                                    'bg-red-500'
-                                  }`}
-                                style={{ width: `${employee.productivity}%` }}
-                              ></div>
-                            </div>
-                            <span className="ml-2 text-gray-700 font-semibold">
-                              {employee.productivity}%
+                          <div className="flex flex-col">
+                            <span className={`text-xs font-bold ${employee.penaltyDeducted > 0 ? 'text-red-500' : 'text-gray-400'}`}>
+                              -{employee.penaltyDeducted}%
                             </span>
                           </div>
                         </td>
                         <td className="px-6 py-4 whitespace-nowrap">
-                          <div className={`inline-flex items-center px-3 py-1 rounded-full text-sm font-semibold ${employee.overdueTasks <= 2 ? 'bg-green-100 text-green-800' :
-                            employee.overdueTasks <= 5 ? 'bg-yellow-100 text-yellow-800' :
-                              'bg-red-100 text-red-800'
+                          <div className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-bold ${employee.overdueTasks === 0 ? 'bg-green-50 text-green-700 border border-green-200' :
+                            employee.overdueTasks <= 3 ? 'bg-yellow-50 text-yellow-700 border border-yellow-200' :
+                              'bg-red-50 text-red-700 border border-red-200'
                             }`}>
-                            {employee.overdueTasks <= 2 ? (
-                              <CheckCircle size={14} className="mr-1" />
-                            ) : (
-                              <AlertCircle size={14} className="mr-1" />
-                            )}
-                            {employee.overdueTasks}
+                            {employee.overdueTasks} Tasks
                           </div>
+                        </td>
+                        <td className="px-6 py-4 whitespace-nowrap">
+                          {employee.status === 'Risk' ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-600 text-white text-[10px] font-black uppercase rounded shadow-sm animate-pulse">
+                              <ShieldAlert size={10} /> Below Benchmark
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 text-[10px] font-black uppercase rounded border border-green-200">
+                              <Award size={10} /> Meeting Goal
+                            </span>
+                          )}
                         </td>
                       </tr>
                     ))}

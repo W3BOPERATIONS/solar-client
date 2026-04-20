@@ -233,4 +233,8 @@ export const campaignAPI = {
   deleteSocialPlatform: (id) => api.delete(`/campaigns/social/platforms/${id}`),
 };
 
+export const departmentAPI = {
+  getAll: () => api.get('/department-modules/departments'),
+};
+
 export default api;
