@@ -298,3 +298,41 @@ export const deleteLoanRule = async (id) => {
         throw error;
     }
 };
+
+const LOAN_PROVIDER_API_URL = '/loan-providers';
+
+export const fetchLoanProviders = async () => {
+    try {
+        const response = await axios.get(LOAN_PROVIDER_API_URL);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const createLoanProvider = async (data) => {
+    try {
+        const response = await axios.post(LOAN_PROVIDER_API_URL, data);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const updateLoanProvider = async (id, data) => {
+    try {
+        const response = await axios.put(`${LOAN_PROVIDER_API_URL}/${id}`, data);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const deleteLoanProvider = async (id) => {
+    try {
+        const response = await axios.delete(`${LOAN_PROVIDER_API_URL}/${id}`);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};

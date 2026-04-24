@@ -1,59 +1,331 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Save, RotateCcw, Plus, Trash2, Edit2, CheckCircle, AlertCircle, Loader2,
-  ChevronRight, Building2, Home
-} from 'lucide-react';
+import { Globe, MapPin, LayoutGrid, Building2, ChevronRight, Edit2, Trash2, CheckCircle, RotateCcw, Save, Loader2, AlertCircle, X, Plus } from 'lucide-react';
 import * as settingsApi from '../../../services/settings/settingsApi';
+import * as masterApi from '../../../services/core/masterApi';
+import * as combokitApi from '../../../services/combokit/combokitApi';
+import { useLocations } from '../../../hooks/useLocations';
+
+const LocationCard = ({ title, subtitle, icon: Icon, isSelected, onClick, colorClass = "blue", count = 0 }) => {
+  const colors = {
+    blue: 'border-blue-600 bg-blue-50/50 shadow-md',
+    purple: 'border-purple-600 bg-purple-50/50 shadow-md',
+    green: 'border-emerald-600 bg-emerald-50/50 shadow-md',
+    orange: 'border-orange-600 bg-orange-50/50 shadow-md'
+  };
+
+  const activeBorder = colors[colorClass] || colors.blue;
+
+  return (
+    <div
+      onClick={onClick}
+      className={`relative min-w-[130px] p-4 rounded-xl border-2 transition-all duration-300 cursor-pointer flex flex-col items-center justify-center space-y-2 group ${
+        isSelected 
+          ? `${activeBorder} scale-[1.02]` 
+          : 'bg-white border-gray-100 hover:border-blue-200 hover:shadow-sm'
+      }`}
+    >
+      {/* Checkbox Icon in Top Right */}
+      <div className={`absolute top-2 right-2 transition-opacity duration-300 ${isSelected ? 'opacity-100' : 'opacity-0'}`}>
+        <div className="w-4 h-4 rounded border-2 border-blue-600 flex items-center justify-center bg-white shadow-sm">
+          <div className="w-2 h-2 bg-blue-600 rounded-sm"></div>
+        </div>
+      </div>
+
+      <div className={`transition-colors ${isSelected ? 'text-blue-600' : 'text-gray-400 group-hover:text-blue-400'}`}>
+        <Icon size={20} />
+      </div>
+
+      <div className={`font-black text-xs tracking-tight ${isSelected ? 'text-gray-900' : 'text-gray-700'}`}>
+        {title}
+      </div>
+
+      {count > 0 && (
+        <div className={`mt-1 px-3 py-0.5 rounded-full text-[9px] font-extrabold transition-all ${
+          isSelected 
+            ? 'bg-blue-100 text-blue-700 shadow-inner' 
+            : 'bg-blue-50 text-blue-600 border border-blue-100'
+        }`}>
+          {count} Plans
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default function LoanSetting() {
+  const { countries, states, clusters, districts, fetchStates, fetchClusters, fetchDistricts } = useLocations();
+
+  const [selectedLocation, setSelectedLocation] = useState({
+    country: ['all'],
+    state: [],
+    cluster: [],
+    district: []
+  });
+
   const [loanRules, setLoanRules] = useState([]);
-  const [activeTab, setActiveTab] = useState('Residential');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const [formFields, setFormFields] = useState({
-    'Residential': [],
-    'Commercial': []
-  });
+  const [categories, setCategories] = useState([]);
+  const [subCategories, setSubCategories] = useState([]);
+  const [projectTypes, setProjectTypes] = useState([]);
+  const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [combokits, setCombokits] = useState([]);
+  const [customizedKits, setCustomizedKits] = useState([]);
+  const [mappings, setMappings] = useState([]);
+
+  // Selections
+  const [loanProviderType, setLoanProviderType] = useState('NBFC');
+  const [orderType, setOrderType] = useState('Combokit');
+  const [selectedCombokit, setSelectedCombokit] = useState('');
+  const [selectedCustomizedKit, setSelectedCustomizedKit] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+  const [selectedProjectType, setSelectedProjectType] = useState('');
+  const [selectedSubProjectType, setSelectedSubProjectType] = useState('');
+
+  // Loan Provider Management State
+  const [providers, setProviders] = useState([]);
+  const [selectedProviderId, setSelectedProviderId] = useState('');
+  const [activeProjectTypeTab, setActiveProjectTypeTab] = useState('Residential');
+  const [newProviderName, setNewProviderName] = useState('');
+  const [editingProvider, setEditingProvider] = useState(null);
+
+  const [formFields, setFormFields] = useState({});
+  const [outcomes, setOutcomes] = useState([
+    { status: 'approved', minScore: 80, maxScore: 100 },
+    { status: 'pre-approved', minScore: 60, maxScore: 79 },
+    { status: 'manual call', minScore: 40, maxScore: 59 },
+    { status: 'rejected', minScore: 0, maxScore: 39 }
+  ]);
+
+  const addRange = (fieldId) => {
+    setFormFields(prev => {
+      const current = prev[fieldId] || { selected: true, ranges: [] };
+      return {
+        ...prev,
+        [fieldId]: {
+          ...current,
+          selected: true,
+          ranges: [...(current.ranges || []), { from: 0, to: 0, score: 0, secondaryFrom: 0, secondaryTo: 0 }]
+        }
+      };
+    });
+  };
+
+  const removeRange = (fieldId, index) => {
+    setFormFields(prev => {
+      const current = prev[fieldId];
+      if (!current) return prev;
+      const newRanges = [...current.ranges];
+      newRanges.splice(index, 1);
+      return {
+        ...prev,
+        [fieldId]: { ...current, ranges: newRanges }
+      };
+    });
+  };
+
+  const updateRange = (fieldId, index, key, value) => {
+    setFormFields(prev => {
+      const current = prev[fieldId];
+      if (!current) return prev;
+      const newRanges = [...current.ranges];
+      newRanges[index] = { ...newRanges[index], [key]: Number(value) };
+      return {
+        ...prev,
+        [fieldId]: { ...current, ranges: newRanges }
+      };
+    });
+  };
+
+  const updateOutcome = (index, key, value) => {
+    setOutcomes(prev => {
+      const newOutcomes = [...prev];
+      newOutcomes[index] = { ...newOutcomes[index], [key]: key === 'status' ? value : Number(value) };
+      return newOutcomes;
+    });
+  };
 
   const fieldOptions = [
     { id: 'min_cibil', label: 'Minimum CIBIL Score' },
-    { id: 'max_ltv', label: 'Max LTV (%)' },
+    { id: 'max_ltv', label: 'Max LTV (%)', secondaryLabel: 'Age' },
     { id: 'min_bank_balance', label: 'Min Avg Bank Balance' },
-    { id: 'processing_fee', label: 'Processing Fee (%)' },
+    { id: 'processing_fee', label: 'Processing Fee (%)', secondaryLabel: 'Downpayment' },
     { id: 'min_itr', label: 'Min Declared Income (ITR)' },
-    { id: 'lockin_period', label: 'Lock-in Period (months)' },
+    { id: 'lockin_period', label: 'Lock-in Period (months)', secondaryLabel: 'LTV %' },
     { id: 'down_payment', label: 'Down Payment (%)' },
-    { id: 'foreclosure_charges', label: 'Foreclosure Charges (%)' }
+    { id: 'foreclosure_charges', label: 'Foreclosure Charges (%)' },
+    { id: 'age_eligibility', label: 'Age Eligibility' },
+    { id: 'emi_capacity', label: 'EMI Capacity (DTI Ratio)' },
+    { id: 'identity_verification', label: 'Identity Verification (Aadhaar/PAN)' }
   ];
 
   useEffect(() => {
-    loadData();
+    loadMasterData();
+    loadLoanRules();
+    loadProviders();
   }, []);
 
-  const loadData = async () => {
+  const loadProviders = async () => {
+    try {
+      const data = await settingsApi.fetchLoanProviders();
+      setProviders(data || []);
+    } catch (err) {
+      console.error('Failed to load providers:', err);
+    }
+  };
+
+  const loadMasterData = async () => {
+    try {
+      const [cats, kits, assignments] = await Promise.all([
+        masterApi.getCategories(),
+        combokitApi.getSolarKits(),
+        combokitApi.getAssignments()
+      ]);
+      const categoryData = cats.data || cats || [];
+      setCategories(categoryData);
+      setCombokits(kits || []);
+      setCustomizedKits(assignments.data || assignments || []);
+
+      // Auto-select category based on activeProjectTypeTab if possible
+      const matchingCat = categoryData.find(c => c.name.toLowerCase() === activeProjectTypeTab.toLowerCase());
+      if (matchingCat) setSelectedCategory(matchingCat._id);
+    } catch (err) {
+      console.error('Failed to load master data:', err);
+    }
+  };
+
+  const handleProviderAction = async (e) => {
+    if (e) e.preventDefault();
+    if (!newProviderName.trim()) return;
+
+    try {
+      setSaving(true);
+      if (editingProvider) {
+        await settingsApi.updateLoanProvider(editingProvider._id, { name: newProviderName });
+        setSuccess('Provider updated');
+      } else {
+        await settingsApi.createLoanProvider({ name: newProviderName });
+        setSuccess('Provider added');
+      }
+      setNewProviderName('');
+      setEditingProvider(null);
+      loadProviders();
+    } catch (err) {
+      setError(err.response?.data?.message || 'Action failed');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteProvider = async (id) => {
+    if (!window.confirm('Delete this provider?')) return;
+    try {
+      await settingsApi.deleteLoanProvider(id);
+      loadProviders();
+      if (selectedProviderId === id) setSelectedProviderId('');
+    } catch (err) {
+      setError('Delete failed');
+    }
+  };
+
+  useEffect(() => {
+    if (selectedCategory) {
+      masterApi.getSubCategories({ categoryId: selectedCategory }).then(res => setSubCategories(res.data || []));
+    } else {
+      setSubCategories([]);
+    }
+    // Removed setSelectedSubCategory('') reset here to prevent conflicts during rule editing
+  }, [selectedCategory]);
+
+  useEffect(() => {
+    if (selectedCategory && selectedSubCategory) {
+      masterApi.getProjectCategoryMappings({ categoryId: selectedCategory, subCategoryId: selectedSubCategory }).then(res => {
+        const data = res.data || [];
+        setMappings(data);
+
+        const ranges = data.map(m => ({
+          label: `${m.projectTypeFrom} to ${m.projectTypeTo} kW`,
+          from: m.projectTypeFrom,
+          to: m.projectTypeTo
+        }));
+        const uniqueRanges = [];
+        const seen = new Set();
+        ranges.forEach(r => {
+          if (!seen.has(r.label)) {
+            seen.add(r.label);
+            uniqueRanges.push(r);
+          }
+        });
+        setProjectTypes(uniqueRanges);
+      });
+    } else {
+      setMappings([]);
+      setProjectTypes([]);
+    }
+    // Removed setSelectedProjectType('') reset here to prevent conflicts during rule editing
+  }, [selectedCategory, selectedSubCategory]);
+
+  useEffect(() => {
+    if (selectedProjectType) {
+      const matching = mappings.filter(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === selectedProjectType);
+      const subTypes = matching.filter(m => m.subProjectTypeId).map(m => m.subProjectTypeId);
+      const uniqueSubTypes = [];
+      const seenIds = new Set();
+      subTypes.forEach(s => {
+        if (!seenIds.has(s._id)) {
+          seenIds.add(s._id);
+          uniqueSubTypes.push(s);
+        }
+      });
+      setSubProjectTypes(uniqueSubTypes);
+    } else {
+      setSubProjectTypes([]);
+    }
+    // Removed setSelectedSubProjectType('') reset here to prevent conflicts during rule editing
+  }, [selectedProjectType, mappings]);
+
+  useEffect(() => {
+    if (selectedLocation.country.length > 0 && !selectedLocation.country.includes('all')) {
+      fetchStates({ countryId: selectedLocation.country[0] });
+    } else {
+      fetchStates();
+    }
+  }, [selectedLocation.country, fetchStates]);
+
+  useEffect(() => {
+    if (selectedLocation.state.length > 0 && !selectedLocation.state.includes('all')) {
+      fetchClusters({ stateId: selectedLocation.state[0] });
+    } else {
+      fetchClusters();
+    }
+  }, [selectedLocation.state, fetchClusters]);
+
+  useEffect(() => {
+    if (selectedLocation.cluster.length > 0 && !selectedLocation.cluster.includes('all')) {
+      fetchDistricts({ clusterId: selectedLocation.cluster[0] });
+    } else {
+      fetchDistricts();
+    }
+  }, [selectedLocation.cluster, fetchDistricts]);
+
+  const getRuleCount = (type, id) => {
+    return loanRules.filter(r => {
+      const fieldArr = r[type === 'country' ? 'countries' : type === 'state' ? 'states' : type === 'cluster' ? 'clusters' : 'districts'] || [];
+      if (id === 'all') return fieldArr.length === 0;
+      return fieldArr.some(item => (item._id || item) === id);
+    }).length;
+  };
+
+  const loadLoanRules = async () => {
     try {
       setLoading(true);
       const rules = await settingsApi.fetchLoanRules();
-      // Filter ONLY global rules (clusterId is missing or null)
-      const globalRules = (rules || []).filter(r => !r.clusterId);
-      setLoanRules(globalRules);
-
-      // Initialize form fields from global rules
-      const newFormFields = { 'Residential': [], 'Commercial': [] };
-      globalRules.forEach(rule => {
-        // Convert 'residential' or 'RESIDENTIAL' to 'Residential'
-        const normalizedType = rule.projectType.charAt(0).toUpperCase() + rule.projectType.slice(1).toLowerCase();
-        if (newFormFields[normalizedType]) {
-          newFormFields[normalizedType] = rule.fields
-            .filter(f => f.selected)
-            .map(f => f.name);
-        }
-      });
-      setFormFields(newFormFields);
-      console.log('Loaded global loan rules:', globalRules);
+      setLoanRules(rules || []);
+      updateFormFromCurrentConfig(rules || []);
     } catch (err) {
       setError('Failed to load loan settings');
     } finally {
@@ -61,14 +333,103 @@ export default function LoanSetting() {
     }
   };
 
+  const arraysEqual = (a, b) => {
+    const arrA = (a || []).map(l => l._id || l).filter(x => x !== 'all');
+    const arrB = (b || []).map(l => l._id || l).filter(x => x !== 'all');
+    if (arrA.length === 0 && arrB.length === 0) return true;
+    if (arrA.length !== arrB.length) return false;
+    const sortedA = [...arrA].sort();
+    const sortedB = [...arrB].sort();
+    return sortedA.every((val, index) => val === sortedB[index]);
+  };
+
+  const updateFormFromCurrentConfig = (rules = loanRules) => {
+    const matchingRule = rules.find(r =>
+      r.loanProviderType === loanProviderType &&
+      r.orderType === orderType &&
+      (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
+      arraysEqual((r.countries || []), selectedLocation.country) &&
+      arraysEqual((r.states || []), selectedLocation.state) &&
+      arraysEqual((r.clusters || []), selectedLocation.cluster) &&
+      arraysEqual((r.districts || []), selectedLocation.district) &&
+      (r.combokitId?._id || r.combokitId) === (selectedCombokit || null) &&
+      (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
+      (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
+      (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
+      (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
+      (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
+    );
+
+    if (matchingRule && matchingRule.fields) {
+      const fieldData = {};
+      matchingRule.fields.forEach(f => {
+        fieldData[f.name] = {
+          selected: f.selected,
+          ranges: f.ranges || []
+        };
+      });
+      setFormFields(fieldData);
+      if (matchingRule.outcomes) setOutcomes(matchingRule.outcomes);
+    } else {
+      setFormFields({});
+      setOutcomes([
+        { status: 'approved', minScore: 80, maxScore: 100 },
+        { status: 'pre-approved', minScore: 60, maxScore: 79 },
+        { status: 'manual call', minScore: 40, maxScore: 59 },
+        { status: 'rejected', minScore: 0, maxScore: 39 }
+      ]);
+    }
+  };
+
+  useEffect(() => {
+    updateFormFromCurrentConfig();
+  }, [loanProviderType, orderType, selectedLocation, selectedCombokit, selectedCustomizedKit, selectedCategory, selectedSubCategory, selectedProjectType, selectedSubProjectType, loanRules]);
+
   const handleCheckboxChange = (fieldId) => {
     setFormFields(prev => {
-      const current = prev[activeTab] || [];
-      if (current.includes(fieldId)) {
-        return { ...prev, [activeTab]: current.filter(id => id !== fieldId) };
+      const current = prev[fieldId] || { selected: false, ranges: [] };
+      const isSelecting = !current.selected;
+      return {
+        ...prev,
+        [fieldId]: {
+          ...current,
+          selected: isSelecting,
+          ranges: isSelecting && current.ranges.length === 0
+            ? [{ from: 0, to: 0, score: 0, secondaryFrom: 0, secondaryTo: 0 }]
+            : current.ranges
+        }
+      };
+    });
+  };
+
+  const toggleLocation = (dim, id) => {
+    setSelectedLocation(prev => {
+      let newVals;
+      const current = prev[dim] || [];
+      if (id === 'all') {
+        newVals = ['all'];
       } else {
-        return { ...prev, [activeTab]: [...current, fieldId] };
+        const filtered = current.filter(x => x !== 'all');
+        if (filtered.includes(id)) {
+          newVals = filtered.filter(x => x !== id);
+          if (newVals.length === 0) newVals = ['all'];
+        } else {
+          newVals = [...filtered, id];
+        }
       }
+
+      const updates = { [dim]: newVals };
+      if (dim === 'country') {
+        updates.state = [];
+        updates.cluster = [];
+        updates.district = [];
+      } else if (dim === 'state') {
+        updates.cluster = [];
+        updates.district = [];
+      } else if (dim === 'cluster') {
+        updates.district = [];
+      }
+      return { ...prev, ...updates };
     });
   };
 
@@ -77,41 +438,59 @@ export default function LoanSetting() {
       setSaving(true);
       setError('');
       setSuccess('');
-      console.log('Saving global settings...', formFields);
 
-      const tasks = Object.keys(formFields).map(async (type) => {
-        const selectedFields = fieldOptions.map(opt => ({
-          name: opt.id,
-          selected: formFields[type].includes(opt.id)
-        }));
+      const selectedFields = fieldOptions.map(opt => ({
+        name: opt.id,
+        selected: formFields[opt.id]?.selected || false,
+        ranges: formFields[opt.id]?.selected ? (formFields[opt.id]?.ranges || []) : []
+      }));
 
-        const existingRule = loanRules.find(r =>
-          r.projectType.toLowerCase() === type.toLowerCase()
-        );
-        console.log(`Checking ${type}: existingId=`, existingRule?._id);
+      const payload = {
+        loanProviderType,
+        orderType,
+        loanProviderId: selectedProviderId || null,
+        countries: selectedLocation.country.includes('all') ? [] : selectedLocation.country,
+        states: selectedLocation.state.includes('all') ? [] : selectedLocation.state,
+        clusters: selectedLocation.cluster.includes('all') ? [] : selectedLocation.cluster,
+        districts: selectedLocation.district.includes('all') ? [] : selectedLocation.district,
+        combokitId: selectedCombokit || null,
+        customizedKitId: selectedCustomizedKit || null,
+        categoryId: selectedCategory || null,
+        subCategoryId: selectedSubCategory || null,
+        projectType: selectedProjectType,
+        subProjectTypeId: selectedSubProjectType || null,
+        fields: selectedFields,
+        outcomes,
+        interestRate: 0,
+        tenureMonths: 0,
+        maxAmount: 0
+      };
 
-        const payload = {
-          projectType: type, // e.g., 'Residential'
-          clusterId: null,   // Explicitly make global
-          interestRate: 0,
-          tenureMonths: 0,
-          maxAmount: 0,
-          fields: selectedFields,
-          status: 'active'
-        };
+      const existingRule = loanRules.find(r =>
+        r.loanProviderType === loanProviderType &&
+        r.orderType === orderType &&
+        (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
+        arraysEqual((r.countries || []), selectedLocation.country) &&
+        arraysEqual((r.states || []), selectedLocation.state) &&
+        arraysEqual((r.clusters || []), selectedLocation.cluster) &&
+        arraysEqual((r.districts || []), selectedLocation.district) &&
+        (r.combokitId?._id || r.combokitId) === (selectedCombokit || null) &&
+        (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
+        (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
+        (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
+        (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
+        (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
+      );
 
-        if (existingRule) {
-          console.log(`Updating global rule for ${type}: ${existingRule._id}`);
-          return settingsApi.updateLoanRule(existingRule._id, payload);
-        } else {
-          console.log(`Creating new global rule for ${type}`);
-          return settingsApi.createLoanRule(payload);
-        }
-      });
 
-      await Promise.all(tasks);
+      if (existingRule) {
+        await settingsApi.updateLoanRule(existingRule._id, payload);
+      } else {
+        await settingsApi.createLoanRule(payload);
+      }
+
       setSuccess('Settings saved successfully');
-      loadData();
+      loadLoanRules();
     } catch (err) {
       console.error('Save failed:', err);
       setError(err.response?.data?.message || 'Failed to save settings');
@@ -121,23 +500,20 @@ export default function LoanSetting() {
   };
 
   const handleReset = () => {
-    loadData();
+    loadLoanRules();
     setSuccess('');
     setError('');
   };
 
   const getLabel = (id) => fieldOptions.find(opt => opt.id === id)?.label || id;
 
-  const handleRemove = async (type) => {
-    if (!window.confirm(`Are you sure you want to remove all fields for ${type}?`)) return;
+  const handleRemove = async (ruleId) => {
+    if (!window.confirm(`Are you sure you want to remove this configuration?`)) return;
     try {
       setSaving(true);
-      const rule = loanRules.find(r => r.projectType.toLowerCase() === type.toLowerCase());
-      if (rule) {
-        await settingsApi.deleteLoanRule(rule._id);
-        setSuccess(`${type} settings removed`);
-        loadData();
-      }
+      await settingsApi.deleteLoanRule(ruleId);
+      setSuccess(`Configuration removed`);
+      loadLoanRules();
     } catch (err) {
       setError('Failed to remove settings');
     } finally {
@@ -148,9 +524,30 @@ export default function LoanSetting() {
   return (
     <div className="p-6 bg-[#f0f2f5] min-h-screen">
       <div className="max-w-7xl mx-auto">
-        <h2 className="text-2xl font-bold text-[#003366] mb-6">Loan Provider Settings</h2>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-2xl font text-[#003366] tracking-tight">Loan eligibility scoring</h1>
+            <p className="text-gray-500 text-sm font-medium mt-1">Configure scoring rules and eligibility criteria for loan providers</p>
+          </div>
+          <div className="flex space-x-3">
+            <button
+              onClick={handleReset}
+              className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm"
+            >
+              <RotateCcw size={16} className="mr-2" />
+              Reset
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-50"
+            >
+              {saving ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
+              Save Settings
+            </button>
+          </div>
+        </div>
 
-        {/* Alerts */}
         {error && (
           <div className="mb-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded flex items-center shadow-sm">
             <AlertCircle className="w-5 h-5 mr-2" /> {error}
@@ -162,129 +559,643 @@ export default function LoanSetting() {
           </div>
         )}
 
-        {/* Project Types Card */}
-        <div className="bg-white rounded-lg shadow-md border border-gray-200 mb-8 overflow-hidden">
-          <div className="bg-gray-50 px-6 py-3 border-b flex justify-between items-center">
-            <h3 className="font-semibold text-gray-700">Project Types</h3>
-          </div>
-
-          <div className="p-6">
-            {/* Tabs */}
-            <div className="flex space-x-2 mb-6 border-b border-gray-100 pb-4">
-              {['Residential', 'Commercial'].map(tab => (
-                <button
-                  key={tab}
-                  onClick={() => setActiveTab(tab)}
-                  className={`px-6 py-2 rounded-md text-sm font-medium transition-all duration-200 ${activeTab === tab
-                    ? 'bg-[#007bff] text-white shadow-md'
-                    : 'bg-[#f8f9fa] text-gray-500 hover:bg-gray-100'
-                    }`}
-                >
-                  {tab}
-                </button>
+        <div className="space-y-6 mb-8">
+          <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-visible">
+            <div className="flex items-center mb-4">
+              <Globe className="text-blue-600 mr-2" size={20} />
+              <h4 className="font-bold text-gray-800 uppercase tracking-tight text-sm">Select Country</h4>
+            </div>
+            <div className="flex flex-wrap gap-4 overflow-x-auto pb-2 scrollbar-hide">
+              <LocationCard
+                title="Select All"
+                subtitle="COUNTRIES"
+                icon={Globe}
+                isSelected={selectedLocation.country?.includes('all')}
+                onClick={() => toggleLocation('country', 'all')}
+                count={getRuleCount('country', 'all')}
+              />
+              {countries.map(c => (
+                <LocationCard
+                  key={c._id}
+                  title={c.name}
+                  subtitle={c.code || 'COUNTRY'}
+                  icon={Globe}
+                  isSelected={selectedLocation.country?.includes(c._id)}
+                  onClick={() => toggleLocation('country', c._id)}
+                  count={getRuleCount('country', c._id)}
+                />
               ))}
             </div>
+          </div>
 
-            {/* Field Selection Area */}
-            <div className="bg-gray-50/50 rounded-xl p-6 border border-gray-200 relative mb-8">
-              <h4 className="text-[#003366] font-bold text-lg mb-6 flex items-center">
-                <div className="w-1.5 h-6 bg-blue-500 rounded-full mr-3"></div>
-                Select Fields for {activeTab} Projects
-              </h4>
+          {selectedLocation.country.length > 0 && (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-visible animate-in fade-in slide-in-from-top-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <MapPin className="text-blue-600 mr-2" size={20} />
+                  <h4 className="font-bold text-gray-800 uppercase tracking-tight text-sm">Select State</h4>
+                </div>
+                {selectedLocation.state.length > 0 && !selectedLocation.state.includes('all') && (
+                  <span className="text-[10px] bg-blue-50 text-blue-600 px-2 py-0.5 rounded-full font-bold border border-blue-100">{selectedLocation.state.length} Selected</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                <LocationCard
+                  title="Select All"
+                  subtitle="STATES"
+                  icon={MapPin}
+                  isSelected={selectedLocation.state?.includes('all')}
+                  onClick={() => toggleLocation('state', 'all')}
+                  count={getRuleCount('state', 'all')}
+                />
+                {states.map(s => (
+                  <LocationCard
+                    key={s._id}
+                    title={s.name}
+                    subtitle="State"
+                    icon={MapPin}
+                    isSelected={selectedLocation.state?.includes(s._id)}
+                    onClick={() => toggleLocation('state', s._id)}
+                    count={getRuleCount('state', s._id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
 
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-8">
-                {fieldOptions.map((opt) => (
-                  <div key={opt.id} className="flex items-center group bg-white p-3 rounded-lg border border-transparent hover:border-blue-200 hover:shadow-sm transition-all">
-                    <div className="relative flex items-center justify-center">
-                      <input
-                        type="checkbox"
-                        id={opt.id}
-                        checked={formFields[activeTab].includes(opt.id)}
-                        onChange={() => handleCheckboxChange(opt.id)}
-                        className="w-5 h-5 border-gray-300 rounded text-blue-600 focus:ring-blue-500 cursor-pointer"
-                      />
-                    </div>
-                    <label htmlFor={opt.id} className="ml-3 text-gray-700 font-medium cursor-pointer group-hover:text-blue-600 transition-colors">
-                      {opt.label}
-                    </label>
-                  </div>
+          {selectedLocation.state.length > 0 && (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-visible animate-in fade-in slide-in-from-top-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <LayoutGrid className="text-purple-600 mr-2" size={20} />
+                  <h4 className="font-bold text-gray-800 uppercase tracking-tight text-sm">Select Cluster</h4>
+                </div>
+                {selectedLocation.cluster.length > 0 && !selectedLocation.cluster.includes('all') && (
+                  <span className="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full font-bold border border-purple-100">{selectedLocation.cluster.length} Selected</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                <LocationCard
+                  title="Select All"
+                  subtitle="CLUSTERS"
+                  icon={LayoutGrid}
+                  isSelected={selectedLocation.cluster?.includes('all')}
+                  onClick={() => toggleLocation('cluster', 'all')}
+                  colorClass="purple"
+                  count={getRuleCount('cluster', 'all')}
+                />
+                {clusters.map(cl => (
+                  <LocationCard
+                    key={cl._id}
+                    title={cl.name}
+                    subtitle="Cluster"
+                    icon={LayoutGrid}
+                    isSelected={selectedLocation.cluster?.includes(cl._id)}
+                    onClick={() => toggleLocation('cluster', cl._id)}
+                    colorClass="purple"
+                    count={getRuleCount('cluster', cl._id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {selectedLocation.cluster.length > 0 && (
+            <div className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm overflow-visible animate-in fade-in slide-in-from-top-4">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center">
+                  <Building2 className="text-emerald-600 mr-2" size={20} />
+                  <h4 className="font-bold text-gray-800 uppercase tracking-tight text-sm">Select District</h4>
+                </div>
+                {selectedLocation.district.length > 0 && !selectedLocation.district.includes('all') && (
+                  <span className="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full font-bold border border-emerald-100">{selectedLocation.district.length} Selected</span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-4 overflow-x-auto pb-2 scrollbar-hide">
+                <LocationCard
+                  title="Select All"
+                  subtitle="DISTRICTS"
+                  icon={Building2}
+                  isSelected={selectedLocation.district?.includes('all')}
+                  onClick={() => toggleLocation('district', 'all')}
+                  colorClass="green"
+                  count={getRuleCount('district', 'all')}
+                />
+                {districts.map(d => (
+                  <LocationCard
+                    key={d._id}
+                    title={d.name}
+                    subtitle="District"
+                    icon={Building2}
+                    isSelected={selectedLocation.district?.includes(d._id)}
+                    onClick={() => toggleLocation('district', d._id)}
+                    colorClass="green"
+                    count={getRuleCount('district', d._id)}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Project Type Tabs & Provider Management */}
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <div className="flex items-center space-x-6">
+              <h3 className="text-sm font text-gray-500 uppercase tracking-widest">Project Types</h3>
+              <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
+                {['Residential', 'Commercial'].map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => {
+                      setActiveProjectTypeTab(type);
+                      const matchingCat = categories.find(c => c.name.toLowerCase() === type.toLowerCase());
+                      if (matchingCat) setSelectedCategory(matchingCat._id);
+                    }}
+                    className={`px-6 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${activeProjectTypeTab === type
+                      ? 'bg-blue-600 text-white shadow-md'
+                      : 'text-gray-500 hover:bg-gray-50'
+                      }`}
+                  >
+                    {type}
+                  </button>
                 ))}
               </div>
             </div>
 
-            {/* Selected Fields Summary Table */}
-            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
-              <div className="bg-gray-50 px-6 py-4 border-b border-gray-200 flex justify-between items-center">
-                <h4 className="font-bold text-gray-800 flex items-center">
-                  <ChevronRight size={18} className="mr-2 text-blue-500" />
-                  Selected Fields by Project Type
-                </h4>
+            <div className="flex items-center space-x-3">
+              <div className="relative group">
+                <input
+                  type="text"
+                  placeholder="Add loan provider..."
+                  value={newProviderName}
+                  onChange={(e) => setNewProviderName(e.target.value)}
+                  className="pl-3 pr-10 py-2 bg-white border border-gray-200 rounded-xl text-xs font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all w-64 shadow-inner"
+                />
                 <button
-                  onClick={() => setActiveTab(activeTab === 'Residential' ? 'Commercial' : 'Residential')}
-                  className="text-blue-600 text-sm font-bold hover:text-blue-700 flex items-center bg-blue-50 px-3 py-1.5 rounded-lg transition-colors"
+                  onClick={handleProviderAction}
+                  disabled={saving || !newProviderName.trim()}
+                  className="absolute right-1 top-1 bottom-1 px-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
                 >
-                  <Plus size={14} className="mr-1" /> Add Project Type
+                  <Plus size={14} />
                 </button>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-6">
+            <div className="flex flex-wrap gap-3 mb-8">
+              {providers.map(p => (
+                <div
+                  key={p._id}
+                  onClick={() => setSelectedProviderId(p._id)}
+                  className={`group flex items-center px-4 py-2.5 rounded-xl border-2 cursor-pointer transition-all duration-300 relative ${selectedProviderId === p._id
+                    ? 'bg-blue-50 border-blue-600 text-blue-700 shadow-sm'
+                    : 'bg-white border-gray-100 hover:border-blue-200 text-gray-600'
+                    }`}
+                >
+                  <div className={`p-1.5 rounded-lg mr-3 ${selectedProviderId === p._id ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-400 group-hover:bg-blue-100 group-hover:text-blue-500'}`}>
+                    <Building2 size={14} />
+                  </div>
+                  <span className="text-xs font-bold tracking-tight">{p.name}</span>
+
+                  <div className="ml-4 flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEditingProvider(p);
+                        setNewProviderName(p.name);
+                      }}
+                      className="p-1 hover:bg-blue-200 rounded text-blue-600"
+                    >
+                      <Edit2 size={12} />
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteProvider(p._id);
+                      }}
+                      className="p-1 hover:bg-red-100 rounded text-red-500"
+                    >
+                      <Trash2 size={12} />
+                    </button>
+                  </div>
+
+                  {selectedProviderId === p._id && (
+                    <div className="absolute -top-1.5 -right-1.5 bg-blue-600 text-white rounded-full p-0.5 border-2 border-white shadow-sm">
+                      <CheckCircle size={10} />
+                    </div>
+                  )}
+                </div>
+              ))}
+              {providers.length === 0 && (
+                <div className="text-gray-400 text-xs font-medium italic py-2">No providers added yet. Use the input above to add one.</div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8 mt-4">
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600 tracking-tight">Loan Provider Type <span className="text-red-500">*</span></label>
+                <div className="flex p-1 bg-gray-50 rounded-xl border border-gray-200">
+                  {['NBFC', 'BANK', 'EMI'].map((type) => (
+                    <button
+                      key={type}
+                      onClick={() => setLoanProviderType(type)}
+                      className={`flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all duration-200 ${loanProviderType === type
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'text-gray-500 hover:bg-gray-100 hover:text-blue-600'
+                        }`}
+                    >
+                      {type}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600">Order Type <span className="text-red-500">*</span></label>
+                <select
+                  value={orderType}
+                  onChange={(e) => setOrderType(e.target.value)}
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                >
+                  <option value="Combokit">Combokit</option>
+                  <option value="Customised kit">Customised kit</option>
+                </select>
+              </div>
+
+              {orderType === 'Combokit' && (
+                <div className="flex flex-col space-y-2">
+                  <label className="text-sm font-bold text-gray-600">Select Combokit</label>
+                  <select
+                    value={selectedCombokit}
+                    onChange={(e) => setSelectedCombokit(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                  >
+                    <option value="">All Combokits</option>
+                    {combokits.map(kit => <option key={kit._id} value={kit._id}>{kit.name}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {orderType === 'Customised kit' && (
+                <div className="flex flex-col space-y-2">
+                  <label className="text-sm font-bold text-gray-600">Select Customised Kit</label>
+                  <select
+                    value={selectedCustomizedKit}
+                    onChange={(e) => setSelectedCustomizedKit(e.target.value)}
+                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                  >
+                    <option value="">All Customised Kits</option>
+                    {customizedKits.map(kit => (
+                      <option key={kit._id} value={kit._id}>
+                        {kit.solarkitName || kit.name || 'Untitled Custom Kit'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600">Category</label>
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => {
+                    setSelectedCategory(e.target.value);
+                    setSelectedSubCategory('');
+                    setSelectedProjectType('');
+                    setSelectedSubProjectType('');
+                  }}
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                >
+                  <option value="">All Categories</option>
+                  {categories.map(cat => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600">Sub Category</label>
+                <select
+                  value={selectedSubCategory}
+                  onChange={(e) => {
+                    setSelectedSubCategory(e.target.value);
+                    setSelectedProjectType('');
+                    setSelectedSubProjectType('');
+                  }}
+                  disabled={!selectedCategory}
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm disabled:bg-gray-50 disabled:opacity-60"
+                >
+                  <option value="">All Sub Categories</option>
+                  {subCategories.map(sub => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600">Project Type</label>
+                <select
+                  value={selectedProjectType}
+                  onChange={(e) => {
+                    setSelectedProjectType(e.target.value);
+                    setSelectedSubProjectType('');
+                  }}
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
+                >
+                  <option value="">All Project Types</option>
+                  {projectTypes.map(pt => <option key={pt.label} value={pt.label}>{pt.label}</option>)}
+                </select>
+              </div>
+
+              <div className="flex flex-col space-y-2">
+                <label className="text-sm font-bold text-gray-600">Sub Project Type</label>
+                <select
+                  value={selectedSubProjectType}
+                  onChange={(e) => setSelectedSubProjectType(e.target.value)}
+                  disabled={!selectedProjectType}
+                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm disabled:bg-gray-50 disabled:opacity-60"
+                >
+                  <option value="">All Sub Project Types</option>
+                  {subProjectTypes.map(sub => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
+                </select>
+              </div>
+            </div>
+
+            <div className="bg-gray-50/50 rounded-xl p-6 border border-gray-100 mb-8 shadow-sm">
+              <div className="flex justify-between items-center mb-6 pb-2 border-b border-gray-100">
+                <h4 className="text-[#003366] font-bold text-md flex items-center">
+                  <div className="w-1.5 h-6 bg-blue-500 rounded-full mr-3"></div>
+                  Parameters Scoring Configuration (Total must be 100)
+                </h4>
+                <div className="flex items-center space-x-2">
+                  <span className="text-[10px] font text-gray-500 uppercase tracking-widest">Total Configured Score:</span>
+                  <span className={`px-3 py-1 rounded-full text-xs font-black shadow-sm border-2 ${Object.values(formFields).reduce((acc, f) => acc + (f.ranges || []).reduce((ra, r) => ra + (r.score || 0), 0), 0) === 100
+                    ? 'bg-emerald-50 border-emerald-500 text-emerald-600'
+                    : 'bg-red-50 border-red-500 text-red-600'
+                    }`}>
+                    {Object.values(formFields).reduce((acc, f) => acc + (f.ranges || []).reduce((ra, r) => ra + (r.score || 0), 0), 0)} / 100
+                  </span>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                {fieldOptions.map((opt) => (
+                  <div
+                    key={opt.id}
+                    className={`bg-white rounded-2xl border transition-all duration-300 ${formFields[opt.id]?.selected
+                      ? 'border-blue-400 shadow-lg'
+                      : 'border-gray-100 opacity-90'
+                      }`}
+                  >
+                    <div
+                      className={`p-4 flex items-center justify-between cursor-pointer ${formFields[opt.id]?.selected ? 'bg-blue-50' : ''}`}
+                      onClick={() => handleCheckboxChange(opt.id)}
+                    >
+                      <div className="flex items-center">
+                        <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${formFields[opt.id]?.selected
+                          ? 'bg-blue-600 border-blue-600 text-white shadow-md'
+                          : 'bg-white border-gray-200 text-transparent'
+                          }`}>
+                          <CheckCircle size={14} />
+                        </div>
+                        <div className="ml-4">
+                          <span className={`text-sm font ${formFields[opt.id]?.selected ? 'text-blue-900' : 'text-gray-600'}`}>
+                            {opt.label}
+                          </span>
+                          {opt.secondaryLabel && (
+                            <span className="ml-2 text-[10px] font-bold text-blue-500 uppercase bg-blue-50 px-2 py-0.5 rounded-full border border-blue-100">
+                              Linked to {opt.secondaryLabel}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {formFields[opt.id]?.selected && (
+                        <button
+                          onClick={(e) => { e.stopPropagation(); addRange(opt.id); }}
+                          className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black hover:bg-blue-700 transition-all shadow-sm"
+                        >
+                          <Plus size={14} className="mr-1" /> ADD RANGE
+                        </button>
+                      )}
+                    </div>
+
+                    {formFields[opt.id]?.selected && (
+                      <div className="p-4 pt-0">
+                        <div className="space-y-3">
+                          {(formFields[opt.id]?.ranges || []).map((range, bIdx) => (
+                            <div key={bIdx} className="flex items-center space-x-4 bg-gray-50 p-4 rounded-xl border border-gray-200 animate-in fade-in slide-in-from-top-2">
+                              <div className="flex-1 grid grid-cols-2 md:grid-cols-5 gap-4">
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">From Value</label>
+                                  <input
+                                    type="number"
+                                    value={range.from}
+                                    onChange={(e) => updateRange(opt.id, bIdx, 'from', e.target.value)}
+                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-blue-700 shadow-inner"
+                                  />
+                                </div>
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">To Value</label>
+                                  <input
+                                    type="number"
+                                    value={range.to}
+                                    onChange={(e) => updateRange(opt.id, bIdx, 'to', e.target.value)}
+                                    className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-bold text-blue-700 shadow-inner"
+                                  />
+                                </div>
+                                {opt.secondaryLabel && (
+                                  <>
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{opt.secondaryLabel} From</label>
+                                      <input
+                                        type="number"
+                                        value={range.secondaryFrom}
+                                        onChange={(e) => updateRange(opt.id, bIdx, 'secondaryFrom', e.target.value)}
+                                        className="w-full px-3 py-2 bg-blue-50/50 border border-blue-100 rounded-lg text-xs font-bold text-blue-600 shadow-inner"
+                                      />
+                                    </div>
+                                    <div className="space-y-1">
+                                      <label className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{opt.secondaryLabel} To</label>
+                                      <input
+                                        type="number"
+                                        value={range.secondaryTo}
+                                        onChange={(e) => updateRange(opt.id, bIdx, 'secondaryTo', e.target.value)}
+                                        className="w-full px-3 py-2 bg-blue-50/50 border border-blue-100 rounded-lg text-xs font-bold text-blue-600 shadow-inner"
+                                      />
+                                    </div>
+                                  </>
+                                )}
+                                <div className="space-y-1">
+                                  <label className="text-[10px] font-black text-emerald-500 uppercase tracking-tighter">Score Points</label>
+                                  <input
+                                    type="number"
+                                    value={range.score}
+                                    onChange={(e) => updateRange(opt.id, bIdx, 'score', e.target.value)}
+                                    className="w-full px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-lg text-xs font-black text-emerald-700 shadow-inner"
+                                  />
+                                </div>
+                              </div>
+                              <button
+                                onClick={() => removeRange(opt.id, bIdx)}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-lg transition-colors"
+                              >
+                                <Trash2 size={16} />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-8 pt-8 border-t border-gray-100">
+                <h4 className="text-[#003366] font-bold text-md mb-6 flex items-center uppercase tracking-widest text-[11px]">
+                  <ChevronRight className="mr-2 text-blue-500" size={18} />
+                  Loan Score Outcome Status
+                </h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {outcomes.map((outcome, oIdx) => (
+                    <div key={oIdx} className="bg-white p-4 rounded-2xl border border-gray-100 shadow-sm space-y-4">
+                      <div className="flex items-center space-x-2">
+                        <div className={`w-3 h-3 rounded-full ${outcome.status === 'approved' ? 'bg-emerald-500' :
+                          outcome.status === 'pre-approved' ? 'bg-blue-500' :
+                            outcome.status === 'manual call' ? 'bg-orange-500' : 'bg-red-500'
+                          }`}></div>
+                        <span className="text-[11px] font-black text-gray-500 uppercase tracking-wider">{outcome.status}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Min Score</label>
+                          <input
+                            type="number"
+                            value={outcome.minScore}
+                            onChange={(e) => updateOutcome(oIdx, 'minScore', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 focus:ring-blue-500 outline-none"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Max Score</label>
+                          <input
+                            type="number"
+                            value={outcome.maxScore}
+                            onChange={(e) => updateOutcome(oIdx, 'maxScore', e.target.value)}
+                            className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-bold text-gray-700 focus:ring-blue-500 outline-none"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-100 overflow-hidden shadow-sm">
+              <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h4 className="font-bold text-gray-800 flex items-center text-sm">
+                  <ChevronRight size={18} className="mr-2 text-blue-500" />
+                  Loan Scoring Outcome Status
+                </h4>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full">
-                  <thead className="bg-[#f8fafc] border-b border-gray-200">
+                  <thead className="bg-gray-50 border-b border-gray-100">
                     <tr>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Project Type</th>
-                      <th className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Selected Fields</th>
-                      <th className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Action</th>
+                      <th className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Hierarchy & Provider</th>
+                      <th className="px-4 py-4 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Scoring Outcomes</th>
+                      <th className="px-4 py-4 text-center text-[10px] font-bold text-gray-500 uppercase tracking-wider">Action</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {['Residential', 'Commercial'].map(type => (
-                      formFields[type].length > 0 && (
-                        <tr key={type} className="hover:bg-blue-50/30 transition-colors">
-                          <td className="px-6 py-5 align-top">
-                            <div className="flex items-center">
-                              {type === 'Residential' ? <Home size={18} className="mr-2 text-blue-500" /> : <Building2 size={18} className="mr-2 text-blue-500" />}
-                              <span className="text-gray-900 font-bold">{type}</span>
+                  <tbody className="divide-y divide-gray-50">
+                    {loanRules.length > 0 ? loanRules.map(rule => (
+                      <tr key={rule._id} className="hover:bg-blue-50/10 transition-colors">
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col space-y-2">
+                            <div className="flex items-center space-x-2">
+                              <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px] font-black uppercase">
+                                {rule.loanProviderType}
+                              </span>
+                              {rule.loanProviderId && <span className="text-xs font-bold text-gray-800">{rule.loanProviderId.name}</span>}
                             </div>
-                          </td>
-                          <td className="px-6 py-5">
-                            <div className="flex flex-wrap gap-2">
-                              {formFields[type].map(id => (
-                                <span key={id} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 border border-blue-200">
-                                  {getLabel(id)}
-                                </span>
-                              ))}
+                            <div className="text-[10px] text-gray-500 font-medium">
+                              {rule.categoryId?.name || 'All'} {rule.projectType ? `(${rule.projectType})` : ''}
                             </div>
-                          </td>
-                          <td className="px-6 py-5 align-top">
-                            <div className="flex justify-center space-x-3">
-                              <button
-                                onClick={() => {
-                                  setActiveTab(type);
-                                  window.scrollTo({ top: 0, behavior: 'smooth' });
-                                }}
-                                className="flex items-center px-3 py-1 bg-blue-50 text-blue-600 rounded-md text-xs font-bold hover:bg-blue-100 transition-colors"
-                              >
-                                <Edit2 size={12} className="mr-1" /> Edit
-                              </button>
-                              <button
-                                onClick={() => handleRemove(type)}
-                                className="flex items-center px-3 py-1 bg-red-50 text-red-600 rounded-md text-xs font-bold hover:bg-red-100 transition-colors"
-                              >
-                                <Trash2 size={12} className="mr-1" /> Remove
-                              </button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    ))}
-                    {!formFields['Residential'].length && !formFields['Commercial'].length && (
-                      <tr>
-                        <td colSpan="3" className="px-6 py-16 text-center">
-                          <div className="flex flex-col items-center opacity-40">
-                            <Plus size={48} className="mb-2 text-gray-300" />
-                            <p className="text-gray-500 font-medium">No project types configured</p>
-                            <p className="text-xs text-gray-400 mt-1">Select fields above and click Save Settings</p>
                           </div>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex flex-col items-center justify-center">
+                            {(() => {
+                              const totalScore = (rule.fields || []).reduce((acc, f) => 
+                                acc + (f.ranges || []).reduce((ra, r) => ra + (r.score || 0), 0), 0
+                              );
+                              return (
+                                <div className={`flex flex-col items-center px-3 py-1.5 rounded-xl border-2 transition-all shadow-sm ${
+                                  totalScore === 100 
+                                    ? 'bg-emerald-50 border-emerald-500 text-emerald-700' 
+                                    : 'bg-red-50 border-red-500 text-red-700'
+                                }`}>
+                                  <span className="text-[9px] font-black uppercase tracking-widest leading-tight">Total Score</span>
+                                  <span className="text-sm font-black leading-none">{totalScore} / 100</span>
+                                </div>
+                              );
+                            })()}
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-center">
+                          <div className="flex justify-center space-x-2">
+                            <button
+                              onClick={() => {
+                                // Restore Main Hierarchy
+                                setLoanProviderType(rule.loanProviderType);
+                                setOrderType(rule.orderType);
+                                setSelectedProviderId(rule.loanProviderId?._id || rule.loanProviderId || '');
+                                setSelectedCategory(rule.categoryId?._id || rule.categoryId || '');
+                                setSelectedSubCategory(rule.subCategoryId?._id || rule.subCategoryId || '');
+                                setSelectedProjectType(rule.projectType || '');
+                                setSelectedSubProjectType(rule.subProjectTypeId?._id || rule.subProjectTypeId || '');
+                                setSelectedCombokit(rule.combokitId?._id || rule.combokitId || '');
+                                setSelectedCustomizedKit(rule.customizedKitId?._id || rule.customizedKitId || '');
+                                if (rule.projectType) setActiveProjectTypeTab(rule.projectType);
+
+                                // Restore Location Hierarchy
+                                setSelectedLocation({
+                                  country: (rule.countries || []).length > 0 ? (rule.countries || []).map(l => l._id || l) : ['all'],
+                                  state: (rule.states || []).length > 0 ? (rule.states || []).map(l => l._id || l) : [],
+                                  cluster: (rule.clusters || []).length > 0 ? (rule.clusters || []).map(l => l._id || l) : [],
+                                  district: (rule.districts || []).length > 0 ? (rule.districts || []).map(l => l._id || l) : []
+                                });
+
+                                // Explicitly set form fields and outcomes for immediate feedback
+                                if (rule.fields) {
+                                  const fieldData = {};
+                                  rule.fields.forEach(f => {
+                                    fieldData[f.name] = { selected: f.selected, ranges: f.ranges || [] };
+                                  });
+                                  setFormFields(fieldData);
+                                }
+                                if (rule.outcomes) setOutcomes(rule.outcomes);
+
+                                setSuccess(`Editing configuration for ${rule.loanProviderId?.name || rule.loanProviderType}`);
+                                window.scrollTo({ top: 0, behavior: 'smooth' });
+                              }}
+                              className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors shadow-sm"
+                            >
+                              <Edit2 size={14} />
+                            </button>
+                            <button
+                              onClick={() => handleRemove(rule._id)}
+                              className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors shadow-sm"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )) : (
+                      <tr>
+                        <td colSpan="6" className="px-6 py-12 text-center text-gray-400 text-sm italic">
+                          No loan configurations found for the current selection.
                         </td>
                       </tr>
                     )}
@@ -295,33 +1206,37 @@ export default function LoanSetting() {
           </div>
         </div>
 
-        {/* Bottom Actions */}
-        <div className="flex justify-end space-x-3">
-          <button
+        <div className="mt-8 mb-12 flex justify-end items-center space-x-3 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm animate-in fade-in slide-in-from-bottom-4">
+          <div className="mr-auto">
+            <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest">Finalize Configuration</h4>
+            <p className="text-[10px] text-gray-500 font-medium">All changes will be applied to the selected hierarchy.</p>
+          </div>
+          <button 
             onClick={handleReset}
-            className="px-6 py-2 bg-gray-500 text-white rounded font-bold hover:bg-gray-600 transition-all flex items-center shadow-md"
+            className="flex items-center px-6 py-2.5 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm"
           >
-            <RotateCcw size={18} className="mr-2" /> Reset
+            <RotateCcw size={16} className="mr-2" />
+            Reset Form
           </button>
-          <button
+          <button 
             onClick={handleSave}
             disabled={saving}
-            className="px-6 py-2 bg-[#007bff] text-white rounded font-bold hover:bg-[#0069d9] transition-all flex items-center shadow-md disabled:bg-blue-300"
+            className="flex items-center px-8 py-2.5 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-50"
           >
-            {saving ? <Loader2 size={18} className="animate-spin mr-2" /> : <Save size={18} className="mr-2" />}
-            Save Settings
+            {saving ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
+            Save All Settings
           </button>
         </div>
-      </div>
 
-      {loading && (
-        <div className="fixed inset-0 bg-white/60 backdrop-blur-[2px] flex items-center justify-center z-[100]">
-          <div className="bg-white p-5 rounded-xl shadow-2xl flex flex-col items-center border border-blue-50">
-            <Loader2 className="w-10 h-10 animate-spin text-blue-500" />
-            <span className="mt-3 text-blue-600 font-bold tracking-wide">Loading Settings...</span>
+        {loading && (
+          <div className="fixed inset-0 bg-white/40 backdrop-blur-[2px] flex items-center justify-center z-[100]">
+            <div className="bg-white p-6 rounded-2xl shadow-xl flex flex-col items-center border border-gray-50">
+              <Loader2 className="w-10 h-10 animate-spin text-blue-600" />
+              <span className="mt-4 text-gray-700 font-bold tracking-wide">Syncing Configurations...</span>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
