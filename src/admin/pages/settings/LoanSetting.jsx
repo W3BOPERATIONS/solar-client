@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Globe, MapPin, LayoutGrid, Building2, ChevronRight, Edit2, Trash2, CheckCircle, RotateCcw, Save, Loader2, AlertCircle, X, Plus } from 'lucide-react';
+import Select from 'react-select';
 import * as settingsApi from '../../../services/settings/settingsApi';
 import * as masterApi from '../../../services/core/masterApi';
 import * as combokitApi from '../../../services/combokit/combokitApi';
@@ -79,7 +80,7 @@ export default function LoanSetting() {
   // Selections
   const [loanProviderType, setLoanProviderType] = useState('NBFC');
   const [orderType, setOrderType] = useState('Combokit');
-  const [selectedCombokit, setSelectedCombokit] = useState('');
+  const [selectedCombokits, setSelectedCombokits] = useState([]);
   const [selectedCustomizedKit, setSelectedCustomizedKit] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [selectedSubCategory, setSelectedSubCategory] = useState('');
@@ -89,7 +90,6 @@ export default function LoanSetting() {
   // Loan Provider Management State
   const [providers, setProviders] = useState([]);
   const [selectedProviderId, setSelectedProviderId] = useState('');
-  const [activeProjectTypeTab, setActiveProjectTypeTab] = useState('Residential');
   const [newProviderName, setNewProviderName] = useState('');
   const [editingProvider, setEditingProvider] = useState(null);
 
@@ -190,9 +190,8 @@ export default function LoanSetting() {
       setCombokits(kits || []);
       setCustomizedKits(assignments.data || assignments || []);
 
-      // Auto-select category based on activeProjectTypeTab if possible
-      const matchingCat = categoryData.find(c => c.name.toLowerCase() === activeProjectTypeTab.toLowerCase());
-      if (matchingCat) setSelectedCategory(matchingCat._id);
+      setCombokits(kits || []);
+      setCustomizedKits(assignments.data || assignments || []);
     } catch (err) {
       console.error('Failed to load master data:', err);
     }
@@ -352,7 +351,7 @@ export default function LoanSetting() {
       arraysEqual((r.states || []), selectedLocation.state) &&
       arraysEqual((r.clusters || []), selectedLocation.cluster) &&
       arraysEqual((r.districts || []), selectedLocation.district) &&
-      (r.combokitId?._id || r.combokitId) === (selectedCombokit || null) &&
+      (selectedCombokits.length === 0 || selectedCombokits.some(c => c.value === (r.combokitId?._id || r.combokitId))) &&
       (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
       (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
       (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
@@ -383,7 +382,7 @@ export default function LoanSetting() {
 
   useEffect(() => {
     updateFormFromCurrentConfig();
-  }, [loanProviderType, orderType, selectedLocation, selectedCombokit, selectedCustomizedKit, selectedCategory, selectedSubCategory, selectedProjectType, selectedSubProjectType, loanRules]);
+  }, [loanProviderType, orderType, selectedLocation, selectedCombokits, selectedCustomizedKit, selectedCategory, selectedSubCategory, selectedProjectType, selectedSubProjectType, loanRules]);
 
   const handleCheckboxChange = (fieldId) => {
     setFormFields(prev => {
@@ -445,7 +444,7 @@ export default function LoanSetting() {
         ranges: formFields[opt.id]?.selected ? (formFields[opt.id]?.ranges || []) : []
       }));
 
-      const payload = {
+      const basePayload = {
         loanProviderType,
         orderType,
         loanProviderId: selectedProviderId || null,
@@ -453,7 +452,6 @@ export default function LoanSetting() {
         states: selectedLocation.state.includes('all') ? [] : selectedLocation.state,
         clusters: selectedLocation.cluster.includes('all') ? [] : selectedLocation.cluster,
         districts: selectedLocation.district.includes('all') ? [] : selectedLocation.district,
-        combokitId: selectedCombokit || null,
         customizedKitId: selectedCustomizedKit || null,
         categoryId: selectedCategory || null,
         subCategoryId: selectedSubCategory || null,
@@ -466,27 +464,34 @@ export default function LoanSetting() {
         maxAmount: 0
       };
 
-      const existingRule = loanRules.find(r =>
-        r.loanProviderType === loanProviderType &&
-        r.orderType === orderType &&
-        (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
-        arraysEqual((r.countries || []), selectedLocation.country) &&
-        arraysEqual((r.states || []), selectedLocation.state) &&
-        arraysEqual((r.clusters || []), selectedLocation.cluster) &&
-        arraysEqual((r.districts || []), selectedLocation.district) &&
-        (r.combokitId?._id || r.combokitId) === (selectedCombokit || null) &&
-        (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
-        (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
-        (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
-        (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
-        (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
-      );
+      const combokitIdsToSave = orderType === 'Combokit' && selectedCombokits.length > 0 
+        ? selectedCombokits.map(c => c.value) 
+        : [null];
 
+      for (const combokitId of combokitIdsToSave) {
+        const payload = { ...basePayload, combokitId };
 
-      if (existingRule) {
-        await settingsApi.updateLoanRule(existingRule._id, payload);
-      } else {
-        await settingsApi.createLoanRule(payload);
+        const existingRule = loanRules.find(r =>
+          r.loanProviderType === loanProviderType &&
+          r.orderType === orderType &&
+          (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
+          arraysEqual((r.countries || []), selectedLocation.country) &&
+          arraysEqual((r.states || []), selectedLocation.state) &&
+          arraysEqual((r.clusters || []), selectedLocation.cluster) &&
+          arraysEqual((r.districts || []), selectedLocation.district) &&
+          (r.combokitId?._id || r.combokitId) === (combokitId || null) &&
+          (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
+          (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
+          (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
+          (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
+          (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
+        );
+
+        if (existingRule) {
+          await settingsApi.updateLoanRule(existingRule._id, payload);
+        } else {
+          await settingsApi.createLoanRule(payload);
+        }
       }
 
       setSuccess('Settings saved successfully');
@@ -698,30 +703,9 @@ export default function LoanSetting() {
           )}
         </div>
 
-        {/* Project Type Tabs & Provider Management */}
+        {/* Provider Management */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden mb-8">
-          <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-            <div className="flex items-center space-x-6">
-              <h3 className="text-sm font text-gray-500 uppercase tracking-widest">Project Types</h3>
-              <div className="flex bg-white p-1 rounded-xl border border-gray-200 shadow-sm">
-                {['Residential', 'Commercial'].map((type) => (
-                  <button
-                    key={type}
-                    onClick={() => {
-                      setActiveProjectTypeTab(type);
-                      const matchingCat = categories.find(c => c.name.toLowerCase() === type.toLowerCase());
-                      if (matchingCat) setSelectedCategory(matchingCat._id);
-                    }}
-                    className={`px-6 py-1.5 rounded-lg text-xs font-bold transition-all duration-200 ${activeProjectTypeTab === type
-                      ? 'bg-blue-600 text-white shadow-md'
-                      : 'text-gray-500 hover:bg-gray-50'
-                      }`}
-                  >
-                    {type}
-                  </button>
-                ))}
-              </div>
-            </div>
+          <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 flex justify-end items-center">
 
             <div className="flex items-center space-x-3">
               <div className="relative group">
@@ -827,14 +811,27 @@ export default function LoanSetting() {
               {orderType === 'Combokit' && (
                 <div className="flex flex-col space-y-2">
                   <label className="text-sm font-bold text-gray-600">Select Combokit</label>
-                  <select
-                    value={selectedCombokit}
-                    onChange={(e) => setSelectedCombokit(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                  >
-                    <option value="">All Combokits</option>
-                    {combokits.map(kit => <option key={kit._id} value={kit._id}>{kit.name}</option>)}
-                  </select>
+                  <Select
+                    isMulti
+                    value={selectedCombokits}
+                    onChange={(selected) => setSelectedCombokits(selected)}
+                    options={combokits.map(kit => ({ value: kit._id, label: kit.name }))}
+                    className="text-xs font-bold shadow-sm"
+                    classNamePrefix="select"
+                    placeholder="Select Combokits..."
+                    styles={{
+                      control: (base) => ({
+                        ...base,
+                        borderRadius: '0.75rem',
+                        borderColor: '#e5e7eb',
+                        padding: '2px',
+                        boxShadow: 'none',
+                        '&:hover': {
+                          borderColor: '#3b82f6'
+                        }
+                      })
+                    }}
+                  />
                 </div>
               )}
 
@@ -1154,9 +1151,8 @@ export default function LoanSetting() {
                                 setSelectedSubCategory(rule.subCategoryId?._id || rule.subCategoryId || '');
                                 setSelectedProjectType(rule.projectType || '');
                                 setSelectedSubProjectType(rule.subProjectTypeId?._id || rule.subProjectTypeId || '');
-                                setSelectedCombokit(rule.combokitId?._id || rule.combokitId || '');
+                                setSelectedCombokits(rule.combokitId ? [{ value: rule.combokitId._id || rule.combokitId, label: rule.combokitId.name || 'Selected Combokit' }] : []);
                                 setSelectedCustomizedKit(rule.customizedKitId?._id || rule.customizedKitId || '');
-                                if (rule.projectType) setActiveProjectTypeTab(rule.projectType);
 
                                 // Restore Location Hierarchy
                                 setSelectedLocation({
