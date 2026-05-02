@@ -43,8 +43,10 @@ export const deletePartnerPlan = async (id) => {
 };
 
 // Partner Rewards
-export const getPartnerRewards = async (partnerType) => {
-    const params = partnerType ? { partnerType } : {};
+export const getPartnerRewards = async (partnerType, plan) => {
+    const params = {};
+    if (partnerType) params.partnerType = partnerType;
+    if (plan) params.plan = plan;
     const res = await api.get('/partner-settings/rewards', { params });
     return res.data;
 };
@@ -73,16 +75,21 @@ export const createPartnerGoal = async (data) => {
     const res = await api.post('/partner-settings/goals', data);
     return res.data;
 };
+export const updatePartnerGoal = async (id, data) => {
+    const res = await api.put(`/partner-settings/goals/${id}`, data);
+    return res.data;
+};
 export const deletePartnerGoal = async (id) => {
     const res = await api.delete(`/partner-settings/goals/${id}`);
     return res.data;
 };
 
 // Partner Professions
-export const getPartnerProfessions = async (partnerType, stateId) => {
+export const getPartnerProfessions = async (partnerType, stateId, plan) => {
     const params = {};
     if (partnerType) params.partnerType = partnerType;
     if (stateId) params.stateId = stateId;
+    if (plan) params.plan = plan;
     const res = await api.get('/partner-settings/professions', { params });
     return res.data;
 };

@@ -1,6 +1,9 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getPartnerPlans, createPartnerPlan, updatePartnerPlan, deletePartnerPlan, getPartners } from '../../../../services/partner/partnerApi';
 import { getStates, getCountries, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
+import { getCategories, getSubCategories, getProjectTypes, getSubProjectTypes } from '../../../../services/core/masterApi';
+import { productApi } from '../../../../api/productApi';
+import { getQuoteSettings } from '../../../../services/quote/quoteApi';
 import {
     Rocket,
     Layers,
@@ -26,9 +29,12 @@ import {
     Edit,
     Globe,
     Star,
-    MessageSquare
+    MessageSquare,
+    ChevronDown,
+    Truck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getVendorDeliveryPlans } from '../../../../services/delivery/deliveryApi';
 
 export default function PartnerPlans() {
     const [loading, setLoading] = useState(true);
@@ -38,16 +44,59 @@ export default function PartnerPlans() {
     const [clusters, setClusters] = useState([]);
     const [districts, setDistricts] = useState([]);
 
-    const [selectedPartnerType, setSelectedPartnerType] = useState('');
-    const [selectedCountryId, setSelectedCountryId] = useState('');
-    const [selectedStateId, setSelectedStateId] = useState('');
-    const [selectedClusterId, setSelectedClusterId] = useState('');
-    const [selectedDistrictId, setSelectedDistrictId] = useState('');
+    const [selectedPartnerTypes, setSelectedPartnerTypes] = useState([]);
+    const [selectedCountryIds, setSelectedCountryIds] = useState([]);
+    const [selectedStateIds, setSelectedStateIds] = useState([]);
+    const [selectedClusterIds, setSelectedClusterIds] = useState([]);
+    const [selectedDistrictIds, setSelectedDistrictIds] = useState([]);
+
+    const handleToggleSelection = (list, setList, id) => {
+        if (list.includes(id)) {
+            setList(list.filter(item => item !== id));
+        } else {
+            setList([...list, id]);
+        }
+    };
     const [plans, setPlans] = useState([]);
+    const [globalPlans, setGlobalPlans] = useState([]);
     const [selectedPlanId, setSelectedPlanId] = useState(null);
     const [showAddPlanModal, setShowAddPlanModal] = useState(false);
 
     // Initial Form State Template directly mapped to generic Schema
+    const [masterCategories, setMasterCategories] = useState([]);
+    const [masterSubCategories, setMasterSubCategories] = useState([]);
+    const [masterProjectTypes, setMasterProjectTypes] = useState([]);
+    const [masterSubProjectTypes, setMasterSubProjectTypes] = useState([]);
+    const [masterMappings, setMasterMappings] = useState([]);
+    const [masterQuoteSettings, setMasterQuoteSettings] = useState([]);
+    const [masterDeliveryPlans, setMasterDeliveryPlans] = useState([]);
+    const [activeDropdown, setActiveDropdown] = useState(null); 
+
+    const dropdownRef = useRef(null);
+
+    // Close dropdown on outside click or ESC key
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setActiveDropdown(null);
+            }
+        };
+
+        const handleEscKey = (event) => {
+            if (event.key === 'Escape') {
+                setActiveDropdown(null);
+            }
+        };
+
+        document.addEventListener('mousedown', handleClickOutside);
+        document.addEventListener('keydown', handleEscKey);
+        
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+            document.removeEventListener('keydown', handleEscKey);
+        };
+    }, []);
+
     const initialFormState = {
         name: '',
         description: '',
@@ -67,11 +116,22 @@ export default function PartnerPlans() {
         config: {
             kyc: { aadhar: true, pan: true, gst: false, verifiedPartner: false, notVerifiedPartner: true },
             eligibility: { kyc: true, agreement: true, depositCheque: true, gstRequired: false, gstAmount: '', depositAmount: '', noCashback: false },
-            coverage: { area: '1 District', city: true, district: true, cluster: false, state: false },
-            user: { sales: true, admin: true, leadPartner: true, service: true, userLimit: 10, noSublogin: false },
-            category: { upto3kw: true, threeTo10kw: true, tenTo100kw: false, above100kw: false, above200kw: false, residential: true, commercial: true, onGrid: true, offGrid: false, hybrid: false },
+            coverage: { area: '1 District', city: true, district: true, cluster: false, state: false, accessApp: true, accessCrm: true },
+            user: { 
+                sales: true, salesLimit: 10,
+                admin: true, adminLimit: 10,
+                leadPartner: true, leadPartnerLimit: 10,
+                service: true, serviceLimit: 10,
+                noSublogin: false 
+            },
+            category: [],
+            subCategory: [],
+            projectType: [],
+            subProjectType: [],
             features: { adminApp: true, adminCrm: false, userApp: true, leadPartner: true, districtManager: false, appSubUser: false, crmLeadManagement: true, assignLead: true, crmKnowMargin: true, crmSurveyBom: true, crmInstall: true, crmService: false, crmProjectManagement: false, crmAmcPlan: false },
             quote: { quickQuote: true, surveyQuote: true, generationGraph: false, addons: false, projectSignupLimit: '', deliveryType: '' },
+            quoteSettings: [],
+            deliveryPlans: [],
             fees: { signupFees: '', installerCharges: '', sdAmountCheque: '', upgradeFees: '', directUpgradeFees: '' },
             incentive: { yearlyTarget: '', cashbackPerKw: '', totalIncentive: '' },
             commissions: []
@@ -89,18 +149,47 @@ export default function PartnerPlans() {
     const fetchInitialData = async () => {
         try {
             setLoading(true);
-            const [partnersData, countriesData] = await Promise.all([
+            const [partnersData, countriesData, catData, subCatData, subTypeData, mappingRes, quoteRes, deliveryRes, allPlansRes] = await Promise.all([
                 getPartners(),
-                getCountries()
+                getCountries(),
+                getCategories(),
+                getSubCategories(),
+                getSubProjectTypes(),
+                productApi.getProjectCategoryMappings(),
+                getQuoteSettings(),
+                getVendorDeliveryPlans(),
+                getPartnerPlans() // Fetch all plans initially for global counting
             ]);
             setPartners(partnersData);
             setCountries(countriesData);
+            setMasterCategories(catData.data || catData);
+            setMasterSubCategories(subCatData.data || subCatData);
+            setMasterSubProjectTypes(subTypeData.data || subTypeData);
+            setMasterQuoteSettings(quoteRes?.data || quoteRes || []);
+            setMasterDeliveryPlans(deliveryRes?.data || deliveryRes || []);
+            setGlobalPlans(allPlansRes || []);
+
+            // Store raw mappings for dependent filtering
+            const mappings = mappingRes?.data?.data || mappingRes?.data || [];
+            setMasterMappings(mappings);
+
+            // Process Mappings to get initial kW ranges (will be filtered later)
+            const uniqueRanges = [];
+            const seenRanges = new Set();
+            mappings.forEach(m => {
+                const rangeLabel = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                if (!seenRanges.has(rangeLabel)) {
+                    seenRanges.add(rangeLabel);
+                    uniqueRanges.push({ _id: rangeLabel, name: rangeLabel });
+                }
+            });
+            setMasterProjectTypes(uniqueRanges);
 
             if (partnersData.length > 0) {
-                setSelectedPartnerType(partnersData[0].name);
+                setSelectedPartnerTypes([partnersData[0].name]);
             }
             if (countriesData.length > 0) {
-                setSelectedCountryId(countriesData[0]._id);
+                setSelectedCountryIds([countriesData[0]._id]);
             }
         } catch (error) {
             console.error('Error fetching initial data:', error);
@@ -112,14 +201,14 @@ export default function PartnerPlans() {
 
     // Cascading: Fetch States when Country changes
     useEffect(() => {
-        if (selectedCountryId) {
+        if (selectedCountryIds.length > 0) {
             const fetchStatesForCountry = async () => {
                 try {
-                    const data = await getStates({ countryId: selectedCountryId });
+                    const data = await getStates({ countryId: selectedCountryIds.join(',') });
                     setStates(data);
-                    setSelectedStateId('');
-                    setSelectedClusterId('');
-                    setSelectedDistrictId('');
+                    setSelectedStateIds([]);
+                    setSelectedClusterIds([]);
+                    setSelectedDistrictIds([]);
                 } catch (error) {
                     console.error('Error fetching states:', error);
                 }
@@ -127,18 +216,21 @@ export default function PartnerPlans() {
             fetchStatesForCountry();
         } else {
             setStates([]);
+            setSelectedStateIds([]);
+            setSelectedClusterIds([]);
+            setSelectedDistrictIds([]);
         }
-    }, [selectedCountryId]);
+    }, [selectedCountryIds]);
 
     // Cascading: Fetch Clusters when State changes
     useEffect(() => {
-        if (selectedStateId) {
+        if (selectedStateIds.length > 0) {
             const fetchClustersForState = async () => {
                 try {
-                    const data = await getClustersHierarchy(selectedStateId);
+                    const data = await getClustersHierarchy(selectedStateIds.join(','));
                     setClusters(data);
-                    setSelectedClusterId('');
-                    setSelectedDistrictId('');
+                    setSelectedClusterIds([]);
+                    setSelectedDistrictIds([]);
                 } catch (error) {
                     console.error('Error fetching clusters:', error);
                 }
@@ -146,17 +238,19 @@ export default function PartnerPlans() {
             fetchClustersForState();
         } else {
             setClusters([]);
+            setSelectedClusterIds([]);
+            setSelectedDistrictIds([]);
         }
-    }, [selectedStateId]);
+    }, [selectedStateIds]);
 
     // Cascading: Fetch Districts when Cluster changes
     useEffect(() => {
-        if (selectedClusterId) {
+        if (selectedClusterIds.length > 0) {
             const fetchDistrictsForCluster = async () => {
                 try {
-                    const data = await getDistrictsHierarchy(selectedClusterId);
+                    const data = await getDistrictsHierarchy(selectedClusterIds.join(','));
                     setDistricts(data);
-                    setSelectedDistrictId('');
+                    setSelectedDistrictIds([]);
                 } catch (error) {
                     console.error('Error fetching districts:', error);
                 }
@@ -164,35 +258,74 @@ export default function PartnerPlans() {
             fetchDistrictsForCluster();
         } else {
             setDistricts([]);
+            setSelectedDistrictIds([]);
         }
-    }, [selectedClusterId]);
+    }, [selectedClusterIds]);
 
     // Fetch Plans when any filter changes
     useEffect(() => {
-        if (selectedPartnerType) {
+        if (selectedPartnerTypes.length > 0) {
             fetchPlans();
         } else {
             setPlans([]);
             setSelectedPlanId(null);
             setFormData(initialFormState);
         }
-    }, [selectedPartnerType, selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId]);
+    }, [selectedPartnerTypes, selectedCountryIds, selectedStateIds, selectedClusterIds, selectedDistrictIds]);
+
+    const getPlanCount = (category, value) => {
+        // Filter global plans by OTHER categories to get context-aware count
+        let filtered = globalPlans;
+        
+        if (category !== 'partnerType' && selectedPartnerTypes.length > 0) {
+            filtered = filtered.filter(p => p.partnerType?.some(t => selectedPartnerTypes.includes(t)));
+        }
+        if (category !== 'country' && selectedCountryIds.length > 0) {
+            filtered = filtered.filter(p => p.country?.some(id => selectedCountryIds.includes(id._id || id)));
+        }
+        if (category !== 'state' && selectedStateIds.length > 0) {
+            filtered = filtered.filter(p => p.state?.some(id => selectedStateIds.includes(id._id || id)));
+        }
+        if (category !== 'cluster' && selectedClusterIds.length > 0) {
+            filtered = filtered.filter(p => p.cluster?.some(id => selectedClusterIds.includes(id._id || id)));
+        }
+        if (category !== 'district' && selectedDistrictIds.length > 0) {
+            filtered = filtered.filter(p => p.district?.some(id => selectedDistrictIds.includes(id._id || id)));
+        }
+
+        // Finally count occurrences of the current value
+        return filtered.filter(p => {
+            const field = p[category];
+            if (!field) return false;
+            if (Array.isArray(field)) {
+                return field.some(v => (v._id || v) === value);
+            }
+            return (field._id || field) === value;
+        }).length;
+    };
 
     const fetchPlans = async () => {
         try {
             setLoading(true);
-            const data = await getPartnerPlans(
-                selectedPartnerType, 
-                selectedStateId, 
-                selectedCountryId, 
-                selectedClusterId, 
-                selectedDistrictId
-            );
+            
+            // Fetch both filtered and global plans
+            const [filteredData, allPlansRes] = await Promise.all([
+                getPartnerPlans(
+                    selectedPartnerTypes.join(','), 
+                    selectedStateIds.join(','), 
+                    selectedCountryIds.join(','), 
+                    selectedClusterIds.join(','), 
+                    selectedDistrictIds.join(',')
+                ),
+                getPartnerPlans() // Refresh global list for counts
+            ]);
+
+            setGlobalPlans(allPlansRes || []);
             
             // Safety filter: Deduplicate by name if backend has legacy duplicates
             const uniqueData = [];
             const seenNames = new Set();
-            data.forEach(plan => {
+            (filteredData || []).forEach(plan => {
                 if (!seenNames.has(plan.name)) {
                     seenNames.add(plan.name);
                     uniqueData.push(plan);
@@ -309,17 +442,17 @@ export default function PartnerPlans() {
     };
 
     const handleSave = async (e) => {
-        e.preventDefault();
+        if (e && e.preventDefault) e.preventDefault();
         try {
             setLoading(true);
             if (selectedPlanId) {
                 await updatePartnerPlan(selectedPlanId, { 
                     ...formData, 
-                    partnerType: selectedPartnerType, 
-                    country: selectedCountryId,
-                    state: selectedStateId,
-                    cluster: selectedClusterId,
-                    district: selectedDistrictId
+                    partnerType: selectedPartnerTypes, 
+                    country: selectedCountryIds,
+                    state: selectedStateIds,
+                    cluster: selectedClusterIds,
+                    district: selectedDistrictIds
                 });
                 toast.success('Plan updated successfully');
                 fetchPlans(); // Refresh
@@ -338,11 +471,11 @@ export default function PartnerPlans() {
                 ...initialFormState,
                 name: formData.name || 'New Plan',
                 price: parseFloat(formData.price) || 0,
-                partnerType: selectedPartnerType,
-                country: selectedCountryId,
-                state: selectedStateId,
-                cluster: selectedClusterId,
-                district: selectedDistrictId
+                partnerType: selectedPartnerTypes,
+                country: selectedCountryIds,
+                state: selectedStateIds,
+                cluster: selectedClusterIds,
+                district: selectedDistrictIds
             };
             await createPartnerPlan(newPlan);
             toast.success('Plan created successfully');
@@ -410,24 +543,33 @@ export default function PartnerPlans() {
                 <div>
                     <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1">Select Partner Type</h2>
                     <div className="flex flex-wrap gap-4">
-                        {partners.map((partner) => (
-                            <div
-                                key={partner._id}
-                                onClick={() => setSelectedPartnerType(partner.name)}
-                                className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[150px] transition-all bg-white border ${
-                                    selectedPartnerType === partner.name
-                                        ? 'border-blue-500 text-blue-600 font-bold ring-1 ring-blue-500'
-                                        : 'border-gray-200 text-gray-600 hover:border-blue-300'
-                                }`}
-                            >
-                                {partner.name}
-                            </div>
-                        ))}
+                        {partners.map((partner) => {
+                            const isSelected = selectedPartnerTypes.includes(partner.name);
+                            const selectionIndex = selectedPartnerTypes.indexOf(partner.name);
+                            return (
+                                <div
+                                    key={partner._id}
+                                    onClick={() => handleToggleSelection(selectedPartnerTypes, setSelectedPartnerTypes, partner.name)}
+                                    className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[150px] transition-all bg-white border ${
+                                        isSelected
+                                            ? 'border-blue-500 text-blue-600 font-bold ring-1 ring-blue-500 bg-blue-50'
+                                            : 'border-gray-200 text-gray-600 hover:border-blue-300'
+                                    }`}
+                                >
+                                    {getPlanCount('partnerType', partner.name) > 0 && (
+                                        <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-md z-10 animate-in zoom-in duration-200">
+                                            {getPlanCount('partnerType', partner.name)}
+                                        </div>
+                                    )}
+                                    {partner.name}
+                                </div>
+                            );
+                        })}
                     </div>
                 </div>
 
                 {/* 2. Location Cascade Selection */}
-                {selectedPartnerType && (
+                {selectedPartnerTypes.length > 0 && (
                     <div className="pt-2 space-y-6">
                         {/* Country Selection */}
                         <div>
@@ -435,53 +577,71 @@ export default function PartnerPlans() {
                                 <Globe className="w-5 h-5 text-blue-600" /> Select Country
                             </h2>
                             <div className="flex flex-wrap gap-4">
-                                {countries.map((country) => (
-                                    <div
-                                        key={country._id}
-                                        onClick={() => setSelectedCountryId(prev => prev === country._id ? '' : country._id)}
-                                        className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
-                                            selectedCountryId === country._id
-                                                ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                                                : 'border-gray-200 hover:border-blue-300'
-                                        }`}
-                                    >
-                                        <div className={`font-bold text-lg ${selectedCountryId === country._id ? 'text-blue-600' : 'text-gray-800'}`}>
-                                            {country.name}
+                                {countries.map((country) => {
+                                    const isSelected = selectedCountryIds.includes(country._id);
+                                    const selectionIndex = selectedCountryIds.indexOf(country._id);
+                                    return (
+                                        <div
+                                            key={country._id}
+                                            onClick={() => handleToggleSelection(selectedCountryIds, setSelectedCountryIds, country._id)}
+                                            className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                                                isSelected
+                                                    ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                    : 'border-gray-200 hover:border-blue-300'
+                                            }`}
+                                        >
+                                            {getPlanCount('country', country._id) > 0 && (
+                                                <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md z-10 animate-in zoom-in duration-200">
+                                                    {getPlanCount('country', country._id)}
+                                                </div>
+                                            )}
+                                            <div className={`font-bold text-lg ${isSelected ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                {country.name}
+                                            </div>
+                                            <div className="text-gray-500 text-sm mt-1 uppercase tracking-wider">
+                                                {country.code || country.name.substring(0, 3).toUpperCase()}
+                                            </div>
                                         </div>
-                                        <div className="text-gray-500 text-sm mt-1 uppercase tracking-wider">
-                                            {country.code || country.name.substring(0, 3).toUpperCase()}
-                                        </div>
-                                    </div>
-                                ))}
+                                    );
+                                })}
                             </div>
                         </div>
 
                         {/* State Selection */}
-                        {selectedCountryId && (
+                        {selectedCountryIds.length > 0 && (
                             <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                 <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
                                     <MapPin className="w-5 h-5 text-blue-600" /> Select State
                                 </h2>
                                 <div className="flex flex-wrap gap-4">
                                     {states.length > 0 ? (
-                                        states.map((state) => (
-                                            <div
-                                                key={state._id}
-                                                onClick={() => setSelectedStateId(prev => prev === state._id ? '' : state._id)}
-                                                className={`cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
-                                                    selectedStateId === state._id
-                                                        ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                                                        : 'border-gray-200 hover:border-blue-300'
-                                                }`}
-                                            >
-                                                <div className={`font-bold text-lg ${selectedStateId === state._id ? 'text-blue-600' : 'text-gray-800'}`}>
-                                                    {state.name}
+                                        states.map((state) => {
+                                            const isSelected = selectedStateIds.includes(state._id);
+                                            const selectionIndex = selectedStateIds.indexOf(state._id);
+                                            return (
+                                                <div
+                                                    key={state._id}
+                                                    onClick={() => handleToggleSelection(selectedStateIds, setSelectedStateIds, state._id)}
+                                                    className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
+                                                        isSelected
+                                                            ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                            : 'border-gray-200 hover:border-blue-300'
+                                                    }`}
+                                                >
+                                                    {getPlanCount('state', state._id) > 0 && (
+                                                        <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md z-10 animate-in zoom-in duration-200">
+                                                            {getPlanCount('state', state._id)}
+                                                        </div>
+                                                    )}
+                                                    <div className={`font-bold text-lg ${isSelected ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                        {state.name}
+                                                    </div>
+                                                    <div className="text-gray-500 text-sm mt-1 uppercase">
+                                                        {state.code || state.name.substring(0, 2).toUpperCase()}
+                                                    </div>
                                                 </div>
-                                                <div className="text-gray-500 text-sm mt-1 uppercase">
-                                                    {state.code || state.name.substring(0, 2).toUpperCase()}
-                                                </div>
-                                            </div>
-                                        ))
+                                            );
+                                        })
                                     ) : (
                                         <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed w-full max-w-sm">
                                             No states found for this country
@@ -493,28 +653,37 @@ export default function PartnerPlans() {
 
                         <div className="flex flex-col gap-6">
                             {/* Cluster Selection */}
-                            {selectedStateId && (
+                            {selectedStateIds.length > 0 && (
                                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                     <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
                                         <Layers className="w-5 h-5 text-blue-600" /> Select Cluster
                                     </h2>
                                     <div className="flex flex-wrap gap-3">
                                         {clusters.length > 0 ? (
-                                            clusters.map((cluster) => (
-                                                <div
-                                                    key={cluster._id}
-                                                    onClick={() => setSelectedClusterId(prev => prev === cluster._id ? '' : cluster._id)}
-                                                    className={`cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
-                                                        selectedClusterId === cluster._id
-                                                            ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                                                            : 'border-gray-200 hover:border-blue-300'
-                                                    }`}
-                                                >
-                                                    <div className={`font-bold ${selectedClusterId === cluster._id ? 'text-blue-600' : 'text-gray-800'}`}>
-                                                        {cluster.name || cluster.clusterName || 'Unnamed'}
+                                            clusters.map((cluster) => {
+                                                const isSelected = selectedClusterIds.includes(cluster._id);
+                                                const selectionIndex = selectedClusterIds.indexOf(cluster._id);
+                                                return (
+                                                    <div
+                                                        key={cluster._id}
+                                                        onClick={() => handleToggleSelection(selectedClusterIds, setSelectedClusterIds, cluster._id)}
+                                                        className={`relative cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                                                            isSelected
+                                                                ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                                : 'border-gray-200 hover:border-blue-300'
+                                                        }`}
+                                                    >
+                                                        {getPlanCount('cluster', cluster._id) > 0 && (
+                                                            <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md z-10 animate-in zoom-in duration-200">
+                                                                {getPlanCount('cluster', cluster._id)}
+                                                            </div>
+                                                        )}
+                                                        <div className={`font-bold ${isSelected ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                            {cluster.name || cluster.clusterName || 'Unnamed'}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         ) : (
                                             <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed text-sm w-full max-w-sm">
                                                 No clusters found for this state
@@ -525,28 +694,37 @@ export default function PartnerPlans() {
                             )}
 
                             {/* District Selection */}
-                            {selectedClusterId && (
+                            {selectedClusterIds.length > 0 && (
                                 <div className="animate-in fade-in slide-in-from-top-2 duration-300">
                                     <h2 className="text-lg font-bold text-gray-800 mb-3 ml-1 flex items-center gap-2">
                                         <Target className="w-5 h-5 text-blue-600" /> Select District
                                     </h2>
                                     <div className="flex flex-wrap gap-3">
                                         {districts.length > 0 ? (
-                                            districts.map((district) => (
-                                                <div
-                                                    key={district._id}
-                                                    onClick={() => setSelectedDistrictId(prev => prev === district._id ? '' : district._id)}
-                                                    className={`cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
-                                                        selectedDistrictId === district._id
-                                                            ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
-                                                            : 'border-gray-200 hover:border-blue-300'
-                                                    }`}
-                                                >
-                                                    <div className={`font-bold ${selectedDistrictId === district._id ? 'text-blue-600' : 'text-gray-800'}`}>
-                                                        {district.name || district.districtName || 'Unnamed'}
+                                            districts.map((district) => {
+                                                const isSelected = selectedDistrictIds.includes(district._id);
+                                                const selectionIndex = selectedDistrictIds.indexOf(district._id);
+                                                return (
+                                                    <div
+                                                        key={district._id}
+                                                        onClick={() => handleToggleSelection(selectedDistrictIds, setSelectedDistrictIds, district._id)}
+                                                        className={`relative cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
+                                                            isSelected
+                                                                ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
+                                                                : 'border-gray-200 hover:border-blue-300'
+                                                        }`}
+                                                    >
+                                                        {getPlanCount('district', district._id) > 0 && (
+                                                            <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shadow-md z-10 animate-in zoom-in duration-200">
+                                                                {getPlanCount('district', district._id)}
+                                                            </div>
+                                                        )}
+                                                        <div className={`font-bold ${isSelected ? 'text-blue-600' : 'text-gray-800'}`}>
+                                                            {district.name || district.districtName || 'Unnamed'}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))
+                                                );
+                                            })
                                         ) : (
                                             <div className="bg-gray-100/50 rounded-xl p-4 text-center text-gray-400 border border-dashed text-sm w-full max-w-sm">
                                                 No districts found for this cluster
@@ -558,16 +736,37 @@ export default function PartnerPlans() {
                         </div>
                     </div>
                 )}
+                {selectedPartnerTypes.length > 0 && (
+                    <div className="mt-8 bg-blue-50/50 border border-blue-100 rounded-2xl p-4 flex items-center gap-3 animate-in fade-in slide-in-from-top-2">
+                        <div className="bg-blue-600 p-2 rounded-lg text-white">
+                            <Building2 className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Selected Partner Types ({selectedPartnerTypes.length})</p>
+                            <p className="text-sm font-bold text-gray-700">{selectedPartnerTypes.join(', ')}</p>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            {loading && partners.length > 0 ? (
-                <div className="flex justify-center p-8"><Loader className="animate-spin text-blue-600 w-8 h-8" /></div>
-            ) : (!selectedPartnerType) ? (
-                <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-dashed text-lg font-medium flex flex-col items-center justify-center min-h-[200px]">
-                    <Rocket className="w-12 h-12 text-gray-300 mb-4" />
-                    Please select a Partner Type to view and configure plans.
-                </div>
-            ) : (
+            <div className="p-8">
+                {/* 3. Plans Selection and Configuration Section */}
+                {loading && partners.length > 0 ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-gray-100 shadow-sm">
+                        <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mb-4"></div>
+                        <p className="text-gray-500 font-bold">Fetching Partner Plans...</p>
+                    </div>
+                ) : (selectedPartnerTypes.length === 0) ? (
+                    <div className="flex flex-col items-center justify-center py-20 bg-white rounded-3xl border border-dashed border-gray-300 shadow-sm animate-in fade-in zoom-in">
+                        <div className="bg-blue-50 p-6 rounded-full mb-6">
+                            <Building2 className="w-12 h-12 text-blue-600" />
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">Select a Partner Type</h3>
+                        <p className="text-gray-500 max-w-xs text-center">
+                            Please choose a partner type from the top to view and configure their available plans.
+                        </p>
+                    </div>
+                ) : (
                 <div className="flex flex-col gap-6">
                     {/* Top Pill Navigation for Plans */}
                     <div className="flex flex-col lg:flex-row items-center justify-start gap-6 border-b border-gray-200 pb-2">
@@ -645,14 +844,11 @@ export default function PartnerPlans() {
                                         { name: 'Coverage & Project Types', id: 'coverage-&-project-types' },
                                         { name: 'User Management', id: 'user-management' },
                                         { name: 'Category Types', id: 'category-types' },
-                                        { name: 'Features', id: 'features' },
+                                        { name: 'CRM Login Modules', id: 'features' },
                                         { name: 'Quote Settings', id: 'quote-settings' },
-                                        { name: 'Fees & Charges', id: 'fees-&-charges' },
+                                        { name: 'Delivery Plans', id: 'fees-&-charges' },
                                         { name: 'Incentive& Targets', id: 'incentive-&-targets' },
-                                        { name: 'Commission Setup', id: 'commission-setup' },
-                                        { name: 'Rewards And Points', id: 'rewards-and-points' },
-                                        { name: 'Training Videos', id: 'training-videos' },
-                                        { name: 'UI & Branding', id: 'ui-branding' }
+                                        { name: 'Training Videos', id: 'training-videos' }
                                     ].map((item) => (
                                         <button
                                             key={item.name}
@@ -667,7 +863,7 @@ export default function PartnerPlans() {
                             </div>
 
                             {/* Center Content Form */}
-                            <div className="w-full lg:w-[62%] bg-white rounded-lg shadow-md border border-gray-200 p-8 space-y-12">
+                            <div className="w-full lg:w-[62%] bg-white rounded-lg shadow-md border border-gray-200 p-8 space-y-12" ref={dropdownRef}>
                                 {/* Plan Header */}
                                 <div className="border-b-2 border-blue-600 pb-4 mb-8 text-left">
                                     <div className="flex justify-between items-center mb-1">
@@ -682,6 +878,52 @@ export default function PartnerPlans() {
                                         </div>
                                     </div>
                                     <p className="text-[#777] font-medium">Configure settings for the {formData.name.toLowerCase()}</p>
+                                    
+                                    {/* CRM Card Branding - Moved from UI & Branding */}
+                                    <div className="mt-6 bg-blue-50/50 p-4 rounded-lg border border-blue-100 flex items-center justify-between gap-6">
+                                        <div className="flex items-center gap-4">
+                                            <div className="flex flex-col">
+                                                <label className="text-[10px] uppercase font-bold text-blue-700 mb-1">Card Theme Color</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="color" 
+                                                        value={formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd'} 
+                                                        onChange={(e) => handleUiChange('headerColor', e.target.value)} 
+                                                        className="w-8 h-8 p-0 border-0 rounded cursor-pointer bg-transparent"
+                                                    />
+                                                    <span className="text-xs font-mono text-gray-600">{formData.ui?.headerColor || '#0078bd'}</span>
+                                                </div>
+                                            </div>
+                                            <div className="w-px h-10 bg-blue-200"></div>
+                                            <div className="flex flex-col">
+                                                <label className="text-[10px] uppercase font-bold text-blue-700 mb-1">Button Color</label>
+                                                <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="color" 
+                                                        value={formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd'} 
+                                                        onChange={(e) => handleUiChange('buttonColor', e.target.value)} 
+                                                        className="w-8 h-8 p-0 border-0 rounded cursor-pointer bg-transparent"
+                                                    />
+                                                    <span className="text-xs font-mono text-gray-600">{formData.ui?.buttonColor || '#0078bd'}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div className="flex flex-col flex-1 max-w-[200px]">
+                                            <label className="text-[10px] uppercase font-bold text-blue-700 mb-1">Card Icon (Lucide Name)</label>
+                                            <div className="flex items-center gap-2">
+                                                    <input 
+                                                        type="text" 
+                                                        placeholder="e.g. Rocket"
+                                                        value={formData.ui?.icon || ''} 
+                                                        onChange={(e) => handleUiChange('icon', e.target.value)} 
+                                                        className="w-full border-blue-200 border rounded px-2 py-1 text-sm bg-white focus:ring-1 focus:ring-blue-400 outline-none"
+                                                    />
+                                            </div>
+                                        </div>
+                                        <div className="bg-white p-2 rounded border border-blue-100 flex items-center gap-2">
+                                            <p className="text-[10px] text-gray-400 italic leading-tight">These colors and icons will be used for plan cards in the Partner CRM.</p>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 {/* Form Sections mapping closely to UI screenshot design */}
@@ -739,11 +981,11 @@ export default function PartnerPlans() {
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <h4 className="font-bold text-gray-800 mb-1 text-sm text-left">Deposit Amount</h4>
-                                                    <input type="text" placeholder="₹ 0" value={formData.config?.eligibility?.depositAmount} onChange={(e) => handleInputChange('eligibility', 'depositAmount', e.target.value)} className="w-full border rounded p-2 text-sm" />
+                                                    <h4 className="font-bold text-gray-800 mb-1 text-sm text-left">Fees Amount</h4>
+                                                    <input type="text" placeholder="₹ 0" value={formData.config?.eligibility?.gstAmount || ''} onChange={(e) => handleInputChange('eligibility', 'gstAmount', e.target.value)} className="w-full border rounded p-2 text-sm" />
                                                 </div>
                                             </div>
-                                            <label className="flex items-center gap-2 pt-2"><input type="checkbox" checked={formData.config?.eligibility?.noCashback} onChange={(e) => handleInputChange('eligibility', 'noCashback', e.target.checked)} className="rounded" /> <span className="text-gray-700 font-bold">No Cashback for this plan</span></label>
+                                            <label className="flex items-center gap-2 pt-2"><input type="checkbox" checked={!!formData.config?.eligibility?.noCashback} onChange={(e) => handleInputChange('eligibility', 'noCashback', e.target.checked)} className="rounded" /> <span className="text-gray-700 font-bold">No Cashback for this plan</span></label>
                                         </div>
                                     </div>
                                 </div>
@@ -756,24 +998,42 @@ export default function PartnerPlans() {
                                     <div className="p-5 grid grid-cols-2 gap-8">
                                         <div>
                                             <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Operation Area</h4>
-                                            <select value={formData.config?.coverage?.area} onChange={(e) => handleInputChange('coverage', 'area', e.target.value)} className="w-full border rounded p-3 mb-4 text-sm">
+                                            <select value={formData.config?.coverage?.area || ''} onChange={(e) => handleInputChange('coverage', 'area', e.target.value)} className="w-full border rounded p-3 mb-4 text-sm">
                                                 <option value="1 District">1 District</option>
                                                 <option value="Whole State">Whole State</option>
                                                 <option value="Multiple Districts">Multiple Districts</option>
                                             </select>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.coverage?.city} onChange={(e) => handleInputChange('coverage', 'city', e.target.checked)} className="rounded" /> <span className="text-gray-700">City Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.coverage?.district} onChange={(e) => handleInputChange('coverage', 'district', e.target.checked)} className="rounded" /> <span className="text-gray-700">District Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.coverage?.cluster} onChange={(e) => handleInputChange('coverage', 'cluster', e.target.checked)} className="rounded" /> <span className="text-gray-700">Cluster Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.coverage?.state} onChange={(e) => handleInputChange('coverage', 'state', e.target.checked)} className="rounded" /> <span className="text-gray-700">State Level</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.city} onChange={(e) => handleInputChange('coverage', 'city', e.target.checked)} className="rounded" /> <span className="text-gray-700">City Level</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.district} onChange={(e) => handleInputChange('coverage', 'district', e.target.checked)} className="rounded" /> <span className="text-gray-700">District Level</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.cluster} onChange={(e) => handleInputChange('coverage', 'cluster', e.target.checked)} className="rounded" /> <span className="text-gray-700">Cluster Level</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.state} onChange={(e) => handleInputChange('coverage', 'state', e.target.checked)} className="rounded" /> <span className="text-gray-700">State Level</span></label>
                                             </div>
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Project Types Allowed</h4>
-                                            <div className="flex flex-wrap gap-2">
-                                                <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded-full text-xs font-bold border border-blue-100">Residential</span>
-                                                <span className="px-3 py-1 bg-green-50 text-green-600 rounded-full text-xs font-bold border border-green-100">Commercial</span>
-                                                <span className="px-3 py-1 bg-yellow-50 text-yellow-600 rounded-full text-xs font-bold border border-yellow-100">Industrial</span>
+                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Access Types (App/CRM/Both)</h4>
+                                            <div className="flex flex-col gap-2">
+                                                <label className="flex items-center gap-2">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={!!formData.config?.coverage?.accessApp} 
+                                                        onChange={(e) => handleInputChange('coverage', 'accessApp', e.target.checked)} 
+                                                        className="rounded" 
+                                                    /> 
+                                                    <span className="text-gray-700 font-medium">App Access</span>
+                                                </label>
+                                                <label className="flex items-center gap-2">
+                                                    <input 
+                                                        type="checkbox" 
+                                                        checked={!!formData.config?.coverage?.accessCrm} 
+                                                        onChange={(e) => handleInputChange('coverage', 'accessCrm', e.target.checked)} 
+                                                        className="rounded" 
+                                                    /> 
+                                                    <span className="text-gray-700 font-medium">CRM Access</span>
+                                                </label>
+                                                <div className="mt-1 text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                                                    {formData.config?.coverage?.accessApp && formData.config?.coverage?.accessCrm ? 'Both Selected' : ''}
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -785,113 +1045,695 @@ export default function PartnerPlans() {
                                         <Users className="w-5 h-5" /> User Management
                                     </div>
                                     <div className="p-5 grid grid-cols-2 gap-8">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Access Controls</h4>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.user?.sales} onChange={(e) => handleInputChange('user', 'sales', e.target.checked)} className="rounded" /> <span className="text-gray-700">Sales Dashboard</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.user?.admin} onChange={(e) => handleInputChange('user', 'admin', e.target.checked)} className="rounded" /> <span className="text-gray-700">Mini Admin Panel</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.user?.leadPartner} onChange={(e) => handleInputChange('user', 'leadPartner', e.target.checked)} className="rounded" /> <span className="text-gray-700">Lead Partner Access</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.user?.service} onChange={(e) => handleInputChange('user', 'service', e.target.checked)} className="rounded" /> <span className="text-gray-700">Service Requests</span></label>
+                                        <div className="col-span-2">
+                                            <div className="flex justify-between items-center mb-4">
+                                                <h4 className="font-bold text-gray-800 text-base">Access Controls & Sub-login Limits</h4>
+                                                <label className="flex items-center gap-2 text-sm font-bold text-red-600">
+                                                    <input type="checkbox" checked={!!formData.config?.user?.noSublogin} onChange={(e) => handleInputChange('user', 'noSublogin', e.target.checked)} className="rounded" /> 
+                                                    Disable All Sub-logins
+                                                </label>
                                             </div>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm text-left">Max Sub-logins</h4>
-                                            <input type="number" value={formData.config?.user?.userLimit} onChange={(e) => handleInputChange('user', 'userLimit', parseInt(e.target.value))} className="w-full border rounded p-2 mb-4 text-sm" />
-                                            <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.user?.noSublogin} onChange={(e) => handleInputChange('user', 'noSublogin', e.target.checked)} className="rounded" /> <span className="text-gray-700 font-bold">Disable Sub-logins</span></label>
-                                        </div>
-                                    </div>
-                                </div>
-
-
-                                {/* Category Types */}
-                                <div id="category-types" className="border rounded-md border-gray-200 overflow-hidden shadow-sm">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold flex items-center gap-2 text-lg text-left">
-                                        <Layers className="w-5 h-5" /> Category Types
-                                    </div>
-                                    <div className="p-5 grid grid-cols-2 gap-8">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Category Selection</h4>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.upto3kw} onChange={(e) => handleInputChange('category', 'upto3kw', e.target.checked)} className="rounded" /> <span className="text-gray-700">Up to 3 KW</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.threeTo10kw} onChange={(e) => handleInputChange('category', 'threeTo10kw', e.target.checked)} className="rounded" /> <span className="text-gray-700">3 KW - 10 KW</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.tenTo100kw} onChange={(e) => handleInputChange('category', 'tenTo100kw', e.target.checked)} className="rounded" /> <span className="text-gray-700">10 KW - 100 KW</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.above100kw} onChange={(e) => handleInputChange('category', 'above100kw', e.target.checked)} className="rounded" /> <span className="text-gray-700">100 KW - 200 KW</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.above200kw} onChange={(e) => handleInputChange('category', 'above200kw', e.target.checked)} className="rounded" /> <span className="text-gray-700">Above 200 KW</span></label>
+                                            
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4 bg-gray-50/50 p-6 rounded-xl border border-gray-100">
+                                                {[
+                                                    { id: 'sales', label: 'CRM sub login', limitKey: 'salesLimit' },
+                                                    { id: 'admin', label: 'App sub login', limitKey: 'adminLimit' },
+                                                    { id: 'leadPartner', label: 'Dealer app login', limitKey: 'leadPartnerLimit' },
+                                                    { id: 'service', label: 'District manager CRM login', limitKey: 'serviceLimit' }
+                                                ].map((item) => (
+                                                    <div key={item.id} className="flex items-center justify-between group">
+                                                        <label className="flex items-center gap-3 cursor-pointer">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                checked={!!formData.config?.user?.[item.id]} 
+                                                                onChange={(e) => handleInputChange('user', item.id, e.target.checked)} 
+                                                                className="w-5 h-5 rounded border-gray-300 text-blue-600 focus:ring-blue-500 transition-all" 
+                                                            /> 
+                                                            <span className={`text-[15px] font-semibold transition-colors ${formData.config?.user?.[item.id] ? 'text-gray-900' : 'text-gray-400'}`}>
+                                                                {item.label}
+                                                            </span>
+                                                        </label>
+                                                        
+                                                        <div className={`flex items-center gap-2 transition-all ${formData.config?.user?.[item.id] ? 'opacity-100' : 'opacity-30 pointer-events-none'}`}>
+                                                            <span className="text-[10px] font-black text-gray-400 uppercase tracking-tighter">Max Limit</span>
+                                                            <input 
+                                                                type="number" 
+                                                                min="0"
+                                                                value={formData.config?.user?.[item.limitKey] || 0} 
+                                                                onChange={(e) => handleInputChange('user', item.limitKey, parseInt(e.target.value) || 0)} 
+                                                                className="w-20 border border-gray-200 rounded-lg p-2 text-center text-sm font-bold bg-white shadow-sm focus:border-blue-500 focus:ring-2 focus:ring-blue-200 transition-all"
+                                                                placeholder="0"
+                                                            />
+                                                        </div>
+                                                    </div>
+                                                ))}
                                             </div>
-                                        </div>
-                                        <div>
-                                            <div className="mb-4">
-                                                <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Project Type</h4>
-                                                <div className="space-y-2">
-                                                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.residential} onChange={(e) => handleInputChange('category', 'residential', e.target.checked)} className="rounded" /> <span className="text-gray-700">Residential</span></label>
-                                                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.commercial} onChange={(e) => handleInputChange('category', 'commercial', e.target.checked)} className="rounded" /> <span className="text-gray-700">Commercial</span></label>
-                                                </div>
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Sub Project Type</h4>
-                                                <div className="space-y-2">
-                                                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.onGrid} onChange={(e) => handleInputChange('category', 'onGrid', e.target.checked)} className="rounded" /> <span className="text-gray-700">On-Grid</span></label>
-                                                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.offGrid} onChange={(e) => handleInputChange('category', 'offGrid', e.target.checked)} className="rounded" /> <span className="text-gray-700">Off-Grid</span></label>
-                                                    <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.category?.hybrid} onChange={(e) => handleInputChange('category', 'hybrid', e.target.checked)} className="rounded" /> <span className="text-gray-700">Hybrid</span></label>
-                                                </div>
-                                            </div>
+                                            <p className="mt-4 text-[11px] text-gray-500 italic">
+                                                * Check the boxes to activate specific sub-login types and set their individual user limits.
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Quote Settings */}
-                                <div id="quote-settings" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
+
+                                {/* Category Types (Dynamic Dropdowns) */}
+                                <div id="category-types" className={`border rounded-md border-gray-200 shadow-sm relative ${activeDropdown && ['category', 'subCategory', 'projectType', 'subProjectType'].includes(activeDropdown) ? 'z-40' : 'z-20'}`}>
+                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold flex items-center gap-2 text-lg text-left rounded-t-md">
+                                        <Layers className="w-5 h-5" /> Category & Project Configuration
+                                    </div>
+                                    <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-8">
+                                        {/* Categories - No dependent filter (Master list) */}
+                                        <div className="space-y-2">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider"><CheckCircle2 className="w-4 h-4 text-blue-600" /> Categories</h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={() => setActiveDropdown(activeDropdown === 'category' ? null : 'category')}
+                                                    className="min-h-[45px] w-full border border-gray-200 rounded-lg p-2 bg-white flex flex-wrap gap-2 items-center cursor-pointer hover:border-blue-300 transition-colors"
+                                                >
+                                                    {Array.isArray(formData.config?.category) && formData.config.category.length > 0 ? (
+                                                        formData.config.category.map(catId => {
+                                                            const cat = masterCategories.find(c => c._id === catId);
+                                                            return (
+                                                                <span key={catId} className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-bold border border-blue-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                    {cat?.name || 'Unknown'}
+                                                                    <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newCats = formData.config.category.filter(id => id !== catId);
+                                                                        handleInputChange('category', null, newCats);
+                                                                        // Reset dependent fields
+                                                                        handleInputChange('subCategory', null, []);
+                                                                        handleInputChange('projectType', null, []);
+                                                                        handleInputChange('subProjectType', null, []);
+                                                                    }} />
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select categories...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'category' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'category' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterCategories.map(cat => {
+                                                            const isSelected = Array.isArray(formData.config?.category) && formData.config.category.includes(cat._id);
+                                                            return (
+                                                                <div 
+                                                                    key={cat._id}
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const current = Array.isArray(formData.config?.category) ? formData.config.category : [];
+                                                                        let newValues;
+                                                                        if (!current.includes(cat._id)) {
+                                                                            newValues = [...current, cat._id];
+                                                                        } else {
+                                                                            newValues = current.filter(id => id !== cat._id);
+                                                                        }
+                                                                        handleInputChange('category', null, newValues);
+                                                                        // Reset dependent fields
+                                                                        handleInputChange('subCategory', null, []);
+                                                                        handleInputChange('projectType', null, []);
+                                                                        handleInputChange('subProjectType', null, []);
+                                                                    }}
+                                                                    className={`px-4 py-2 hover:bg-blue-50 cursor-pointer text-sm font-medium border-b border-gray-50 last:border-0 flex items-center justify-between ${isSelected ? 'bg-blue-50 text-blue-700' : 'text-gray-700'}`}
+                                                                >
+                                                                    {cat.name}
+                                                                    {isSelected && <Check className="w-4 h-4" />}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Sub-Categories (Filtered by Selected Categories) */}
+                                        <div className="space-y-2">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider"><Layers className="w-4 h-4 text-blue-600" /> Sub-Categories</h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={() => {
+                                                        if (!formData.config?.category?.length) {
+                                                            toast.error("Please select a Category first");
+                                                            return;
+                                                        }
+                                                        setActiveDropdown(activeDropdown === 'subCategory' ? null : 'subCategory');
+                                                    }}
+                                                    className={`min-h-[45px] w-full border border-gray-200 rounded-lg p-2 flex flex-wrap gap-2 items-center cursor-pointer transition-colors ${!formData.config?.category?.length ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'bg-white hover:border-green-300'}`}
+                                                >
+                                                    {Array.isArray(formData.config?.subCategory) && formData.config.subCategory.length > 0 ? (
+                                                        formData.config.subCategory.map(subId => {
+                                                            const sub = masterSubCategories.find(s => s._id === subId);
+                                                            return (
+                                                                <span key={subId} className="bg-green-50 text-green-700 px-2.5 py-1 rounded-md text-xs font-bold border border-green-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                    {sub?.name || 'Unknown'}
+                                                                    <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newSubs = formData.config.subCategory.filter(id => id !== subId);
+                                                                        handleInputChange('subCategory', null, newSubs);
+                                                                        // Reset children
+                                                                        handleInputChange('projectType', null, []);
+                                                                        handleInputChange('subProjectType', null, []);
+                                                                    }} />
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select sub-categories...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'subCategory' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'subCategory' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterSubCategories
+                                                            .filter(sub => {
+                                                                // Filter: Only show sub-categories that have mappings with selected categories
+                                                                const selectedCats = formData.config?.category || [];
+                                                                return masterMappings.some(m => 
+                                                                    selectedCats.includes(m.categoryId?._id || m.categoryId) && 
+                                                                    (m.subCategoryId?._id || m.subCategoryId) === sub._id
+                                                                );
+                                                            })
+                                                            .map(sub => {
+                                                                const isSelected = Array.isArray(formData.config?.subCategory) && formData.config.subCategory.includes(sub._id);
+                                                                return (
+                                                                    <div 
+                                                                        key={sub._id}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const current = Array.isArray(formData.config?.subCategory) ? formData.config.subCategory : [];
+                                                                            let newValues;
+                                                                            if (!current.includes(sub._id)) {
+                                                                                newValues = [...current, sub._id];
+                                                                            } else {
+                                                                                newValues = current.filter(id => id !== sub._id);
+                                                                            }
+                                                                            handleInputChange('subCategory', null, newValues);
+                                                                            // Reset children
+                                                                            handleInputChange('projectType', null, []);
+                                                                            handleInputChange('subProjectType', null, []);
+                                                                        }}
+                                                                        className={`px-4 py-2 hover:bg-green-50 cursor-pointer text-sm font-medium border-b border-gray-50 last:border-0 flex items-center justify-between ${isSelected ? 'bg-green-50 text-green-700' : 'text-gray-700'}`}
+                                                                    >
+                                                                        {sub.name}
+                                                                        {isSelected && <Check className="w-4 h-4" />}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Project Types (Filtered by Selected Cat & SubCat) */}
+                                        <div className="space-y-2">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider"><Rocket className="w-4 h-4 text-blue-600" /> Project Types</h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={() => {
+                                                        if (!formData.config?.subCategory?.length) {
+                                                            toast.error("Please select a Sub-Category first");
+                                                            return;
+                                                        }
+                                                        setActiveDropdown(activeDropdown === 'projectType' ? null : 'projectType');
+                                                    }}
+                                                    className={`min-h-[45px] w-full border border-gray-200 rounded-lg p-2 flex flex-wrap gap-2 items-center cursor-pointer transition-colors ${!formData.config?.subCategory?.length ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'bg-white hover:border-purple-300'}`}
+                                                >
+                                                    {Array.isArray(formData.config?.projectType) && formData.config.projectType.length > 0 ? (
+                                                        formData.config.projectType.map(rangeLabel => (
+                                                            <span key={rangeLabel} className="bg-purple-50 text-purple-700 px-2.5 py-1 rounded-md text-xs font-bold border border-purple-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                {rangeLabel}
+                                                                <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                    e.stopPropagation();
+                                                                    const newTypes = formData.config.projectType.filter(id => id !== rangeLabel);
+                                                                    handleInputChange('projectType', null, newTypes);
+                                                                    // Reset children
+                                                                    handleInputChange('subProjectType', null, []);
+                                                                }} />
+                                                            </span>
+                                                        ))
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select project types...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'projectType' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'projectType' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterProjectTypes
+                                                            .filter(type => {
+                                                                // Filter ranges that have mappings with selected Cats and SubCats
+                                                                const selectedCats = formData.config?.category || [];
+                                                                const selectedSubs = formData.config?.subCategory || [];
+                                                                return masterMappings.some(m => {
+                                                                    const mRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                                                                    return selectedCats.includes(m.categoryId?._id || m.categoryId) && 
+                                                                           selectedSubs.includes(m.subCategoryId?._id || m.subCategoryId) &&
+                                                                           mRange === type.name;
+                                                                });
+                                                            })
+                                                            .map(type => {
+                                                                const isSelected = Array.isArray(formData.config?.projectType) && formData.config.projectType.includes(type.name);
+                                                                return (
+                                                                    <div 
+                                                                        key={type.name}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const current = Array.isArray(formData.config?.projectType) ? formData.config.projectType : [];
+                                                                            let newValues;
+                                                                            if (!current.includes(type.name)) {
+                                                                                newValues = [...current, type.name];
+                                                                            } else {
+                                                                                newValues = current.filter(id => id !== type.name);
+                                                                            }
+                                                                            handleInputChange('projectType', null, newValues);
+                                                                            // Reset children
+                                                                            handleInputChange('subProjectType', null, []);
+                                                                        }}
+                                                                        className={`px-4 py-2 hover:bg-purple-50 cursor-pointer text-sm font-medium border-b border-gray-50 last:border-0 flex items-center justify-between ${isSelected ? 'bg-purple-50 text-purple-700' : 'text-gray-700'}`}
+                                                                    >
+                                                                        {type.name}
+                                                                        {isSelected && <Check className="w-4 h-4" />}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        {/* Sub-Project Types (Filtered by All Above) */}
+                                        <div className="space-y-2">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider"><Target className="w-4 h-4 text-blue-600" /> Sub-Project Types</h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={() => {
+                                                        if (!formData.config?.projectType?.length) {
+                                                            toast.error("Please select a Project Type first");
+                                                            return;
+                                                        }
+                                                        setActiveDropdown(activeDropdown === 'subProjectType' ? null : 'subProjectType');
+                                                    }}
+                                                    className={`min-h-[45px] w-full border border-gray-200 rounded-lg p-2 flex flex-wrap gap-2 items-center cursor-pointer transition-colors ${!formData.config?.projectType?.length ? 'bg-gray-50 cursor-not-allowed opacity-60' : 'bg-white hover:border-orange-300'}`}
+                                                >
+                                                    {Array.isArray(formData.config?.subProjectType) && formData.config.subProjectType.length > 0 ? (
+                                                        formData.config.subProjectType.map(stId => {
+                                                            const st = masterSubProjectTypes.find(s => s._id === stId);
+                                                            return (
+                                                                <span key={stId} className="bg-orange-50 text-orange-700 px-2.5 py-1 rounded-md text-xs font-bold border border-orange-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                    {st?.name || 'Unknown'}
+                                                                    <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newSTs = formData.config.subProjectType.filter(id => id !== stId);
+                                                                        handleInputChange('subProjectType', null, newSTs);
+                                                                    }} />
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select sub-project types...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'subProjectType' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'subProjectType' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-48 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterSubProjectTypes
+                                                            .filter(st => {
+                                                                // Filter by Cat, SubCat, and Range
+                                                                const selectedCats = formData.config?.category || [];
+                                                                const selectedSubs = formData.config?.subCategory || [];
+                                                                const selectedRanges = formData.config?.projectType || [];
+                                                                return masterMappings.some(m => {
+                                                                    const mRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                                                                    return selectedCats.includes(m.categoryId?._id || m.categoryId) && 
+                                                                           selectedSubs.includes(m.subCategoryId?._id || m.subCategoryId) &&
+                                                                           selectedRanges.includes(mRange) &&
+                                                                           (m.subProjectTypeId?._id || m.subProjectTypeId) === st._id;
+                                                                });
+                                                            })
+                                                            .map(st => {
+                                                                const isSelected = Array.isArray(formData.config?.subProjectType) && formData.config.subProjectType.includes(st._id);
+                                                                return (
+                                                                    <div 
+                                                                        key={st._id}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const current = Array.isArray(formData.config?.subProjectType) ? formData.config.subProjectType : [];
+                                                                            let newValues;
+                                                                            if (!current.includes(st._id)) {
+                                                                                newValues = [...current, st._id];
+                                                                            } else {
+                                                                                newValues = current.filter(id => id !== st._id);
+                                                                            }
+                                                                            handleInputChange('subProjectType', null, newValues);
+                                                                        }}
+                                                                        className={`px-4 py-2 hover:bg-orange-50 cursor-pointer text-sm font-medium border-b border-gray-50 last:border-0 flex items-center justify-between ${isSelected ? 'bg-orange-50 text-orange-700' : 'text-gray-700'}`}
+                                                                    >
+                                                                        {st.name}
+                                                                        {isSelected && <Check className="w-4 h-4" />}
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="bg-gray-50 p-4 border-t border-gray-100 text-[11px] text-gray-500 italic">
+                                        * Hover over the dropdown fields to select multiple options for each category.
+                                    </div>
+                                </div>
+
+                                {/* Quote Settings - Filtered by Location */}
+                                <div id="quote-settings" className={`border rounded-md border-gray-200 shadow-sm text-left relative ${activeDropdown === 'quoteSettings' ? 'z-30' : 'z-10'}`}>
+                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2 rounded-t-md">
                                         <Settings className="w-5 h-5" /> Quote Settings
                                     </div>
-                                    <div className="p-5 grid grid-cols-2 gap-8">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Customer Quote Type</h4>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.quote?.quickQuote} onChange={(e) => handleInputChange('quote', 'quickQuote', e.target.checked)} className="rounded" /> <span className="text-gray-700">Quick Quote</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.quote?.surveyQuote} onChange={(e) => handleInputChange('quote', 'surveyQuote', e.target.checked)} className="rounded" /> <span className="text-gray-700">Survey Quote</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.quote?.generationGraph} onChange={(e) => handleInputChange('quote', 'generationGraph', e.target.checked)} className="rounded" /> <span className="text-gray-700">Generation Graph</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.quote?.addons} onChange={(e) => handleInputChange('quote', 'addons', e.target.checked)} className="rounded" /> <span className="text-gray-700">Add-ons</span></label>
+                                    <div className="p-6">
+                                        <div className="space-y-2 max-w-xl">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider">
+                                                <Target className="w-4 h-4 text-blue-600" /> Available Quote Configurations
+                                            </h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={() => setActiveDropdown(activeDropdown === 'quoteSettings' ? null : 'quoteSettings')}
+                                                    className="min-h-[45px] w-full border border-gray-200 rounded-lg p-2 bg-white flex flex-wrap gap-2 items-center cursor-pointer hover:border-blue-300 transition-colors"
+                                                >
+                                                    {Array.isArray(formData.config?.quoteSettings) && formData.config.quoteSettings.length > 0 ? (
+                                                        formData.config.quoteSettings.map(qId => {
+                                                            const quote = masterQuoteSettings.find(q => q._id === qId);
+                                                            return (
+                                                                <span key={qId} className="bg-blue-50 text-blue-700 px-2.5 py-1 rounded-md text-xs font-bold border border-blue-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                    {quote?.proposalNo || 'Unnamed Config'}
+                                                                    <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newQuotes = formData.config.quoteSettings.filter(id => id !== qId);
+                                                                        handleInputChange('quoteSettings', null, newQuotes);
+                                                                    }} />
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select quote configurations...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'quoteSettings' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'quoteSettings' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-60 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterQuoteSettings
+                                                            .filter(q => {
+                                                                // Filter by currently selected State or Cluster in the top tabs
+                                                                const stateId = selectedStateIds[0];
+                                                                const clusterId = selectedClusterIds[0];
+                                                                
+                                                                if (!stateId && !clusterId) return true; // Show all if no filter
+                                                                
+                                                                const inState = q.states?.some(s => (s._id || s) === stateId);
+                                                                const inCluster = q.clusters?.some(c => (c._id || c) === clusterId);
+                                                                
+                                                                return inState || inCluster;
+                                                            })
+                                                            .map(quote => {
+                                                                const isSelected = Array.isArray(formData.config?.quoteSettings) && formData.config.quoteSettings.includes(quote._id);
+                                                                return (
+                                                                    <div 
+                                                                        key={quote._id}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const current = Array.isArray(formData.config?.quoteSettings) ? formData.config.quoteSettings : [];
+                                                                            let newValues;
+                                                                            if (!current.includes(quote._id)) {
+                                                                                newValues = [...current, quote._id];
+                                                                            } else {
+                                                                                newValues = current.filter(id => id !== quote._id);
+                                                                            }
+                                                                            handleInputChange('quoteSettings', null, newValues);
+                                                                        }}
+                                                                        className={`px-4 py-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 flex flex-col gap-1 ${isSelected ? 'bg-blue-50' : ''}`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className={`text-sm font-bold ${isSelected ? 'text-blue-700' : 'text-gray-800'}`}>{quote.proposalNo}</span>
+                                                                            {isSelected && <Check className="w-4 h-4 text-blue-600" />}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-gray-500 flex gap-2 flex-wrap">
+                                                                            <span className="bg-gray-100 px-1 rounded">Categories: {quote.categories?.join(', ') || 'All'}</span>
+                                                                            <span className="bg-gray-100 px-1 rounded">Quote Types: {quote.quoteTypes?.join(', ') || 'All'}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })}
+                                                        {masterQuoteSettings.filter(q => {
+                                                            const stateId = selectedStateIds[0];
+                                                            const clusterId = selectedClusterIds[0];
+                                                            if (!stateId && !clusterId) return true;
+                                                            return q.states?.some(s => (s._id || s) === stateId) || q.clusters?.some(c => (c._id || c) === clusterId);
+                                                        }).length === 0 && (
+                                                            <div className="p-4 text-center text-sm text-gray-500 italic">No quote settings found for this location</div>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </div>
-                                        </div>
-                                        <div>
-                                            <div className="mb-4">
-                                                <h4 className="font-bold text-gray-800 mb-1 text-base">Project Signup Limit</h4>
-                                                <input type="text" placeholder="e.g. 10000 kw" value={formData.config?.quote?.projectSignupLimit} onChange={(e) => handleInputChange('quote', 'projectSignupLimit', e.target.value)} className="w-full border rounded p-2 text-sm" />
-                                            </div>
-                                            <div>
-                                                <h4 className="font-bold text-gray-800 mb-1 text-base">Delivery Type</h4>
-                                                <input type="text" placeholder="e.g. Standard" value={formData.config?.quote?.deliveryType} onChange={(e) => handleInputChange('quote', 'deliveryType', e.target.value)} className="w-full border rounded p-2 text-sm" />
+                                            <p className="text-[11px] text-gray-500 italic mt-1">
+                                                * Only showing quote configurations available for the selected state/cluster.
+                                            </p>
+
+                                            {/* Rate Settings (Moved from Commission Setup) */}
+                                            <div className="mt-10 pt-8 border-t border-gray-100">
+                                                <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider mb-4">
+                                                    <Percent className="w-4 h-4 text-blue-600" /> Rate Settings
+                                                </h4>
+                                                <div className="overflow-x-auto scrollbar-thin">
+                                                    <table className="w-full text-sm border-collapse min-w-[800px]">
+                                                        <thead>
+                                                            <tr className="bg-gray-100 text-gray-700 text-left">
+                                                                <th className="p-2 border">Category</th>
+                                                                <th className="p-2 border">Sub-Category</th>
+                                                                <th className="p-2 border">Project Type</th>
+                                                                <th className="p-2 border">Sub-Project Type</th>
+                                                                <th className="p-2 border">Commission (₹)</th>
+                                                                <th className="p-2 border w-10">Action</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {(formData.config?.commissions || []).map((row, index) => (
+                                                                <tr key={index}>
+                                                                    <td className="p-2 border">
+                                                                        <select 
+                                                                            value={row.category || ''} 
+                                                                            onChange={(e) => {
+                                                                                handleCommissionChange(index, 'category', e.target.value);
+                                                                                handleCommissionChange(index, 'subCategory', '');
+                                                                                handleCommissionChange(index, 'projectType', '');
+                                                                                handleCommissionChange(index, 'subProjectType', '');
+                                                                            }}
+                                                                            className="w-full border p-1 rounded text-sm"
+                                                                        >
+                                                                            <option value="">Select Category</option>
+                                                                            {masterCategories.map(cat => (
+                                                                                <option key={cat._id} value={cat._id}>{cat.name}</option>
+                                                                            ))}
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="p-2 border">
+                                                                        <select 
+                                                                            value={row.subCategory || ''} 
+                                                                            onChange={(e) => {
+                                                                                handleCommissionChange(index, 'subCategory', e.target.value);
+                                                                                handleCommissionChange(index, 'projectType', '');
+                                                                                handleCommissionChange(index, 'subProjectType', '');
+                                                                            }}
+                                                                            className="w-full border p-1 rounded text-sm"
+                                                                            disabled={!row.category}
+                                                                        >
+                                                                            <option value="">Select Sub-Category</option>
+                                                                            {masterSubCategories
+                                                                                .filter(sub => {
+                                                                                    if (!row.category) return false;
+                                                                                    return masterMappings.some(m => 
+                                                                                        (m.categoryId?._id || m.categoryId) === row.category && 
+                                                                                        (m.subCategoryId?._id || m.subCategoryId) === sub._id
+                                                                                    );
+                                                                                })
+                                                                                .map(sub => (
+                                                                                    <option key={sub._id} value={sub._id}>{sub.name}</option>
+                                                                                ))}
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="p-2 border">
+                                                                        <select 
+                                                                            value={row.projectType || ''} 
+                                                                            onChange={(e) => {
+                                                                                handleCommissionChange(index, 'projectType', e.target.value);
+                                                                                handleCommissionChange(index, 'subProjectType', '');
+                                                                            }}
+                                                                            className="w-full border p-1 rounded text-sm"
+                                                                            disabled={!row.subCategory}
+                                                                        >
+                                                                            <option value="">Select Project Type</option>
+                                                                            {masterProjectTypes
+                                                                                .filter(type => {
+                                                                                    if (!row.category || !row.subCategory) return false;
+                                                                                    return masterMappings.some(m => {
+                                                                                        const mRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                                                                                        return (m.categoryId?._id || m.categoryId) === row.category && 
+                                                                                               (m.subCategoryId?._id || m.subCategoryId) === row.subCategory &&
+                                                                                               mRange === type.name;
+                                                                                    });
+                                                                                })
+                                                                                .map(type => (
+                                                                                    <option key={type._id} value={type._id}>{type.name}</option>
+                                                                                ))}
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="p-2 border">
+                                                                        <select 
+                                                                            value={row.subProjectType || ''} 
+                                                                            onChange={(e) => handleCommissionChange(index, 'subProjectType', e.target.value)}
+                                                                            className="w-full border p-1 rounded text-sm"
+                                                                            disabled={!row.projectType}
+                                                                        >
+                                                                            <option value="">Select Sub-Project Type</option>
+                                                                            {masterSubProjectTypes
+                                                                                .filter(st => {
+                                                                                    if (!row.category || !row.subCategory || !row.projectType) return false;
+                                                                                    return masterMappings.some(m => {
+                                                                                        const mRange = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                                                                                        return (m.categoryId?._id || m.categoryId) === row.category && 
+                                                                                               (m.subCategoryId?._id || m.subCategoryId) === row.subCategory &&
+                                                                                               mRange === row.projectType &&
+                                                                                               (m.subProjectTypeId?._id || m.subProjectTypeId) === st._id;
+                                                                                    });
+                                                                                })
+                                                                                .map(st => (
+                                                                                    <option key={st._id} value={st._id}>{st.name}</option>
+                                                                                ))}
+                                                                        </select>
+                                                                    </td>
+                                                                    <td className="p-2 border">
+                                                                        <div className="flex items-center gap-1">
+                                                                            <input 
+                                                                                type="text" 
+                                                                                value={row.amount || ''} 
+                                                                                onChange={(e) => handleCommissionChange(index, 'amount', e.target.value)}
+                                                                                className="w-full border p-1 rounded text-sm"
+                                                                                placeholder="Enter amount"
+                                                                            />
+                                                                            <button className="p-1 border text-[10px] bg-white rounded flex items-center gap-1 hover:bg-gray-50 uppercase font-bold text-gray-500"><Settings size={10} /> Settings</button>
+                                                                        </div>
+                                                                    </td>
+                                                                    <td className="p-2 border text-center">
+                                                                        <div className="flex items-center justify-center gap-1">
+                                                                            <button 
+                                                                                onClick={() => handleSave()}
+                                                                                className="p-1 text-green-600 hover:bg-green-50 rounded transition-colors"
+                                                                                title="Save All Changes"
+                                                                            >
+                                                                                <Save size={16} />
+                                                                            </button>
+                                                                            <button 
+                                                                                onClick={() => handleRemoveCommissionRow(index)}
+                                                                                className="p-1 text-red-500 hover:bg-red-50 rounded transition-colors"
+                                                                                title="Remove Row"
+                                                                            >
+                                                                                <Trash2 size={16} />
+                                                                            </button>
+                                                                        </div>
+                                                                    </td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                                <button 
+                                                    onClick={handleAddCommissionRow}
+                                                    className="mt-4 text-[#1e73be] font-bold text-sm flex items-center gap-1 hover:underline"
+                                                >
+                                                    <Plus size={16} /> Add Row
+                                                </button>
                                             </div>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Fees & Charges */}
-                                <div id="fees-&-charges" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
-                                        <CreditCard className="w-5 h-5" /> Fees & Charges
+                                {/* Delivery Plans Selection */}
+                                <div id="fees-&-charges" className={`border rounded-md border-gray-200 shadow-sm text-left relative ${activeDropdown === 'deliveryPlan' ? 'z-20' : 'z-10'}`}>
+                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2 rounded-t-md">
+                                        <Truck className="w-5 h-5" /> Delivery Plans Selection
                                     </div>
-                                    <div className="p-5 grid grid-cols-3 gap-4">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm">Signup Fees</h4>
-                                            <input type="text" placeholder="e.g. 4999" value={formData.config?.fees?.signupFees} onChange={(e) => handleInputChange('fees', 'signupFees', e.target.value)} className="w-full border rounded p-2 text-sm" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm">Installer Charges</h4>
-                                            <input type="text" placeholder="e.g. 5000" value={formData.config?.fees?.installerCharges} onChange={(e) => handleInputChange('fees', 'installerCharges', e.target.value)} className="w-full border rounded p-2 text-sm" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm">SD Amount Cheque</h4>
-                                            <input type="text" placeholder="e.g. 10000" value={formData.config?.fees?.sdAmountCheque} onChange={(e) => handleInputChange('fees', 'sdAmountCheque', e.target.value)} className="w-full border rounded p-2 text-sm" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm">Applicable Upgrade Fees*</h4>
-                                            <input type="text" placeholder="e.g. 2000" value={formData.config?.fees?.upgradeFees} onChange={(e) => handleInputChange('fees', 'upgradeFees', e.target.value)} className="w-full border rounded p-2 text-sm" />
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-1 text-sm">Signup Fees if Direct Upgrade*</h4>
-                                            <input type="text" placeholder="e.g. 3000" value={formData.config?.fees?.directUpgradeFees} onChange={(e) => handleInputChange('fees', 'directUpgradeFees', e.target.value)} className="w-full border rounded p-2 text-sm" />
+                                    <div className="p-6">
+                                        <div className="space-y-2 max-w-xl">
+                                            <h4 className="font-bold text-gray-700 text-sm flex items-center gap-2 uppercase tracking-wider">
+                                                <Truck className="w-4 h-4 text-blue-600" /> Select Delivery Plans (Multiple)
+                                            </h4>
+                                            <div className="relative">
+                                                <div 
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setActiveDropdown(activeDropdown === 'deliveryPlan' ? null : 'deliveryPlan');
+                                                    }}
+                                                    className="min-h-[45px] w-full border border-gray-200 rounded-lg p-2 bg-white flex flex-wrap gap-2 items-center cursor-pointer hover:border-blue-300 transition-colors"
+                                                >
+                                                    {Array.isArray(formData.config?.deliveryPlans) && formData.config.deliveryPlans.length > 0 ? (
+                                                        formData.config.deliveryPlans.map(dpId => {
+                                                            const plan = masterDeliveryPlans.find(p => p._id === dpId);
+                                                            return (
+                                                                <span key={dpId} className="bg-orange-50 text-orange-700 px-2.5 py-1 rounded-md text-xs font-bold border border-orange-100 flex items-center gap-1.5 animate-in zoom-in duration-200">
+                                                                    {plan ? `${plan.deliveryType?.name} - ${plan.vehicle?.name} (₹${plan.pricePerDelivery})` : 'Unnamed Plan'}
+                                                                    <X className="w-3 h-3 cursor-pointer hover:text-red-500" onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        const newPlans = formData.config.deliveryPlans.filter(id => id !== dpId);
+                                                                        handleInputChange('deliveryPlans', null, newPlans);
+                                                                    }} />
+                                                                </span>
+                                                            );
+                                                        })
+                                                    ) : (
+                                                        <span className="text-gray-400 text-sm ml-2 italic">Select delivery plans...</span>
+                                                    )}
+                                                    <ChevronDown className={`w-4 h-4 text-gray-400 ml-auto mr-1 transition-transform ${activeDropdown === 'deliveryPlan' ? 'rotate-180' : ''}`} />
+                                                </div>
+                                                {activeDropdown === 'deliveryPlan' && (
+                                                    <div className="absolute top-full left-0 w-full bg-white border border-gray-200 rounded-b-lg shadow-xl z-50 max-h-60 overflow-y-auto scrollbar-thin animate-in slide-in-from-top-2 duration-200">
+                                                        {masterDeliveryPlans.length > 0 ? (
+                                                            masterDeliveryPlans.map(plan => {
+                                                                const isSelected = Array.isArray(formData.config?.deliveryPlans) && formData.config.deliveryPlans.includes(plan._id);
+                                                                return (
+                                                                    <div 
+                                                                        key={plan._id}
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            const current = Array.isArray(formData.config?.deliveryPlans) ? formData.config.deliveryPlans : [];
+                                                                            let newValues;
+                                                                            if (!current.includes(plan._id)) {
+                                                                                newValues = [...current, plan._id];
+                                                                            } else {
+                                                                                newValues = current.filter(id => id !== plan._id);
+                                                                            }
+                                                                            handleInputChange('deliveryPlans', null, newValues);
+                                                                        }}
+                                                                        className={`px-4 py-3 hover:bg-orange-50 cursor-pointer border-b border-gray-50 last:border-0 flex flex-col gap-1 ${isSelected ? 'bg-orange-50' : ''}`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between">
+                                                                            <span className={`text-sm font-bold ${isSelected ? 'text-orange-700' : 'text-gray-800'}`}>
+                                                                                {plan.deliveryType?.name} - {plan.vehicle?.name}
+                                                                            </span>
+                                                                            {isSelected && <Check className="w-4 h-4 text-orange-600" />}
+                                                                        </div>
+                                                                        <div className="text-[10px] text-gray-500 flex gap-2 flex-wrap">
+                                                                            <span className="bg-gray-100 px-1 rounded">Vendor: {plan.vendor?.name}</span>
+                                                                            <span className="bg-gray-100 px-1 rounded text-orange-600 font-bold">Rate: ₹{plan.pricePerDelivery}</span>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })
+                                                        ) : (
+                                                            <div className="p-4 text-center text-sm text-gray-500 italic">No delivery plans available</div>
+                                                        )}
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <p className="text-[11px] text-gray-500 italic mt-1">
+                                                * Select multiple delivery plans available for this partner plan.
+                                            </p>
                                         </div>
                                     </div>
                                 </div>
@@ -905,15 +1747,15 @@ export default function PartnerPlans() {
                                         <div className="grid grid-cols-3 gap-4">
                                             <div>
                                                 <h4 className="font-bold text-gray-800 mb-1 text-sm">Yearly Target (kW)</h4>
-                                                <input type="text" placeholder="Enter target in kW" value={formData.config?.incentive?.yearlyTarget} onChange={(e) => handleInputChange('incentive', 'yearlyTarget', e.target.value)} className="w-full border rounded p-2 text-sm" />
+                                                <input type="text" placeholder="Enter target in kW" value={formData.config?.incentive?.yearlyTarget || ''} onChange={(e) => handleInputChange('incentive', 'yearlyTarget', e.target.value)} className="w-full border rounded p-2 text-sm" />
                                             </div>
                                             <div>
                                                 <h4 className="font-bold text-gray-800 mb-1 text-sm">Cashback per kW (₹)</h4>
-                                                <input type="text" placeholder="Enter cashback per kW" value={formData.config?.incentive?.cashbackPerKw} onChange={(e) => handleInputChange('incentive', 'cashbackPerKw', e.target.value)} className="w-full border rounded p-2 text-sm" />
+                                                <input type="text" placeholder="Enter cashback per kW" value={formData.config?.incentive?.cashbackPerKw || ''} onChange={(e) => handleInputChange('incentive', 'cashbackPerKw', e.target.value)} className="w-full border rounded p-2 text-sm" />
                                             </div>
                                             <div>
                                                 <h4 className="font-bold text-gray-800 mb-1 text-sm">Total Incentive (₹)</h4>
-                                                <input type="text" readOnly placeholder="" value={formData.config?.incentive?.totalIncentive} className="w-full border rounded p-2 text-sm bg-gray-50" />
+                                                <input type="text" readOnly placeholder="" value={formData.config?.incentive?.totalIncentive || ''} className="w-full border rounded p-2 text-sm bg-gray-50" />
                                             </div>
                                         </div>
                                         <div className="flex justify-end">
@@ -927,114 +1769,9 @@ export default function PartnerPlans() {
                                     </div>
                                 </div>
 
-                                {/* Commission Setup */}
-                                <div id="commission-setup" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
-                                        <Percent className="w-5 h-5" /> Commission Setup
-                                    </div>
-                                    <div className="p-5">
-                                        <div className="overflow-x-auto scrollbar-thin">
-                                            <table className="w-full text-sm border-collapse min-w-[800px]">
-                                                <thead>
-                                                    <tr className="bg-gray-100 text-gray-700 text-left">
-                                                        <th className="p-2 border">Category</th>
-                                                        <th className="p-2 border">Sub-Category</th>
-                                                        <th className="p-2 border">Project Type</th>
-                                                        <th className="p-2 border">Sub-Project Type</th>
-                                                        <th className="p-2 border">Commission (₹)</th>
-                                                        <th className="p-2 border w-10">Action</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {(formData.config?.commissions || []).map((row, index) => (
-                                                        <tr key={index}>
-                                                            <td className="p-2 border">
-                                                                <select 
-                                                                    value={row.category} 
-                                                                    onChange={(e) => handleCommissionChange(index, 'category', e.target.value)}
-                                                                    className="w-full border p-1 rounded"
-                                                                >
-                                                                    <option value="">Select</option>
-                                                                    <option value="Solar Panel">Solar Panel</option>
-                                                                    <option value="Solar Rooftop">Solar Rooftop</option>
-                                                                </select>
-                                                            </td>
-                                                            <td className="p-2 border">
-                                                                <select 
-                                                                    value={row.subCategory} 
-                                                                    onChange={(e) => handleCommissionChange(index, 'subCategory', e.target.value)}
-                                                                    className="w-full border p-1 rounded"
-                                                                >
-                                                                    <option value="">Select</option>
-                                                                    <option value="Upto 100KW">Upto 100KW</option>
-                                                                    <option value="Above 100KW">Above 100KW</option>
-                                                                </select>
-                                                            </td>
-                                                            <td className="p-2 border">
-                                                                <select 
-                                                                    value={row.projectType} 
-                                                                    onChange={(e) => handleCommissionChange(index, 'projectType', e.target.value)}
-                                                                    className="w-full border p-1 rounded"
-                                                                >
-                                                                    <option value="">Select</option>
-                                                                    <option value="Residential">Residential</option>
-                                                                    <option value="Commercial">Commercial</option>
-                                                                </select>
-                                                            </td>
-                                                            <td className="p-2 border">
-                                                                <select 
-                                                                    value={row.subProjectType} 
-                                                                    onChange={(e) => handleCommissionChange(index, 'subProjectType', e.target.value)}
-                                                                    className="w-full border p-1 rounded"
-                                                                >
-                                                                    <option value="">Select</option>
-                                                                    <option value="On-Grid">On-Grid</option>
-                                                                    <option value="Off-Grid">Off-Grid</option>
-                                                                </select>
-                                                            </td>
-                                                            <td className="p-2 border">
-                                                                <div className="flex items-center gap-1">
-                                                                    <input 
-                                                                        type="text" 
-                                                                        value={row.amount} 
-                                                                        onChange={(e) => handleCommissionChange(index, 'amount', e.target.value)}
-                                                                        className="w-full border p-1 rounded"
-                                                                        placeholder="Enter amount"
-                                                                    />
-                                                                    <button className="p-1 border text-xs bg-white rounded flex items-center gap-1 hover:bg-gray-50"><Settings size={12} /> Settings</button>
-                                                                </div>
-                                                            </td>
-                                                            <td className="p-2 border text-center">
-                                                                <button 
-                                                                    onClick={() => handleRemoveCommissionRow(index)}
-                                                                    className="p-1 text-red-500 hover:bg-red-50 rounded"
-                                                                >
-                                                                    <Trash2 size={16} />
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                        <button 
-                                            onClick={handleAddCommissionRow}
-                                            className="mt-4 text-[#1e73be] font-bold text-sm flex items-center gap-1 hover:underline"
-                                        >
-                                            <Plus size={16} /> Add Row
-                                        </button>
-                                    </div>
-                                </div>
 
-                                {/* Rewards And Points */}
-                                <div id="rewards-and-points" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
-                                        <Star className="w-5 h-5" /> Rewards And Points
-                                    </div>
-                                    <div className="p-5">
-                                        <p className="text-gray-500 italic">Rewards and loyalty points configuration section...</p>
-                                    </div>
-                                </div>
+
+
 
                                 {/* Training Videos */}
                                 <div id="training-videos" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
@@ -1046,87 +1783,25 @@ export default function PartnerPlans() {
                                     </div>
                                 </div>
 
-                                {/* UI & Branding */}
-                                <div id="ui-branding" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
-                                    <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
-                                        <div className="flex items-center justify-center p-1 rounded-sm bg-white/20 mr-1"><div className="w-3 h-3 bg-red-400 rounded-full mr-1"></div><div className="w-3 h-3 bg-green-400 rounded-full mr-1"></div><div className="w-3 h-3 bg-blue-400 rounded-full"></div></div> UI & Branding
-                                    </div>
-                                    <div className="p-5 grid grid-cols-2 gap-8">
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Plan Colors</h4>
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Theme Button Color</label>
-                                                    <div className="flex items-center gap-2">
-                                                        <input 
-                                                            type="color" 
-                                                            value={formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd'} 
-                                                            onChange={(e) => handleUiChange('buttonColor', e.target.value)} 
-                                                            className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
-                                                        />
-                                                        <span className="text-sm text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border">{formData.ui?.buttonColor || '#0078bd'}</span>
-                                                    </div>
-                                                </div>
-                                                <div>
-                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Header Background Color</label>
-                                                    <div className="flex items-center gap-2">
-                                                        <input 
-                                                            type="color" 
-                                                            value={formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd'} 
-                                                            onChange={(e) => handleUiChange('headerColor', e.target.value)} 
-                                                            className="w-10 h-10 p-0 border-0 rounded cursor-pointer"
-                                                        />
-                                                        <span className="text-sm text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded border">{formData.ui?.headerColor || '#0078bd'}</span>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Plan Icons</h4>
-                                            <div className="space-y-4">
-                                                <div>
-                                                    <label className="block text-sm font-semibold text-gray-700 mb-1">Lucide Icon Name</label>
-                                                    <input 
-                                                        type="text" 
-                                                        placeholder="e.g. Rocket, Star, Shield"
-                                                        value={formData.ui?.icon || ''} 
-                                                        onChange={(e) => handleUiChange('icon', e.target.value)} 
-                                                        className="w-full border rounded p-2 text-sm"
-                                                    />
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
 
-                                {/* Features */}
+
+                                {/* Features -> CRM Login Modules */}
                                 <div id="features" className="border rounded-md border-gray-200 overflow-hidden shadow-sm text-left">
                                     <div className="bg-[#0078bd] text-white px-5 py-3 font-bold text-lg flex items-center gap-2">
-                                        <Rocket className="w-5 h-5" /> Features
+                                        <Rocket className="w-5 h-5" /> CRM Login Modules
                                     </div>
-                                    <div className="p-5 grid grid-cols-2 gap-8">
+                                    <div className="p-5">
                                         <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base">Platform Features</h4>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.adminApp} onChange={(e) => handleInputChange('features', 'adminApp', e.target.checked)} className="rounded" /> <span className="text-gray-700">Admin App</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.adminCrm} onChange={(e) => handleInputChange('features', 'adminCrm', e.target.checked)} className="rounded" /> <span className="text-gray-700">Admin CRM</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.userApp} onChange={(e) => handleInputChange('features', 'userApp', e.target.checked)} className="rounded" /> <span className="text-gray-700">Dealer User</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.leadPartner} onChange={(e) => handleInputChange('features', 'leadPartner', e.target.checked)} className="rounded" /> <span className="text-gray-700">Lead Partner Access</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.districtManager} onChange={(e) => handleInputChange('features', 'districtManager', e.target.checked)} className="rounded" /> <span className="text-gray-700">District Manager User</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.appSubUser} onChange={(e) => handleInputChange('features', 'appSubUser', e.target.checked)} className="rounded" /> <span className="text-gray-700">App Sub User</span></label>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base">CRM App Features</h4>
-                                            <div className="space-y-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmLeadManagement} onChange={(e) => handleInputChange('features', 'crmLeadManagement', e.target.checked)} className="rounded" /> <span className="text-gray-700">Lead Management</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.assignLead} onChange={(e) => handleInputChange('features', 'assignLead', e.target.checked)} className="rounded" /> <span className="text-gray-700">Assign Lead</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmKnowMargin} onChange={(e) => handleInputChange('features', 'crmKnowMargin', e.target.checked)} className="rounded" /> <span className="text-gray-700">Know my margin</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmSurveyBom} onChange={(e) => handleInputChange('features', 'crmSurveyBom', e.target.checked)} className="rounded" /> <span className="text-gray-700">Survey BOM</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmInstall} onChange={(e) => handleInputChange('features', 'crmInstall', e.target.checked)} className="rounded" /> <span className="text-gray-700">Install</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmService} onChange={(e) => handleInputChange('features', 'crmService', e.target.checked)} className="rounded" /> <span className="text-gray-700">Service</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmProjectManagement} onChange={(e) => handleInputChange('features', 'crmProjectManagement', e.target.checked)} className="rounded" /> <span className="text-gray-700">Project Management</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={formData.config?.features?.crmAmcPlan} onChange={(e) => handleInputChange('features', 'crmAmcPlan', e.target.checked)} className="rounded" /> <span className="text-gray-700">AMC Plan</span></label>
+                                            <h4 className="font-bold text-gray-800 mb-3 text-base">List of all CRM modules</h4>
+                                            <div className="space-y-2 grid grid-cols-2 gap-x-8">
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmLeadManagement} onChange={(e) => handleInputChange('features', 'crmLeadManagement', e.target.checked)} className="rounded" /> <span className="text-gray-700">Lead Management</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.assignLead} onChange={(e) => handleInputChange('features', 'assignLead', e.target.checked)} className="rounded" /> <span className="text-gray-700">Assign Lead</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmKnowMargin} onChange={(e) => handleInputChange('features', 'crmKnowMargin', e.target.checked)} className="rounded" /> <span className="text-gray-700">Know my margin</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmSurveyBom} onChange={(e) => handleInputChange('features', 'crmSurveyBom', e.target.checked)} className="rounded" /> <span className="text-gray-700">Survey BOM</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmInstall} onChange={(e) => handleInputChange('features', 'crmInstall', e.target.checked)} className="rounded" /> <span className="text-gray-700">Install</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmService} onChange={(e) => handleInputChange('features', 'crmService', e.target.checked)} className="rounded" /> <span className="text-gray-700">Service</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmProjectManagement} onChange={(e) => handleInputChange('features', 'crmProjectManagement', e.target.checked)} className="rounded" /> <span className="text-gray-700">Project Management</span></label>
+                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.features?.crmAmcPlan} onChange={(e) => handleInputChange('features', 'crmAmcPlan', e.target.checked)} className="rounded" /> <span className="text-gray-700">AMC Plan</span></label>
                                             </div>
                                         </div>
                                     </div>
@@ -1156,10 +1831,10 @@ export default function PartnerPlans() {
                                 
                                 <div className="text-center w-full mb-6">
                                     <h3 className="text-4xl font-black text-gray-800 mb-1 flex items-center justify-center gap-1">
-                                        ₹<input type="number" value={formData.price} onChange={(e) => handleRootInputChange('price', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 font-black p-0 w-32" />
+                                        ₹<input type="number" value={formData.price || 0} onChange={(e) => handleRootInputChange('price', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 font-black p-0 w-32" />
                                     </h3>
                                     <p className="text-gray-500 font-medium">
-                                        <input type="text" value={formData.priceDescription} onChange={(e) => handleRootInputChange('priceDescription', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 w-full" />
+                                        <input type="text" value={formData.priceDescription || ''} onChange={(e) => handleRootInputChange('priceDescription', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 w-full" />
                                     </p>
                                 </div>
 
@@ -1167,7 +1842,7 @@ export default function PartnerPlans() {
                                     <div className="bg-[#0078bd] text-white text-center py-4 font-bold flex flex-col items-center rounded shadow-sm">
                                         <span className="text-xs uppercase opacity-80 mb-1">🎯 Yearly Target</span>
                                         <div className="flex items-center gap-1">
-                                            <input type="number" value={formData.yearlyTargetKw} onChange={(e) => handleRootInputChange('yearlyTargetKw', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-16 text-center text-white font-black text-lg" />
+                                            <input type="number" value={formData.yearlyTargetKw || 0} onChange={(e) => handleRootInputChange('yearlyTargetKw', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-16 text-center text-white font-black text-lg" />
                                             <span className="text-lg font-black">KW</span>
                                         </div>
                                     </div>
@@ -1175,7 +1850,7 @@ export default function PartnerPlans() {
                                         <span className="text-xs uppercase opacity-80 mb-1">💰 Incentive</span>
                                         <div className="flex items-center gap-1">
                                             <span className="text-lg font-black">₹</span>
-                                            <input type="number" value={formData.cashbackAmount} onChange={(e) => handleRootInputChange('cashbackAmount', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-24 text-center text-white font-black text-lg" />
+                                            <input type="number" value={formData.cashbackAmount || 0} onChange={(e) => handleRootInputChange('cashbackAmount', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-24 text-center text-white font-black text-lg" />
                                         </div>
                                     </div>
                                 </div>
@@ -1215,8 +1890,9 @@ export default function PartnerPlans() {
                     )}
                 </div>
             )}
+        </div>
 
-            {/* Add Plan Modal */}
+        {/* Add Plan Modal */}
             {showAddPlanModal && (
                 <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                     <div className="bg-white rounded-xl p-6 w-96 font-sans">
@@ -1231,7 +1907,7 @@ export default function PartnerPlans() {
                                     type="text"
                                     placeholder="Enter Plan Name"
                                     className="w-full border rounded p-2"
-                                    value={formData.name}
+                                    value={formData.name || ''}
                                     onChange={(e) => handleRootInputChange('name', e.target.value)}
                                 />
                             </div>
@@ -1241,7 +1917,7 @@ export default function PartnerPlans() {
                                     type="number"
                                     placeholder="0"
                                     className="w-full border rounded p-2"
-                                    value={formData.price}
+                                    value={formData.price || 0}
                                     onChange={(e) => handleRootInputChange('price', e.target.value)}
                                 />
                             </div>

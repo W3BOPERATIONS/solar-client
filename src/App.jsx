@@ -36,8 +36,6 @@ import SetupLocations from './admin/pages/settings/location/SetupLocations';
 import ApprovalOverdueSetting from './admin/pages/settings/ApprovalOverdueSetting';
 import OverdueTaskSetting from './admin/pages/settings/OverdueTaskSetting';
 import OverdueStatusSetting from './admin/pages/settings/OverdueStatusSetting';
-import FranchiseeManagerSetting from './admin/pages/settings/FranchiseeManagerSetting';
-import FranchiseBuyLeadSetting from './admin/pages/settings/FranchiseBuyLeadSetting';
 import LoanSetting from './admin/pages/settings/LoanSetting';
 import ChecklistSetting from './admin/pages/settings/ChecklistSetting';
 
@@ -119,6 +117,8 @@ import PartnerPlans from './admin/pages/settings/partner/Plans';
 import PartnerPointsRewards from './admin/pages/settings/partner/PointsRewards';
 import PartnerOnboardingGoals from './admin/pages/settings/partner/OnboardingGoals';
 import PartnerProfessionType from './admin/pages/settings/partner/ProfessionType';
+import FranchiseeManagerSetting from './admin/pages/settings/partner/FranchiseeManagerSetting';
+import FranchiseBuyLeadSetting from './admin/pages/settings/partner/FranchiseBuyLeadSetting';
 
 // HRMS Settings
 import HrmsSettings from './admin/pages/settings/hrms/Settings';

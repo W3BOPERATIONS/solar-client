@@ -12,14 +12,35 @@ import {
   createPartnerReward,
   deletePartnerReward,
   updatePartnerReward,
-  getPartners
+  getPartners,
+  getPartnerPlans
 } from '../../../../services/partner/partnerApi';
+import {
+  getCategories,
+  getSubCategories,
+  getProjectCategoryMappings,
+  getSubProjectTypes
+} from '../../../../services/settings/orderProcurementSettingApi';
 
 export default function PartnerPointsRewards() {
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState([]);
   const [selectedPartnerType, setSelectedPartnerType] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState('');
+  const [plansLoading, setPlansLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('products');
+
+  // Master Data States for Dynamic Dropdowns
+  const [masterCategories, setMasterCategories] = useState([]);
+  const [allSubCategories, setAllSubCategories] = useState([]);
+  const [projectMappings, setProjectMappings] = useState([]);
+  const [allSubProjectTypes, setAllSubProjectTypes] = useState([]);
+
+  // Filter Options for Modal
+  const [availableSubCategories, setAvailableSubCategories] = useState([]);
+  const [availableProjectTypes, setAvailableProjectTypes] = useState([]);
+  const [availableSubProjectTypes, setAvailableSubProjectTypes] = useState([]);
 
   // Dynamic Data States
   const [projectPoints, setProjectPoints] = useState([]);
@@ -54,35 +75,67 @@ export default function PartnerPointsRewards() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const partnersData = await getPartners();
+      const [partnersData, cats, mappings, subPTs, subCats] = await Promise.all([
+        getPartners(),
+        getCategories(),
+        getProjectCategoryMappings(),
+        getSubProjectTypes(),
+        getSubCategories()
+      ]);
+
       setPartners(partnersData);
+      setMasterCategories(cats?.data || []);
+      setProjectMappings(mappings?.data || []);
+      setAllSubProjectTypes(subPTs?.data || []);
+      setAllSubCategories(subCats?.data || []);
+
       if (partnersData.length > 0) {
         setSelectedPartnerType(partnersData[0].name);
+        fetchPlans(partnersData[0].name);
       }
     } catch (error) {
-      toast.error('Failed to load partner types');
+      console.error('Error fetching initial data:', error);
+      toast.error('Failed to load initial data');
     } finally {
       setLoading(false);
     }
   };
 
-  // Fetch Data when Partner Type changes
+  // Fetch Plans when Partner Type changes
+  const fetchPlans = async (type) => {
+    try {
+      setPlansLoading(true);
+      const plansData = await getPartnerPlans(type);
+      setPlans(plansData);
+      if (plansData.length > 0) {
+        setSelectedPlan(plansData[0].name);
+      } else {
+        setSelectedPlan('');
+      }
+    } catch (error) {
+      toast.error('Failed to load plans');
+    } finally {
+      setPlansLoading(false);
+    }
+  };
+
+  // Fetch Data when Partner Type or Plan changes
   useEffect(() => {
-    if (selectedPartnerType) {
+    if (selectedPartnerType && selectedPlan) {
       fetchData();
     } else {
-      // Clear data
+      // Clear data if either is missing
       setProjectPoints([]);
       setRewards({ products: [], cashback: [], experiences: [] });
       setRedeemSettings({ minPoints: 10000, frequency: 'quarterly', _id: null });
     }
-  }, [selectedPartnerType]);
+  }, [selectedPartnerType, selectedPlan]);
 
 
   const fetchData = async () => {
     try {
       setLoading(true);
-      const data = await getPartnerRewards(selectedPartnerType);
+      const data = await getPartnerRewards(selectedPartnerType, selectedPlan);
 
       // Separate data by type
       const points = data.filter(item => item.type === 'project_point_rule');
@@ -135,6 +188,7 @@ export default function PartnerPointsRewards() {
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         type: 'product',
         name: newProduct.name,
         description: newProduct.description,
@@ -158,6 +212,7 @@ export default function PartnerPointsRewards() {
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         type: 'cashback',
         name: `₹${parseInt(newCashback.amount).toLocaleString()} Cashback`,
         couponCode: newCashback.couponCode,
@@ -182,6 +237,7 @@ export default function PartnerPointsRewards() {
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         type: 'experience',
         name: newExperience.name,
         description: newExperience.description,
@@ -201,11 +257,63 @@ export default function PartnerPointsRewards() {
     }
   };
 
+  // Hierarchical Filter Handlers for Add Project Type Modal
+  const handleModalCategoryChange = async (catName) => {
+    setNewProjectType(prev => ({ ...prev, categoryType: catName, subCategory: '', projectType: '', subProjectType: '' }));
+    setAvailableSubCategories([]);
+    setAvailableProjectTypes([]);
+    setAvailableSubProjectTypes([]);
+
+    if (catName) {
+      const selCat = masterCategories.find(c => c.name === catName);
+      if (selCat) {
+        try {
+          const res = await getSubCategories(selCat._id);
+          setAvailableSubCategories(res.data || []);
+        } catch (err) {
+          console.error("Error loading sub categories:", err);
+        }
+      }
+    }
+  };
+
+  const handleModalSubCategoryChange = (subCatName) => {
+    setNewProjectType(prev => ({ ...prev, subCategory: subCatName, projectType: '', subProjectType: '' }));
+    setAvailableProjectTypes([]);
+    setAvailableSubProjectTypes([]);
+
+    if (newProjectType.categoryType && subCatName) {
+      const selCat = masterCategories.find(c => c.name === newProjectType.categoryType);
+      const selSubCat = allSubCategories.find(sc => sc.name === subCatName);
+
+      if (selCat && selSubCat) {
+        const ranges = projectMappings
+          .filter(m =>
+            (m.categoryId?._id || m.categoryId) === selCat._id &&
+            (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id
+          )
+          .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+          .filter((v, i, a) => a.indexOf(v) === i);
+        setAvailableProjectTypes(ranges);
+      }
+    }
+  };
+
+  const handleModalProjectTypeChange = (ptName) => {
+    setNewProjectType(prev => ({ ...prev, projectType: ptName, subProjectType: '' }));
+    setAvailableSubProjectTypes([]);
+
+    if (ptName) {
+      setAvailableSubProjectTypes(allSubProjectTypes);
+    }
+  };
+
   const handleAddProjectType = async () => {
     if(!selectedPartnerType) return toast.error("Select Partner Type");
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         type: 'project_point_rule',
         projectRule: {
           categoryType: newProjectType.categoryType,
@@ -259,6 +367,7 @@ export default function PartnerPointsRewards() {
     try {
       await updatePartnerReward(item._id, {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         projectRule: item.projectRule
       });
       toast.success('Rule saved');
@@ -274,6 +383,7 @@ export default function PartnerPointsRewards() {
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         type: 'redeem_settings',
         points: redeemSettings.minPoints, // storing minPoints in 'points' field
         description: redeemSettings.frequency // storing frequency in 'description' field
@@ -322,25 +432,45 @@ export default function PartnerPointsRewards() {
           <h1 className="text-2xl font-bold text-gray-800">Partner Points and Reward System</h1>
         </div>
 
-        <div className="bg-white rounded-xl shadow-sm p-4 w-full md:w-1/3">
-          <label className="block text-sm font-medium text-gray-700 mb-1">Select Partner Type</label>
-          <select
-            value={selectedPartnerType}
-            onChange={(e) => setSelectedPartnerType(e.target.value)}
-            className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
-          >
-            <option value="">-- Select Partner Type --</option>
-            {partners.map(partner => (
-              <option key={partner._id} value={partner.name}>{partner.name}</option>
-            ))}
-          </select>
+        <div className="bg-white rounded-xl shadow-sm p-4 w-full flex flex-col md:flex-row gap-4">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Partner Type</label>
+            <select
+              value={selectedPartnerType}
+              onChange={(e) => {
+                setSelectedPartnerType(e.target.value);
+                fetchPlans(e.target.value);
+              }}
+              className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+            >
+              <option value="">-- Select Partner Type --</option>
+              {partners.map(partner => (
+                <option key={partner._id} value={partner.name}>{partner.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Plan</label>
+            <select
+              value={selectedPlan}
+              onChange={(e) => setSelectedPlan(e.target.value)}
+              disabled={plansLoading || !selectedPartnerType}
+              className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border disabled:bg-gray-100"
+            >
+              <option value="">{plansLoading ? 'Loading Plans...' : '-- Select Plan --'}</option>
+              {plans.map(plan => (
+                <option key={plan._id} value={plan.name}>{plan.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
-      {!selectedPartnerType ? (
+      {(!selectedPartnerType || !selectedPlan) ? (
         <div className="bg-white rounded-xl p-8 text-center text-gray-500 shadow-sm border border-dashed flex flex-col items-center">
           <Users className="w-12 h-12 text-gray-300 mb-4" />
-          Please select a Partner Type to configure points and rewards.
+          Please select a Partner Type and Plan to configure points and rewards.
         </div>
       ) : (
         <>
@@ -380,8 +510,10 @@ export default function PartnerPointsRewards() {
                           onChange={(e) => handleUpdateProjectPoints(item._id, 'categoryType', e.target.value)}
                           className="border rounded p-1 w-full"
                         >
-                          <option value="solar_rooftop">Solar Rooftop</option>
-                          <option value="solar_pump">Solar Pump</option>
+                          <option value="">Select Category</option>
+                          {masterCategories.map(cat => (
+                            <option key={cat._id} value={cat.name}>{cat.name}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -390,10 +522,16 @@ export default function PartnerPointsRewards() {
                           onChange={(e) => handleUpdateProjectPoints(item._id, 'subCategory', e.target.value)}
                           className="border rounded p-1 w-full"
                         >
-                          <option value="residential">Residential</option>
-                          <option value="commercial">Commercial</option>
-                          <option value="agricultural">Agricultural</option>
-                          <option value="industrial">Industrial</option>
+                          <option value="">Select Sub Category</option>
+                          {allSubCategories
+                            .filter(sc => {
+                              const selCat = masterCategories.find(c => c.name === item.projectRule?.categoryType);
+                              return !selCat || (sc.categoryId?._id || sc.categoryId) === selCat._id;
+                            })
+                            .map(sc => (
+                              <option key={sc._id} value={sc.name}>{sc.name}</option>
+                            ))
+                          }
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -402,13 +540,20 @@ export default function PartnerPointsRewards() {
                           onChange={(e) => handleUpdateProjectPoints(item._id, 'projectType', e.target.value)}
                           className="border rounded p-1 w-full"
                         >
-                          <option value="3kw-5kw">3kw-5kw</option>
-                          <option value="5kw-10kw">5kw-10kw</option>
-                          <option value="10kw-20kw">10kw-20kw</option>
-                          <option value="20kw-50kw">20kw-50kw</option>
-                          <option value="2hp-5hp">2hp-5hp</option>
-                          <option value="5hp-10hp">5hp-10hp</option>
-                          <option value="10hp-20hp">10hp-20hp</option>
+                          <option value="">Select Capacity</option>
+                          {projectMappings
+                            .filter(m => {
+                              const selCat = masterCategories.find(c => c.name === item.projectRule?.categoryType);
+                              const selSubCat = allSubCategories.find(sc => sc.name === item.projectRule?.subCategory);
+                              return (!selCat || (m.categoryId?._id || m.categoryId) === selCat._id) &&
+                                     (!selSubCat || (m.subCategoryId?._id || m.subCategoryId) === selSubCat._id);
+                            })
+                            .map(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                            .filter((v, i, a) => a.indexOf(v) === i)
+                            .map((range, idx) => (
+                              <option key={idx} value={range}>{range}</option>
+                            ))
+                          }
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -417,11 +562,10 @@ export default function PartnerPointsRewards() {
                           onChange={(e) => handleUpdateProjectPoints(item._id, 'subProjectType', e.target.value)}
                           className="border rounded p-1 w-full"
                         >
-                          <option value="on-grid">On-grid</option>
-                          <option value="off-grid">Off-grid</option>
-                          <option value="hybrid">Hybrid</option>
-                          <option value="surface">Surface</option>
-                          <option value="submersible">Submersible</option>
+                          <option value="">Select Connection</option>
+                          {allSubProjectTypes.map(st => (
+                            <option key={st._id} value={st.name}>{st.name}</option>
+                          ))}
                         </select>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
@@ -640,33 +784,44 @@ export default function PartnerPointsRewards() {
                <button onClick={() => setShowAddProjectTypeModal(false)} className="text-gray-400 hover:bg-gray-100 rounded-full p-1"><X className="w-5 h-5"/></button>
             </div>
             <div className="space-y-3">
-              <select className="w-full border p-2 rounded-lg" value={newProjectType.categoryType} onChange={e => setNewProjectType({ ...newProjectType, categoryType: e.target.value })}>
+              <select className="w-full border p-2 rounded-lg" value={newProjectType.categoryType} onChange={e => handleModalCategoryChange(e.target.value)}>
                 <option value="">Select Category</option>
-                <option value="solar_rooftop">Solar Rooftop</option>
-                <option value="solar_pump">Solar Pump</option>
+                {masterCategories.map(cat => (
+                  <option key={cat._id} value={cat.name}>{cat.name}</option>
+                ))}
               </select>
-              <select className="w-full border p-2 rounded-lg" value={newProjectType.subCategory} onChange={e => setNewProjectType({ ...newProjectType, subCategory: e.target.value })}>
+              <select 
+                className="w-full border p-2 rounded-lg disabled:bg-gray-50" 
+                value={newProjectType.subCategory} 
+                onChange={e => handleModalSubCategoryChange(e.target.value)}
+                disabled={!newProjectType.categoryType}
+              >
                 <option value="">Select Sub Category</option>
-                <option value="residential">Residential</option>
-                <option value="commercial">Commercial</option>
-                <option value="agricultural">Agricultural</option>
+                {availableSubCategories.map(sc => (
+                  <option key={sc._id} value={sc.name}>{sc.name}</option>
+                ))}
               </select>
-              <select className="w-full border p-2 rounded-lg" value={newProjectType.projectType} onChange={e => setNewProjectType({ ...newProjectType, projectType: e.target.value })}>
+              <select 
+                className="w-full border p-2 rounded-lg disabled:bg-gray-50" 
+                value={newProjectType.projectType} 
+                onChange={e => handleModalProjectTypeChange(e.target.value)}
+                disabled={!newProjectType.subCategory}
+              >
                 <option value="">Select Capacity Range</option>
-                <option value="3kw-5kw">3kw-5kw</option>
-                <option value="5kw-10kw">5kw-10kw</option>
-                <option value="10kw-20kw">10kw-20kw</option>
-                <option value="20kw-50kw">20kw-50kw</option>
-                <option value="2hp-5hp">2hp-5hp (Pump)</option>
-                <option value="5hp-10hp">5hp-10hp (Pump)</option>
+                {availableProjectTypes.map((range, idx) => (
+                  <option key={idx} value={range}>{range}</option>
+                ))}
               </select>
-              <select className="w-full border p-2 rounded-lg" value={newProjectType.subProjectType} onChange={e => setNewProjectType({ ...newProjectType, subProjectType: e.target.value })}>
+              <select 
+                className="w-full border p-2 rounded-lg disabled:bg-gray-50" 
+                value={newProjectType.subProjectType} 
+                onChange={e => setNewProjectType({ ...newProjectType, subProjectType: e.target.value })}
+                disabled={!newProjectType.projectType}
+              >
                 <option value="">Select Connection Type</option>
-                <option value="on-grid">On-grid</option>
-                <option value="off-grid">Off-grid</option>
-                <option value="hybrid">Hybrid</option>
-                <option value="surface">Surface</option>
-                <option value="submersible">Submersible</option>
+                {availableSubProjectTypes.map(st => (
+                  <option key={st._id} value={st.name}>{st.name}</option>
+                ))}
               </select>
               <input className="w-full border p-2 rounded-lg" placeholder="Points Per kW" type="number" value={newProjectType.pointsPerKw} onChange={e => setNewProjectType({ ...newProjectType, pointsPerKw: e.target.value })} />
             </div>

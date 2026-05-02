@@ -11,12 +11,14 @@ import {
 } from 'lucide-react';
 import { useLocations } from '../../../../hooks/useLocations';
 import toast from 'react-hot-toast';
-import { getPartnerProfessions, createPartnerProfession, deletePartnerProfession, getPartners } from '../../../../services/partner/partnerApi';
+import { getPartnerProfessions, createPartnerProfession, deletePartnerProfession, getPartners, getPartnerPlans } from '../../../../services/partner/partnerApi';
 
 export default function PartnerProfessionType() {
   const [loading, setLoading] = useState(true);
   const [partners, setPartners] = useState([]);
   const [selectedPartnerType, setSelectedPartnerType] = useState('');
+  const [plans, setPlans] = useState([]);
+  const [selectedPlan, setSelectedPlan] = useState('');
   const [professions, setProfessions] = useState([]);
   const [selectedState, setSelectedState] = useState(null);
   const [showAddModal, setShowAddModal] = useState(false);
@@ -36,11 +38,26 @@ export default function PartnerProfessionType() {
       setPartners(partnersData);
       if (partnersData.length > 0) {
         setSelectedPartnerType(partnersData[0].name);
+        fetchPlans(partnersData[0].name);
       }
     } catch (error) {
       toast.error('Failed to load partner types');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchPlans = async (type) => {
+    try {
+      const data = await getPartnerPlans(type);
+      setPlans(data);
+      if (data.length > 0) {
+        setSelectedPlan(data[0].name);
+      } else {
+        setSelectedPlan('');
+      }
+    } catch (error) {
+      console.error(error);
     }
   };
 
@@ -50,12 +67,12 @@ export default function PartnerProfessionType() {
     } else {
       setProfessions([]);
     }
-  }, [selectedPartnerType]);
+  }, [selectedPartnerType, selectedPlan]);
 
   const fetchProfessions = async () => {
     try {
       setLoading(true);
-      const data = await getPartnerProfessions(selectedPartnerType);
+      const data = await getPartnerProfessions(selectedPartnerType, undefined, selectedPlan);
       setProfessions(data);
     } catch (error) {
       console.error(error);
@@ -82,6 +99,7 @@ export default function PartnerProfessionType() {
     try {
       const payload = {
         partnerType: selectedPartnerType,
+        plan: selectedPlan,
         state: selectedState._id,
         name: newProfession
       };
@@ -133,18 +151,36 @@ export default function PartnerProfessionType() {
           </div>
         </div>
 
-        {/* Partner Type Selector & Search */}
+        {/* Partner Type & Plan Selector & Search */}
         <div className="bg-white rounded-xl shadow-sm p-4 flex flex-col md:flex-row gap-4 justify-between items-center">
-          <div className="w-full md:w-1/3">
+          <div className="w-full md:w-1/4">
             <label className="block text-sm font-medium text-gray-700 mb-1">Select Partner Type</label>
             <select
               value={selectedPartnerType}
-              onChange={(e) => setSelectedPartnerType(e.target.value)}
+              onChange={(e) => {
+                setSelectedPartnerType(e.target.value);
+                fetchPlans(e.target.value);
+              }}
               className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
             >
               <option value="">-- Select Partner Type --</option>
               {partners.map(partner => (
                 <option key={partner._id} value={partner.name}>{partner.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="w-full md:w-1/4">
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select Plan</label>
+            <select
+              value={selectedPlan}
+              onChange={(e) => setSelectedPlan(e.target.value)}
+              className="w-full border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border"
+              disabled={!selectedPartnerType || plans.length === 0}
+            >
+              <option value="">-- Select Plan --</option>
+              {plans.map(plan => (
+                <option key={plan._id} value={plan.name}>{plan.name}</option>
               ))}
             </select>
           </div>
@@ -204,7 +240,7 @@ export default function PartnerProfessionType() {
           {/* Summary Section */}
           <div className="bg-white rounded-xl shadow-lg overflow-hidden">
             <div className="border-b border-gray-200 px-6 py-4 bg-gray-50">
-              <h2 className="text-lg font-semibold text-gray-800">Profession Summary for {selectedPartnerType}</h2>
+              <h2 className="text-lg font-semibold text-gray-800">Profession Summary for {selectedPartnerType} {selectedPlan ? `- ${selectedPlan}` : ''}</h2>
             </div>
             <div className="p-6">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -228,7 +264,7 @@ export default function PartnerProfessionType() {
                   </div>
                 ))}
                 {professions.length === 0 && (
-                  <p className="text-gray-500 italic col-span-full text-center p-8 bg-gray-50 rounded border border-dashed">No professions added yet for {selectedPartnerType}.</p>
+                  <p className="text-gray-500 italic col-span-full text-center p-8 bg-gray-50 rounded border border-dashed">No professions added yet for {selectedPartnerType} {selectedPlan}.</p>
                 )}
               </div>
             </div>
@@ -243,7 +279,7 @@ export default function PartnerProfessionType() {
             <div className="bg-blue-600 text-white px-6 py-4 flex justify-between items-center">
               <h3 className="font-bold text-lg flex items-center gap-2">
                 <MapPin className="w-5 h-5" />
-                {selectedState.name} ({selectedPartnerType})
+                {selectedState.name} ({selectedPartnerType} {selectedPlan ? `- ${selectedPlan}` : ''})
               </h3>
               <button onClick={() => setShowAddModal(false)} className="text-white hover:bg-blue-700 p-1 rounded-full transition-colors">
                 <X className="w-5 h-5" />

@@ -174,6 +174,24 @@ export const deleteBuyLeadSetting = async (id) => {
     }
 };
 
+export const addLeadsToSetting = async (data) => {
+    try {
+        const response = await axios.post(`${BUY_LEAD_SETTINGS_API_URL}/add-leads`, data);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const fetchLeadsBySetting = async (id) => {
+    try {
+        const response = await axios.get(`${BUY_LEAD_SETTINGS_API_URL}/${id}/leads`);
+        return response.data;
+    } catch (error) {
+        throw error;
+    }
+};
+
 const CHECKLIST_API_URL = '/checklist';
 
 export const seedChecklists = async () => {

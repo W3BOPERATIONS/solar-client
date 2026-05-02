@@ -6,7 +6,7 @@ import * as masterApi from '../../../services/core/masterApi';
 import * as combokitApi from '../../../services/combokit/combokitApi';
 import { useLocations } from '../../../hooks/useLocations';
 
-const LocationCard = ({ title, subtitle, icon: Icon, isSelected, onClick, colorClass = "blue", count = 0 }) => {
+const LocationCard = ({ title, subtitle, icon: Icon, isSelected, onClick, colorClass = "blue", count = 0, selectionNumber = 0 }) => {
   const colors = {
     blue: 'border-blue-600 bg-blue-50/50 shadow-md',
     purple: 'border-purple-600 bg-purple-50/50 shadow-md',
@@ -25,8 +25,15 @@ const LocationCard = ({ title, subtitle, icon: Icon, isSelected, onClick, colorC
           : 'bg-white border-gray-100 hover:border-blue-200 hover:shadow-sm'
       }`}
     >
-      {/* Checkbox Icon in Top Right */}
-      <div className={`absolute top-2 right-2 transition-opacity duration-300 ${isSelected ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Selection Number Badge */}
+      {isSelected && selectionNumber > 0 && (
+        <div className="absolute -top-2 -right-2 bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-black shadow-md z-10 animate-in zoom-in duration-200">
+          {selectionNumber}
+        </div>
+      )}
+
+      {/* Checkbox Icon in Top Right (fallback/decorative) */}
+      <div className={`absolute top-2 right-2 transition-opacity duration-300 ${isSelected && selectionNumber === 0 ? 'opacity-100' : 'opacity-0'}`}>
         <div className="w-4 h-4 rounded border-2 border-blue-600 flex items-center justify-center bg-white shadow-sm">
           <div className="w-2 h-2 bg-blue-600 rounded-sm"></div>
         </div>
@@ -578,6 +585,7 @@ export default function LoanSetting() {
                 isSelected={selectedLocation.country?.includes('all')}
                 onClick={() => toggleLocation('country', 'all')}
                 count={getRuleCount('country', 'all')}
+                selectionNumber={selectedLocation.country?.indexOf('all') + 1}
               />
               {countries.map(c => (
                 <LocationCard
@@ -588,6 +596,7 @@ export default function LoanSetting() {
                   isSelected={selectedLocation.country?.includes(c._id)}
                   onClick={() => toggleLocation('country', c._id)}
                   count={getRuleCount('country', c._id)}
+                  selectionNumber={selectedLocation.country?.indexOf(c._id) + 1}
                 />
               ))}
             </div>
@@ -612,6 +621,7 @@ export default function LoanSetting() {
                   isSelected={selectedLocation.state?.includes('all')}
                   onClick={() => toggleLocation('state', 'all')}
                   count={getRuleCount('state', 'all')}
+                  selectionNumber={selectedLocation.state?.indexOf('all') + 1}
                 />
                 {states.map(s => (
                   <LocationCard
@@ -622,6 +632,7 @@ export default function LoanSetting() {
                     isSelected={selectedLocation.state?.includes(s._id)}
                     onClick={() => toggleLocation('state', s._id)}
                     count={getRuleCount('state', s._id)}
+                    selectionNumber={selectedLocation.state?.indexOf(s._id) + 1}
                   />
                 ))}
               </div>
@@ -648,6 +659,7 @@ export default function LoanSetting() {
                   onClick={() => toggleLocation('cluster', 'all')}
                   colorClass="purple"
                   count={getRuleCount('cluster', 'all')}
+                  selectionNumber={selectedLocation.cluster?.indexOf('all') + 1}
                 />
                 {clusters.map(cl => (
                   <LocationCard
@@ -659,6 +671,7 @@ export default function LoanSetting() {
                     onClick={() => toggleLocation('cluster', cl._id)}
                     colorClass="purple"
                     count={getRuleCount('cluster', cl._id)}
+                    selectionNumber={selectedLocation.cluster?.indexOf(cl._id) + 1}
                   />
                 ))}
               </div>
@@ -685,6 +698,7 @@ export default function LoanSetting() {
                   onClick={() => toggleLocation('district', 'all')}
                   colorClass="green"
                   count={getRuleCount('district', 'all')}
+                  selectionNumber={selectedLocation.district?.indexOf('all') + 1}
                 />
                 {districts.map(d => (
                   <LocationCard
@@ -696,6 +710,7 @@ export default function LoanSetting() {
                     onClick={() => toggleLocation('district', d._id)}
                     colorClass="green"
                     count={getRuleCount('district', d._id)}
+                    selectionNumber={selectedLocation.district?.indexOf(d._id) + 1}
                   />
                 ))}
               </div>
