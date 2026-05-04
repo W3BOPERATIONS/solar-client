@@ -31,10 +31,168 @@ import {
     Star,
     MessageSquare,
     ChevronDown,
-    Truck
+    Truck,
+    ShieldCheck
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { getVendorDeliveryPlans } from '../../../../services/delivery/deliveryApi';
+
+const PlanPreview = ({ formData, getIcon }) => {
+    const { config, ui, name, price, priceDescription, yearlyTargetKw, cashbackAmount, userDescription } = formData;
+    const headerColor = ui?.headerColor || '#0078bd';
+    const buttonColor = ui?.buttonColor || '#0078bd';
+
+    return (
+        <div className="w-full lg:w-[22%] sticky top-20 bg-white shadow-2xl flex flex-col rounded-2xl overflow-hidden self-start border border-gray-100 animate-in fade-in slide-in-from-right-4 duration-500">
+            {/* Header Section */}
+            <div 
+                className="w-full p-8 text-center text-white relative overflow-hidden flex flex-col items-center justify-center min-h-[160px]"
+                style={{ backgroundColor: headerColor }}
+            >
+                <div className="absolute -top-4 -right-4 opacity-10 transform scale-150">
+                    {getIcon(ui?.icon, "w-32 h-32 rotate-12")}
+                </div>
+                <div className="relative z-10 flex flex-col items-center">
+                    <div className="bg-white/20 p-3 rounded-2xl backdrop-blur-md mb-3">
+                        {getIcon(ui?.icon, "w-8 h-8 text-white")}
+                    </div>
+                    <h2 className="text-3xl font-black uppercase tracking-tight mb-1 leading-tight">{name || 'Plan Name'}</h2>
+                    <p className="text-xs font-bold opacity-80 tracking-widest uppercase">Premium Partner Access</p>
+                </div>
+            </div>
+
+            <div className="p-6 space-y-6 bg-white">
+                {/* Price Section */}
+                <div className="text-center py-2">
+                    <div className="flex items-baseline justify-center gap-1">
+                        <span className="text-2xl font-bold text-gray-300">₹</span>
+                        <span className="text-5xl font-black text-gray-800 tracking-tighter tabular-nums">{price || 0}</span>
+                    </div>
+                    <p className="text-gray-400 font-black uppercase text-[10px] tracking-[0.2em] mt-2">{priceDescription || 'Subscription Fee'}</p>
+                </div>
+
+                {/* Key Metrics Grid */}
+                <div className="grid grid-cols-2 gap-3">
+                    <div className="bg-blue-50/50 p-4 rounded-2xl border border-blue-50 text-center transition-all hover:bg-blue-50">
+                        <p className="text-[10px] font-black text-blue-400 uppercase mb-1 tracking-tighter">Yearly Target</p>
+                        <p className="text-xl font-black text-blue-700 tabular-nums">{config?.incentive?.yearlyTarget || yearlyTargetKw || 0}<span className="text-xs ml-0.5 opacity-60">kW</span></p>
+                    </div>
+                    <div className="bg-green-50/50 p-4 rounded-2xl border border-green-50 text-center transition-all hover:bg-green-50">
+                        <p className="text-[10px] font-black text-green-400 uppercase mb-1 tracking-tighter">Incentive</p>
+                        <p className="text-xl font-black text-green-700 tabular-nums"><span className="text-xs mr-0.5 opacity-60">₹</span>{config?.incentive?.totalIncentive || cashbackAmount || 0}</p>
+                    </div>
+                </div>
+
+                {/* Dynamic Features List */}
+                <div className="space-y-5 pt-2">
+                    <div className="flex items-center gap-3">
+                        <div className="h-px bg-gray-100 flex-1"></div>
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-[0.2em] whitespace-nowrap">Plan Configuration</h4>
+                        <div className="h-px bg-gray-100 flex-1"></div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                        {/* KYC Section */}
+                        <div className="flex items-center justify-between group">
+                            <div className="flex items-center gap-2">
+                                <ShieldCheck className="w-4 h-4 text-gray-400" />
+                                <span className="text-xs font-bold text-gray-600">KYC Required</span>
+                            </div>
+                            <div className="flex gap-1.5">
+                                {config?.kyc?.aadhar && <div className="w-2 h-2 rounded-full bg-blue-500 shadow-sm shadow-blue-200" title="Aadhar" />}
+                                {config?.kyc?.pan && <div className="w-2 h-2 rounded-full bg-orange-500 shadow-sm shadow-orange-200" title="PAN" />}
+                                {config?.kyc?.gst && <div className="w-2 h-2 rounded-full bg-purple-500 shadow-sm shadow-purple-200" title="GST" />}
+                                {!config?.kyc?.aadhar && !config?.kyc?.pan && !config?.kyc?.gst && <span className="text-[10px] font-bold text-gray-300">None</span>}
+                            </div>
+                        </div>
+                        
+                        {/* Eligibility */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <BadgeCheck className="w-4 h-4 text-gray-400" />
+                                <span className="text-xs font-bold text-gray-600">Eligibility</span>
+                            </div>
+                            <span className="text-[10px] font-black text-gray-800 uppercase bg-gray-100 px-2 py-0.5 rounded">
+                                {config?.eligibility?.kyc ? 'Verified' : 'Basic'}
+                            </span>
+                        </div>
+
+                        {/* Coverage */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <Globe className="w-4 h-4 text-gray-400" />
+                                <span className="text-xs font-bold text-gray-600">Operation Area</span>
+                            </div>
+                            <span className="text-[10px] font-black text-blue-600 uppercase bg-blue-50 px-2 py-0.5 rounded">
+                                {config?.coverage?.area}
+                            </span>
+                        </div>
+
+                        {/* GST Info */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <CreditCard className="w-4 h-4 text-gray-400" />
+                                <span className="text-xs font-bold text-gray-600">GST Status</span>
+                            </div>
+                            <span className="text-[10px] font-black text-gray-800 uppercase">
+                                {config?.eligibility?.gstRequired ? `₹${config.eligibility.gstAmount} Extra` : 'Inclusive'}
+                            </span>
+                        </div>
+
+                        {/* Documents */}
+                        <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                                <List className="w-4 h-4 text-gray-400" />
+                                <span className="text-xs font-bold text-gray-600">Documents</span>
+                            </div>
+                            <span className="text-[10px] font-black text-gray-800 uppercase">
+                                {formData.documents?.length > 0 ? `${formData.documents.length} Added` : 'Required'}
+                            </span>
+                        </div>
+                    </div>
+
+                    {/* Project Types Tag Cloud */}
+                    {(config?.projectType?.length > 0 || config?.category?.length > 0) && (
+                        <div className="pt-4 space-y-3">
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest text-center">Project Access</p>
+                            <div className="flex flex-wrap gap-1.5 justify-center">
+                                {config?.projectType?.map(range => (
+                                    <span key={range} className="text-[9px] font-bold bg-gray-50 text-gray-600 px-2.5 py-1.5 rounded-lg border border-gray-100 transition-all hover:border-blue-200 hover:text-blue-600">
+                                        {range}
+                                    </span>
+                                ))}
+                                {config?.category?.map(catId => {
+                                    // This assumes masterCategories is available or we just show IDs if not
+                                    // For preview we'll just show 'Active' if no mapping
+                                    return null; 
+                                })}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* Upgrade Button */}
+                <button 
+                    className="w-full text-white font-black py-5 rounded-2xl shadow-xl transition-all hover:scale-[1.02] hover:shadow-2xl active:scale-[0.98] uppercase tracking-[0.2em] text-[10px] flex items-center justify-center gap-2 mt-6 group"
+                    style={{ backgroundColor: buttonColor }}
+                >
+                    Upgrade Plan <Rocket className="w-4 h-4 group-hover:animate-bounce" />
+                </button>
+            </div>
+            
+            {/* Footer Status */}
+            <div className="bg-gray-50/80 backdrop-blur-sm px-6 py-5 border-t border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                    <div className={`w-2.5 h-2.5 rounded-full ${formData.isActive ? 'bg-green-500 shadow-sm shadow-green-200' : 'bg-gray-400'}`}></div>
+                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-tighter">{formData.isActive ? 'Active Plan' : 'Draft'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 text-[10px] font-black text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full uppercase">
+                    <Users className="w-3.5 h-3.5" /> {userDescription || 'Standard Access'}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 export default function PartnerPlans() {
     const [loading, setLoading] = useState(true);
@@ -116,7 +274,7 @@ export default function PartnerPlans() {
         config: {
             kyc: { aadhar: true, pan: true, gst: false, verifiedPartner: false, notVerifiedPartner: true },
             eligibility: { kyc: true, agreement: true, depositCheque: true, gstRequired: false, gstAmount: '', depositAmount: '', noCashback: false },
-            coverage: { area: '1 District', city: true, district: true, cluster: false, state: false, accessApp: true, accessCrm: true },
+            coverage: { area: '1 District', city: false, district: true, cluster: false, state: false, accessApp: true, accessCrm: true },
             user: { 
                 sales: true, salesLimit: 10,
                 admin: true, adminLimit: 10,
@@ -419,25 +577,38 @@ export default function PartnerPlans() {
     // Adjusted handleInputChange to support setting entire arrays/objects
     const handleInputChange = (section, field, value) => {
         setFormData(prev => {
+            let updatedSectionData;
             if (field === null) {
-                return {
-                    ...prev,
-                    config: {
-                        ...prev.config,
-                        [section]: value
-                    }
+                updatedSectionData = value;
+            } else {
+                updatedSectionData = {
+                    ...(prev.config[section] || {}),
+                    [field]: value
                 };
             }
-            return {
+
+            const newState = {
                 ...prev,
                 config: {
                     ...prev.config,
-                    [section]: {
-                        ...prev.config[section],
-                        [field]: value
-                    }
+                    [section]: updatedSectionData
                 }
             };
+
+            // Synchronize main price with Fees Amount (gstAmount) in Eligibility section
+            if (section === 'eligibility' && field === 'gstAmount') {
+                newState.price = value;
+            }
+
+            // Synchronize Yearly Target and Incentive root properties
+            if (section === 'incentive' && field === 'yearlyTarget') {
+                newState.yearlyTargetKw = value;
+            }
+            if (section === 'incentive' && field === 'totalIncentive') {
+                newState.cashbackAmount = value;
+            }
+
+            return newState;
         });
     };
 
@@ -549,7 +720,7 @@ export default function PartnerPlans() {
                             return (
                                 <div
                                     key={partner._id}
-                                    onClick={() => handleToggleSelection(selectedPartnerTypes, setSelectedPartnerTypes, partner.name)}
+                                    onClick={() => setSelectedPartnerTypes([partner.name])}
                                     className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[150px] transition-all bg-white border ${
                                         isSelected
                                             ? 'border-blue-500 text-blue-600 font-bold ring-1 ring-blue-500 bg-blue-50'
@@ -583,7 +754,7 @@ export default function PartnerPlans() {
                                     return (
                                         <div
                                             key={country._id}
-                                            onClick={() => handleToggleSelection(selectedCountryIds, setSelectedCountryIds, country._id)}
+                                            onClick={() => setSelectedCountryIds([country._id])}
                                             className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
                                                 isSelected
                                                     ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
@@ -621,7 +792,7 @@ export default function PartnerPlans() {
                                             return (
                                                 <div
                                                     key={state._id}
-                                                    onClick={() => handleToggleSelection(selectedStateIds, setSelectedStateIds, state._id)}
+                                                    onClick={() => setSelectedStateIds([state._id])}
                                                     className={`relative cursor-pointer px-6 py-4 rounded-xl shadow-sm text-center min-w-[180px] transition-all bg-white border ${
                                                         isSelected
                                                             ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
@@ -666,7 +837,7 @@ export default function PartnerPlans() {
                                                 return (
                                                     <div
                                                         key={cluster._id}
-                                                        onClick={() => handleToggleSelection(selectedClusterIds, setSelectedClusterIds, cluster._id)}
+                                                        onClick={() => setSelectedClusterIds([cluster._id])}
                                                         className={`relative cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
                                                             isSelected
                                                                 ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
@@ -707,7 +878,7 @@ export default function PartnerPlans() {
                                                 return (
                                                     <div
                                                         key={district._id}
-                                                        onClick={() => handleToggleSelection(selectedDistrictIds, setSelectedDistrictIds, district._id)}
+                                                        onClick={() => setSelectedDistrictIds([district._id])}
                                                         className={`relative cursor-pointer px-6 py-3 rounded-xl shadow-sm text-center min-w-[160px] transition-all bg-white border ${
                                                             isSelected
                                                                 ? 'border-blue-500 ring-1 ring-blue-500 bg-blue-50'
@@ -742,8 +913,8 @@ export default function PartnerPlans() {
                             <Building2 className="w-5 h-5" />
                         </div>
                         <div>
-                            <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Selected Partner Types ({selectedPartnerTypes.length})</p>
-                            <p className="text-sm font-bold text-gray-700">{selectedPartnerTypes.join(', ')}</p>
+                            <p className="text-xs font-black text-blue-600 uppercase tracking-widest">Selected Partner Type</p>
+                            <p className="text-sm font-bold text-gray-700">{selectedPartnerTypes[0]}</p>
                         </div>
                     </div>
                 )}
@@ -1004,35 +1175,83 @@ export default function PartnerPlans() {
                                                 <option value="Multiple Districts">Multiple Districts</option>
                                             </select>
                                             <div className="grid grid-cols-2 gap-2">
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.city} onChange={(e) => handleInputChange('coverage', 'city', e.target.checked)} className="rounded" /> <span className="text-gray-700">City Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.district} onChange={(e) => handleInputChange('coverage', 'district', e.target.checked)} className="rounded" /> <span className="text-gray-700">District Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.cluster} onChange={(e) => handleInputChange('coverage', 'cluster', e.target.checked)} className="rounded" /> <span className="text-gray-700">Cluster Level</span></label>
-                                                <label className="flex items-center gap-2"><input type="checkbox" checked={!!formData.config?.coverage?.state} onChange={(e) => handleInputChange('coverage', 'state', e.target.checked)} className="rounded" /> <span className="text-gray-700">State Level</span></label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="coverageLevel"
+                                                        checked={!!formData.config?.coverage?.city} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, city: true, district: false, cluster: false, state: false })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
+                                                    /> 
+                                                    <span className="text-gray-700 text-sm">City Level</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="coverageLevel"
+                                                        checked={!!formData.config?.coverage?.district} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, city: false, district: true, cluster: false, state: false })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
+                                                    /> 
+                                                    <span className="text-gray-700 text-sm">District Level</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="coverageLevel"
+                                                        checked={!!formData.config?.coverage?.cluster} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, city: false, district: false, cluster: true, state: false })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
+                                                    /> 
+                                                    <span className="text-gray-700 text-sm">Cluster Level</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="coverageLevel"
+                                                        checked={!!formData.config?.coverage?.state} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, city: false, district: false, cluster: false, state: true })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
+                                                    /> 
+                                                    <span className="text-gray-700 text-sm">State Level</span>
+                                                </label>
                                             </div>
                                         </div>
                                         <div>
-                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Access Types (App/CRM/Both)</h4>
-                                            <div className="flex flex-col gap-2">
-                                                <label className="flex items-center gap-2">
+                                            <h4 className="font-bold text-gray-800 mb-3 text-base text-left">Access Types (Single Selection)</h4>
+                                            <div className="flex flex-col gap-3">
+                                                <label className="flex items-center gap-2 cursor-pointer">
                                                     <input 
-                                                        type="checkbox" 
-                                                        checked={!!formData.config?.coverage?.accessApp} 
-                                                        onChange={(e) => handleInputChange('coverage', 'accessApp', e.target.checked)} 
-                                                        className="rounded" 
+                                                        type="radio" 
+                                                        name="accessType"
+                                                        checked={formData.config?.coverage?.accessApp && !formData.config?.coverage?.accessCrm} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, accessApp: true, accessCrm: false })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
                                                     /> 
-                                                    <span className="text-gray-700 font-medium">App Access</span>
+                                                    <span className="text-gray-700 font-medium">App Access Only</span>
                                                 </label>
-                                                <label className="flex items-center gap-2">
+                                                <label className="flex items-center gap-2 cursor-pointer">
                                                     <input 
-                                                        type="checkbox" 
-                                                        checked={!!formData.config?.coverage?.accessCrm} 
-                                                        onChange={(e) => handleInputChange('coverage', 'accessCrm', e.target.checked)} 
-                                                        className="rounded" 
+                                                        type="radio" 
+                                                        name="accessType"
+                                                        checked={!formData.config?.coverage?.accessApp && formData.config?.coverage?.accessCrm} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, accessApp: false, accessCrm: true })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
                                                     /> 
-                                                    <span className="text-gray-700 font-medium">CRM Access</span>
+                                                    <span className="text-gray-700 font-medium">CRM Access Only</span>
                                                 </label>
-                                                <div className="mt-1 text-[10px] text-blue-600 font-bold uppercase tracking-wider">
-                                                    {formData.config?.coverage?.accessApp && formData.config?.coverage?.accessCrm ? 'Both Selected' : ''}
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input 
+                                                        type="radio" 
+                                                        name="accessType"
+                                                        checked={formData.config?.coverage?.accessApp && formData.config?.coverage?.accessCrm} 
+                                                        onChange={() => handleInputChange('coverage', null, { ...formData.config.coverage, accessApp: true, accessCrm: true })} 
+                                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300" 
+                                                    /> 
+                                                    <span className="text-gray-700 font-medium">Both (App & CRM)</span>
+                                                </label>
+                                                <div className="mt-1 text-[10px] text-blue-600 font-black uppercase tracking-widest bg-blue-50 px-2 py-1 rounded-full w-fit">
+                                                    {formData.config?.coverage?.accessApp && formData.config?.coverage?.accessCrm ? 'Full Access' : 'Partial Access'}
                                                 </div>
                                             </div>
                                         </div>
@@ -1820,72 +2039,7 @@ export default function PartnerPlans() {
                             </div>
                             
                             {/* Right Plan View Sidebar Widget */}
-                            <div className="w-full lg:w-[20%] sticky top-20 bg-[#f8f9fa] border-4 border-white shadow-xl flex flex-col items-center p-8 relative rounded-md self-start text-left">
-                                <div 
-                                    className="w-full py-8 px-4 text-center text-white mb-6 relative overflow-hidden flex flex-col items-center justify-center rounded"
-                                    style={{ backgroundColor: formData.ui?.headerColor?.startsWith('#') ? formData.ui.headerColor : '#0078bd' }}
-                                >
-                                    <h2 className="text-3xl font-black uppercase tracking-wide mb-1 relative z-10">{formData.name}</h2>
-                                    <p className="text-sm font-medium relative z-10 opacity-90">Perfect for your business</p>
-                                </div>
-                                
-                                <div className="text-center w-full mb-6">
-                                    <h3 className="text-4xl font-black text-gray-800 mb-1 flex items-center justify-center gap-1">
-                                        ₹<input type="number" value={formData.price || 0} onChange={(e) => handleRootInputChange('price', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 font-black p-0 w-32" />
-                                    </h3>
-                                    <p className="text-gray-500 font-medium">
-                                        <input type="text" value={formData.priceDescription || ''} onChange={(e) => handleRootInputChange('priceDescription', e.target.value)} className="bg-transparent border-none text-center focus:ring-0 w-full" />
-                                    </p>
-                                </div>
-
-                                <div className="w-full space-y-2 mb-6">
-                                    <div className="bg-[#0078bd] text-white text-center py-4 font-bold flex flex-col items-center rounded shadow-sm">
-                                        <span className="text-xs uppercase opacity-80 mb-1">🎯 Yearly Target</span>
-                                        <div className="flex items-center gap-1">
-                                            <input type="number" value={formData.yearlyTargetKw || 0} onChange={(e) => handleRootInputChange('yearlyTargetKw', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-16 text-center text-white font-black text-lg" />
-                                            <span className="text-lg font-black">KW</span>
-                                        </div>
-                                    </div>
-                                    <div className="bg-[#0078bd] text-white text-center py-4 font-bold flex flex-col items-center rounded shadow-sm">
-                                        <span className="text-xs uppercase opacity-80 mb-1">💰 Incentive</span>
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-lg font-black">₹</span>
-                                            <input type="number" value={formData.cashbackAmount || 0} onChange={(e) => handleRootInputChange('cashbackAmount', e.target.value)} className="bg-transparent border-none focus:ring-0 p-0 w-24 text-center text-white font-black text-lg" />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-[#28a745] text-white px-6 py-2 rounded-md font-extrabold mb-6 shadow-sm uppercase text-xs tracking-wider">
-                                    {formData.accessType || 'App Only Access'}
-                                </div>
-                                
-                                <div className="text-center flex flex-col items-center justify-center mb-8">
-                                    <div className="flex items-center gap-2 text-[#0078bd] font-black text-xl">
-                                        <Users className="w-6 h-6"/> {formData.userDescription || 'Single User'}
-                                    </div>
-                                    <p className="text-gray-500 text-sm font-medium mt-1">1 primary user account</p>
-                                </div>
-                                
-                                <div className="w-full text-left bg-white p-5 mb-8 border border-gray-200 rounded-lg shadow-inner">
-                                    <div className="flex justify-between items-center mb-4 text-gray-800 font-bold">
-                                        <span className="text-sm">Total Cashback</span> <Monitor className="w-4 h-4 text-[#0078bd]" />
-                                    </div>
-                                    <h4 className="font-bold text-gray-900 border-b pb-2 mb-3 text-sm">Project Types</h4>
-                                    <ul className="text-gray-600 space-y-2">
-                                        <li className="flex items-center gap-2 text-xs font-medium"><Check className="w-3.5 h-3.5 text-green-500"/> Residential Projects</li>
-                                        <li className="flex items-center gap-2 text-xs font-medium"><Check className="w-3.5 h-3.5 text-green-500"/> Commercial Projects</li>
-                                    </ul>
-                                </div>
-
-                                <button 
-                                    onClick={handleSave} 
-                                    className="w-full text-white font-black py-4 rounded-lg hover:shadow-xl transition-all shadow-md uppercase tracking-widest text-sm flex items-center justify-center gap-2"
-                                    style={{ backgroundColor: formData.ui?.buttonColor?.startsWith('#') ? formData.ui.buttonColor : '#0078bd' }}
-                                >
-                                    Upgrade Plan <Rocket className="w-4 h-4" />
-                                </button>
-                                
-                            </div>
+                            <PlanPreview formData={formData} getIcon={getIcon} />
                         </div>
                     )}
                 </div>
