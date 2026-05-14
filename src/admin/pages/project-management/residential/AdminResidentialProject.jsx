@@ -157,19 +157,29 @@ const AdminResidentialProject = () => {
 
     // Timeline generation based on hardcoded layout request
     const getTimelineItems = (customer) => {
-        return [
+        const items = [];
+        
+        // Add dynamic milestones if available
+        if (customer?.orderId?.milestones) {
+            customer.orderId.milestones.forEach(m => {
+                items.push({
+                    title: m.name,
+                    date: m.completedAt ? new Date(m.completedAt).toLocaleDateString() : 'Pending',
+                    status: m.status === 'completed' ? 'Completed' : 'Pending',
+                    icon: m.status === 'completed' ? 'Check' : 'Clock',
+                    color: m.status === 'completed' ? 'green' : 'blue',
+                    hasPdf: m.name === 'Advance Payment' && m.status === 'completed'
+                });
+            });
+        }
+
+        // Hardcoded defaults for display as requested earlier
+        items.push(
             {
                 title: 'Service Ticket Closed',
                 date: '23 Jan 2024',
                 user: 'Completed by RajDeep Singh',
                 icon: 'CheckSquare',
-                color: 'blue'
-            },
-            {
-                title: 'Service Ticket Created',
-                date: '24 Jan 2024',
-                user: 'Assigned to RajDeep Singh',
-                icon: 'User',
                 color: 'blue'
             },
             {
@@ -180,104 +190,15 @@ const AdminResidentialProject = () => {
                 color: 'green'
             },
             {
-                title: 'Subsidy Received',
-                date: '25 Jan 2024',
-                hasPdf: true,
-                icon: 'IndianRupee',
-                color: 'blue'
-            },
-            {
-                title: 'Subsidy Claimed',
-                date: '25 Jan 2024',
-                hasPdf: true,
-                icon: 'IndianRupee',
-                color: 'blue'
-            },
-            {
-                title: 'PCR by Discom',
-                date: '25 Jan 2024',
-                status: 'Completed',
-                hasPdf: true,
-                icon: 'FileText',
-                color: 'blue'
-            },
-            {
-                title: 'Solar Meter Status',
-                date: '25 Jan 2024',
-                status: 'Completed',
-                icon: 'Zap',
-                color: 'blue'
-            },
-            {
-                title: 'Meter Change File',
-                date: '25 Jan 2024',
-                hasPdf: true,
-                icon: 'FileText',
-                color: 'blue'
-            },
-            {
-                title: 'Assigned Installation To Prince',
-                date: 'Installer Prince',
-                user: '25 Jan 2024',
-                details: '2053, New Ram Bagh, Junagarh 143001',
-                mapLocation: true,
-                icon: 'User',
-                color: 'blue'
-            },
-            {
-                title: 'Picked Combo Kit From Warehouse',
-                date: 'Rajkot Warehouse',
-                user: '23 Jan 2024',
-                icon: 'MapPin',
-                color: 'blue'
-            },
-            {
-                title: 'Combokit Reached Company Warehouse',
-                date: 'Rajkot Warehouse',
-                user: '23 Jan 2024',
-                mapLocation: true,
-                icon: 'MapPin',
-                color: 'blue'
-            },
-            {
-                title: 'Meter Change Payment Paid',
-                date: '₹2,650 by online',
-                status: 'Completed',
-                details: '09 Oct 2023',
-                icon: 'CreditCard',
-                color: 'blue'
-            },
-            {
-                title: 'Combokit Payment Paid',
-                date: '₹1,30,0000 by online',
-                status: 'Completed',
-                details: '09 Oct 2023',
-                hasPdf: true,
-                icon: 'CreditCard',
-                color: 'blue'
-            },
-            {
-                title: 'Feasibility approbal by Discom(Auto)',
-                date: '23 Oct 2023',
-                icon: 'CheckSquare',
-                color: 'blue'
-            },
-            {
-                title: 'Reg. Summited for Subsidy',
-                date: 'by Ravi',
-                user: '07 Jan 2024',
-                hasPdf: true,
-                icon: 'FileText',
-                color: 'blue'
-            },
-            {
                 title: 'Token Amount Received',
                 date: 'paid 20,000 online',
                 details: '05 Jan 2024',
                 icon: 'IndianRupee',
                 color: 'blue'
             }
-        ];
+        );
+
+        return items;
     };
 
     useEffect(() => {
@@ -720,11 +641,20 @@ const AdminResidentialProject = () => {
         </table>
     );
 
-    const ActionButtons = ({ showDownload = true, showView = true }) => (
+    const ActionButtons = ({ showDownload = true, showView = true, orderId }) => (
         <div className="flex gap-2">
             {showDownload && (
-                <button className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center">
-                    <Download className="h-4 w-4 mr-1" /> Download
+                <button 
+                  onClick={() => {
+                    if (!orderId) {
+                      toast.error("Invoice not available for this stage yet.");
+                      return;
+                    }
+                    window.open(`${import.meta.env.VITE_API_URL || 'http://localhost:5000'}/api/orders/${orderId}/invoice`, '_blank');
+                  }}
+                  className="bg-green-600 hover:bg-green-700 text-white px-3 py-1 rounded text-sm flex items-center"
+                >
+                    <Download className="h-4 w-4 mr-1" /> Invoice
                 </button>
             )}
             {showView && (

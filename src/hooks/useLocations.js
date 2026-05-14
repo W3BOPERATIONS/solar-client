@@ -202,6 +202,8 @@ export const useLocations = () => {
     fetchClusters,
     fetchDistricts,
     fetchCities,
+    setClusters,
+    setDistricts,
     refreshStates: fetchStates
   };
 };

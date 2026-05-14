@@ -82,9 +82,9 @@ export default function SetPrice() {
   const [marginFilter, setMarginFilter] = useState('All');
   
   const [marginData, setMarginData] = useState([
-     { type: 'Prime', cost: 500, margin: 1000, total: 1500 },
-     { type: 'Regular', cost: 400, margin: 800, total: 1200 },
-     { type: 'Other', cost: 300, margin: 500, total: 800 }
+     { type: 'Prime', cost: 500, margin: 1000, total: 1500, minOrders: 0, percentageMargin: 0 },
+     { type: 'Regular', cost: 400, margin: 800, total: 1200, minOrders: 0, percentageMargin: 0 },
+     { type: 'Other', cost: 300, margin: 500, total: 800, minOrders: 0, percentageMargin: 0 }
   ]);
 
   const [newPriceForm, setNewPriceForm] = useState({
@@ -99,7 +99,9 @@ export default function SetPrice() {
     gst: 18,
     status: 'Active',
     comboKit: '',
-    kitType: 'All'
+    kitType: 'All',
+    validFrom: new Date().toISOString().split('T')[0],
+    validTo: ''
   });
 
   const [configurationsList, setConfigurationsList] = useState([]);
@@ -703,7 +705,9 @@ export default function SetPrice() {
       comboKit: item.comboKit || '',
       paymentType: rawPaymentType,
       role: rawPartnerType === 'All' ? '' : rawPartnerType,
-      kitType: item.kitType || 'All'
+      kitType: item.kitType || 'All',
+      validFrom: item.validFrom ? new Date(item.validFrom).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+      validTo: item.validTo ? new Date(item.validTo).toISOString().split('T')[0] : ''
     };
 
     // 1. Sync Product Type
@@ -1382,6 +1386,7 @@ export default function SetPrice() {
                           <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[8%]">Benchmark (₹)</th>
                           <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[12%]">Latest Buying Price (per Kw)</th>
                           <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-right w-[8%]">Margin</th>
+                          <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-center w-[10%]">Validity</th>
                           <th className="p-3 font-bold text-[#0076a8] text-[10px] uppercase tracking-widest text-right w-[10%] bg-blue-50/50">Final (₹)</th>
                           <th className="p-3 font-bold text-[#14233c] text-[10px] uppercase tracking-wider text-center w-[5%]">Action</th>
                        </tr>
@@ -1418,6 +1423,10 @@ export default function SetPrice() {
                                 <td className="p-3 text-right text-gray-500 font-mono text-[11px] border-r border-gray-50">{(row.benchmarkPrice || 0).toLocaleString()}</td>
                                 <td className="p-3 text-right text-gray-900 font-black font-mono text-[11px] border-r border-gray-50">{(row.marketPrice || 0).toLocaleString()}</td>
                                 <td className={`p-3 text-right font-black font-mono text-[11px] border-r border-gray-50 ${marginValue >= 0 ? 'text-green-600' : 'text-red-500'}`}>{marginValue.toLocaleString()}</td>
+                                <td className="p-3 text-center border-r border-gray-50">
+                                   <div className="text-[9px] font-bold text-gray-600">{row.validFrom ? new Date(row.validFrom).toLocaleDateString() : 'N/A'}</div>
+                                   <div className="text-[8px] text-gray-400">to {row.validTo ? new Date(row.validTo).toLocaleDateString() : '∞'}</div>
+                                </td>
                                 <td className="p-3 text-right bg-blue-50/30 font-black font-mono text-[12px] text-[#0076a8] border-r border-gray-50">{finalCompTotal.toLocaleString()}</td>
                                 <td className="p-3 text-center">
                                    <div className="flex items-center justify-center gap-1">
@@ -1597,6 +1606,8 @@ export default function SetPrice() {
                    </div>
                 </div>
                 <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">GST (%)</label><input type="number" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.gst} onChange={e => setNewPriceForm({ ...newPriceForm, gst: Number(e.target.value) })} /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valid From</label><input type="date" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.validFrom} onChange={e => setNewPriceForm({ ...newPriceForm, validFrom: e.target.value })} /></div>
+                <div><label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Valid To (Optional)</label><input type="date" className="w-full px-4 py-3 border border-gray-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition-all text-sm" value={newPriceForm.validTo} onChange={e => setNewPriceForm({ ...newPriceForm, validTo: e.target.value })} /></div>
               </div>
             </div>
             <div className="p-4 border-t border-gray-100 flex gap-3 bg-white flex-none">
@@ -1629,8 +1640,79 @@ export default function SetPrice() {
              <div className="p-6">
                 <div className="border border-gray-200 rounded overflow-hidden">
                    <table className="w-full text-left text-sm">
-                      <thead className="bg-[#6db3f2] text-white"><tr><th className="p-3">Delivery Type</th><th className="p-3 text-center">Cost (₹)</th><th className="p-3 text-center">Margin (₹)</th><th className="p-3 text-center">Total (₹)</th></tr></thead>
-                      <tbody>{marginData.map((row, idx) => (<tr key={idx} className="border-b"><td className="p-3">{row.type}</td><td className="p-3 text-center"><input type="number" value={row.cost} onChange={e => { const n = [...marginData]; n[idx].cost = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center"><input type="number" value={row.margin} onChange={e => { const n = [...marginData]; n[idx].margin = Number(e.target.value); n[idx].total = n[idx].cost + n[idx].margin; setMarginData(n); }} className="w-20 border rounded px-2 text-center" /></td><td className="p-3 text-center font-bold">₹{row.total}</td></tr>))}</tbody>
+                      <thead className="bg-[#6db3f2] text-white">
+                         <tr>
+                            <th className="p-3">Delivery Type</th>
+                            <th className="p-3 text-center">Min orders</th>
+                            <th className="p-3 text-center">Cost (₹)</th>
+                            <th className="p-3 text-center">Margin (₹)</th>
+                            <th className="p-3 text-center">
+                               <div className="flex flex-col items-center">
+                                  <span className="text-[10px] text-red-500 font-bold mb-0.5">% margin</span>
+                                  <span>Margin (%)</span>
+                               </div>
+                            </th>
+                            <th className="p-3 text-center">Total (₹)</th>
+                         </tr>
+                      </thead>
+                      <tbody>
+                         {marginData.map((row, idx) => (
+                            <tr key={idx} className="border-b">
+                               <td className="p-3">{row.type}</td>
+                               <td className="p-3 text-center">
+                                  <input 
+                                     type="number" 
+                                     value={row.minOrders || 0} 
+                                     onChange={e => { 
+                                        const n = [...marginData]; 
+                                        n[idx].minOrders = Number(e.target.value); 
+                                        setMarginData(n); 
+                                     }} 
+                                     className="w-20 border rounded px-2 py-1 text-center border-gray-300" 
+                                  />
+                               </td>
+                               <td className="p-3 text-center">
+                                  <input 
+                                     type="number" 
+                                     value={row.cost} 
+                                     onChange={e => { 
+                                        const n = [...marginData]; 
+                                        n[idx].cost = Number(e.target.value); 
+                                        n[idx].total = n[idx].cost + n[idx].margin; 
+                                        setMarginData(n); 
+                                     }} 
+                                     className="w-20 border rounded px-2 py-1 text-center border-gray-300" 
+                                  />
+                               </td>
+                               <td className="p-3 text-center">
+                                  <input 
+                                     type="number" 
+                                     value={row.margin} 
+                                     onChange={e => { 
+                                        const n = [...marginData]; 
+                                        n[idx].margin = Number(e.target.value); 
+                                        n[idx].total = n[idx].cost + n[idx].margin; 
+                                        setMarginData(n); 
+                                     }} 
+                                     className="w-20 border rounded px-2 py-1 text-center border-gray-300" 
+                                  />
+                               </td>
+                               <td className="p-3 text-center">
+                                  <input 
+                                     type="number" 
+                                     value={row.percentageMargin || 0} 
+                                     onChange={e => { 
+                                        const n = [...marginData]; 
+                                        n[idx].percentageMargin = Number(e.target.value); 
+                                        setMarginData(n); 
+                                     }} 
+                                     className="w-20 border rounded px-2 py-1 text-center border-gray-300" 
+                                  />
+                               </td>
+                               <td className="p-3 text-center font-bold">₹{row.total}</td>
+                            </tr>
+                         ))}
+                      </tbody>
                    </table>
                 </div>
              </div>

@@ -169,3 +169,8 @@ export const getAllCombokits = async () => {
     const response = await api.get('/combokit/all-combokits');
     return response.data;
 };
+
+export const getAllCustomizedCombokits = async () => {
+    const response = await api.get('/combokit/all-customized-combokits');
+    return response.data;
+};

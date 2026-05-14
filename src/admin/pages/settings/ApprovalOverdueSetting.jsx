@@ -177,23 +177,14 @@ export default function ApprovalOverdueSetting() {
                       {rule.status}
                     </button>
                   </td>
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="flex items-center space-x-3">
-                      <button
-                        onClick={() => handleEditClick(rule)}
-                        className="text-blue-600 hover:text-blue-900 transition-colors"
-                        title="Edit Rule"
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteRule(rule._id)}
-                        className="text-red-600 hover:text-red-900 transition-colors"
-                        title="Delete Rule"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-center">
+                    <button
+                      onClick={() => handleEditClick(rule)}
+                      className="inline-flex items-center px-3 py-1.5 border border-blue-600 text-blue-600 hover:bg-blue-600 hover:text-white rounded-md text-xs font-medium transition-all"
+                      title="Edit Rule"
+                    >
+                      <Edit className="h-3.5 w-3.5 mr-1.5" /> Edit Configuration
+                    </button>
                   </td>
                 </tr>
               ))}
@@ -227,18 +218,6 @@ export default function ApprovalOverdueSetting() {
             </li>
           </ol>
         </nav>
-        <button
-          onClick={() => {
-            setIsEditing(false);
-            setCurrentRuleId(null);
-            setNewRule({ ruleName: '', overdueDays: 1, status: 'Active' });
-            setIsAddingMetric(true);
-          }}
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700"
-        >
-          <Plus className="mr-2 h-4 w-4" />
-          Add Rule
-        </button>
       </div>
 
       <div className="container mx-auto p-4">
@@ -303,14 +282,10 @@ export default function ApprovalOverdueSetting() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700">Rule Name</label>
-                <input
-                  type="text"
-                  className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                  value={newRule.ruleName}
-                  onChange={(e) => setNewRule({ ...newRule, ruleName: e.target.value })}
-                  placeholder="e.g., Temporary Incharge Approval"
-                />
+                <label className="block text-sm font-medium text-gray-700">Approval Type</label>
+                <div className="mt-1 p-2 bg-gray-50 border border-gray-200 rounded-md text-sm text-gray-600 font-semibold">
+                  {newRule.ruleName}
+                </div>
               </div>
 
               <div>

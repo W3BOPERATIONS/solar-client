@@ -88,17 +88,19 @@ export default function LoanSetting() {
   const [loanProviderType, setLoanProviderType] = useState('NBFC');
   const [orderType, setOrderType] = useState('Combokit');
   const [selectedCombokits, setSelectedCombokits] = useState([]);
-  const [selectedCustomizedKit, setSelectedCustomizedKit] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState('');
-  const [selectedSubCategory, setSelectedSubCategory] = useState('');
-  const [selectedProjectType, setSelectedProjectType] = useState('');
-  const [selectedSubProjectType, setSelectedSubProjectType] = useState('');
+  const [selectedCustomizedKits, setSelectedCustomizedKits] = useState([]);
+  const [selectedCategories, setSelectedCategories] = useState([]);
+  const [selectedSubCategories, setSelectedSubCategories] = useState([]);
+  const [selectedProjectTypes, setSelectedProjectTypes] = useState([]);
+  const [selectedSubProjectTypes, setSelectedSubProjectTypes] = useState([]);
 
   // Loan Provider Management State
   const [providers, setProviders] = useState([]);
   const [selectedProviderId, setSelectedProviderId] = useState('');
   const [newProviderName, setNewProviderName] = useState('');
   const [editingProvider, setEditingProvider] = useState(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [currentEditingRuleId, setCurrentEditingRuleId] = useState(null);
 
   const [formFields, setFormFields] = useState({});
   const [outcomes, setOutcomes] = useState([
@@ -239,18 +241,29 @@ export default function LoanSetting() {
   };
 
   useEffect(() => {
-    if (selectedCategory) {
-      masterApi.getSubCategories({ categoryId: selectedCategory }).then(res => setSubCategories(res.data || []));
+    if (selectedCategories.length > 0) {
+      const promises = selectedCategories.map(cat => masterApi.getSubCategories({ categoryId: cat.value }));
+      Promise.all(promises).then(results => {
+        const allSubs = results.map(res => res.data || []).flat();
+        const uniqueSubs = Array.from(new Map(allSubs.map(s => [s._id, s])).values());
+        setSubCategories(uniqueSubs);
+      });
     } else {
       setSubCategories([]);
     }
-    // Removed setSelectedSubCategory('') reset here to prevent conflicts during rule editing
-  }, [selectedCategory]);
+  }, [selectedCategories]);
 
   useEffect(() => {
-    if (selectedCategory && selectedSubCategory) {
-      masterApi.getProjectCategoryMappings({ categoryId: selectedCategory, subCategoryId: selectedSubCategory }).then(res => {
-        const data = res.data || [];
+    if (selectedCategories.length > 0 && selectedSubCategories.length > 0) {
+      const promises = [];
+      selectedCategories.forEach(cat => {
+        selectedSubCategories.forEach(sub => {
+          promises.push(masterApi.getProjectCategoryMappings({ categoryId: cat.value, subCategoryId: sub.value }));
+        });
+      });
+
+      Promise.all(promises).then(results => {
+        const data = results.map(res => res.data || []).flat();
         setMappings(data);
 
         const ranges = data.map(m => ({
@@ -272,12 +285,12 @@ export default function LoanSetting() {
       setMappings([]);
       setProjectTypes([]);
     }
-    // Removed setSelectedProjectType('') reset here to prevent conflicts during rule editing
-  }, [selectedCategory, selectedSubCategory]);
+  }, [selectedCategories, selectedSubCategories]);
 
   useEffect(() => {
-    if (selectedProjectType) {
-      const matching = mappings.filter(m => `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === selectedProjectType);
+    if (selectedProjectTypes.length > 0) {
+      const labels = selectedProjectTypes.map(pt => pt.value);
+      const matching = mappings.filter(m => labels.includes(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`));
       const subTypes = matching.filter(m => m.subProjectTypeId).map(m => m.subProjectTypeId);
       const uniqueSubTypes = [];
       const seenIds = new Set();
@@ -291,8 +304,7 @@ export default function LoanSetting() {
     } else {
       setSubProjectTypes([]);
     }
-    // Removed setSelectedSubProjectType('') reset here to prevent conflicts during rule editing
-  }, [selectedProjectType, mappings]);
+  }, [selectedProjectTypes, mappings]);
 
   useEffect(() => {
     if (selectedLocation.country.length > 0 && !selectedLocation.country.includes('all')) {
@@ -358,12 +370,13 @@ export default function LoanSetting() {
       arraysEqual((r.states || []), selectedLocation.state) &&
       arraysEqual((r.clusters || []), selectedLocation.cluster) &&
       arraysEqual((r.districts || []), selectedLocation.district) &&
+      arraysEqual((r.districts || []), selectedLocation.district) &&
       (selectedCombokits.length === 0 || selectedCombokits.some(c => c.value === (r.combokitId?._id || r.combokitId))) &&
-      (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
-      (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
-      (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
-      (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
-      (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
+      (selectedCustomizedKits.length === 0 || selectedCustomizedKits.some(c => c.value === (r.customizedKitId?._id || r.customizedKitId))) &&
+      (selectedCategories.length === 0 || selectedCategories.some(c => c.value === (r.categoryId?._id || r.categoryId))) &&
+      (selectedSubCategories.length === 0 || selectedSubCategories.some(c => c.value === (r.subCategoryId?._id || r.subCategoryId))) &&
+      (selectedProjectTypes.length === 0 || selectedProjectTypes.some(c => c.value === r.projectType)) &&
+      (selectedSubProjectTypes.length === 0 || selectedSubProjectTypes.some(c => c.value === (r.subProjectTypeId?._id || r.subProjectTypeId)))
     );
 
     if (matchingRule && matchingRule.fields) {
@@ -389,7 +402,7 @@ export default function LoanSetting() {
 
   useEffect(() => {
     updateFormFromCurrentConfig();
-  }, [loanProviderType, orderType, selectedLocation, selectedCombokits, selectedCustomizedKit, selectedCategory, selectedSubCategory, selectedProjectType, selectedSubProjectType, loanRules]);
+  }, [loanProviderType, orderType, selectedLocation, selectedCombokits, selectedCustomizedKits, selectedCategories, selectedSubCategories, selectedProjectTypes, selectedSubProjectTypes, loanRules]);
 
   const handleCheckboxChange = (fieldId) => {
     setFormFields(prev => {
@@ -459,11 +472,11 @@ export default function LoanSetting() {
         states: selectedLocation.state.includes('all') ? [] : selectedLocation.state,
         clusters: selectedLocation.cluster.includes('all') ? [] : selectedLocation.cluster,
         districts: selectedLocation.district.includes('all') ? [] : selectedLocation.district,
-        customizedKitId: selectedCustomizedKit || null,
-        categoryId: selectedCategory || null,
-        subCategoryId: selectedSubCategory || null,
-        projectType: selectedProjectType,
-        subProjectTypeId: selectedSubProjectType || null,
+        customizedKitIds: selectedCustomizedKits.map(c => c.value),
+        categoryIds: selectedCategories.map(c => c.value),
+        subCategoryIds: selectedSubCategories.map(c => c.value),
+        projectType: selectedProjectTypes.length > 0 ? selectedProjectTypes[0].value : '',
+        subProjectTypeIds: selectedSubProjectTypes.map(c => c.value),
         fields: selectedFields,
         outcomes,
         interestRate: 0,
@@ -471,37 +484,43 @@ export default function LoanSetting() {
         maxAmount: 0
       };
 
-      const combokitIdsToSave = orderType === 'Combokit' && selectedCombokits.length > 0 
-        ? selectedCombokits.map(c => c.value) 
-        : [null];
+      if (isEditing && currentEditingRuleId) {
+        await settingsApi.updateLoanRule(currentEditingRuleId, basePayload);
+        setSuccess('Rule updated successfully');
+      } else {
+        const combokitIdsToSave = orderType === 'Combokit' && selectedCombokits.length > 0 
+          ? selectedCombokits.map(c => c.value) 
+          : [null];
 
-      for (const combokitId of combokitIdsToSave) {
-        const payload = { ...basePayload, combokitId };
+        for (const combokitId of combokitIdsToSave) {
+          const payload = { ...basePayload, combokitId };
 
-        const existingRule = loanRules.find(r =>
-          r.loanProviderType === loanProviderType &&
-          r.orderType === orderType &&
-          (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
-          arraysEqual((r.countries || []), selectedLocation.country) &&
-          arraysEqual((r.states || []), selectedLocation.state) &&
-          arraysEqual((r.clusters || []), selectedLocation.cluster) &&
-          arraysEqual((r.districts || []), selectedLocation.district) &&
-          (r.combokitId?._id || r.combokitId) === (combokitId || null) &&
-          (r.customizedKitId?._id || r.customizedKitId) === (selectedCustomizedKit || null) &&
-          (r.categoryId?._id || r.categoryId) === (selectedCategory || null) &&
-          (r.subCategoryId?._id || r.subCategoryId) === (selectedSubCategory || null) &&
-          (r.projectType === selectedProjectType || (!r.projectType && !selectedProjectType)) &&
-          (r.subProjectTypeId?._id || r.subProjectTypeId) === (selectedSubProjectType || null)
-        );
+          const existingRule = loanRules.find(r =>
+            r.loanProviderType === loanProviderType &&
+            r.orderType === orderType &&
+            (r.loanProviderId?._id || r.loanProviderId) === (selectedProviderId || null) &&
+            arraysEqual((r.countries || []), selectedLocation.country) &&
+            arraysEqual((r.states || []), selectedLocation.state) &&
+            arraysEqual((r.clusters || []), selectedLocation.cluster) &&
+            arraysEqual((r.districts || []), selectedLocation.district) &&
+            (r.combokitId?._id || r.combokitId) === (combokitId || null) &&
+            (selectedCustomizedKits.length === 0 || selectedCustomizedKits.some(c => c.value === (r.customizedKitId?._id || r.customizedKitId))) &&
+            (selectedCategories.length === 0 || selectedCategories.some(c => c.value === (r.categoryId?._id || r.categoryId))) &&
+            (selectedSubCategories.length === 0 || selectedSubCategories.some(c => c.value === (r.subCategoryId?._id || r.subCategoryId))) &&
+            (selectedProjectTypes.length === 0 || selectedProjectTypes.some(c => c.value === r.projectType)) &&
+            (selectedSubProjectTypes.length === 0 || selectedSubProjectTypes.some(c => c.value === (r.subProjectTypeId?._id || r.subProjectTypeId)))
+          );
 
-        if (existingRule) {
-          await settingsApi.updateLoanRule(existingRule._id, payload);
-        } else {
-          await settingsApi.createLoanRule(payload);
+          if (existingRule) {
+            await settingsApi.updateLoanRule(existingRule._id, payload);
+          } else {
+            await settingsApi.createLoanRule(payload);
+          }
         }
+        setSuccess('Settings saved successfully');
       }
 
-      setSuccess('Settings saved successfully');
+      handleReset();
       loadLoanRules();
     } catch (err) {
       console.error('Save failed:', err);
@@ -512,7 +531,22 @@ export default function LoanSetting() {
   };
 
   const handleReset = () => {
-    loadLoanRules();
+    setIsEditing(false);
+    setCurrentEditingRuleId(null);
+    setSelectedProviderId('');
+    setSelectedCategories([]);
+    setSelectedSubCategories([]);
+    setSelectedProjectTypes([]);
+    setSelectedSubProjectTypes([]);
+    setSelectedCombokits([]);
+    setSelectedCustomizedKits([]);
+    setFormFields({});
+    setOutcomes([
+      { status: 'approved', minScore: 80, maxScore: 100 },
+      { status: 'pre-approved', minScore: 60, maxScore: 79 },
+      { status: 'manual call', minScore: 40, maxScore: 59 },
+      { status: 'rejected', minScore: 0, maxScore: 39 }
+    ]);
     setSuccess('');
     setError('');
   };
@@ -542,12 +576,21 @@ export default function LoanSetting() {
             <p className="text-gray-500 text-sm font-medium mt-1">Configure scoring rules and eligibility criteria for loan providers</p>
           </div>
           <div className="flex space-x-3">
+            {isEditing && (
+              <button
+                onClick={handleReset}
+                className="flex items-center px-4 py-2 bg-red-50 border border-red-200 text-red-600 rounded-xl text-sm font-bold hover:bg-red-100 transition-all shadow-sm"
+              >
+                <X size={16} className="mr-2" />
+                Cancel Edit
+              </button>
+            )}
             <button
               onClick={handleReset}
               className="flex items-center px-4 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-bold hover:bg-gray-50 transition-all shadow-sm"
             >
               <RotateCcw size={16} className="mr-2" />
-              Reset
+              Reset Form
             </button>
             <button
               onClick={handleSave}
@@ -555,7 +598,7 @@ export default function LoanSetting() {
               className="flex items-center px-6 py-2 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all shadow-lg hover:shadow-blue-200 disabled:opacity-50"
             >
               {saving ? <Loader2 size={16} className="mr-2 animate-spin" /> : <Save size={16} className="mr-2" />}
-              Save Settings
+              {isEditing ? 'Update Configuration' : 'Save Settings'}
             </button>
           </div>
         </div>
@@ -853,81 +896,66 @@ export default function LoanSetting() {
               {orderType === 'Customised kit' && (
                 <div className="flex flex-col space-y-2">
                   <label className="text-sm font-bold text-gray-600">Select Customised Kit</label>
-                  <select
-                    value={selectedCustomizedKit}
-                    onChange={(e) => setSelectedCustomizedKit(e.target.value)}
-                    className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                  >
-                    <option value="">All Customised Kits</option>
-                    {customizedKits.map(kit => (
-                      <option key={kit._id} value={kit._id}>
-                        {kit.solarkitName || kit.name || 'Untitled Custom Kit'}
-                      </option>
-                    ))}
-                  </select>
+                  <Select
+                    isMulti
+                    value={selectedCustomizedKits}
+                    onChange={(selected) => setSelectedCustomizedKits(selected)}
+                    options={customizedKits.map(kit => ({ value: kit._id, label: kit.solarkitName || kit.name }))}
+                    className="text-xs font-bold shadow-sm"
+                    classNamePrefix="select"
+                    placeholder="Select Customised Kits..."
+                  />
                 </div>
               )}
 
               <div className="flex flex-col space-y-2">
                 <label className="text-sm font-bold text-gray-600">Category</label>
-                <select
-                  value={selectedCategory}
-                  onChange={(e) => {
-                    setSelectedCategory(e.target.value);
-                    setSelectedSubCategory('');
-                    setSelectedProjectType('');
-                    setSelectedSubProjectType('');
-                  }}
-                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                >
-                  <option value="">All Categories</option>
-                  {categories.map(cat => <option key={cat._id} value={cat._id}>{cat.name}</option>)}
-                </select>
+                <Select
+                  isMulti
+                  value={selectedCategories}
+                  onChange={(selected) => setSelectedCategories(selected || [])}
+                  options={categories.map(cat => ({ value: cat._id, label: cat.name }))}
+                  className="text-xs font-bold shadow-sm"
+                  placeholder="Select Categories..."
+                />
               </div>
 
               <div className="flex flex-col space-y-2">
                 <label className="text-sm font-bold text-gray-600">Sub Category</label>
-                <select
-                  value={selectedSubCategory}
-                  onChange={(e) => {
-                    setSelectedSubCategory(e.target.value);
-                    setSelectedProjectType('');
-                    setSelectedSubProjectType('');
-                  }}
-                  disabled={!selectedCategory}
-                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm disabled:bg-gray-50 disabled:opacity-60"
-                >
-                  <option value="">All Sub Categories</option>
-                  {subCategories.map(sub => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
-                </select>
+                <Select
+                  isMulti
+                  value={selectedSubCategories}
+                  onChange={(selected) => setSelectedSubCategories(selected || [])}
+                  options={subCategories.map(sub => ({ value: sub._id, label: sub.name }))}
+                  className="text-xs font-bold shadow-sm"
+                  placeholder="Select Sub Categories..."
+                  isDisabled={selectedCategories.length === 0}
+                />
               </div>
 
               <div className="flex flex-col space-y-2">
                 <label className="text-sm font-bold text-gray-600">Project Type</label>
-                <select
-                  value={selectedProjectType}
-                  onChange={(e) => {
-                    setSelectedProjectType(e.target.value);
-                    setSelectedSubProjectType('');
-                  }}
-                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm"
-                >
-                  <option value="">All Project Types</option>
-                  {projectTypes.map(pt => <option key={pt.label} value={pt.label}>{pt.label}</option>)}
-                </select>
+                <Select
+                  isMulti
+                  value={selectedProjectTypes}
+                  onChange={(selected) => setSelectedProjectTypes(selected || [])}
+                  options={projectTypes.map(pt => ({ value: pt.label, label: pt.label }))}
+                  className="text-xs font-bold shadow-sm"
+                  placeholder="Select Project Types..."
+                />
               </div>
 
               <div className="flex flex-col space-y-2">
                 <label className="text-sm font-bold text-gray-600">Sub Project Type</label>
-                <select
-                  value={selectedSubProjectType}
-                  onChange={(e) => setSelectedSubProjectType(e.target.value)}
-                  disabled={!selectedProjectType}
-                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl text-xs font-bold focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all shadow-sm disabled:bg-gray-50 disabled:opacity-60"
-                >
-                  <option value="">All Sub Project Types</option>
-                  {subProjectTypes.map(sub => <option key={sub._id} value={sub._id}>{sub.name}</option>)}
-                </select>
+                <Select
+                  isMulti
+                  value={selectedSubProjectTypes}
+                  onChange={(selected) => setSelectedSubProjectTypes(selected || [])}
+                  options={subProjectTypes.map(sub => ({ value: sub._id, label: sub.name }))}
+                  className="text-xs font-bold shadow-sm"
+                  placeholder="Select Sub Project Types..."
+                  isDisabled={selectedProjectTypes.length === 0}
+                />
               </div>
             </div>
 
@@ -981,12 +1009,20 @@ export default function LoanSetting() {
                       </div>
 
                       {formFields[opt.id]?.selected && (
-                        <button
-                          onClick={(e) => { e.stopPropagation(); addRange(opt.id); }}
-                          className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black hover:bg-blue-700 transition-all shadow-sm"
-                        >
-                          <Plus size={14} className="mr-1" /> ADD RANGE
-                        </button>
+                        <div className="flex items-center space-x-3">
+                          <div className="flex flex-col items-center">
+                            <span className="text-[9px] font-black text-blue-500 uppercase tracking-tighter">Total Score</span>
+                            <div className="w-12 h-8 bg-blue-50 border border-blue-200 rounded-lg flex items-center justify-center text-xs font-black text-blue-700 shadow-inner">
+                              {(formFields[opt.id]?.ranges || []).reduce((sum, r) => sum + (r.score || 0), 0)}
+                            </div>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); addRange(opt.id); }}
+                            className="flex items-center px-3 py-1.5 bg-blue-600 text-white rounded-lg text-[10px] font-black hover:bg-blue-700 transition-all shadow-sm"
+                          >
+                            <Plus size={14} className="mr-1" /> ADD RANGE
+                          </button>
+                        </div>
                       )}
                     </div>
 
@@ -1123,15 +1159,22 @@ export default function LoanSetting() {
                     {loanRules.length > 0 ? loanRules.map(rule => (
                       <tr key={rule._id} className="hover:bg-blue-50/10 transition-colors">
                         <td className="px-4 py-4">
-                          <div className="flex flex-col space-y-2">
+                          <div className="flex flex-col space-y-1.5">
                             <div className="flex items-center space-x-2">
-                              <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[10px] font-black uppercase">
+                              <span className="px-2 py-0.5 bg-blue-600 text-white rounded text-[9px] font-black uppercase tracking-tighter">
                                 {rule.loanProviderType}
                               </span>
-                              {rule.loanProviderId && <span className="text-xs font-bold text-gray-800">{rule.loanProviderId.name}</span>}
+                              {rule.loanProviderId && <span className="text-xs font-black text-gray-800">{rule.loanProviderId.name}</span>}
                             </div>
-                            <div className="text-[10px] text-gray-500 font-medium">
-                              {rule.categoryId?.name || 'All'} {rule.projectType ? `(${rule.projectType})` : ''}
+                            <div className="flex flex-col">
+                              <div className="text-[10px] font-bold text-blue-600 bg-blue-50/50 px-2 py-0.5 rounded-md border border-blue-100 inline-block w-fit">
+                                {rule.categoryIds?.length > 0 
+                                  ? rule.categoryIds.map(c => c.name).join(', ') 
+                                  : rule.categoryId?.name || 'All Categories'}
+                              </div>
+                              <div className="text-[10px] text-gray-400 font-bold mt-1">
+                                {rule.projectType ? `${rule.projectType}` : 'All Project Types'}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -1158,16 +1201,33 @@ export default function LoanSetting() {
                           <div className="flex justify-center space-x-2">
                             <button
                               onClick={() => {
+                                setIsEditing(true);
+                                setCurrentEditingRuleId(rule._id);
+
                                 // Restore Main Hierarchy
                                 setLoanProviderType(rule.loanProviderType);
                                 setOrderType(rule.orderType);
                                 setSelectedProviderId(rule.loanProviderId?._id || rule.loanProviderId || '');
-                                setSelectedCategory(rule.categoryId?._id || rule.categoryId || '');
-                                setSelectedSubCategory(rule.subCategoryId?._id || rule.subCategoryId || '');
-                                setSelectedProjectType(rule.projectType || '');
-                                setSelectedSubProjectType(rule.subProjectTypeId?._id || rule.subProjectTypeId || '');
+                                
+                                // Map plural IDs for multi-select
+                                setSelectedCategories(rule.categoryIds?.length > 0 
+                                  ? rule.categoryIds.map(c => ({ value: c._id || c, label: c.name || 'Category' })) 
+                                  : rule.categoryId ? [{ value: rule.categoryId._id || rule.categoryId, label: rule.categoryId.name || 'Category' }] : []);
+                                
+                                setSelectedSubCategories(rule.subCategoryIds?.length > 0 
+                                  ? rule.subCategoryIds.map(c => ({ value: c._id || c, label: c.name || 'Sub Category' })) 
+                                  : rule.subCategoryId ? [{ value: rule.subCategoryId._id || rule.subCategoryId, label: rule.subCategoryId.name || 'Sub Category' }] : []);
+                                
+                                setSelectedProjectTypes(rule.projectType ? [{ value: rule.projectType, label: rule.projectType }] : []);
+                                
+                                setSelectedSubProjectTypes(rule.subProjectTypeIds?.length > 0 
+                                  ? rule.subProjectTypeIds.map(c => ({ value: c._id || c, label: c.name || 'Sub Project Type' })) 
+                                  : rule.subProjectTypeId ? [{ value: rule.subProjectTypeId._id || rule.subProjectTypeId, label: rule.subProjectTypeId.name || 'Sub Project Type' }] : []);
+                                
                                 setSelectedCombokits(rule.combokitId ? [{ value: rule.combokitId._id || rule.combokitId, label: rule.combokitId.name || 'Selected Combokit' }] : []);
-                                setSelectedCustomizedKit(rule.customizedKitId?._id || rule.customizedKitId || '');
+                                setSelectedCustomizedKits(rule.customizedKitIds?.length > 0 
+                                  ? rule.customizedKitIds.map(c => ({ value: c._id || c, label: c.solarkitName || c.name || 'Custom Kit' })) 
+                                  : rule.customizedKitId ? [{ value: rule.customizedKitId._id || rule.customizedKitId, label: rule.customizedKitId.solarkitName || rule.customizedKitId.name || 'Custom Kit' }] : []);
 
                                 // Restore Location Hierarchy
                                 setSelectedLocation({

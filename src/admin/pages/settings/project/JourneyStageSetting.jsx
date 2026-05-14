@@ -107,6 +107,7 @@ const JourneyStageSetting = () => {
 
   // Open edit step modal
   const openEditStepModal = (step) => {
+    setCurrentStepId(step._id);
     setEditStepName(step.name);
     setShowEditStepModal(true);
   };

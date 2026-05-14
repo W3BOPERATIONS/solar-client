@@ -18,7 +18,7 @@ import {
 import { Chart } from 'react-google-charts';
 import { organizationApi } from '../../../services/organization/organizationApi';
 import * as locationApi from '../../../services/core/locationApi';
-import { getDepartments } from '../../../services/core/masterApi';
+import { getDepartments as getHRDepartments } from '../../../services/hr/departmentModuleApi';
 
 export default function OrganizationChart() {
   const [loading, setLoading] = useState(false);
@@ -60,15 +60,15 @@ export default function OrganizationChart() {
       setLoading(true);
       setError(null);
 
-      const [countriesRes, deptData, statsRes, chartRes] = await Promise.all([
+      const [countriesRes, hrDeptRes, statsRes, chartRes] = await Promise.all([
         locationApi.getCountries(),
-        getDepartments(),
+        getHRDepartments(),
         organizationApi.getStats(),
-        organizationApi.getChartData({})
+        organizationApi.getChartData({ departments: '' })
       ]);
 
       setCountries(countriesRes || []);
-      setDepartments(deptData.data || []);
+      setDepartments(hrDeptRes.departments || hrDeptRes.data || []);
       setStatsData(statsRes.data?.data || statsRes.data || []);
       setChartData(chartRes.data?.data || chartRes.data || []);
 
@@ -94,10 +94,9 @@ export default function OrganizationChart() {
   useEffect(() => {
     if (selectedCountry) {
       loadStates(selectedCountry._id);
-      // We might want to refresh Chart Data filtered by country if API supports it
-      refreshChartData(selectedCountry._id);
+      refreshChartData(selectedCountry._id, selectedDepartments);
     }
-  }, [selectedCountry]);
+  }, [selectedCountry, selectedDepartments]);
 
   // Effect: Fetch Employees when filters change
   useEffect(() => {
@@ -128,7 +127,6 @@ export default function OrganizationChart() {
 
   const loadClusters = async (districtId) => {
     try {
-      // getClusters accepts districtId directly
       const res = await locationApi.getClusters(districtId);
       setClusters(res || []);
     } catch (e) {
@@ -136,9 +134,32 @@ export default function OrganizationChart() {
     }
   };
 
-  const refreshChartData = async (countryId) => {
+  const loadClustersByState = async (stateId) => {
     try {
-      const res = await organizationApi.getChartData({ countryId });
+      const res = await locationApi.getClustersHierarchy(stateId);
+      setClusters(res || []);
+      setDistricts([]);
+    } catch (e) {
+      console.error("Failed to load clusters by state", e);
+    }
+  };
+
+  const loadDistrictsByCluster = async (clusterId) => {
+    try {
+      const res = await locationApi.getDistrictsHierarchy(clusterId);
+      setDistricts(res || []);
+    } catch (e) {
+      console.error("Failed to load districts by cluster", e);
+    }
+  };
+
+  const refreshChartData = async (countryId, deptIds) => {
+    try {
+      const params = { countryId };
+      if (deptIds && deptIds.length > 0) {
+        params.departments = deptIds.join(',');
+      }
+      const res = await organizationApi.getChartData(params);
       setChartData(res.data?.data || []);
       if (!res.data?.data || res.data.data.length <= 1) {
         console.log('⚠️ No data found in database for this section');
@@ -172,18 +193,16 @@ export default function OrganizationChart() {
   const handleFilterChange = (key, value) => {
     setFilters(prev => ({ ...prev, [key]: value }));
 
-    // Cascade logic for filters: State -> District -> Cluster
+    // Cascade logic for filters: State -> Cluster -> District
     if (key === 'state') {
-      if (value) loadDistricts(value);
-      else { setDistricts([]); setClusters([]); }
-      // Reset child filters
-      setFilters(prev => ({ ...prev, state: value, district: '', cluster: '' }));
+      if (value) loadClustersByState(value);
+      else { setClusters([]); setDistricts([]); }
+      setFilters(prev => ({ ...prev, state: value, cluster: '', district: '' }));
     }
-    if (key === 'district') {
-      if (value) loadClusters(value);
-      else setClusters([]);
-      // Reset child filter
-      setFilters(prev => ({ ...prev, district: value, cluster: '' }));
+    if (key === 'cluster') {
+      if (value) loadDistrictsByCluster(value);
+      else setDistricts([]);
+      setFilters(prev => ({ ...prev, cluster: value, district: '' }));
     }
   };
 
@@ -442,24 +461,6 @@ export default function OrganizationChart() {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
-                      District
-                    </label>
-                    <select
-                      value={filters.district}
-                      onChange={(e) => handleFilterChange('district', e.target.value)}
-                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
-                    >
-                      <option value="">All Districts</option>
-                      {districts.map(district => (
-                        <option key={district._id} value={district._id}>
-                          {district.name}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Cluster
                     </label>
                     <select
@@ -471,6 +472,24 @@ export default function OrganizationChart() {
                       {clusters.map(cluster => (
                         <option key={cluster._id} value={cluster._id}>
                           {cluster.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      District
+                    </label>
+                    <select
+                      value={filters.district}
+                      onChange={(e) => handleFilterChange('district', e.target.value)}
+                      className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition-all"
+                    >
+                      <option value="">All Districts</option>
+                      {districts.map(district => (
+                        <option key={district._id} value={district._id}>
+                          {district.name}
                         </option>
                       ))}
                     </select>

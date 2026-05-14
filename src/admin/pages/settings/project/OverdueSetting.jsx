@@ -63,7 +63,19 @@ export default function OverdueSetting() {
 
       // Also fetch all sub-categories for mapping
       const subCats = await getSubCategories();
-      setAllSubCategories(subCats?.data || []);
+      const rawSubCats = subCats?.data || [];
+      
+      // Deduplicate sub-categories by name (case-insensitive) for cleaner UI
+      const uniqueSubCats = [];
+      const seenNames = new Set();
+      rawSubCats.forEach(sc => {
+        const lowerName = sc.name.toLowerCase();
+        if (!seenNames.has(lowerName)) {
+          seenNames.add(lowerName);
+          uniqueSubCats.push(sc);
+        }
+      });
+      setAllSubCategories(uniqueSubCats);
     } catch (error) {
       console.error('Error fetching initial data:', error);
       toast.error('Failed to load configuration data');
@@ -140,7 +152,17 @@ export default function OverdueSetting() {
       if (selCat) {
         try {
           const res = await getSubCategories(selCat._id);
-          setAvailableSubCategories(res.data || []);
+          const rawSubCats = res.data || [];
+          // Deduplicate these too
+          const uniqueRes = [];
+          const seen = new Set();
+          rawSubCats.forEach(sc => {
+            if (!seen.has(sc.name.toLowerCase())) {
+              seen.add(sc.name.toLowerCase());
+              uniqueRes.push(sc);
+            }
+          });
+          setAvailableSubCategories(uniqueRes);
         } catch (err) {
           console.error("Error loading sub categories:", err);
         }
@@ -148,15 +170,35 @@ export default function OverdueSetting() {
     }
   };
 
-  const handleSubCategoryChange = (subCatName) => {
+  const handleSubCategoryChange = async (subCatName) => {
     setSubCategory(subCatName);
     setProjectType('');
     setSubProjectType('');
     setAvailableProjectTypes([]);
 
-    if (category && subCatName) {
-      const selCat = masterCategories.find(c => c.name === category);
-      const selSubCat = allSubCategories.find(sc => sc.name === subCatName);
+    let currentCategory = category;
+
+    // If category is not set, try to find it from the sub-category
+    if (!currentCategory) {
+      const selSubCat = allSubCategories.find(sc => sc.name.toLowerCase() === subCatName.toLowerCase());
+      if (selSubCat) {
+        const catId = selSubCat.categoryId?._id || selSubCat.categoryId;
+        const parentCat = masterCategories.find(c => c._id === catId);
+        if (parentCat) {
+          currentCategory = parentCat.name;
+          setCategory(parentCat.name);
+          // Also update available sub-categories for this category
+          try {
+            const res = await getSubCategories(catId);
+            setAvailableSubCategories(res.data || []);
+          } catch (err) { console.error(err); }
+        }
+      }
+    }
+
+    if (currentCategory && subCatName) {
+      const selCat = masterCategories.find(c => c.name === currentCategory);
+      const selSubCat = allSubCategories.find(sc => sc.name.toLowerCase() === subCatName.toLowerCase());
 
       if (selCat && selSubCat) {
         const ranges = projectMappings
@@ -169,6 +211,9 @@ export default function OverdueSetting() {
         setAvailableProjectTypes(ranges);
       }
     }
+    
+    // Sync summary tab
+    setSummaryTab(subCatName.toLowerCase());
   };
 
   const handleProjectTypeChange = async (ptName) => {

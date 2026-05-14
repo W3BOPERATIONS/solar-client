@@ -137,7 +137,7 @@ export default function QuoteSetting() {
     heightNote: 'Structure Height 6 x 8 Feet is included. Extra pipes beyond this will be paid by the customer.'
   });
   const [availableKits, setAvailableKits] = useState([]);
-  const [selectedKitId, setSelectedKitId] = useState(null);
+  const [selectedKitIds, setSelectedKitIds] = useState([]); // Multiple selection support
   const [kitLoading, setKitLoading] = useState(false);
   const [currentProposalNo, setCurrentProposalNo] = useState('');
   const [summarySearch, setSummarySearch] = useState('');
@@ -182,7 +182,14 @@ export default function QuoteSetting() {
   }, [kitTypesSelected]);
 
   const handleKitSelect = (kit) => {
-    setSelectedKitId(kit._id);
+    setSelectedKitIds(prev => {
+      const isSelected = prev.includes(kit._id);
+      if (isSelected) {
+        return prev.filter(id => id !== kit._id);
+      } else {
+        return [...prev, kit._id];
+      }
+    });
     
     // Load BOM from kit if available
     if (kit.type === 'Combo Kit' && kit.bom && kit.bom.length > 0) {
@@ -446,7 +453,8 @@ export default function QuoteSetting() {
         if (parsed.solarSettings) setSolarSettings(parsed.solarSettings);
         if (parsed.monthlyIsolation) setMonthlyIsolation(parsed.monthlyIsolation);
         if (parsed.bomData) setBomData(parsed.bomData);
-        if (parsed.selectedKitId) setSelectedKitId(parsed.selectedKitId);
+        if (parsed.selectedKitIds) setSelectedKitIds(parsed.selectedKitIds);
+        else if (parsed.selectedKitId) setSelectedKitIds([parsed.selectedKitId]); // Backward compatibility
         
         let restoredPages = parsed.selectedPages || [];
         if (!restoredPages.includes('Front Page')) {
@@ -507,7 +515,7 @@ export default function QuoteSetting() {
   // Auto-save state to localStorage on changes
   useEffect(() => {
     const setup = {
-      filters, solarSettings, monthlyIsolation, bomData, selectedKitId,
+      filters, solarSettings, monthlyIsolation, bomData, selectedKitIds,
       selectedPages, frontPageSettings, colorSettings, advancedOptions,
       unitPrice, inflationRate, degradationRate, quoteTypesSelected,
       partnerTypesSelected, planTypesSelected, kitTypesSelected,
@@ -516,7 +524,7 @@ export default function QuoteSetting() {
     };
     localStorage.setItem('activeQuoteSetup', JSON.stringify(setup));
   }, [
-    filters, solarSettings, monthlyIsolation, bomData, selectedKitId,
+    filters, solarSettings, monthlyIsolation, bomData, selectedKitIds,
     selectedPages, frontPageSettings, colorSettings, advancedOptions,
     unitPrice, inflationRate, degradationRate, quoteTypesSelected,
     partnerTypesSelected, planTypesSelected, kitTypesSelected,
@@ -2095,7 +2103,7 @@ export default function QuoteSetting() {
                     ) : (
                       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                         {availableKits.map(kit => {
-                          const isSelected = selectedKitId === kit._id;
+                          const isSelected = selectedKitIds.includes(kit._id);
                           return (
                             <button
                               key={kit._id}
@@ -2218,7 +2226,7 @@ export default function QuoteSetting() {
               badge="Material Specifications & Tables"
             >
 
-              {!selectedKitId ? (
+              {selectedKitIds.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16 px-8 text-center bg-gray-50/30 rounded-3xl border-2 border-dashed border-gray-100">
                   <div className="w-16 h-16 bg-white rounded-2xl flex items-center justify-center shadow-sm mb-4">
                     <Settings size={32} className="text-gray-300" />

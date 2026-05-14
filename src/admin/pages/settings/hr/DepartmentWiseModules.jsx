@@ -101,6 +101,7 @@ const DepartmentWiseModules = () => {
 
   // Form State
   const [selectedLevel, setSelectedLevel] = useState('country');
+  const [selectedPanel, setSelectedPanel] = useState(''); // NEW
   const [selectedModuleData, setSelectedModuleData] = useState('');
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [saving, setSaving] = useState(false);
@@ -295,7 +296,7 @@ const DepartmentWiseModules = () => {
             Assign Modules to Department
           </div>
           <div className="p-6 pb-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-6">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
               {/* Select Level */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Level</label>
@@ -311,22 +312,43 @@ const DepartmentWiseModules = () => {
                 </select>
               </div>
 
+              {/* Select Panel (Category) - NEW */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Panel</label>
+                <select
+                  value={selectedPanel}
+                  onChange={(e) => {
+                    setSelectedPanel(e.target.value);
+                    setSelectedModuleData(''); // Reset module when panel changes
+                  }}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="">-- Select Panel --</option>
+                  {SIDEBAR_MODULES.map((group) => (
+                    <option key={group.category} value={group.category}>
+                      {group.category}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
               {/* Select Modules */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Module</label>
                 <select
                   value={selectedModuleData}
                   onChange={(e) => setSelectedModuleData(e.target.value)}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  disabled={!selectedPanel}
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
                 >
-                  <option value="">Select an option</option>
-                  {SIDEBAR_MODULES.map((group) => (
+                  <option value="">{selectedPanel ? '-- Choose Module --' : 'First Select Panel'}</option>
+                  {selectedPanel && SIDEBAR_MODULES.find(g => g.category === selectedPanel)?.modules.map((mod) => (
                     <option
-                      key={group.category}
-                      value={`|${group.category}|${group.category.toLowerCase().replace(/\s+/g, '_')}`}
+                      key={mod.key}
+                      value={`${selectedPanel}|${mod.name}|${mod.key}`}
                       className="font-normal text-gray-800"
                     >
-                      {group.category}
+                      {mod.name}
                     </option>
                   ))}
                 </select>

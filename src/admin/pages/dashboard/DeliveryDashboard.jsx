@@ -1,5 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { dashboardAPI } from '../../../api/api';
+import inventoryApi from '../../../services/inventory/inventoryApi';
+import { getSolarKits, getAllCombokits, getAllCustomizedCombokits } from '../../../services/combokit/combokitApi';
+import { getPartners, getPartnerPlans } from '../../../services/partner/partnerApi';
 import ReactApexChart from 'react-apexcharts';
 import {
   Truck,
@@ -12,7 +15,9 @@ import {
   Calendar,
   Filter,
   CheckCircle,
-  XCircle
+  XCircle,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { useLocations } from '../../../hooks/useLocations';
 
@@ -40,14 +45,80 @@ export default function DeliveryDashboard() {
     state: '',
     cluster: '',
     district: '',
+    warehouse: '',
     deliveryType: '',
     category: '',
-    timeline: 'Last Month' // Default
+    startDate: '',
+    endDate: '',
+    partnerTypes: [],
+    partnerPlans: [],
+    status: '',
+    orderType: '',
+    specificKit: ''
   });
+
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [partnerPlans, setPartnerPlans] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [kitOptions, setKitOptions] = useState([]);
+  const [isTypesOpen, setIsTypesOpen] = useState(false);
+  const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const typesRef = useRef(null);
+  const plansRef = useRef(null);
 
   useEffect(() => {
     fetchStates();
+
+    const fetchPartnerData = async () => {
+      try {
+        const [typesRes, plansRes] = await Promise.all([
+          getPartners(),
+          getPartnerPlans()
+        ]);
+        setPartnerTypes(typesRes || []);
+        setPartnerPlans(plansRes.data || plansRes || []);
+        
+        const whRes = await inventoryApi.getAllWarehouses();
+        setWarehouses(whRes.data.data || []);
+      } catch (err) {
+        console.error('Error fetching initial dashboard data:', err);
+      }
+    };
+    fetchPartnerData();
+
+    const handleClickOutside = (event) => {
+      if (typesRef.current && !typesRef.current.contains(event.target)) setIsTypesOpen(false);
+      if (plansRef.current && !plansRef.current.contains(event.target)) setIsPlansOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  useEffect(() => {
+    const fetchKitOptions = async () => {
+      if (!filters.orderType) {
+        setKitOptions([]);
+        return;
+      }
+
+      try {
+        if (filters.orderType === 'Customized Kit') {
+          // Fetch from image 3 source
+          const res = await getAllCustomizedCombokits();
+          setKitOptions(res || []);
+        } else if (filters.orderType === 'ComboKit') {
+          // Fetch from image 4 source
+          const res = await getAllCombokits();
+          setKitOptions(res || []);
+        }
+      } catch (err) {
+        console.error('Error fetching kit options:', err);
+      }
+    };
+    fetchKitOptions();
+    // Reset specificKit when orderType changes
+    setFilters(prev => ({ ...prev, specificKit: '' }));
+  }, [filters.orderType]);
 
   // Fetch Dashboard Data
   useEffect(() => {
@@ -63,9 +134,16 @@ export default function DeliveryDashboard() {
         if (filters.state) params.state = filters.state;
         if (filters.cluster) params.cluster = filters.cluster;
         if (filters.district) params.district = filters.district;
+        if (filters.warehouse) params.warehouse = filters.warehouse;
         if (filters.deliveryType) params.deliveryType = filters.deliveryType;
         if (filters.category) params.category = filters.category;
-        if (filters.timeline) params.timeline = filters.timeline;
+        if (filters.startDate) params.startDate = filters.startDate;
+        if (filters.endDate) params.endDate = filters.endDate;
+        if (filters.status) params.status = filters.status;
+        if (filters.orderType) params.orderType = filters.orderType;
+        if (filters.specificKit) params.specificKit = filters.specificKit;
+        if (filters.partnerTypes.length > 0) params.partnerTypes = filters.partnerTypes.join(',');
+        if (filters.partnerPlans.length > 0) params.partnerPlans = filters.partnerPlans.join(',');
 
         const res = await dashboardAPI.getDelivery(params);
         if (res.data.success) {
@@ -139,14 +217,91 @@ export default function DeliveryDashboard() {
             <h3 className="text-xl font-bold text-blue-600 mb-0">Delivery Dashboard</h3>
           </div>
           <div className="flex space-x-2">
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Franchisee Delivery
-            </button>
-            <button className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2">
-              <Package className="h-4 w-4" />
-              Dealer Delivery
-            </button>
+            {/* Partner Types Dropdown */}
+            <div className="relative" ref={typesRef}>
+              <button 
+                onClick={() => setIsTypesOpen(!isTypesOpen)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                   <Package className="h-4 w-4" />
+                   <span className="truncate">
+                     {filters.partnerTypes.length === 0 ? 'Partner Types' : `${filters.partnerTypes.length} Selected`}
+                   </span>
+                </div>
+                <ChevronDown size={14} className={`transition-transform ${isTypesOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isTypesOpen && (
+                <div className="absolute z-50 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl py-2 left-0 sm:left-auto sm:right-0">
+                  <div className="max-h-60 overflow-y-auto px-2">
+                    {partnerTypes.map((type) => (
+                      <label key={type._id} className="flex items-center px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filters.partnerTypes.includes(type.name)}
+                          onChange={(e) => {
+                            const newValue = e.target.checked
+                              ? [...filters.partnerTypes, type.name]
+                              : filters.partnerTypes.filter(t => t !== type.name);
+                            handleFilterChange('partnerTypes', newValue);
+                          }}
+                        />
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 transition-colors ${filters.partnerTypes.includes(type.name) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-blue-400'}`}>
+                          {filters.partnerTypes.includes(type.name) && <Check size={12} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-gray-700 font-medium">{type.name}</span>
+                      </label>
+                    ))}
+                    {partnerTypes.length === 0 && <div className="p-3 text-sm text-gray-500 text-center">No types found</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Partner Plans Dropdown */}
+            <div className="relative" ref={plansRef}>
+              <button 
+                onClick={() => setIsPlansOpen(!isPlansOpen)}
+                className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 flex items-center gap-2 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                   <Package className="h-4 w-4" />
+                   <span className="truncate">
+                     {filters.partnerPlans.length === 0 ? 'Partner Plans' : `${filters.partnerPlans.length} Selected`}
+                   </span>
+                </div>
+                <ChevronDown size={14} className={`transition-transform ${isPlansOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isPlansOpen && (
+                <div className="absolute z-50 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl py-2 left-0 sm:left-auto sm:right-0">
+                  <div className="max-h-60 overflow-y-auto px-2">
+                    {partnerPlans.map((plan) => (
+                      <label key={plan._id} className="flex items-center px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filters.partnerPlans.includes(plan._id)}
+                          onChange={(e) => {
+                            const newValue = e.target.checked
+                              ? [...filters.partnerPlans, plan._id]
+                              : filters.partnerPlans.filter(p => p !== plan._id);
+                            handleFilterChange('partnerPlans', newValue);
+                          }}
+                        />
+                        <div className={`w-4 h-4 rounded border flex items-center justify-center mr-3 transition-colors ${filters.partnerPlans.includes(plan._id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-blue-400'}`}>
+                          {filters.partnerPlans.includes(plan._id) && <Check size={12} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-gray-700 font-medium">{plan.name || plan.planName}</span>
+                      </label>
+                    ))}
+                    {partnerPlans.length === 0 && <div className="p-3 text-sm text-gray-500 text-center">No plans found</div>}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -217,6 +372,21 @@ export default function DeliveryDashboard() {
             </select>
           </div>
 
+          {/* Warehouse */}
+          <div className="relative">
+            <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <select
+              className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+              value={filters.warehouse}
+              onChange={(e) => handleFilterChange('warehouse', e.target.value)}
+            >
+              <option value="">All Warehouses</option>
+              {warehouses.map(w => (
+                <option key={w._id} value={w._id}>{w.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Delivery Type */}
           <div className="relative">
             <Truck className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -248,21 +418,64 @@ export default function DeliveryDashboard() {
             </select>
           </div>
 
-          {/* Timeline */}
+          {/* Date Filters */}
+          <div className="lg:col-span-2 flex items-center gap-2 bg-white border border-gray-300 rounded-lg px-3 h-[46px] shadow-sm">
+            <Calendar className="h-4 w-4 text-blue-600 shrink-0" />
+            <div className="flex items-center gap-4 w-full h-full">
+              <div className="flex flex-col justify-center flex-1 h-full">
+                <span className="text-[9px] text-blue-600 uppercase font-bold leading-none mb-0.5">From Date</span>
+                <input
+                  type="date"
+                  className="text-[11px] bg-transparent border-none p-0 focus:ring-0 outline-none cursor-pointer text-gray-700 font-bold leading-none"
+                  value={filters.startDate}
+                  onChange={(e) => handleFilterChange('startDate', e.target.value)}
+                />
+              </div>
+              <div className="h-6 w-[1px] bg-gray-200"></div>
+              <div className="flex flex-col justify-center flex-1 h-full">
+                <span className="text-[9px] text-blue-600 uppercase font-bold leading-none mb-0.5">To Date</span>
+                <input
+                  type="date"
+                  className="text-[11px] bg-transparent border-none p-0 focus:ring-0 outline-none cursor-pointer text-gray-700 font-bold leading-none"
+                  value={filters.endDate}
+                  onChange={(e) => handleFilterChange('endDate', e.target.value)}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Order Type */}
           <div className="relative">
-            <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+            <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
             <select
               className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
-              value={filters.timeline}
-              onChange={(e) => handleFilterChange('timeline', e.target.value)}
+              value={filters.orderType}
+              onChange={(e) => handleFilterChange('orderType', e.target.value)}
             >
-              <option value="">select timeline</option>
-              <option value="Last Week">Last Week</option>
-              <option value="Last Month">Last Month</option>
-              <option value="Last 3 Months">Last 3 Months</option>
-              <option value="Last 6 Months">Last 6 Months</option>
+              <option value="">All Order Types</option>
+              <option value="Customized Kit">Customized Kit</option>
+              <option value="ComboKit">ComboKit</option>
             </select>
           </div>
+
+          {/* Specific Kit/Combo (Dependent) */}
+          {filters.orderType && (
+            <div className="relative animate-in fade-in slide-in-from-left-2 duration-300">
+              <Package className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+              <select
+                className="w-full pl-10 p-3 border border-blue-300 rounded-lg bg-white text-sm focus:ring-2 focus:ring-blue-500 shadow-sm"
+                value={filters.specificKit}
+                onChange={(e) => handleFilterChange('specificKit', e.target.value)}
+              >
+                <option value="">{`Select ${filters.orderType === 'Customized Kit' ? 'Solar Kit' : 'ComboKit'}`}</option>
+                {kitOptions.map(option => (
+                  <option key={option._id || option.id} value={option.solarkitName || option.name}>
+                    {option.solarkitName || option.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
       </div>
 
@@ -272,65 +485,13 @@ export default function DeliveryDashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-6">
         {/* TOTAL DELIVERIES Card */}
         <div className="bg-white rounded-lg shadow-sm border-l-4 border-blue-500">
-          <div className="p-5">
+          <div className="p-5 h-full flex flex-col justify-start">
             <div className="flex items-center justify-between mb-2">
-              <h6 className="text-gray-500 text-sm font-medium">TOTAL DELIVERIES</h6>
-              <Truck className="h-5 w-5 text-blue-500" />
+              <h6 className="text-gray-500 text-sm font-medium uppercase tracking-wider">Total Deliveries</h6>
+              <Truck className="h-6 w-6 text-blue-500" />
             </div>
-            <h4 className="text-2xl font-bold mb-4">{data.totalDeliveries}</h4>
-
-            {/* Tabs */}
-            <div className="flex space-x-1 mb-4">
-              <button
-                className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1 ${activeKitTab === 'kit' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}
-                onClick={() => setActiveKitTab('kit')}
-              >
-                <Package className="h-3 w-3" />
-                Customized Kit
-              </button>
-              <button
-                className={`px-3 py-1 text-sm rounded-lg flex items-center gap-1 ${activeKitTab === 'combo' ? 'bg-blue-100 text-blue-600' : 'bg-gray-100 text-gray-500'}`}
-                onClick={() => setActiveKitTab('combo')}
-              >
-                <Package className="h-3 w-3" />
-                ComboKit
-              </button>
-            </div>
-
-            {/* Tab Content */}
-            <div className="text-center">
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <div className="text-gray-500 text-xs flex items-center justify-center gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    Prime
-                  </div>
-                  <div className="font-bold text-sm text-blue-600">
-                    {activeKitTab === 'kit' ? data.breakdown.kit.prime : data.breakdown.combo.prime}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-500 text-xs flex items-center justify-center gap-1">
-                    <CheckCircle className="h-3 w-3" />
-                    Regular
-                  </div>
-                  <div className="font-bold text-sm text-green-600">
-                    {activeKitTab === 'kit' ? data.breakdown.kit.regular : data.breakdown.combo.regular}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-gray-500 text-xs flex items-center justify-center gap-1">
-                    <Package className="h-3 w-3" />
-                    Other
-                  </div>
-                  <div className="font-bold text-gray-600 text-sm">
-                    {activeKitTab === 'kit'
-                      ? (data.breakdown.kit.total - (data.breakdown.kit.prime + data.breakdown.kit.regular))
-                      : (data.breakdown.combo.total - (data.breakdown.combo.prime + data.breakdown.combo.regular))}
-                  </div>
-                </div>
-              </div>
-            </div>
+            <h4 className="text-4xl font-bold text-gray-800">{data.totalDeliveries}</h4>
+            <p className="text-xs text-gray-400 mt-2">Overall delivery count based on filters</p>
           </div>
         </div>
 
@@ -403,7 +564,7 @@ export default function DeliveryDashboard() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-gray-600 flex items-center gap-1">
                   <AlertCircle className="h-3 w-3 text-red-500" />
-                  Urgent
+                  Urgent {data.pending.settings ? `(${data.pending.settings.minDays}-${data.pending.settings.maxDays} Days)` : ''}
                 </span>
                 <strong className="text-red-600">{data.pending.urgent}</strong>
               </div>
@@ -418,7 +579,7 @@ export default function DeliveryDashboard() {
               <div className="flex justify-between items-center text-sm">
                 <span className="text-red-600 flex items-center gap-1">
                   <XCircle className="h-3 w-3" />
-                  Overdue
+                  Overdue {data.pending.settings ? `(>${data.pending.settings.maxDays} Days)` : ''}
                 </span>
                 <strong className="text-red-600">{data.pending.overdue}</strong>
               </div>
@@ -502,9 +663,24 @@ export default function DeliveryDashboard() {
 
       {/* Chart Section */}
       <div className="bg-white rounded-lg shadow-sm p-5 mb-6">
-        <div className="flex items-center gap-2 mb-4">
-          <BarChart3 className="h-5 w-5 text-blue-600" />
-          <h4 className="text-lg font-bold text-blue-600">Delivery Summary Chart (Real-Time)</h4>
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-blue-600" />
+            <h4 className="text-lg font-bold text-blue-600">Delivery Summary Chart (Real-Time)</h4>
+          </div>
+          <div className="flex items-center gap-2">
+            <Filter size={16} className="text-gray-400" />
+            <select 
+              className="p-2 border border-gray-300 rounded-lg text-sm bg-white focus:ring-2 focus:ring-blue-500"
+              value={filters.status}
+              onChange={(e) => handleFilterChange('status', e.target.value)}
+            >
+              <option value="">All Status</option>
+              <option value="pending">At Warehouse</option>
+              <option value="in_transit">Out for Delivery</option>
+              <option value="delivered">Delivered</option>
+            </select>
+          </div>
         </div>
         {typeof window !== 'undefined' && (
           <ReactApexChart

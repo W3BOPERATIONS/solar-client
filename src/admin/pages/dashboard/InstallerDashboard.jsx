@@ -1,6 +1,8 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { dashboardAPI } from '../../../api/api';
 import * as masterApi from '../../../services/core/masterApi';
+import { getPartners, getPartnerPlans } from '../../../services/partner/partnerApi';
 import ReactApexChart from 'react-apexcharts';
 import {
   Users,
@@ -9,11 +11,14 @@ import {
   CheckCircle,
   Calendar,
   Filter,
-  X
+  X,
+  Check,
+  ChevronDown
 } from 'lucide-react';
 import { useLocations } from '../../../hooks/useLocations';
 
 export default function InstallerDashboard() {
+  const navigate = useNavigate();
   const {
     countries,
     states,
@@ -35,8 +40,17 @@ export default function InstallerDashboard() {
     projectType: '',
     subType: '',
     startDate: '',
-    endDate: ''
+    endDate: '',
+    partnerTypes: [],
+    partnerPlans: []
   });
+
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [partnerPlans, setPartnerPlans] = useState([]);
+  const [isTypesOpen, setIsTypesOpen] = useState(false);
+  const [isPlansOpen, setIsPlansOpen] = useState(false);
+  const typesRef = useRef(null);
+  const plansRef = useRef(null);
 
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
@@ -79,6 +93,27 @@ export default function InstallerDashboard() {
       }
     };
     loadMasterData();
+
+    const fetchPartnerData = async () => {
+      try {
+        const [typesRes, plansRes] = await Promise.all([
+          getPartners(),
+          getPartnerPlans()
+        ]);
+        setPartnerTypes(typesRes || []);
+        setPartnerPlans(plansRes.data || plansRes || []);
+      } catch (err) {
+        console.error('Error fetching partner data:', err);
+      }
+    };
+    fetchPartnerData();
+
+    const handleClickOutside = (event) => {
+      if (typesRef.current && !typesRef.current.contains(event.target)) setIsTypesOpen(false);
+      if (plansRef.current && !plansRef.current.contains(event.target)) setIsPlansOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   useEffect(() => {
@@ -220,7 +255,9 @@ export default function InstallerDashboard() {
       projectType: '',
       subType: '',
       startDate: '',
-      endDate: ''
+      endDate: '',
+      partnerTypes: [],
+      partnerPlans: []
     });
   };
 
@@ -253,14 +290,91 @@ export default function InstallerDashboard() {
             </h2>
           </div>
           <div className="flex flex-wrap gap-2">
-            <button className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 flex items-center gap-2">
-              <Users size={18} />
-              Franchisee Installer
-            </button>
-            <button className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 flex items-center gap-2">
-              <Users size={18} />
-              Dealer Installer
-            </button>
+            {/* Partner Types Dropdown */}
+            <div className="relative" ref={typesRef}>
+              <button 
+                onClick={() => setIsTypesOpen(!isTypesOpen)}
+                className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 flex items-center gap-2 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                   <Users size={18} />
+                   <span className="truncate">
+                     {filters.partnerTypes.length === 0 ? 'Partner Types' : `${filters.partnerTypes.length} Selected`}
+                   </span>
+                </div>
+                <ChevronDown size={16} className={`transition-transform ${isTypesOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isTypesOpen && (
+                <div className="absolute z-50 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl py-2 left-0 sm:left-auto sm:right-0">
+                  <div className="max-h-60 overflow-y-auto px-2">
+                    {partnerTypes.map((type) => (
+                      <label key={type._id} className="flex items-center px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filters.partnerTypes.includes(type.name)}
+                          onChange={(e) => {
+                            const newValue = e.target.checked
+                              ? [...filters.partnerTypes, type.name]
+                              : filters.partnerTypes.filter(t => t !== type.name);
+                            handleFilterChange('partnerTypes', newValue);
+                          }}
+                        />
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center mr-3 transition-colors ${filters.partnerTypes.includes(type.name) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-blue-400'}`}>
+                          {filters.partnerTypes.includes(type.name) && <Check size={14} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-gray-700 font-medium">{type.name}</span>
+                      </label>
+                    ))}
+                    {partnerTypes.length === 0 && <div className="p-3 text-sm text-gray-500 text-center">No types found</div>}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Partner Plans Dropdown */}
+            <div className="relative" ref={plansRef}>
+              <button 
+                onClick={() => setIsPlansOpen(!isPlansOpen)}
+                className="bg-white text-blue-600 px-4 py-2 rounded-lg font-medium hover:bg-blue-50 flex items-center gap-2 min-w-[160px] justify-between"
+              >
+                <div className="flex items-center gap-2">
+                   <Users size={18} />
+                   <span className="truncate">
+                     {filters.partnerPlans.length === 0 ? 'Partner Plans' : `${filters.partnerPlans.length} Selected`}
+                   </span>
+                </div>
+                <ChevronDown size={16} className={`transition-transform ${isPlansOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {isPlansOpen && (
+                <div className="absolute z-50 mt-2 w-64 bg-white border border-gray-200 rounded-xl shadow-xl py-2 left-0 sm:left-auto sm:right-0">
+                  <div className="max-h-60 overflow-y-auto px-2">
+                    {partnerPlans.map((plan) => (
+                      <label key={plan._id} className="flex items-center px-3 py-2 hover:bg-blue-50 rounded-lg cursor-pointer transition-colors group">
+                        <input
+                          type="checkbox"
+                          className="hidden"
+                          checked={filters.partnerPlans.includes(plan._id)}
+                          onChange={(e) => {
+                            const newValue = e.target.checked
+                              ? [...filters.partnerPlans, plan._id]
+                              : filters.partnerPlans.filter(p => p !== plan._id);
+                            handleFilterChange('partnerPlans', newValue);
+                          }}
+                        />
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center mr-3 transition-colors ${filters.partnerPlans.includes(plan._id) ? 'bg-blue-600 border-blue-600' : 'border-gray-300 group-hover:border-blue-400'}`}>
+                          {filters.partnerPlans.includes(plan._id) && <Check size={14} className="text-white" />}
+                        </div>
+                        <span className="text-sm text-gray-700 font-medium">{plan.name || plan.planName}</span>
+                      </label>
+                    ))}
+                    {partnerPlans.length === 0 && <div className="p-3 text-sm text-gray-500 text-center">No plans found</div>}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>

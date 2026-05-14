@@ -336,8 +336,10 @@ export default function SupplierType() {
 
   // Cascading logic based on Mappings
   useEffect(() => {
-    if (formData.categories.length > 0) {
-      const selectedCatMappings = masterLists.mappings.filter(m => formData.categories.includes(m.categoryId?.name));
+    const activeCategories = editingTypeId ? editFormData.categories : formData.categories;
+    
+    if (activeCategories.length > 0) {
+      const selectedCatMappings = masterLists.mappings.filter(m => activeCategories.includes(m.categoryId?.name));
 
       // Extract unique subCategories
       const uniqueSubs = [];
@@ -352,13 +354,16 @@ export default function SupplierType() {
     } else {
       setMasterLists(prev => ({ ...prev, subCategories: [] }));
     }
-  }, [formData.categories, masterLists.mappings]);
+  }, [formData.categories, editFormData.categories, masterLists.mappings, editingTypeId]);
 
   useEffect(() => {
-    if (formData.categories.length > 0 && formData.subCategories.length > 0) {
+    const activeCategories = editingTypeId ? editFormData.categories : formData.categories;
+    const activeSubCategories = editingTypeId ? editFormData.subCategories : formData.subCategories;
+
+    if (activeCategories.length > 0 && activeSubCategories.length > 0) {
       const filteredMappings = masterLists.mappings.filter(m =>
-        formData.categories.includes(m.categoryId?.name) &&
-        formData.subCategories.includes(m.subCategoryId?.name)
+        activeCategories.includes(m.categoryId?.name) &&
+        activeSubCategories.includes(m.subCategoryId?.name)
       );
 
       // Extract unique Project Type Ranges
@@ -375,14 +380,18 @@ export default function SupplierType() {
     } else {
       setMasterLists(prev => ({ ...prev, projectTypes: [] }));
     }
-  }, [formData.categories, formData.subCategories, masterLists.mappings]);
+  }, [formData.categories, formData.subCategories, editFormData.categories, editFormData.subCategories, masterLists.mappings, editingTypeId]);
 
   useEffect(() => {
-    if (formData.categories.length > 0 && formData.subCategories.length > 0 && formData.projectTypes.length > 0) {
+    const activeCategories = editingTypeId ? editFormData.categories : formData.categories;
+    const activeSubCategories = editingTypeId ? editFormData.subCategories : formData.subCategories;
+    const activeProjectTypes = editingTypeId ? editFormData.projectTypes : formData.projectTypes;
+
+    if (activeCategories.length > 0 && activeSubCategories.length > 0 && activeProjectTypes.length > 0) {
       const filteredMappings = masterLists.mappings.filter(m =>
-        formData.categories.includes(m.categoryId?.name) &&
-        formData.subCategories.includes(m.subCategoryId?.name) &&
-        formData.projectTypes.includes(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+        activeCategories.includes(m.categoryId?.name) &&
+        activeSubCategories.includes(m.subCategoryId?.name) &&
+        activeProjectTypes.includes(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
       );
 
       // Extract unique Sub Project Types
@@ -398,7 +407,7 @@ export default function SupplierType() {
     } else {
       setMasterLists(prev => ({ ...prev, subProjectTypes: [] }));
     }
-  }, [formData.categories, formData.subCategories, formData.projectTypes, masterLists.mappings]);
+  }, [formData.categories, formData.subCategories, formData.projectTypes, editFormData.categories, editFormData.subCategories, editFormData.projectTypes, masterLists.mappings, editingTypeId]);
 
   // Remove the old master fetching effects if they exist
   // (I already replace the previous effects block in the next chunk)

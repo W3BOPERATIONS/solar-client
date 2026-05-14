@@ -76,7 +76,7 @@ export default function PlaceholderNameSetting() {
     { label: 'Capacity', icon: <Zap className="w-4 h-4" />, color: 'bg-yellow-50 text-yellow-600 border-yellow-200' },
   ];
 
-  const dbFields = [
+  const [dbFieldsList, setDbFieldsList] = useState([
     { label: 'Project ID', value: 'projectId' },
     { label: 'Project Name', value: 'projectName' },
     { label: 'Category', value: 'category' },
@@ -93,7 +93,7 @@ export default function PlaceholderNameSetting() {
     { label: 'Project Cost', value: 'totalAmount' },
     { label: 'Commission', value: 'commission' },
     { label: 'Project Status', value: 'status' }
-  ];
+  ]);
 
   // Initialize data
   useEffect(() => {
@@ -109,6 +109,40 @@ export default function PlaceholderNameSetting() {
       ]);
 
       setAllJourneyStages(stages);
+
+      // Dynamically build dbFields from static ones + stage fields
+      const initialDbFields = [
+        { label: 'Project ID', value: 'projectId' },
+        { label: 'Project Name', value: 'projectName' },
+        { label: 'Category', value: 'category' },
+        { label: 'Project Type', value: 'projectType' },
+        { label: 'Sub Project Type', value: 'subProjectType' },
+        { label: 'Total KW (System Capacity)', value: 'totalKW' },
+        { label: 'Client Name', value: 'authorizedPersonName' },
+        { label: 'Client Mobile', value: 'mobile' },
+        { label: 'Client Email', value: 'email' },
+        { label: 'Client Address', value: 'address' },
+        { label: 'Installation Date', value: 'installationDate' },
+        { label: 'Consumer Number', value: 'consumerNumber' },
+        { label: 'Due Date', value: 'dueDate' },
+        { label: 'Project Cost', value: 'totalAmount' },
+        { label: 'Commission', value: 'commission' },
+        { label: 'Project Status', value: 'status' }
+      ];
+
+      const stageFields = [];
+      stages.forEach(stage => {
+        if (stage.fields && Array.isArray(stage.fields)) {
+          stage.fields.forEach(field => {
+            const fieldName = typeof field === 'object' ? (field.name || field.label) : field;
+            if (fieldName && !initialDbFields.find(f => f.label === fieldName) && !stageFields.find(f => f.label === fieldName)) {
+              stageFields.push({ label: fieldName, value: fieldName });
+            }
+          });
+        }
+      });
+      
+      setDbFieldsList([...initialDbFields, ...stageFields]);
 
       // Group configurations (same logic as DocumentationSetting) to prevent duplication in dropdown
       if (allConfigs && Array.isArray(allConfigs)) {
@@ -304,7 +338,7 @@ export default function PlaceholderNameSetting() {
     if (!finalSelectedKey) return;
 
     const stepName = selectedStep?.name || selectedStep?.title || '';
-    const matchingDbField = dbFields.find(f => f.label.toLowerCase() === finalSelectedKey.toLowerCase())?.value || '';
+    const matchingDbField = dbFieldsList.find(f => f.label.toLowerCase() === finalSelectedKey.toLowerCase())?.value || '';
 
     try {
       await projectApi.savePlaceholder({
@@ -670,7 +704,7 @@ export default function PlaceholderNameSetting() {
                       onChange={(e) => setSelectedDbField(e.target.value)}
                     >
                       <option value="">Select database field to link</option>
-                      {dbFields.map((f, i) => (
+                      {dbFieldsList.map((f, i) => (
                         <option key={i} value={f.value}>{f.label}</option>
                       ))}
                     </select>

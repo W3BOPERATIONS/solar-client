@@ -160,12 +160,10 @@ export default function AdminSidebar() {
           icon: BarChart3,
           isGroup: true,
           isExpanded: expandedSections.userPerformance,
-          children: [
-            { name: '- Partner Manager Dashboard', href: '/admin/dashboard/user-performance/partner-manager', icon: UserCog },
-            { name: '- Partner Dashboard', href: '/admin/dashboard/user-performance/partner', icon: Building },
-            { name: '- Dealer Manager Dashboard', href: '/admin/dashboard/user-performance/dealer-manager', icon: UserCheck },
-            { name: '- Dealer Dashboard', href: '/admin/dashboard/user-performance/dealer', icon: StoreIcon },
-          ]
+            children: [
+              { name: '- Partner Manager Dashboard', href: '/admin/dashboard/user-performance/partner-manager', icon: UserCog },
+              { name: '- Partner Dashboard', href: '/admin/dashboard/user-performance/partner', icon: Building },
+            ]
         },
         { name: 'Orders', icon: ShoppingCart, href: '/admin/dashboard/orders' },
         { name: 'Orders by Loan', icon: FileBarChart, href: '/admin/dashboard/orders-by-loan' },
@@ -290,6 +288,7 @@ export default function AdminSidebar() {
             { name: '- Create Department', href: '/admin/settings/hr/create-department', icon: Building2 },
 
             { name: '- Department-wise Modules', href: '/admin/settings/hr/department-wise-modules', icon: LayoutDashboard },
+            { name: '- Panels - select level wise panels', href: '/admin/settings/hr/panels-level-wise', icon: Layers },
             { name: '- Temporary Incharge Setting', href: '/admin/settings/hr/temporary-incharge-setting', icon: Users },
             { name: '- Leave Approvals', href: '/admin/settings/hr/leave-approvals', icon: CheckCircle2 },
             { name: '- Resign Approvals', href: '/admin/settings/hr/resign-approvals', icon: CheckCircle2 },

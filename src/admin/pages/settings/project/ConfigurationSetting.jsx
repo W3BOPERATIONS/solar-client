@@ -20,7 +20,7 @@ import { getProjectTypes, getProjectCategoryMappings, getSubCategories } from '.
 import { useNavigate } from 'react-router-dom';
 
 import { getCountries, getStates, getClustersHierarchy, getDistrictsHierarchy } from '../../../../services/core/locationApi';
-import { createDiscom, getDiscomsByState, getQuoteSettings } from '../../../../services/quote/quoteApi';
+import { createDiscom, getDiscomsByState, getQuoteSettings, deleteDiscom } from '../../../../services/quote/quoteApi';
 import toast from 'react-hot-toast';
 import { Loader2 } from 'lucide-react';
 
@@ -346,6 +346,27 @@ const ConfigurationSetting = () => {
     } catch (error) {
       console.error("Error adding discom:", error);
       toast.error("Failed to add Discom");
+    } finally {
+      setIsDiscomLoading(false);
+    }
+  };
+
+  const handleDeleteDiscom = async (e, discomId, name) => {
+    e.stopPropagation();
+    if (!window.confirm(`Are you sure you want to delete DISCOM "${name}"?`)) return;
+
+    try {
+      setIsDiscomLoading(true);
+      await deleteDiscom(discomId);
+      toast.success("DISCOM deleted successfully");
+      
+      // Update local list
+      setDiscoms(prev => prev.filter(d => d._id !== discomId));
+      // Remove from selected if it was there
+      setSelectedDiscoms(prev => prev.filter(d => d !== name));
+    } catch (error) {
+      console.error("Error deleting discom:", error);
+      toast.error("Failed to delete DISCOM");
     } finally {
       setIsDiscomLoading(false);
     }
@@ -995,11 +1016,18 @@ const ConfigurationSetting = () => {
                       <div
                         key={discom._id}
                         onClick={() => handleDiscomSelect(discom.name)}
-                        className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg ${selectedDiscoms.includes(discom.name)
+                        className={`bg-white border rounded-xl p-4 text-center cursor-pointer transition-all duration-300 hover:-translate-y-1 hover:shadow-lg relative group ${selectedDiscoms.includes(discom.name)
                           ? 'border-blue-500 border-2 bg-blue-50'
                           : 'border-gray-200 hover:border-blue-300'
                           }`}
                       >
+                        <button
+                          onClick={(e) => handleDeleteDiscom(e, discom._id, discom.name)}
+                          className="absolute top-2 right-2 p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg opacity-0 group-hover:opacity-100 transition-all z-10"
+                          title="Delete DISCOM"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
                         <h4 className={`font-bold ${selectedDiscoms.includes(discom.name) ? 'text-blue-700' : 'text-gray-800'}`}>{discom.name}</h4>
                         <p className="text-gray-500 text-sm mt-1">
                           {states.find(s => s._id === discom.state)?.name || 'State'}

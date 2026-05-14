@@ -19,9 +19,72 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useLocations } from '../../../hooks/useLocations';
-import { getLoanApplications, getLoanStats } from '../../../services/loan/loanApi';
+import { getLoanApplications, getLoanStats, getLoanCountsByLocation } from '../../../services/loan/loanApi';
 import * as masterApi from '../../../services/core/masterApi';
 import salesSettingsService from '../../../services/settings/salesSettingsApi';
+
+function MultiSelect({ label, options, selected, onChange, placeholder = 'Select...' }) {
+  const [isOpen, setIsOpen] = React.useState(false);
+  const containerRef = React.useRef(null);
+
+  React.useEffect(() => {
+    function handleClickOutside(event) {
+      if (containerRef.current && !containerRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const toggleOption = (id) => {
+    const newSelected = selected.includes(id)
+      ? selected.filter(item => item !== id)
+      : [...selected, id];
+    onChange(newSelected);
+  };
+
+  return (
+    <div className="relative w-full" ref={containerRef}>
+      <label className="block text-xs font-medium text-gray-500 mb-1">{label}</label>
+      <div 
+        className="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm cursor-pointer flex justify-between items-center min-h-[42px]"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="truncate text-gray-700">
+          {selected.length === 0 ? placeholder : 
+           selected.length === options.length ? 'All Selected' :
+           `${selected.length} Selected`}
+        </div>
+        <Filter className="h-4 w-4 text-gray-400" />
+      </div>
+      {isOpen && (
+        <div className="absolute z-[100] mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto p-2">
+          <div 
+            className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer border-b mb-1"
+            onClick={() => {
+              if (selected.length === options.length) onChange([]);
+              else onChange(options.map(o => o._id || o.id));
+            }}
+          >
+            <input type="checkbox" checked={selected.length === options.length && options.length > 0} readOnly />
+            <span className="text-sm font-bold">Select All</span>
+          </div>
+          {options.map(opt => (
+            <div 
+              key={opt._id || opt.id} 
+              className="flex items-center gap-2 p-2 hover:bg-gray-50 rounded cursor-pointer"
+              onClick={() => toggleOption(opt._id || opt.id)}
+            >
+              <input type="checkbox" checked={selected.includes(opt._id || opt.id)} readOnly />
+              <span className="text-sm">{opt.name}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function Badge({ tone = 'gray', children, className = '' }) {
   const map = {
@@ -65,11 +128,15 @@ export default function OrdersByLoanDashboard() {
     subType: '',
   });
 
-  const [bankFranchiseeFilter, setBankFranchiseeFilter] = useState('');
-  const [privateFranchiseeFilter, setPrivateFranchiseeFilter] = useState('');
-
   const [bankLoansData, setBankLoansData] = useState([]);
   const [privateLoansData, setPrivateLoansData] = useState([]);
+  const [franchisees, setFranchisees] = useState([]);
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [partnerPlans, setPartnerPlans] = useState([]);
+  
+  const [selectedFranchisees, setSelectedFranchisees] = useState([]);
+  const [selectedPartnerTypes, setSelectedPartnerTypes] = useState([]);
+  const [selectedPlans, setSelectedPlans] = useState([]);
   const [categories, setCategories] = useState([]);
   const [subCategories, setSubCategories] = useState([]);
   const [projectTypes, setProjectTypes] = useState([]);
@@ -81,6 +148,7 @@ export default function OrdersByLoanDashboard() {
     totalDisbursed: 0,
     overdue: 0
   });
+  const [locationCounts, setLocationCounts] = useState({ states: [], clusters: [], districts: [] });
 
   const { countries, states, clusters, districts, fetchStates, fetchClusters, fetchDistricts } = useLocations();
   const selectedCountry = countries.find((c) => c._id === selectedCountryId) || null;
@@ -190,11 +258,30 @@ export default function OrdersByLoanDashboard() {
         setProjectTypes(ptRes.data || []);
         setAllMappings(mappingRes.data || []);
         setSubProjectTypes(sptRes.data || []);
+        
+        const [fRes, partnerTypeRes, ppRes] = await Promise.all([
+          masterApi.getUsersByRole('franchisee'),
+          masterApi.getPartnerTypes(),
+          masterApi.getPartnerPlans()
+        ]);
+        setFranchisees(fRes.data || []);
+        setPartnerTypes(partnerTypeRes.data || []);
+        setPartnerPlans(ppRes.data || []);
       } catch (err) {
         console.error('Error loading master data:', err);
       }
     };
     loadMasterData();
+    
+    const fetchCounts = async () => {
+      try {
+        const res = await getLoanCountsByLocation();
+        if (res.success) setLocationCounts(res.data);
+      } catch (err) {
+        console.error('Error fetching location counts:', err);
+      }
+    };
+    fetchCounts();
   }, []);
 
   useEffect(() => {
@@ -281,7 +368,10 @@ export default function OrdersByLoanDashboard() {
         timeline: filters.timeline,
         category: filters.category,
         subCategory: filters.subcategory,
-        subType: filters.subType
+        subType: filters.subType,
+        franchiseeId: selectedFranchisees.join(','),
+        partnerType: selectedPartnerTypes.join(','),
+        plan: selectedPlans.join(',')
       };
 
       // Handle Project Type Range
@@ -319,7 +409,44 @@ export default function OrdersByLoanDashboard() {
 
   useEffect(() => {
     fetchData();
-  }, [activeTab, selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, filters.timeline, filters.category, filters.projectType]);
+  }, [activeTab, selectedCountryId, selectedStateId, selectedClusterId, selectedDistrictId, filters.timeline, filters.category, filters.projectType, filters.subcategory, filters.subType, selectedFranchisees, selectedPartnerTypes, selectedPlans]);
+
+  // Chart Data Calculations
+  const chartData = React.useMemo(() => {
+    const allData = [...bankLoansData, ...privateLoansData];
+    
+    // Status distribution
+    const statusMap = { 'Pending': 0, 'Approved': 0, 'Disbursed': 0, 'Rejected': 0, 'Active': 0, 'Closed': 0 };
+    allData.forEach(loan => {
+      if (statusMap[loan.status] !== undefined) statusMap[loan.status]++;
+    });
+
+    // Monthly trends (last 6 months)
+    const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    const trends = {};
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().substr(-2)}`;
+      trends[key] = 0;
+    }
+
+    allData.forEach(loan => {
+      const d = new Date(loan.createdAt);
+      const key = `${monthNames[d.getMonth()]} ${d.getFullYear().toString().substr(-2)}`;
+      if (trends[key] !== undefined) trends[key]++;
+    });
+
+    return {
+      statusSeries: Object.values(statusMap),
+      statusLabels: Object.keys(statusMap),
+      trendLabels: Object.keys(trends),
+      trendSeries: Object.values(trends)
+    };
+  }, [bankLoansData, privateLoansData]);
+
+  const filteredBankLoans = bankLoansData;
+  const filteredPrivateLoans = privateLoansData;
 
   // Clear all filters
   const clearAllFilters = () => {
@@ -429,6 +556,11 @@ export default function OrdersByLoanDashboard() {
                   >
                     <div className="text-2xl text-center mb-1">🏳️</div>
                     <h6 className="font-bold text-center mb-0">{country.name}</h6>
+                    <div className="mt-2 flex justify-center">
+                      <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {stats?.totalFiles || 0} Files
+                      </span>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -444,18 +576,31 @@ export default function OrdersByLoanDashboard() {
                     onClick={() => handleStateSelect('')}
                   >
                     <h6 className="font-bold text-center mb-1">All States</h6>
-                    <small className="text-gray-500 text-center block">{selectedCountry?.name || 'Global'}</small>
-                  </div>
-                  {states.map((state) => (
-                    <div
-                      key={state._id}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedStateId === state._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                      onClick={() => handleStateSelect(state._id)}
-                    >
-                      <h6 className="font-bold text-center mb-1">{state.name}</h6>
-                      <small className="text-gray-500 text-center block">{selectedCountry?.name || ''}</small>
+                    <small className="text-gray-500 text-center block mb-2">{selectedCountry?.name || 'Global'}</small>
+                    <div className="flex justify-center">
+                      <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {stats?.totalFiles || 0} Files
+                      </span>
                     </div>
-                  ))}
+                  </div>
+                  {states.map((state) => {
+                    const count = locationCounts.states?.find(s => s._id === state._id)?.count || 0;
+                    return (
+                      <div
+                        key={state._id}
+                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedStateId === state._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                        onClick={() => handleStateSelect(state._id)}
+                      >
+                        <h6 className="font-bold text-center mb-1">{state.name}</h6>
+                        <small className="text-gray-500 text-center block mb-2">{selectedCountry?.name || ''}</small>
+                        <div className="flex justify-center">
+                          <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            {count} Files
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -470,18 +615,31 @@ export default function OrdersByLoanDashboard() {
                     onClick={() => handleClusterSelect('')}
                   >
                     <h6 className="font-bold text-center mb-1">All Clusters</h6>
-                    <small className="text-gray-500 text-center block">{selectedState?.name || 'All States'}</small>
-                  </div>
-                  {clusters.map((cluster) => (
-                    <div
-                      key={cluster._id}
-                      className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedClusterId === cluster._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                      onClick={() => handleClusterSelect(cluster._id)}
-                    >
-                      <h6 className="font-bold text-center mb-1">{cluster.name}</h6>
-                      <small className="text-gray-500 text-center block">{selectedState?.name || ''}</small>
+                    <small className="text-gray-500 text-center block mb-2">{selectedState?.name || 'All States'}</small>
+                    <div className="flex justify-center">
+                      <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {stats?.totalFiles || 0} Files
+                      </span>
                     </div>
-                  ))}
+                  </div>
+                  {clusters.map((cluster) => {
+                    const count = locationCounts.clusters?.find(c => c._id === cluster._id)?.count || 0;
+                    return (
+                      <div
+                        key={cluster._id}
+                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedClusterId === cluster._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                        onClick={() => handleClusterSelect(cluster._id)}
+                      >
+                        <h6 className="font-bold text-center mb-1">{cluster.name}</h6>
+                        <small className="text-gray-500 text-center block mb-2">{selectedState?.name || ''}</small>
+                        <div className="flex justify-center">
+                          <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            {count} Files
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -496,18 +654,31 @@ export default function OrdersByLoanDashboard() {
                      onClick={() => handleDistrictSelect('')}
                    >
                      <h6 className="font-bold text-center mb-1">All Districts</h6>
-                     <small className="text-gray-500 text-center block">{selectedCluster?.name || 'All Clusters'}</small>
+                     <small className="text-gray-500 text-center block mb-2">{selectedCluster?.name || 'All Clusters'}</small>
+                     <div className="flex justify-center">
+                      <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                        {stats?.totalFiles || 0} Files
+                      </span>
+                    </div>
                    </div>
-                   {districts.map((district) => (
-                      <div
-                        key={district._id}
-                        className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedDistrictId === district._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
-                        onClick={() => handleDistrictSelect(district._id)}
-                      >
-                        <h6 className="font-bold text-center mb-1">{district.name}</h6>
-                        <small className="text-gray-500 text-center block">{selectedCluster?.name || ''}</small>
-                      </div>
-                    ))}
+                   {districts.map((district) => {
+                      const count = locationCounts.districts?.find(d => d._id === district._id)?.count || 0;
+                      return (
+                        <div
+                          key={district._id}
+                          className={`p-4 rounded-lg border-2 cursor-pointer transition-all hover:shadow-md ${selectedDistrictId === district._id ? 'border-blue-500 bg-blue-50' : 'border-gray-200'}`}
+                          onClick={() => handleDistrictSelect(district._id)}
+                        >
+                          <h6 className="font-bold text-center mb-1">{district.name}</h6>
+                          <small className="text-gray-500 text-center block mb-2">{selectedCluster?.name || ''}</small>
+                          <div className="flex justify-center">
+                            <span className="bg-blue-100 text-blue-700 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                              {count} Files
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -516,7 +687,7 @@ export default function OrdersByLoanDashboard() {
       </div>
 
       {/* Other Filters */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
         <div className="relative">
           <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
@@ -704,6 +875,40 @@ export default function OrdersByLoanDashboard() {
         </div>
       </div>
 
+      {/* Analytics Section */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <h6 className="font-bold text-gray-800 mb-4">Loan Status Distribution</h6>
+          <Chart
+            options={{
+              labels: chartData.statusLabels,
+              colors: ['#f59e0b', '#10b981', '#3b82f6', '#ef4444', '#8b5cf6', '#6b7280'],
+              legend: { position: 'bottom' },
+              plotOptions: { pie: { donut: { size: '70%' } } },
+              dataLabels: { enabled: false }
+            }}
+            series={chartData.statusSeries}
+            type="donut"
+            height={300}
+          />
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+          <h6 className="font-bold text-gray-800 mb-4">Application Trend (Last 6 Months)</h6>
+          <Chart
+            options={{
+              chart: { toolbar: { show: false } },
+              xaxis: { categories: chartData.trendLabels },
+              colors: ['#3b82f6'],
+              plotOptions: { bar: { borderRadius: 4, columnWidth: '50%' } },
+              dataLabels: { enabled: false }
+            }}
+            series={[{ name: 'Applications', data: chartData.trendSeries }]}
+            type="bar"
+            height={300}
+          />
+        </div>
+      </div>
+
       {/* Loan Type Tabs */}
       <div className="bg-white rounded-lg shadow-sm">
         {/* Tabs Header */}
@@ -744,22 +949,29 @@ export default function OrdersByLoanDashboard() {
                 </button>
               </div>
 
-              {/* Franchisee Filter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Franchisee</label>
-                  <select
-                    className="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm"
-                    value={bankFranchiseeFilter}
-                    onChange={(e) => setBankFranchiseeFilter(e.target.value)}
-                  >
-                    <option value="">All Franchisees</option>
-                    <option value="Solar Tech Solutions">Solar Tech Solutions</option>
-                    <option value="Green Energy Corp">Green Energy Corp</option>
-                    <option value="Sun Power Enterprises">Sun Power Enterprises</option>
-                    <option value="Eco Solar Solutions">Eco Solar Solutions</option>
-                  </select>
-                </div>
+              {/* Multi-Select Filters */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-blue-50/50 p-4 rounded-xl border border-blue-100">
+                <MultiSelect 
+                  label="Filter by Franchisee" 
+                  options={franchisees} 
+                  selected={selectedFranchisees} 
+                  onChange={setSelectedFranchisees} 
+                  placeholder="All Franchisees"
+                />
+                <MultiSelect 
+                  label="Partner's Type" 
+                  options={partnerTypes} 
+                  selected={selectedPartnerTypes} 
+                  onChange={setSelectedPartnerTypes} 
+                  placeholder="All Types"
+                />
+                <MultiSelect 
+                  label="Partner's Plans" 
+                  options={partnerPlans} 
+                  selected={selectedPlans} 
+                  onChange={setSelectedPlans} 
+                  placeholder="All Plans"
+                />
               </div>
 
               {/* Bank Loans Table */}
@@ -780,7 +992,7 @@ export default function OrdersByLoanDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {bankLoansData.length > 0 ? bankLoansData.map((loan, index) => {
+                    {filteredBankLoans.length > 0 ? filteredBankLoans.map((loan, index) => {
                       const loanAmt = loan.loanAmount || 0;
                       const disbAmt = loan.disbursedAmount || 0;
                       const disbursedPercentage = loanAmt > 0 ? Math.round((disbAmt / loanAmt) * 100) : 0;
@@ -850,22 +1062,29 @@ export default function OrdersByLoanDashboard() {
                 </button>
               </div>
 
-              {/* Franchisee Filter */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Filter by Franchisee</label>
-                  <select
-                    className="w-full p-2 border border-gray-300 rounded-lg bg-white text-sm"
-                    value={privateFranchiseeFilter}
-                    onChange={(e) => setPrivateFranchiseeFilter(e.target.value)}
-                  >
-                    <option value="">All Franchisees</option>
-                    <option value="Solar Tech Solutions">Solar Tech Solutions</option>
-                    <option value="Green Energy Corp">Green Energy Corp</option>
-                    <option value="Sun Power Enterprises">Sun Power Enterprises</option>
-                    <option value="Eco Solar Solutions">Eco Solar Solutions</option>
-                  </select>
-                </div>
+              {/* Multi-Select Filters (Shared State for now or separate if needed) */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-green-50/50 p-4 rounded-xl border border-green-100">
+                <MultiSelect 
+                  label="Filter by Franchisee" 
+                  options={franchisees} 
+                  selected={selectedFranchisees} 
+                  onChange={setSelectedFranchisees} 
+                  placeholder="All Franchisees"
+                />
+                <MultiSelect 
+                  label="Partner's Type" 
+                  options={partnerTypes} 
+                  selected={selectedPartnerTypes} 
+                  onChange={setSelectedPartnerTypes} 
+                  placeholder="All Types"
+                />
+                <MultiSelect 
+                  label="Partner's Plans" 
+                  options={partnerPlans} 
+                  selected={selectedPlans} 
+                  onChange={setSelectedPlans} 
+                  placeholder="All Plans"
+                />
               </div>
 
               {/* Private Loans Table */}
@@ -888,7 +1107,7 @@ export default function OrdersByLoanDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {privateLoansData.length > 0 ? privateLoansData.map((loan, index) => {
+                    {filteredPrivateLoans.length > 0 ? filteredPrivateLoans.map((loan, index) => {
                       const loanAmt = loan.loanAmount || 0;
                       const disbAmt = loan.disbursedAmount || 0;
                       const disbursedPercentage = loanAmt > 0 ? Math.round((disbAmt / loanAmt) * 100) : 0;

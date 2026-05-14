@@ -1,10 +1,19 @@
 import api from '../../api/axios';
 
 const buildQueryString = (params) => {
-    const cleanedParams = Object.fromEntries(
-        Object.entries(params).filter(([_, v]) => v !== null && v !== undefined && v !== 'undefined' && v !== '')
-    );
-    return new URLSearchParams(cleanedParams).toString();
+    const searchParams = new URLSearchParams();
+    Object.entries(params).forEach(([key, value]) => {
+        if (value !== null && value !== undefined && value !== 'undefined' && value !== '' && value !== 'all') {
+            if (Array.isArray(value)) {
+                if (value.length > 0) {
+                    value.forEach(v => searchParams.append(key, v));
+                }
+            } else {
+                searchParams.append(key, value);
+            }
+        }
+    });
+    return searchParams.toString();
 };
 
 const performanceApi = {

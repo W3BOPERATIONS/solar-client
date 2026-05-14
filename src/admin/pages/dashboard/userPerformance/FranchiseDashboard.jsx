@@ -8,6 +8,8 @@ import ApexCharts from 'apexcharts';
 import performanceApi from '../../../../services/performance/performanceApi';
 import { useLocations } from '../../../../hooks/useLocations';
 import * as masterApi from '../../../../services/core/masterApi';
+import { getPartners } from '../../../../services/partner/partnerApi';
+import { ChevronDown, Check } from 'lucide-react';
 
 // Google Maps Script Loader
 const loadGoogleMapsScript = (callback) => {
@@ -41,6 +43,13 @@ export default function FranchiseDashboard() {
   const [subCategories, setSubCategories] = useState([]);
   const [projectTypes, setProjectTypes] = useState([]);
   const [subProjectTypes, setSubProjectTypes] = useState([]);
+  const [partnerTypes, setPartnerTypes] = useState([]);
+  const [partnerNames, setPartnerNames] = useState([]);
+  const [dynamicQuarters, setDynamicQuarters] = useState([]);
+  const [isTopTypeOpen, setIsTopTypeOpen] = useState(false);
+  const [isBottomTypeOpen, setIsBottomTypeOpen] = useState(false);
+  const topTypeRef = useRef(null);
+  const bottomTypeRef = useRef(null);
 
   const {
     countries,
@@ -57,7 +66,7 @@ export default function FranchiseDashboard() {
 
   const [filters, setFilters] = useState({
     timeline: '30',
-    franchiseeType: 'all',
+    franchiseeType: [],
     franchiseeName: 'all',
     category: '',
     subCategory: '',
@@ -259,6 +268,11 @@ export default function FranchiseDashboard() {
         ...filters
       };
       const response = await performanceApi.getFranchiseePerformance(params);
+      
+      if (!response?.summary) console.log('ℹ️ Performance summary data missing for current filters');
+      if (!response?.summary?.conversionRatio) console.log('ℹ️ No conversion data (Leads to Orders ratio) available for current selection');
+      if (!response?.tableData || response.tableData.length === 0) console.log('ℹ️ No dealer records found in performance data');
+      
       setPerformanceData(response);
     } catch (err) {
       console.error('Error fetching performance:', err);
@@ -395,7 +409,76 @@ export default function FranchiseDashboard() {
 
   useEffect(() => {
     loadGoogleMapsScript(initMap);
+    fetchDynamicFilters();
+
+    const handleClickOutside = (event) => {
+      if (topTypeRef.current && !topTypeRef.current.contains(event.target)) {
+        setIsTopTypeOpen(false);
+      }
+      if (bottomTypeRef.current && !bottomTypeRef.current.contains(event.target)) {
+        setIsBottomTypeOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  const fetchDynamicFilters = async () => {
+    try {
+      const [catRes, typeRes, pTypesRes, partnersRes, dealersRes] = await Promise.all([
+        masterApi.getCategories(),
+        masterApi.getProjectTypes(),
+        getPartners(),
+        masterApi.getUsersByRole('franchisee'),
+        masterApi.getUsersByRole('dealer')
+      ]);
+      
+      const allPartners = [
+        ...(partnersRes.users || partnersRes.data || partnersRes || []),
+        ...(dealersRes.users || dealersRes.data || dealersRes || [])
+      ];
+
+      if (allPartners.length === 0) console.warn('⚠️ No Partner Names found in database');
+      if (pTypesRes.length === 0) console.warn('⚠️ No Partner Types found in database');
+
+      setCategories(catRes.data || catRes);
+      setProjectTypes(typeRes.data || typeRes);
+      setPartnerTypes(pTypesRes || []);
+      setPartnerNames(allPartners);
+
+      // Generate dynamic quarters
+      const currentYear = new Date().getFullYear();
+      setDynamicQuarters([
+        { value: 'q1', label: `Jan-Mar ${currentYear}` },
+        { value: 'q2', label: `Apr-Jun ${currentYear}` },
+        { value: 'q3', label: `Jul-Sep ${currentYear}` },
+        { value: 'q4', label: `Oct-Dec ${currentYear}` }
+      ]);
+
+    } catch (err) {
+      console.error('Error fetching dynamic filters:', err);
+    }
+  };
+
+  useEffect(() => {
+    if (filters.category) {
+      masterApi.getSubCategories({ categoryId: filters.category }).then(res => {
+        setSubCategories(res.data || res);
+      });
+    } else {
+      setSubCategories([]);
+    }
+  }, [filters.category]);
+
+  useEffect(() => {
+    if (filters.projectType) {
+      masterApi.getSubProjectTypes({ projectTypeName: filters.projectType }).then(res => {
+        setSubProjectTypes(res.data || res);
+      });
+    } else {
+      setSubProjectTypes([]);
+    }
+  }, [filters.projectType]);
 
   const handleStateSelect = (state) => {
     setSelectedState(state);
@@ -434,7 +517,7 @@ export default function FranchiseDashboard() {
     setSelectedCluster(null);
     setFilters({
       timeline: '30',
-      franchiseeType: 'all',
+      franchiseeType: [],
       franchiseeName: 'all',
       category: '',
       subCategory: '',
@@ -457,6 +540,19 @@ export default function FranchiseDashboard() {
               <BarChart3 className="inline mr-2" size={24} />
               Partner Dashboard
             </h2>
+          </div>
+          <div className="flex space-x-6">
+            <div className="text-white">
+              <div className="text-xs opacity-80 uppercase tracking-wider font-semibold">Target Achievement</div>
+              <div className="text-xl font-bold">{performanceData?.summary?.targetAchievement || 0}%</div>
+            </div>
+            <div className="text-white">
+              <div className="text-xs opacity-80 uppercase tracking-wider font-semibold">Growth</div>
+              <div className="text-xl font-bold flex items-center">
+                {performanceData?.summary?.growth || 0}%
+                <TrendingUp size={16} className="ml-1" />
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -537,18 +633,52 @@ export default function FranchiseDashboard() {
               <option value="90">Last Quarter</option>
             </select>
           </div>
-          <div>
-            <select
-              value={filters.franchiseeType}
-              onChange={(e) => handleFilterChange('franchiseeType', e.target.value)}
-              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+          <div className="relative" ref={topTypeRef}>
+            <button
+              type="button"
+              onClick={() => setIsTopTypeOpen(!isTopTypeOpen)}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between min-h-[38px]"
             >
-              <option value="all" disabled>Partner Type</option>
-              <option value="startup">Start Up(Dealer)</option>
-              <option value="startup">Basic</option>
-              <option value="enterprice">Enterprice</option>
-              <option value="solarbussiness">Solar Bussiness</option>
-            </select>
+              <span className="truncate">
+                {filters.franchiseeType.length === 0
+                  ? 'Select Partner Type'
+                  : `${filters.franchiseeType.length} Types Selected`}
+              </span>
+              <ChevronDown size={16} className={`transition-transform ${isTopTypeOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isTopTypeOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                <div className="p-2 space-y-1">
+                  {partnerTypes.map((type) => (
+                    <label
+                      key={type._id}
+                      className="flex items-center px-3 py-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        checked={filters.franchiseeType.includes(type.name)}
+                        onChange={(e) => {
+                          const val = type.name;
+                          const newTypes = e.target.checked
+                            ? [...filters.franchiseeType, val]
+                            : filters.franchiseeType.filter(t => t !== val);
+                          handleFilterChange('franchiseeType', newTypes);
+                        }}
+                      />
+                      <span className="ml-3 text-sm text-gray-700">{type.name}</span>
+                      {filters.franchiseeType.includes(type.name) && (
+                        <Check size={14} className="ml-auto text-blue-600" />
+                      )}
+                    </label>
+                  ))}
+                  {partnerTypes.length === 0 && (
+                    <div className="p-3 text-sm text-gray-500 text-center">No types found</div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -677,17 +807,50 @@ export default function FranchiseDashboard() {
           <label className="block text-sm font-semibold text-gray-700 mb-1">
             Partner Type
           </label>
-          <select
-            value={filters.franchiseeType}
-            onChange={(e) => handleFilterChange('franchiseeType', e.target.value)}
-            className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All</option>
-            <option value="startup">Start Up(Dealer)</option>
-            <option value="startup">Basic</option>
-            <option value="enterprice">Enterprice</option>
-            <option value="solarbussiness">Solar Bussiness</option>
-          </select>
+          <div className="relative" ref={bottomTypeRef}>
+            <button
+              type="button"
+              onClick={() => setIsBottomTypeOpen(!isBottomTypeOpen)}
+              className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 flex items-center justify-between min-h-[42px]"
+            >
+              <span className="truncate">
+                {filters.franchiseeType.length === 0
+                  ? 'All Types'
+                  : `${filters.franchiseeType.length} Types Selected`}
+              </span>
+              <ChevronDown size={16} className={`transition-transform ${isBottomTypeOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {isBottomTypeOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-xl max-h-60 overflow-y-auto">
+                <div className="p-2 space-y-1">
+                  {partnerTypes.map((type) => (
+                    <label
+                      key={type._id}
+                      className="flex items-center px-3 py-2 hover:bg-gray-50 rounded-md cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                        checked={filters.franchiseeType.includes(type.name)}
+                        onChange={(e) => {
+                          const val = type.name;
+                          const newTypes = e.target.checked
+                            ? [...filters.franchiseeType, val]
+                            : filters.franchiseeType.filter(t => t !== val);
+                          handleFilterChange('franchiseeType', newTypes);
+                        }}
+                      />
+                      <span className="ml-3 text-sm text-gray-700">{type.name}</span>
+                      {filters.franchiseeType.includes(type.name) && (
+                        <Check size={14} className="ml-auto text-blue-600" />
+                      )}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
         <div>
           <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -699,13 +862,9 @@ export default function FranchiseDashboard() {
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
             <option value="all">All</option>
-            <option value="startup">Ramesh Pandit</option>
-            <option value="startup">Mayank Agarwal</option>
-            <option value="enterprice">Priyank Patel</option>
-            <option value="solarbussiness">Priya Sharma</option>
-            <option value="solarbussiness">Shruti Mehta</option>
-            <option value="solarbussiness">Kiran Patel</option>
-            <option value="solarbussiness">Amit Shah</option>
+            {partnerNames.map(p => (
+              <option key={p._id} value={p._id}>{p.name}</option>
+            ))}
           </select>
         </div>
         <div>
@@ -717,10 +876,9 @@ export default function FranchiseDashboard() {
             onChange={(e) => handleFilterChange('timeline2', e.target.value)}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="q1">January-March</option>
-            <option value="q2">April-June</option>
-            <option value="q3">July-September</option>
-            <option value="q4">October-December</option>
+            {dynamicQuarters.map(q => (
+              <option key={q.value} value={q.value}>{q.label}</option>
+            ))}
           </select>
         </div>
       </div>
@@ -801,11 +959,10 @@ export default function FranchiseDashboard() {
             onChange={(e) => handleFilterChange('timeline2', e.target.value)}
             className="w-full bg-white border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
           >
-            <option value="q1" disabled>Timeline</option>
-            <option value="q1">January-March</option>
-            <option value="q2">April-June</option>
-            <option value="q3">July-September</option>
-            <option value="q4">October-December</option>
+            <option value="" disabled>Timeline</option>
+            {dynamicQuarters.map(q => (
+              <option key={q.value} value={q.value}>{q.label}</option>
+            ))}
           </select>
         </div>
       </div>

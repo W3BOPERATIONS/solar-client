@@ -269,18 +269,19 @@ export default function RoleSettings() {
   const [deptModulesList, setDeptModulesList] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
 
-  // Location Hierarchy State
+   // Location Hierarchy State
   const [locationData, setLocationData] = useState({
+    countries: [], // NEW
     states: [],
     clusters: [],
     districts: []
   });
 
   const [selectedLocation, setSelectedLocation] = useState({
+    country: 'all', // NEW
     state: 'all',
     cluster: 'all',
-    district: 'all',
-    country: ''
+    district: 'all'
   });
 
   // UI State
@@ -301,17 +302,17 @@ export default function RoleSettings() {
   const fetchInitialData = async () => {
     try {
       setLoading(true);
-      const [deptRes, roleRes, modRes, stateRes] = await Promise.all([
+      const [deptRes, roleRes, modRes, countryRes] = await Promise.all([
         getDepartments(),
         getRoles(),
         getModules(),
-        locationAPI.getAllStates({ isActive: true })
+        locationAPI.getAllCountries({ isActive: true })
       ]);
       if (deptRes.success) setDepartments(deptRes.data);
       if (roleRes.success) setRoles(roleRes.data);
       if (modRes.success) setAllModulesList(modRes.data || modRes.modules || []);
-      if (stateRes.data && stateRes.data.data) {
-        setLocationData(prev => ({ ...prev, states: stateRes.data.data }));
+      if (countryRes.data && countryRes.data.data) {
+        setLocationData(prev => ({ ...prev, countries: countryRes.data.data }));
       }
     } catch (error) {
       console.error("Error loading data:", error);
@@ -320,6 +321,26 @@ export default function RoleSettings() {
       setLoading(false);
     }
   };
+
+  // Fetch States when Country changes (NEW)
+  useEffect(() => {
+    const fetchStates = async () => {
+      try {
+        const params = { isActive: true };
+        if (selectedLocation.country && selectedLocation.country !== 'all') {
+          params.countryId = selectedLocation.country;
+        }
+        const res = await locationAPI.getAllStates(params);
+        if (res.data && res.data.data) {
+          setLocationData(prev => ({ ...prev, states: res.data.data }));
+        }
+      } catch (error) {
+        console.error('Failed to fetch states:', error);
+        setLocationData(prev => ({ ...prev, states: [] }));
+      }
+    };
+    fetchStates();
+  }, [selectedLocation.country]);
 
 
   // Fetch Clusters when State changes
@@ -677,9 +698,46 @@ export default function RoleSettings() {
         </nav>
       </div>
 
-      {/* Location Hierarchy Cards section */}
+       {/* Location Hierarchy Cards section */}
       {showLocationCards && (
         <div className="mb-6 space-y-6">
+
+          {/* Countries (NEW) */}
+          <div>
+            <h4 className="font-bold text-lg mb-3 text-[#0b386a]">Select Country</h4>
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+              <LocationCard
+                title="All Countries"
+                subtitle="ALL"
+                isSelected={selectedLocation.country === 'all'}
+                onClick={() => {
+                  setSelectedLocation({
+                    country: 'all',
+                    state: 'all',
+                    cluster: '',
+                    district: ''
+                  });
+                }}
+              />
+              {locationData.countries.map(c => (
+                <LocationCard
+                  key={c._id}
+                  title={c.name}
+                  subtitle={c.code || c.name.substring(0, 2).toUpperCase()}
+                  isSelected={selectedLocation.country === c._id}
+                  onClick={() => {
+                    setSelectedLocation({
+                      country: c._id,
+                      state: 'all',
+                      cluster: '',
+                      district: ''
+                    });
+                  }}
+                />
+              ))}
+            </div>
+            {locationData.countries.length === 0 && <p className="text-gray-500 italic">No countries found.</p>}
+          </div>
 
           {/* States */}
           <div>

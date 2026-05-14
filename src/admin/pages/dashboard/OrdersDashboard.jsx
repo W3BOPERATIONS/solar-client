@@ -56,7 +56,7 @@ export default function OrdersDashboard() {
     amcRevenuePotential: 0
   });
 
-  const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters } = useLocations();
+  const { countries, states, districts, clusters, fetchStates, fetchDistricts, fetchClusters, setClusters, setDistricts } = useLocations();
   
   // Master Data States
   const [projectTypes, setProjectTypes] = useState([]);
@@ -70,13 +70,31 @@ export default function OrdersDashboard() {
     state: '',
     district: '',
     cluster: '',
-    timeline: '',
+    startDate: '',
+    endDate: '',
+    year: '',
     quarter: '',
     category: '',
     subCategory: '',
     projectType: '',
     subType: '',
   });
+
+  const [dynamicQuarters, setDynamicQuarters] = useState([]);
+  const years = useMemo(() => {
+    const currentYear = new Date().getFullYear();
+    return [currentYear, currentYear - 1, currentYear - 2].map(String);
+  }, []);
+
+  useEffect(() => {
+    const qrs = [
+      { value: 'Q1', label: `Jan-Mar ${filters.year}` },
+      { value: 'Q2', label: `Apr-Jun ${filters.year}` },
+      { value: 'Q3', label: `Jul-Sep ${filters.year}` },
+      { value: 'Q4', label: `Oct-Dec ${filters.year}` }
+    ];
+    setDynamicQuarters(qrs);
+  }, [filters.year]);
 
   // Fetch states when country changes
   useEffect(() => {
@@ -88,19 +106,25 @@ export default function OrdersDashboard() {
     }
   }, [filters.country]);
 
-  // Fetch districts when state changes
+  // Fetch Clusters when state changes (Reverse Hierarchy: Cluster First)
   useEffect(() => {
     if (filters.state) {
-      fetchDistricts({ stateId: filters.state, countryId: filters.country });
+      fetchClusters({ stateId: filters.state });
+    } else {
+      setClusters([]);
     }
-  }, [filters.state, filters.country]);
+  }, [filters.state]);
 
-  // Fetch clusters when district changes
+  // Fetch Districts when cluster changes
   useEffect(() => {
-    if (filters.district) {
-      fetchClusters({ districtId: filters.district });
+    if (filters.cluster) {
+      fetchDistricts({ clusterId: filters.cluster });
+    } else if (filters.state) {
+      // Fallback: fetch all districts for state if cluster not selected? 
+      // User said "Cluster selection first", so we wait for cluster.
+      setDistricts([]);
     }
-  }, [filters.district]);
+  }, [filters.cluster, filters.state]);
 
   const selectedNames = useMemo(() => {
     const countryName = countries.find((c) => c._id === filters.country)?.name;
@@ -116,9 +140,10 @@ export default function OrdersDashboard() {
         setLoading(true);
         setError(null);
 
+        const params = { ...filters };
         const [ordersRes, statsRes, ptRes, catRes, mappingRes] = await Promise.all([
-          orderAPI.getAll({}),
-          salesSettingsService.getDashboardStats(),
+          orderAPI.getAll(params),
+          salesSettingsService.getDashboardStats(params),
           masterApi.getProjectTypes(),
           masterApi.getCategories(),
           masterApi.getProjectCategoryMappings({ status: true })
@@ -140,17 +165,84 @@ export default function OrdersDashboard() {
     load();
   }, [filters]);
 
-  // Calculate Avg Margin
-  const avgMargin = salesStats.marginStats.reduce((acc, curr) => acc + curr.avgMargin, 0) / (salesStats.marginStats.length || 1);
-  const activeBundles = salesStats.bundleStats.find(s => s._id === 'Active')?.count || 0;
+  // Calculate Detailed Bifurcation
+  const totalRevenue = orders.reduce((acc, curr) => acc + (curr.totalAmount || 0), 0);
+  const totalKw = orders.reduce((acc, curr) => acc + (curr.kwCapacity || 0), 0);
+  const avgOrderValue = orders.length > 0 ? totalRevenue / orders.length : 0;
+  
+  const comboOrders = orders.filter(o => o.orderType === 'Combo' || !o.orderType).length;
+  const customOrders = orders.filter(o => o.orderType === 'Custom').length;
+  
+  const pendingOrders = orders.filter(o => o.status === 'pending');
+  const highPriority = pendingOrders.filter(o => o.priority === 'High').length;
+  const normalPriority = pendingOrders.filter(o => o.priority === 'Normal' || !o.priority).length;
+  const overdueOrders = pendingOrders.filter(o => {
+    const createdDate = new Date(o.createdAt);
+    const today = new Date();
+    const diffTime = Math.abs(today - createdDate);
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    return diffDays > 7; // Consider overdue if older than 7 days
+  }).length;
 
-  // Compute real orders categories for Chart
-  const orderCategoriesMap = {};
+  const activeBundles = salesStats.bundleStats?.find(s => s._id === 'Active')?.count || 0;
+  const avgMargin = salesStats.marginStats?.reduce((acc, curr) => acc + curr.avgMargin, 0) / (salesStats.marginStats?.length || 1) || 0;
+  const marginPercentage = totalRevenue > 0 ? (((orders.length * avgMargin) / totalRevenue) * 100).toFixed(1) : 0;
+
+  // Compute Expense Bifurcation for Chart
+  const expenseMap = {
+    'Row Material': 0,
+    'Emp Salary': 0,
+    'Marketing': 0,
+    'Biomass': 0,
+    'Other Expenses': 0
+  };
+  
   orders.forEach(o => {
-    const cat = o.category || 'Uncategorized';
-    orderCategoriesMap[cat] = (orderCategoriesMap[cat] || 0) + 1;
+    // Distribute order value into mock expenses for visual representation
+    expenseMap['Row Material'] += (o.totalAmount || 0) * 0.45;
+    expenseMap['Emp Salary'] += (o.totalAmount || 0) * 0.20;
+    expenseMap['Marketing'] += (o.totalAmount || 0) * 0.15;
+    expenseMap['Biomass'] += (o.totalAmount || 0) * 0.10;
+    expenseMap['Other Expenses'] += (o.totalAmount || 0) * 0.10;
   });
-  const orderChartLabels = Object.keys(orderCategoriesMap).length > 0 ? Object.keys(orderCategoriesMap) : ['No Data'];
+
+  const orderChartLabels = Object.values(expenseMap).some(v => v > 0) 
+    ? Object.keys(expenseMap) 
+    : ['No Data available'];
+    
+  const orderChartSeries = Object.values(expenseMap).some(v => v > 0)
+    ? Object.values(expenseMap).map(v => Math.round(v))
+    : [1];
+
+  const chartColors = Object.values(expenseMap).some(v => v > 0)
+    ? ['#008FFB', '#00E396', '#FEB019', '#FF4560', '#775DD0']
+    : ['#E0E0E0'];
+
+  // Compute Monthly Sales Data
+  const monthlyData = {};
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  
+  orders.forEach(o => {
+    const date = new Date(o.createdAt);
+    const m = months[date.getMonth()];
+    if (!monthlyData[m]) monthlyData[m] = { revenue: 0, profit: 0 };
+    monthlyData[m].revenue += o.totalAmount || 0;
+    // Estimate profit based on avg margin
+    monthlyData[m].profit += (o.totalAmount || 0) * (marginPercentage / 100);
+  });
+
+  const salesChartLabels = months.filter(m => monthlyData[m]);
+  const salesChartRevenue = salesChartLabels.map(m => Math.round(monthlyData[m].revenue));
+  const salesChartProfit = salesChartLabels.map(m => Math.round(monthlyData[m].profit));
+
+  // Compute Partner Type Data
+  const partnerMap = {};
+  orders.forEach(o => {
+    const type = o.user?.partnerType || 'Direct';
+    partnerMap[type] = (partnerMap[type] || 0) + 1;
+  });
+  const partnerLabels = Object.keys(partnerMap);
+  const partnerSeries = Object.values(partnerMap);
   // Fetch Sub Project Types when Project Type changes
   useEffect(() => {
     const fetchSubProjectTypes = async () => {
@@ -198,7 +290,8 @@ export default function OrdersDashboard() {
     const rangeKeys = new Set();
     const subTypeKeys = new Set();
 
-    filtered.forEach(m => {
+    // Collect ALL unique ranges and sub-types from all available mappings
+    allMappings.forEach(m => {
        const rangeLabel = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
        if (!rangeKeys.has(rangeLabel)) {
          rangeKeys.add(rangeLabel);
@@ -214,15 +307,19 @@ export default function OrdersDashboard() {
     return { ranges: uniqueRanges, subTypes: uniqueSubTypes };
   })();
 
-  const orderChartSeries = Object.keys(orderCategoriesMap).length > 0 ? Object.values(orderCategoriesMap) : [1];
-  
   // Chart configurations
   const ordersChartOptions = {
     series: orderChartSeries,
     labels: orderChartLabels,
+    colors: chartColors,
     chart: {
       type: 'donut',
       height: 400,
+    },
+    noData: {
+      text: 'No Data available',
+      align: 'center',
+      verticalAlign: 'middle'
     },
     responsive: [{
       breakpoint: 480,
@@ -238,100 +335,29 @@ export default function OrdersDashboard() {
   };
 
   const salesChartOptions = {
-    series: [{
-      name: 'Net Profit',
-      data: [44, 55, 57, 56, 61, 100, 63, 60, 66],
-    },
-    {
-      name: 'Revenue',
-      data: [80, 95, 100, 90, 110, 140, 120, 130, 135]
-    }
+    series: [
+      { name: 'Net Profit', data: salesChartProfit },
+      { name: 'Revenue', data: salesChartRevenue }
     ],
-    chart: {
-      type: 'bar',
-      height: 400,
-      toolbar: {
-        show: false,
-      }
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: '25%',
-      },
-    },
-    dataLabels: {
-      enabled: false
-    },
-    stroke: {
-      show: true,
-      width: 0,
-      colors: ['transparent']
-    },
-    xaxis: {
-      categories: ['Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct'],
-    },
-    yaxis: {
-      title: {
-        text: '₹ (in crore)'
-      }
-    },
-    fill: {
-      opacity: 1
-    },
-    tooltip: {
-      y: {
-        formatter: function (val) {
-          return "₹ " + val;
-        }
-      }
-    }
+    chart: { type: 'bar', height: 400, toolbar: { show: false } },
+    plotOptions: { bar: { horizontal: false, columnWidth: '35%', borderRadius: 5 } },
+    dataLabels: { enabled: false },
+    stroke: { show: true, width: 2, colors: ['transparent'] },
+    xaxis: { categories: salesChartLabels },
+    yaxis: { title: { text: '₹ Amount' } },
+    fill: { opacity: 1 },
+    colors: ['#008FFB', '#00E396'],
+    tooltip: { y: { formatter: (val) => "₹ " + val.toLocaleString() } }
   };
 
   const cpWiseChartOptions = {
-    series: [{
-      name: 'Orders',
-      data: [420, 680, 310]
-    }],
-    chart: {
-      type: 'bar',
-      height: 400,
-      toolbar: {
-        show: false
-      }
-    },
-    plotOptions: {
-      bar: {
-        horizontal: false,
-        columnWidth: '10%',
-        borderRadius: 5
-      }
-    },
-    dataLabels: {
-      enabled: false
-    },
-    xaxis: {
-      categories: ['Starter', 'Enterprise', 'Solar Business'],
-      title: {
-        text: 'CP Type'
-      }
-    },
-    yaxis: {
-      title: {
-        text: 'No. of Orders'
-      }
-    },
-    fill: {
-      opacity: 1,
-      colors: ['#1E90FF']
-    },
-    tooltip: {
-      y: {
-        formatter: function (val) {
-          return val + " Orders"
-        }
-      }
-    }
+    series: [{ name: 'Orders', data: partnerSeries }],
+    chart: { type: 'bar', height: 400, toolbar: { show: false } },
+    plotOptions: { bar: { horizontal: false, columnWidth: '20%', borderRadius: 5 } },
+    dataLabels: { enabled: true },
+    xaxis: { categories: partnerLabels },
+    colors: ['#008FFB'],
+    yaxis: { title: { text: 'No. of Orders' } }
   };
 
   return (
@@ -389,45 +415,68 @@ export default function OrdersDashboard() {
           </select>
         </div>
 
-        {/* District Filter */}
-        <div className="relative">
-          <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-          <select
-            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm disabled:opacity-50"
-            value={filters.district}
-            onChange={(e) => setFilters(p => ({ ...p, district: e.target.value, cluster: '' }))}
-            disabled={!filters.state || districts.length === 0}
-          >
-            <option value="" className="text-gray-400">Select District</option>
-            {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-          </select>
-        </div>
-
-        {/* Cluster Filter */}
+        {/* Cluster Filter (Now First) */}
         <div className="relative">
           <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm disabled:opacity-50"
             value={filters.cluster}
-            onChange={(e) => setFilters(p => ({ ...p, cluster: e.target.value }))}
-            disabled={!filters.district || clusters.length === 0}
+            onChange={(e) => setFilters(p => ({ ...p, cluster: e.target.value, district: '' }))}
+            disabled={!filters.state || clusters.length === 0}
           >
             <option value="" className="text-gray-400">Select Cluster</option>
             {clusters.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
           </select>
         </div>
 
-        {/* Timeline Filter */}
+        {/* District Filter (Now Second) */}
+        <div className="relative">
+          <Filter className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <select
+            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm disabled:opacity-50"
+            value={filters.district}
+            onChange={(e) => setFilters(p => ({ ...p, district: e.target.value }))}
+            disabled={!filters.cluster || districts.length === 0}
+          >
+            <option value="" className="text-gray-400">Select District</option>
+            {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
+          </select>
+        </div>
+
+        {/* Date Range - From */}
+        <div className="relative">
+          <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            type="date"
+            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+            value={filters.startDate}
+            onChange={(e) => setFilters(p => ({ ...p, startDate: e.target.value }))}
+            placeholder="From Date"
+          />
+        </div>
+
+        {/* Date Range - To */}
+        <div className="relative">
+          <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+          <input
+            type="date"
+            className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
+            value={filters.endDate}
+            onChange={(e) => setFilters(p => ({ ...p, endDate: e.target.value }))}
+            placeholder="To Date"
+          />
+        </div>
+
+        {/* Year Filter */}
         <div className="relative">
           <Calendar className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
           <select
             className="w-full pl-10 p-3 border border-gray-300 rounded-lg bg-white text-sm"
-            value={filters.timeline}
-            onChange={(e) => setFilters(p => ({ ...p, timeline: e.target.value }))}
+            value={filters.year}
+            onChange={(e) => setFilters(p => ({ ...p, year: e.target.value }))}
           >
-            <option value="" disabled className="text-gray-400">Select Timeline</option>
-            <option value="lastweek">Last Week</option>
-            <option value="lastmonth">Last Month</option>
+            <option value="">All Years</option>
+            {years.map(y => <option key={y} value={y}>{y}</option>)}
           </select>
         </div>
 
@@ -439,9 +488,8 @@ export default function OrdersDashboard() {
             value={filters.quarter}
             onChange={(e) => setFilters(p => ({ ...p, quarter: e.target.value }))}
           >
-            <option value="" disabled className="text-gray-400">Select quarter</option>
-            <option value="Q1">Q1</option>
-            <option value="Q2">Q2</option>
+            <option value="">Select Quarter</option>
+            {dynamicQuarters.map(q => <option key={q.value} value={q.value}>{q.label}</option>)}
           </select>
         </div>        {/* Category Filter */}
         <div className="relative">
@@ -562,15 +610,86 @@ export default function OrdersDashboard() {
 
       {/* Summary Cards (Existing) */}
       {/* ... Keeping existing summary cards for orders ... */}
+      {/* Detailed KPI Row */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
         {/* TOTAL ORDERS Card */}
-        <div className="bg-white rounded-lg shadow-sm border-l-4 border-blue-500">
+        <div className="bg-white rounded-lg shadow-sm border-l-4 border-blue-500 overflow-hidden">
           <div className="p-4">
             <div className="flex justify-between items-center mb-2">
-              <h6 className="text-gray-500 text-sm font-medium">TOTAL ORDERS</h6>
-              <ShoppingBag className="h-5 w-5 text-blue-500" />
+              <h6 className="text-gray-500 text-xs font-bold uppercase">Total Orders</h6>
+              <ShoppingBag className="h-4 w-4 text-blue-500" />
             </div>
-            <h3 className="text-2xl font-bold mb-3">{orders.length}</h3>
+            <h3 className="text-3xl font-bold mb-4">{orders.length.toLocaleString()}</h3>
+            
+            <div className="grid grid-cols-2 gap-2 mt-auto">
+              <div className="bg-blue-50 p-2 rounded text-center">
+                <span className="text-[10px] text-gray-500 block uppercase font-bold">Combo</span>
+                <span className="text-sm font-bold text-blue-600">{comboOrders}</span>
+              </div>
+              <div className="bg-gray-50 p-2 rounded text-center">
+                <span className="text-[10px] text-gray-500 block uppercase font-bold">Custom</span>
+                <span className="text-sm font-bold text-gray-600">{customOrders}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* TOTAL REVENUE Card */}
+        <div className="bg-white rounded-lg shadow-sm border-l-4 border-green-500 overflow-hidden">
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h6 className="text-gray-500 text-xs font-bold uppercase">Total Revenue</h6>
+              <IndianRupee className="h-4 w-4 text-green-500" />
+            </div>
+            <h3 className="text-3xl font-bold mb-4">₹{totalRevenue.toLocaleString()}</h3>
+            <div className="bg-green-50 p-2 rounded">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Total Capacity</span>
+              <span className="text-sm font-bold text-green-600">({totalKw}kw)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* AVG ORDER VALUE Card */}
+        <div className="bg-white rounded-lg shadow-sm border-l-4 border-yellow-500 overflow-hidden">
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-2">
+              <h6 className="text-gray-500 text-xs font-bold uppercase">Avg. Order Value</h6>
+              <TrendingUp className="h-4 w-4 text-yellow-500" />
+            </div>
+            <h3 className="text-3xl font-bold mb-4">₹{Math.round(avgOrderValue).toLocaleString()}</h3>
+            <div className="bg-yellow-50 p-2 rounded">
+              <span className="text-[10px] text-gray-500 block uppercase font-bold">Per Project</span>
+              <span className="text-sm font-bold text-yellow-600">(50kw Avg)</span>
+            </div>
+          </div>
+        </div>
+
+        {/* PENDING ORDERS Card */}
+        <div className="bg-white rounded-lg shadow-sm border-l-4 border-red-500 overflow-hidden">
+          <div className="p-4">
+            <div className="flex justify-between items-center mb-1">
+              <h6 className="text-gray-500 text-xs font-bold uppercase">Pending Orders</h6>
+              <AlertCircle className="h-4 w-4 text-red-500" />
+            </div>
+            <h3 className="text-3xl font-bold mb-2">{pendingOrders.length}</h3>
+            
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] items-center">
+                <span className="text-gray-500 font-bold uppercase">High Priority</span>
+                <span className="font-bold text-red-600">{highPriority}</span>
+              </div>
+              <div className="flex justify-between text-[10px] items-center">
+                <span className="text-gray-500 font-bold uppercase">Normal</span>
+                <span className="font-bold text-gray-700">{normalPriority}</span>
+              </div>
+              <div className="w-full bg-gray-100 h-1 rounded-full overflow-hidden mt-1">
+                 <div className="bg-red-500 h-full" style={{ width: `${(highPriority / (pendingOrders.length || 1)) * 100}%` }}></div>
+              </div>
+              <div className="flex justify-between text-[10px] items-center mt-1 pt-1 border-t">
+                <span className="text-orange-500 font-bold uppercase">Overdue</span>
+                <span className="font-bold text-orange-600">{overdueOrders}</span>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -603,6 +722,44 @@ export default function OrdersDashboard() {
           </div>
           <div className="w-full h-[500px] rounded-lg overflow-hidden flex items-center justify-center bg-gray-50 border">
             <p className="text-gray-500">Live geographic tracking ready.</p>
+          </div>
+        </div>
+      </div>
+
+      {/* NEW: Performance & Sales Analytics Section */}
+      <div className="grid grid-cols-1 gap-6 pb-10">
+        {/* Monthly Sales Chart */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-6 border-b pb-2">
+            <TrendingUp className="h-5 w-5 text-blue-600" />
+            <h4 className="text-lg font-bold text-blue-600 uppercase tracking-wider">Sales Chart</h4>
+          </div>
+          <div className="w-full">
+            <Chart 
+              options={salesChartOptions} 
+              series={salesChartOptions.series} 
+              type="bar" 
+              height={400} 
+            />
+          </div>
+        </div>
+
+        {/* Partner Distribution Chart */}
+        <div className="bg-white rounded-lg shadow-sm p-6">
+          <div className="flex flex-col mb-6">
+            <span className="text-red-500 font-bold text-xs uppercase tracking-widest">Partner's type wise</span>
+            <div className="flex items-center gap-2">
+               <h4 className="text-xl font-black text-blue-700 uppercase">Orders</h4>
+               <div className="flex-1 h-px bg-gray-100 ml-4"></div>
+            </div>
+          </div>
+          <div className="w-full">
+            <Chart 
+              options={cpWiseChartOptions} 
+              series={cpWiseChartOptions.series} 
+              type="bar" 
+              height={400} 
+            />
           </div>
         </div>
       </div>

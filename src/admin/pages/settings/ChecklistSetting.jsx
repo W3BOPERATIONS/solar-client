@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Building2, Home, MapPin, Users, Truck, Package,
+  Building2, Home, MapPin, Users, Truck, Package, Globe,
   DollarSign, Wrench, ShoppingBag, Briefcase, Megaphone,
   ClipboardList, CheckCircle, Clock, TrendingUp,
   ChevronRight, Eye, LayoutDashboard,
@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import * as settingsApi from '../../../services/settings/settingsApi';
 import * as locationApi from '../../../services/core/locationApi';
+import Select from 'react-select';
 
 export default function ChecklistSetting() {
   // Hierarchical Location Data
@@ -21,10 +22,10 @@ export default function ChecklistSetting() {
   const [clusters, setClusters] = useState([]);
 
   // Selections
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [selectedState, setSelectedState] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
+  const [selectedCountries, setSelectedCountries] = useState([]);
+  const [selectedStates, setSelectedStates] = useState([]);
+  const [selectedDistricts, setSelectedDistricts] = useState([]);
+  const [selectedClusters, setSelectedClusters] = useState([]);
 
   const [activeFilter, setActiveFilter] = useState('all');
   const [moduleCategories, setModuleCategories] = useState([]);
@@ -56,8 +57,8 @@ export default function ChecklistSetting() {
         const fetchedCountries = await locationApi.getCountries();
         setCountries(fetchedCountries || []);
 
-        // We'll fetch checklists and categories when cluster changes or on mount if no cluster
-        if (!selectedCluster) {
+        // We'll fetch checklists and categories when cluster changes or on mount if no clusters selected
+        if (selectedClusters.length === 0) {
           const [fetchedChecklists, fetchedCategories] = await Promise.all([
             settingsApi.fetchChecklists(),
             settingsApi.fetchCategories()
@@ -75,15 +76,16 @@ export default function ChecklistSetting() {
     init();
   }, []);
 
-  // Fetch regional checklists and completions when cluster changes
+  // Fetch regional checklists and completions when clusters change
   useEffect(() => {
     const fetchRegionalData = async () => {
-      if (selectedCluster) {
+      if (selectedClusters.length > 0) {
         try {
           setLoading(true);
+          const clusterIds = selectedClusters.map(c => c._id).join(',');
           const [completions, regionalChecklists, categories] = await Promise.all([
-            settingsApi.fetchModuleCompletions(selectedCluster._id),
-            settingsApi.fetchChecklists(selectedCluster._id), // Pass clusterId
+            settingsApi.fetchModuleCompletions(clusterIds),
+            settingsApi.fetchChecklists(clusterIds),
             settingsApi.fetchCategories()
           ]);
           setChecklists(regionalChecklists || []);
@@ -94,10 +96,23 @@ export default function ChecklistSetting() {
         } finally {
           setLoading(false);
         }
+      } else {
+        // Clear data if no clusters selected
+        if (countries.length > 0) {
+           const initChecklists = async () => {
+             const [fetchedChecklists, fetchedCategories] = await Promise.all([
+               settingsApi.fetchChecklists(),
+               settingsApi.fetchCategories()
+             ]);
+             setChecklists(fetchedChecklists || []);
+             processCategories(fetchedChecklists, [], fetchedCategories);
+           }
+           initChecklists();
+        }
       }
     };
     fetchRegionalData();
-  }, [selectedCluster?._id]);
+  }, [selectedClusters.map(c => c._id).join(',')]);
 
   const processCategories = (checklistTemplates, completions = [], categories = []) => {
     const processed = categories.map(cat => {
@@ -105,14 +120,20 @@ export default function ChecklistSetting() {
       const catModules = checklistTemplates.filter(cl => cl.category === cat.title);
 
       const items = catModules.map(m => {
-        const regComp = completions.find(c => c.moduleName === m.name && c.category === m.category);
+        // Find completions across all selected clusters for this module
+        const clusterCompletions = completions.filter(c => c.moduleName === m.name && c.category === m.category);
 
-        // Logic: Checklist is completed only if ALL items are checked
+        // Merge items status: Completed only if completed in all clusters (aggregated view)
         const itemsWithStatus = m.items.map(mi => {
-          const itemComp = regComp?.itemsStatus?.find(is => is.itemName === mi.itemName);
+          if (clusterCompletions.length === 0) return { ...mi, completed: false };
+          
+          const isCompletedInAll = clusterCompletions.every(comp => 
+            comp.itemsStatus?.find(is => is.itemName === mi.itemName)?.completed || false
+          );
+          
           return {
             ...mi,
-            completed: itemComp ? itemComp.completed : false
+            completed: isCompletedInAll
           };
         });
 
@@ -152,7 +173,9 @@ export default function ChecklistSetting() {
         iconBg: cat.iconBg || "bg-blue-100 text-blue-600",
         progress: progress,
         modules: catModules.length,
-        items: items
+        items: items,
+        completedCount: completedModulesCount,
+        pendingCount: items.length - completedModulesCount
       };
     });
 
@@ -160,18 +183,20 @@ export default function ChecklistSetting() {
   };
 
 
-  const handleCountrySelect = async (country) => {
-    setSelectedCountry(country);
-    setSelectedState(null);
-    setSelectedDistrict(null);
-    setSelectedCluster(null);
+  const handleCountrySelect = async (options) => {
+    const countriesArr = options ? options.map(o => o.value) : [];
+    setSelectedCountries(countriesArr);
+    setSelectedStates([]);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
     setStates([]);
-    setDistricts([]);
     setClusters([]);
+    setDistricts([]);
 
-    if (country) {
+    if (countriesArr.length > 0) {
       try {
-        const fetchedStates = await locationApi.getStates(country._id);
+        const countryIds = countriesArr.map(c => c._id).join(',');
+        const fetchedStates = await locationApi.getStates({ countryId: countryIds });
         setStates(fetchedStates || []);
       } catch (err) {
         console.error('Failed to load states', err);
@@ -179,31 +204,19 @@ export default function ChecklistSetting() {
     }
   };
 
-  const handleStateSelect = async (state) => {
-    setSelectedState(state);
-    setSelectedDistrict(null);
-    setSelectedCluster(null);
+  const handleStateSelect = async (options) => {
+    const statesArr = options ? options.map(o => o.value) : [];
+    setSelectedStates(statesArr);
+    setSelectedClusters([]);
+    setSelectedDistricts([]);
+    setClusters([]);
     setDistricts([]);
-    setClusters([]);
 
-    if (state) {
+    if (statesArr.length > 0) {
       try {
-        const fetchedDistricts = await locationApi.getDistricts({ stateId: state._id });
-        setDistricts(fetchedDistricts || []);
-      } catch (err) {
-        console.error('Failed to load districts', err);
-      }
-    }
-  };
-
-  const handleDistrictSelect = async (district) => {
-    setSelectedDistrict(district);
-    setSelectedCluster(null);
-    setClusters([]);
-
-    if (district) {
-      try {
-        const fetchedClusters = await locationApi.getClusters(district._id);
+        const stateIds = statesArr.map(s => s._id).join(',');
+        // Swap: First show clusters after state
+        const fetchedClusters = await locationApi.getClustersHierarchy(stateIds);
         setClusters(fetchedClusters || []);
       } catch (err) {
         console.error('Failed to load clusters', err);
@@ -211,8 +224,27 @@ export default function ChecklistSetting() {
     }
   };
 
-  const handleClusterSelect = (cluster) => {
-    setSelectedCluster(cluster);
+  const handleClusterSelect = async (options) => {
+    const clustersArr = options ? options.map(o => o.value) : [];
+    setSelectedClusters(clustersArr);
+    setSelectedDistricts([]);
+    setDistricts([]);
+
+    if (clustersArr.length > 0) {
+      try {
+        const clusterIds = clustersArr.map(c => c._id).join(',');
+        // Swap: Districts depend on clusters
+        const fetchedDistricts = await locationApi.getDistrictsHierarchy(clusterIds);
+        setDistricts(fetchedDistricts || []);
+      } catch (err) {
+        console.error('Failed to load districts', err);
+      }
+    }
+  };
+
+  const handleDistrictSelect = (options) => {
+    const districtsArr = options ? options.map(o => o.value) : [];
+    setSelectedDistricts(districtsArr);
   };
 
   // CRUD Operations
@@ -241,8 +273,8 @@ export default function ChecklistSetting() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!selectedCluster) {
-      setError("Please select Country, State, District, and Cluster first");
+    if (selectedClusters.length === 0) {
+      setError("Please select Country, State, and Clusters first to add a template");
       return;
     }
     if (formData.items.length === 0) {
@@ -256,9 +288,9 @@ export default function ChecklistSetting() {
 
       const payload = {
         ...formData,
-        state: selectedState._id,
-        district: selectedDistrict._id,
-        cluster: selectedCluster._id
+        state: selectedStates[0]?._id,
+        district: selectedDistricts[0]?._id,
+        cluster: selectedClusters[0]?._id
       };
 
       if (editingId) {
@@ -272,10 +304,10 @@ export default function ChecklistSetting() {
       resetForm(); // This will close the modal and clear form state
 
       // Refresh data
-      const clusterId = selectedCluster?._id;
+      const clusterIds = selectedClusters.map(c => c._id).join(',');
       const [updatedChecklists, updatedCompletions, categories] = await Promise.all([
-        settingsApi.fetchChecklists(clusterId),
-        settingsApi.fetchModuleCompletions(clusterId),
+        settingsApi.fetchChecklists(clusterIds),
+        settingsApi.fetchModuleCompletions(clusterIds),
         settingsApi.fetchCategories()
       ]);
       setChecklists(updatedChecklists);
@@ -320,10 +352,10 @@ export default function ChecklistSetting() {
       setSuccess('Checklist deleted successfully');
 
       // Refresh regional data
-      const clusterId = selectedCluster?._id;
+      const clusterIds = selectedClusters.map(c => c._id).join(',');
       const [updatedChecklists, updatedCompletions, categories] = await Promise.all([
-        settingsApi.fetchChecklists(clusterId),
-        settingsApi.fetchModuleCompletions(clusterId),
+        settingsApi.fetchChecklists(clusterIds),
+        settingsApi.fetchModuleCompletions(clusterIds),
         settingsApi.fetchCategories()
       ]);
       setChecklists(updatedChecklists);
@@ -349,52 +381,51 @@ export default function ChecklistSetting() {
   };
 
   const handleToggleItemStatus = async (cl, itemName, currentStatus) => {
-    if (!selectedCluster) {
-      setError("Please select a cluster first to record regional completion");
+    if (selectedClusters.length === 0) {
+      setError("Please select at least one cluster to record completion");
       return;
     }
     try {
-      // Find current regional completion
-      const currentCompletions = await settingsApi.fetchModuleCompletions(selectedCluster._id);
-      const regComp = currentCompletions.find(c => c.moduleName === cl.name && c.category === cl.category);
+      // Record completion for ALL selected clusters (Aggregated action)
+      await Promise.all(selectedClusters.map(async (cluster) => {
+        // Find current regional completion for this cluster
+        const currentCompletions = await settingsApi.fetchModuleCompletions(cluster._id);
+        const regComp = currentCompletions.find(c => c.moduleName === cl.name && c.category === cl.category);
 
-      // Prepare itemsStatus
-      let itemsStatus = regComp?.itemsStatus || [];
+        // Prepare itemsStatus
+        let itemsStatus = regComp?.itemsStatus || [];
 
-      // Sync itemsStatus with current template items if they differ (e.g. if template was updated)
-      const templateItemNames = cl.items.map(i => i.itemName.trim());
+        // Sync itemsStatus with current template items
+        const templateItemNames = cl.items.map(i => i.itemName.trim());
+        const syncedItemsStatus = templateItemNames.map(name => {
+          const existing = itemsStatus.find(is => is.itemName.trim() === name);
+          return existing ? existing : { itemName: name, completed: false };
+        });
 
-      // Remove items no longer in template, and add new items from template as uncompleted
-      const syncedItemsStatus = templateItemNames.map(name => {
-        const existing = itemsStatus.find(is => is.itemName.trim() === name);
-        return existing ? existing : { itemName: name, completed: false };
-      });
+        const targetName = itemName.trim();
+        const updatedItemsStatus = syncedItemsStatus.map(item =>
+          item.itemName.trim() === targetName ? { ...item, completed: !currentStatus } : item
+        );
 
-      // Update the specific item in the synced list
-      const targetName = itemName.trim();
-      const updatedItemsStatus = syncedItemsStatus.map(item =>
-        item.itemName.trim() === targetName ? { ...item, completed: !currentStatus } : item
-      );
+        const completedCount = updatedItemsStatus.filter(i => i.completed).length;
+        const allCompleted = completedCount === updatedItemsStatus.length;
 
-      // Logic: Checklist is completed only if ALL items are checked
-      const completedCount = updatedItemsStatus.filter(i => i.completed).length;
-      const allCompleted = completedCount === updatedItemsStatus.length;
-
-      // Update ModuleCompletion record scoped to cluster
-      await settingsApi.updateModuleCompletion({
-        moduleName: cl.name,
-        itemsStatus: updatedItemsStatus,
-        completed: allCompleted,
-        progressPercent: updatedItemsStatus.length > 0 ? Math.round((completedCount / updatedItemsStatus.length) * 100) : 0,
-        category: cl.category,
-        iconName: cl.iconName,
-        clusterId: selectedCluster._id
-      });
+        return settingsApi.updateModuleCompletion({
+          moduleName: cl.name,
+          itemsStatus: updatedItemsStatus,
+          completed: allCompleted,
+          progressPercent: updatedItemsStatus.length > 0 ? Math.round((completedCount / updatedItemsStatus.length) * 100) : 0,
+          category: cl.category,
+          iconName: cl.iconName,
+          clusterId: cluster._id
+        });
+      }));
 
       // Refresh regional data
+      const clusterIds = selectedClusters.map(c => c._id).join(',');
       const [updatedCompletions, regionalChecklists, categories] = await Promise.all([
-        settingsApi.fetchModuleCompletions(selectedCluster._id),
-        settingsApi.fetchChecklists(selectedCluster._id),
+        settingsApi.fetchModuleCompletions(clusterIds),
+        settingsApi.fetchChecklists(clusterIds),
         settingsApi.fetchCategories()
       ]);
       setChecklists(regionalChecklists);
@@ -409,6 +440,7 @@ export default function ChecklistSetting() {
   const totalModules = moduleCategories.reduce((acc, cat) => acc + cat.items.length, 0);
   const completedModules = moduleCategories.reduce((acc, cat) => acc + cat.items.filter(i => i.status === 'completed').length, 0);
   const pendingModules = totalModules - completedModules;
+  const highPriorityModules = moduleCategories.reduce((acc, cat) => acc + cat.items.filter(i => i.manualStatus === 'high-priority').length, 0);
   const completionRate = totalModules > 0 ? Math.round((completedModules / totalModules) * 100) : 0;
 
   const stats = [
@@ -571,6 +603,34 @@ export default function ChecklistSetting() {
       background-color: #fffbeb;
     }
     
+    .react-select-container .react-select__control {
+      border-radius: 0.75rem;
+      padding: 0.25rem;
+      background-color: #f9fafb;
+      border-color: #e5e7eb;
+    }
+    
+    .react-select-container .react-select__control--is-focused {
+      border-color: #3b82f6;
+      box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+    }
+    
+    .react-select-container .react-select__multi-value {
+      background-color: #eff6ff;
+      border-radius: 0.5rem;
+      border: 1px border #dbeafe;
+    }
+    
+    .react-select-container .react-select__multi-value__label {
+      color: #2563eb;
+      font-weight: 600;
+    }
+    
+    .react-select-container .react-select__multi-value__remove:hover {
+      background-color: #dbeafe;
+      color: #ef4444;
+    }
+
     /* Breadcrumb styles */
     .breadcrumb-item {
       position: relative;
@@ -598,13 +658,13 @@ export default function ChecklistSetting() {
             {!showForm && (
               <button
                 onClick={() => {
-                  if (!selectedCluster) {
-                    setError("Please select Country, State, District, and Cluster first to add a template");
+                  if (selectedClusters.length === 0) {
+                    setError("Please select Country, State, and Clusters first to add a template");
                     return;
                   }
                   setShowForm(true);
                 }}
-                className={`${!selectedCluster ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg`}
+                className={`${selectedClusters.length === 0 ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700'} text-white px-4 py-2 rounded-xl flex items-center gap-2 transition shadow-lg`}
               >
                 <Plus className="w-4 h-4" />
                 Add Checklist Template
@@ -802,86 +862,78 @@ export default function ChecklistSetting() {
             {/* Country Dropdown */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                <Compass className="w-4 h-4 text-blue-500" />
-                Select Country
+                <Globe className="w-4 h-4 text-blue-500" />
+                Select Countries
               </label>
-              <select
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition"
-                value={selectedCountry?._id || ''}
-                onChange={(e) => {
-                  const country = countries.find(c => c._id === e.target.value);
-                  handleCountrySelect(country);
-                }}
-              >
-                <option value="">Choose Country...</option>
-                {countries.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-              </select>
+              <Select
+                isMulti
+                className="react-select-container"
+                classNamePrefix="react-select"
+                options={countries.map(c => ({ value: c, label: c.name }))}
+                value={selectedCountries.map(c => ({ value: c, label: c.name }))}
+                onChange={handleCountrySelect}
+                placeholder="Choose Countries..."
+              />
             </div>
 
             {/* State Dropdown */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <MapPin className="w-4 h-4 text-sky-500" />
-                Select State
+                Select States
               </label>
-              <select
-                disabled={!selectedCountry}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
-                value={selectedState?._id || ''}
-                onChange={(e) => {
-                  const state = states.find(s => s._id === e.target.value);
-                  handleStateSelect(state);
-                }}
-              >
-                <option value="">Choose State...</option>
-                {states.map(s => <option key={s._id} value={s._id}>{s.name}</option>)}
-              </select>
+              <Select
+                isMulti
+                isDisabled={selectedCountries.length === 0}
+                className="react-select-container"
+                classNamePrefix="react-select"
+                options={states.map(s => ({ value: s, label: s.name }))}
+                value={selectedStates.map(s => ({ value: s, label: s.name }))}
+                onChange={handleStateSelect}
+                placeholder="Choose States..."
+              />
             </div>
 
-            {/* District Dropdown */}
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
-                <Grid3x3 className="w-4 h-4 text-emerald-500" />
-                Select District
-              </label>
-              <select
-                disabled={!selectedState}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
-                value={selectedDistrict?._id || ''}
-                onChange={(e) => {
-                  const district = districts.find(d => d._id === e.target.value);
-                  handleDistrictSelect(district);
-                }}
-              >
-                <option value="">Choose District...</option>
-                {districts.map(d => <option key={d._id} value={d._id}>{d.name}</option>)}
-              </select>
-            </div>
-
-            {/* Cluster Dropdown */}
+            {/* Cluster Dropdown (SWAPPED: Now before District) */}
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
                 <Target className="w-4 h-4 text-orange-500" />
-                Select Cluster
+                Select Clusters
               </label>
-              <select
-                disabled={!selectedDistrict}
-                className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition disabled:opacity-50"
-                value={selectedCluster?._id || ''}
-                onChange={(e) => {
-                  const cluster = clusters.find(cl => cl._id === e.target.value);
-                  handleClusterSelect(cluster);
-                }}
-              >
-                <option value="">Choose Cluster...</option>
-                {clusters.map(cl => <option key={cl._id} value={cl._id}>{cl.name}</option>)}
-              </select>
+              <Select
+                isMulti
+                isDisabled={selectedStates.length === 0}
+                className="react-select-container"
+                classNamePrefix="react-select"
+                options={clusters.map(cl => ({ value: cl, label: cl.name }))}
+                value={selectedClusters.map(cl => ({ value: cl, label: cl.name }))}
+                onChange={handleClusterSelect}
+                placeholder="Choose Clusters..."
+              />
+            </div>
+
+            {/* District Dropdown (SWAPPED: Now after Cluster) */}
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-2 flex items-center gap-2">
+                <Grid3x3 className="w-4 h-4 text-emerald-500" />
+                Select Districts
+              </label>
+              <Select
+                isMulti
+                isDisabled={selectedClusters.length === 0}
+                className="react-select-container"
+                classNamePrefix="react-select"
+                options={districts.map(d => ({ value: d, label: d.name }))}
+                value={selectedDistricts.map(d => ({ value: d, label: d.name }))}
+                onChange={handleDistrictSelect}
+                placeholder="Choose Districts..."
+              />
             </div>
           </div>
         </div>
 
-        {/* Progress Summary Section - Show only when cluster is selected */}
-        {selectedCluster && (
+        {/* Progress Summary Section - Show only when clusters are selected */}
+        {selectedClusters.length > 0 && (
           <div className="mb-10 animate-fadeIn">
             <div className="mb-8">
               <h2 className="text-2xl font-bold text-gray-800 mb-2">Progress Overview</h2>
@@ -941,16 +993,16 @@ export default function ChecklistSetting() {
           </div>
         )}
 
-        {/* Module Categories Section - Show only when cluster is selected */}
-        {selectedCluster && (
+        {/* Module Categories Section - Show only when clusters are selected */}
+        {selectedClusters.length > 0 && (
           <div className="animate-fadeIn">
             {/* Filters */}
             <div className="flex flex-wrap items-center gap-3 mb-8">
               {[
-                { id: 'all', label: 'All Modules', icon: Grid3x3 },
-                { id: 'completed', label: 'Completed', icon: CheckCircle },
-                { id: 'pending', label: 'Pending', icon: Clock },
-                { id: 'high-priority', label: 'High Priority', icon: TrendingUp }
+                { id: 'all', label: `All Modules (${totalModules})`, icon: Grid3x3 },
+                { id: 'completed', label: `Completed (${completedModules})`, icon: CheckCircle },
+                { id: 'pending', label: `Pending (${pendingModules})`, icon: Clock },
+                { id: 'high-priority', label: `High Priority (${highPriorityModules})`, icon: TrendingUp }
               ].map((filter) => {
                 return (
                   <button
@@ -997,7 +1049,7 @@ export default function ChecklistSetting() {
                           </div>
                           <div className="flex items-center flex-wrap gap-4 text-sm text-gray-600">
                             <span className="bg-white border border-gray-100 py-1.5 px-3 rounded-full font-medium shadow-sm">
-                              {category.modules} Modules
+                              {category.completedCount} Completed • {category.pendingCount} Pending
                             </span>
                             <span className="flex items-center bg-blue-50 text-blue-700 py-1.5 px-3 rounded-full font-medium border border-blue-100">
                               <TrendingUp className="w-4 h-4 mr-2" />
@@ -1110,7 +1162,7 @@ export default function ChecklistSetting() {
                     {/* Category Footer */}
                     <div className="p-4 bg-gray-50/80 border-t border-gray-100">
                       <div className="flex justify-between items-center text-xs text-gray-500 font-medium">
-                        <span>{category.modules} Checklists Total</span>
+                        <span>{category.completedCount} Completed • {category.pendingCount} Pending</span>
                         <div className="flex items-center gap-2">
                           <div className={`w-2 h-2 rounded-full ${category.progress === 100 ? 'bg-emerald-500 shadow-sm shadow-emerald-200' : 'bg-amber-500 shadow-sm shadow-amber-200'}`}></div>
                           <span>{category.progress === 100 ? 'Fully Completed' : 'In Progress'}</span>
@@ -1156,7 +1208,7 @@ export default function ChecklistSetting() {
                 </div>
                 <h3 className="text-2xl font-bold text-gray-800 mb-4">Regional Management Center</h3>
                 <p className="text-gray-600 mb-8 leading-relaxed">
-                  Viewing data for <span className="font-bold text-blue-600">{selectedState?.name}</span> / <span className="font-bold text-blue-600">{selectedCluster?.name}</span>.
+                  Viewing data for <span className="font-bold text-blue-600">{selectedStates.map(s => s.name).join(', ')}</span> / <span className="font-bold text-blue-600">{selectedClusters.map(c => c.name).join(', ')}</span>.
                   Track regional requirements, manage task lists, and ensure quality standards are met across all modules.
                 </p>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -1177,7 +1229,7 @@ export default function ChecklistSetting() {
         )}
 
         {/* Empty State */}
-        {!selectedCluster && (
+        {selectedClusters.length === 0 && (
           <div className="text-center py-24 animate-fadeIn">
             <div className="w-40 h-40 mx-auto mb-10 rounded-[2.5rem] bg-gradient-to-br from-blue-50 to-cyan-50 flex items-center justify-center shadow-lg transform -rotate-3 hover:rotate-0 transition-transform duration-500">
               <LayoutDashboard className="w-20 h-20 text-blue-600" />

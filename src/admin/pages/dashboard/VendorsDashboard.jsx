@@ -10,7 +10,8 @@ import {
   Download
 } from 'lucide-react';
 import ApexCharts from 'apexcharts';
-import { getDashboardMetrics, getOrders } from '../../../services/dashboard/vendorsApi';
+import { getDashboardMetrics, getOrders, getSupplierTypes, getSupplierVendors } from '../../../services/dashboard/vendorsApi';
+import inventoryApi from '../../../services/inventory/inventoryApi';
 import { useLocations } from '../../../hooks/useLocations';
 
 const VendorsDashboard = () => {
@@ -18,7 +19,13 @@ const VendorsDashboard = () => {
   const [stateFilter, setStateFilter] = useState('');
   const [clusterFilter, setClusterFilter] = useState('');
   const [districtFilter, setDistrictFilter] = useState('');
+  const [supplierTypeFilter, setSupplierTypeFilter] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const [vendorFilter, setVendorFilter] = useState('');
   const [timeRange, setTimeRange] = useState('');
+  const [supplierTypes, setSupplierTypes] = useState([]);
+  const [warehouseOptions, setWarehouseOptions] = useState([]);
+  const [vendorOptions, setVendorOptions] = useState([]);
 
   const {
     countries,
@@ -55,10 +62,40 @@ const VendorsDashboard = () => {
     }
   }, [clusterFilter]);
 
+  // Fetch Supplier Types on Mount
+  useEffect(() => {
+    const fetchSupplierTypes = async () => {
+      try {
+        const res = await getSupplierTypes();
+        setSupplierTypes(res.data || []);
+      } catch (err) {
+        console.error("Error fetching supplier types:", err);
+      }
+    };
+    fetchSupplierTypes();
+  }, []);
+
+  // Fetch Warehouses and Vendors
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const [whRes, venRes] = await Promise.all([
+          inventoryApi.getAllWarehouses({ state: stateFilter, cluster: clusterFilter, district: districtFilter }),
+          getSupplierVendors({ state: stateFilter, cluster: clusterFilter, district: districtFilter })
+        ]);
+        setWarehouseOptions(whRes.data.data || []);
+        setVendorOptions(venRes.data || []);
+      } catch (err) {
+        console.error("Error fetching vendor dashboard options:", err);
+      }
+    };
+    fetchOptions();
+  }, [stateFilter, clusterFilter, districtFilter]);
+
   // Fetch Data when filters change
   useEffect(() => {
     fetchData();
-  }, [countryFilter, stateFilter, clusterFilter, districtFilter, timeRange]);
+  }, [countryFilter, stateFilter, clusterFilter, districtFilter, supplierTypeFilter, warehouseFilter, vendorFilter, timeRange]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -67,7 +104,10 @@ const VendorsDashboard = () => {
         country: countryFilter,
         state: stateFilter,
         cluster: clusterFilter,
-        district: districtFilter
+        district: districtFilter,
+        supplierType: supplierTypeFilter,
+        warehouse: warehouseFilter,
+        vendorId: vendorFilter
       };
 
       // Calculate date range
@@ -208,7 +248,7 @@ const VendorsDashboard = () => {
 
       {/* Filter Controls */}
       <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-5 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-5 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Select Country</label>
             <select
@@ -281,6 +321,20 @@ const VendorsDashboard = () => {
           </div>
 
           <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Warehouse selection</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={warehouseFilter}
+              onChange={(e) => setWarehouseFilter(e.target.value)}
+            >
+              <option value="">All Warehouses</option>
+              {warehouseOptions.map(wh => (
+                <option key={wh._id} value={wh._id}>{wh.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Select Range</label>
             <select
               className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -295,7 +349,35 @@ const VendorsDashboard = () => {
             </select>
           </div>
 
-          <div className="flex items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Supplier Type</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              value={supplierTypeFilter}
+              onChange={(e) => setSupplierTypeFilter(e.target.value)}
+            >
+              <option value="">All Types</option>
+              {supplierTypes.map(type => (
+                <option key={type._id} value={type._id}>{type.loginTypeName}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Select vendor by name</label>
+            <select
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-medium"
+              value={vendorFilter}
+              onChange={(e) => setVendorFilter(e.target.value)}
+            >
+              <option value="">All Vendors</option>
+              {vendorOptions.map(v => (
+                <option key={v._id} value={v._id}>{v.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="flex items-end lg:col-span-1 xl:col-span-1">
             <button
               onClick={fetchData}
               className="w-full px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors flex items-center justify-center"

@@ -1,6 +1,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import Chart from 'react-apexcharts';
 import { dashboardApi } from '../../../services/dashboard/dashboardApi';
+import inventoryApi from '../../../services/inventory/inventoryApi';
+import { getSolarKits } from '../../../services/combokit/combokitApi';
 import { useLocations } from '../../../hooks/useLocations';
 import {
   Package,
@@ -12,7 +14,10 @@ import {
   TrendingUp,
   Eye,
   Filter,
-  X
+  X,
+  ChevronDown,
+  Building2,
+  Tag
 } from 'lucide-react';
 
 function Badge({ tone = 'gray', children }) {
@@ -48,13 +53,24 @@ export default function InventoryDashboard() {
     projectType: '',
     subType: '',
     product: '',
-    brand: '',
+    brand: [], // Multiple
+    warehouse: [], // Multiple
+    solarkitType: '',
     timeline: ''
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [data, setData] = useState(null);
+
+  const [brandOptions, setBrandOptions] = useState([]);
+  const [warehouseOptions, setWarehouseOptions] = useState([]);
+  const [solarkitOptions, setSolarkitOptions] = useState([]);
+
+  const [isBrandsOpen, setIsBrandsOpen] = useState(false);
+  const [isWarehousesOpen, setIsWarehousesOpen] = useState(false);
+  const brandsRef = React.useRef(null);
+  const warehousesRef = React.useRef(null);
 
   const {
     countries,
@@ -88,6 +104,32 @@ export default function InventoryDashboard() {
     }
   }, [filters.cluster]);
 
+  // Initial Fetch: Brands, Warehouses, Solarkits
+  useEffect(() => {
+    const fetchOptions = async () => {
+      try {
+        const [brandsRes, whRes, kitsRes] = await Promise.all([
+          inventoryApi.getBrands(),
+          inventoryApi.getAllWarehouses(),
+          getSolarKits()
+        ]);
+        setBrandOptions(brandsRes.data || []);
+        setWarehouseOptions(whRes.data.data || []);
+        setSolarkitOptions(kitsRes || []);
+      } catch (err) {
+        console.error('Error fetching inventory options:', err);
+      }
+    };
+    fetchOptions();
+
+    const handleClickOutside = (event) => {
+      if (brandsRef.current && !brandsRef.current.contains(event.target)) setIsBrandsOpen(false);
+      if (warehousesRef.current && !warehousesRef.current.contains(event.target)) setIsWarehousesOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
   // Fetch Data whenever filters change
   useEffect(() => {
     fetchData();
@@ -99,7 +141,11 @@ export default function InventoryDashboard() {
       setLoading(true);
       setError(null);
       
-      const queryParams = { ...filters };
+      const queryParams = { 
+        ...filters,
+        brand: filters.brand.join(','),
+        warehouse: filters.warehouse.join(',')
+      };
       const res = await dashboardApi.getInventoryDashboard(queryParams);
       setData(res.dashboard);
       if (res.dashboard) {
@@ -285,6 +331,90 @@ export default function InventoryDashboard() {
               <option value="residential">Residential</option>
               <option value="commercial">Commercial</option>
             </select>
+          </div>
+
+          {/* Solarkits type */}
+          <div>
+            <select
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={filters.solarkitType}
+              onChange={(e) => setFilters(p => ({ ...p, solarkitType: e.target.value }))}
+            >
+              <option value="">Solarkits type</option>
+              {solarkitOptions.map(kit => (
+                <option key={kit._id} value={kit.name}>{kit.name}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Select Brands (Multiple) */}
+          <div className="relative" ref={brandsRef}>
+            <div
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white cursor-pointer flex justify-between items-center"
+              onClick={() => setIsBrandsOpen(!isBrandsOpen)}
+            >
+              <span className="truncate">
+                {filters.brand.length > 0
+                  ? `${filters.brand.length} Brands Selected`
+                  : 'Select brands (multiple)'}
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${isBrandsOpen ? 'rotate-180' : ''}`} />
+            </div>
+            {isBrandsOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {brandOptions.map((brand) => (
+                  <label key={brand._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 mr-2"
+                      checked={filters.brand.includes(brand.brand)}
+                      onChange={(e) => {
+                        const newBrands = e.target.checked
+                          ? [...filters.brand, brand.brand]
+                          : filters.brand.filter(b => b !== brand.brand);
+                        setFilters(prev => ({ ...prev, brand: newBrands }));
+                      }}
+                    />
+                    <span className="text-sm text-gray-700">{brand.brand}</span>
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Select Warehouse (Multiple) */}
+          <div className="relative" ref={warehousesRef}>
+            <div
+              className="w-full border border-gray-300 rounded-md px-3 py-2 text-sm bg-white cursor-pointer flex justify-between items-center"
+              onClick={() => setIsWarehousesOpen(!isWarehousesOpen)}
+            >
+              <span className="truncate">
+                {filters.warehouse.length > 0
+                  ? `${filters.warehouse.length} Warehouses Selected`
+                  : 'Select warehouse (multiple)'}
+              </span>
+              <ChevronDown className={`h-4 w-4 transition-transform ${isWarehousesOpen ? 'rotate-180' : ''}`} />
+            </div>
+            {isWarehousesOpen && (
+              <div className="absolute z-50 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                {warehouseOptions.map((wh) => (
+                  <label key={wh._id} className="flex items-center px-3 py-2 hover:bg-gray-50 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 h-4 w-4 mr-2"
+                      checked={filters.warehouse.includes(wh._id)}
+                      onChange={(e) => {
+                        const newWarehouses = e.target.checked
+                          ? [...filters.warehouse, wh._id]
+                          : filters.warehouse.filter(id => id !== wh._id);
+                        setFilters(prev => ({ ...prev, warehouse: newWarehouses }));
+                      }}
+                    />
+                    <span className="text-sm text-gray-700">{wh.name}</span>
+                  </label>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 

@@ -26,3 +26,11 @@ export const createLoanApplication = async (data) => {
         throw err.response?.data || err.message;
     }
 };
+export const getLoanCountsByLocation = async () => {
+    try {
+        const res = await api.get('/loan-applications/location-counts');
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};

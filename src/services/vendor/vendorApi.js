@@ -81,6 +81,11 @@ export const getSupplierVendorPlans = async (params = {}) => {
     return response.data;
 };
 
+export const getSupplierVendorPlanCounts = async () => {
+    const response = await axios.get(`${API_URL}/supplier-vendor-plans/counts`, getAuthHeaders());
+    return response.data;
+};
+
 export const saveSupplierVendorPlan = async (data) => {
     const response = await axios.post(`${API_URL}/supplier-vendor-plans`, data, getAuthHeaders());
     return response.data;

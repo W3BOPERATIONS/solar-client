@@ -25,7 +25,9 @@ const tableHeaders = {
   inventory: ['ID', 'Product Type', 'Product Name', 'Brand', 'SKU', 'Model No.', 'Quantity', 'Requested By', 'Date', 'Action'],
   ticket: ['ID', 'Issue Type', 'Ticket Name', 'Priority', 'Customer Name', 'Customer Phone', 'Assigned To', 'Est. Resolution', 'Modules', 'Timeline', 'Requested By', 'Date', 'Action'],
   standard: ['ID', 'ComboKit Name', 'Solar Panel Brand', 'SKU', 'Inverter', 'Inverter SKU', 'BOS Kit Brand', 'BOS Kit SKU', 'CP Type', 'District', 'Date', 'Action'],
-  customize: ['ID', 'Kit Name', 'Solar Panel', 'Inverter', 'Battery', 'Mounting', 'Wiring', 'Accessories', 'Total Cost', 'Requested By', 'Date', 'Action']
+  customize: ['ID', 'Kit Name', 'Solar Panel', 'Inverter', 'Battery', 'Mounting', 'Wiring', 'Accessories', 'Total Cost', 'Requested By', 'Date', 'Action'],
+  leave: ['ID', 'Employee Name', 'Leave Type', 'Start Date', 'End Date', 'Reason', 'Requested By', 'Date', 'Action'],
+  resignation: ['ID', 'Employee Name', 'Reason', 'Notice Period', 'Last Working Day', 'Requested By', 'Date', 'Action']
 };
 
 // Field mappings for each approval type
@@ -39,7 +41,9 @@ const fieldMappings = {
   inventory: ['id', 'productType', 'name', 'brand', 'sku', 'modelNo', 'quantity', 'requestedBy', 'date'],
   ticket: ['id', 'issueType', 'name', 'priority', 'customerName', 'customerPhone', 'assignedTo', 'estimatedResolution', 'modules', 'timeline', 'requestedBy', 'date'],
   standard: ['id', 'name', 'solarpanelbrand', 'panelsku', 'inverter', 'invertorsku', 'boskitbrand', 'boskitsku', 'cptype', 'district', 'date'],
-  customize: ['id', 'name', 'solarPanel', 'inverter', 'battery', 'mounting', 'wiring', 'accessories', 'totalCost', 'requestedBy', 'date']
+  customize: ['id', 'name', 'solarPanel', 'inverter', 'battery', 'mounting', 'wiring', 'accessories', 'totalCost', 'requestedBy', 'date'],
+  leave: ['id', 'employeeName', 'leaveType', 'startDate', 'endDate', 'reason', 'requestedBy', 'date'],
+  resignation: ['id', 'employeeName', 'reason', 'noticePeriod', 'lastWorkingDay', 'requestedBy', 'date']
 };
 
 // Sample data for different approval types
@@ -62,7 +66,9 @@ const getTypeDisplayName = (type) => {
     'inventory': 'Inventory',
     'ticket': 'Ticket',
     'standard': 'Standard ComboKit',
-    'customize': 'Customize Kit'
+    'customize': 'Customize Kit',
+    'leave': 'Leave Approval',
+    'resignation': 'Resignation Approval'
   };
   return typeMap[type] || type;
 };
@@ -156,7 +162,8 @@ export default function AdminApproval() {
 
   const [data, setData] = useState({
     recruitment: [], driver: [], dealer: [], installer: [], franchisee: [],
-    combokit: [], inventory: [], ticket: [], standard: [], customize: []
+    combokit: [], inventory: [], ticket: [], standard: [], customize: [],
+    leave: [], resignation: []
   });
 
   const [approvedItems, setApprovedItems] = useState([]);
@@ -207,7 +214,8 @@ export default function AdminApproval() {
         // Organize data by type
         const newData = {
           recruitment: [], driver: [], dealer: [], installer: [], franchisee: [],
-          combokit: [], inventory: [], ticket: [], standard: [], customize: []
+          combokit: [], inventory: [], ticket: [], standard: [], customize: [],
+          leave: [], resignation: []
         };
         const newApproved = [];
         const newRejected = [];
@@ -274,7 +282,7 @@ export default function AdminApproval() {
     (sum, type) => sum + (data[type]?.length || 0), 0
   );
 
-  const companyPending = ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize'].reduce(
+  const companyPending = ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize', 'leave', 'resignation'].reduce(
     (sum, type) => sum + (data[type]?.length || 0), 0
   );
 
@@ -283,7 +291,7 @@ export default function AdminApproval() {
   ).length;
 
   const companyApproved = approvedItems.filter(
-    item => ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize'].includes(item.type)
+    item => ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize', 'leave', 'resignation'].includes(item.type)
   ).length;
 
   const approvedToday = approvedItems.filter(item => {
@@ -302,7 +310,9 @@ export default function AdminApproval() {
     inventory: data.inventory?.length || 0,
     ticket: data.ticket?.length || 0,
     standard: data.standard?.length || 0,
-    customize: data.customize?.length || 0
+    customize: data.customize?.length || 0,
+    leave: data.leave?.length || 0,
+    resignation: data.resignation?.length || 0
   };
 
   const approveItem = async (id, type) => {
@@ -899,6 +909,8 @@ export default function AdminApproval() {
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
                 { type: 'recruitment', color: 'bg-blue-600', icon: Users, count: counts.recruitment, label: 'Recruitment' },
+                { type: 'leave', color: 'bg-indigo-600', icon: Calendar, count: counts.leave, label: 'Leave Approval' },
+                { type: 'resignation', color: 'bg-red-600', icon: FileSpreadsheet, count: counts.resignation, label: 'Resignation Approval' },
                 { type: 'combokit', color: 'bg-green-600', icon: Package, count: counts.combokit, label: 'ComboKit Approvals' },
                 { type: 'inventory', color: 'bg-yellow-600', icon: Box, count: counts.inventory, label: 'Inventory Approvals' },
                 { type: 'ticket', color: 'bg-cyan-600', icon: Wrench, count: counts.ticket, label: 'Ticket Approvals' }

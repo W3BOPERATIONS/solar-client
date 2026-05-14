@@ -188,6 +188,32 @@ export default function CreateDepartment() {
           </div>
           <div className="p-6">
             <form id="departmentForm" onSubmit={handleSubmit}>
+              {/* Existing Department Selection */}
+              <div className="mb-6">
+                <label className="block font-semibold text-gray-700 mb-2">
+                  Select Existing Department (To add country to it)
+                </label>
+                <select
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all bg-blue-50/30"
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const newNames = [...formData.names];
+                      newNames[0] = e.target.value;
+                      setFormData({ ...formData, names: newNames });
+                    }
+                  }}
+                  value={formData.names[0] && departments.some(d => d.name === formData.names[0]) ? formData.names[0] : ""}
+                >
+                  <option value="">-- Choose Existing Department --</option>
+                  {[...new Set(departments.map(d => d.name))].sort().map(name => (
+                    <option key={name} value={name}>{name}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-400 mt-2">
+                  * Selecting an existing department helps in adding more countries to the same department name.
+                </p>
+              </div>
+
               {/* Department Names */}
               <div className="mb-6">
                 <label className="block font-semibold text-gray-700 mb-2">

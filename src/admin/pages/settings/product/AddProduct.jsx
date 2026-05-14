@@ -10,6 +10,7 @@ import {
   CheckCircle,
   AlertCircle
 } from 'lucide-react';
+import Select from 'react-select';
 import { productApi } from '../../../../api/productApi';
 import { masterApi } from '../../../../api/masterApi';
 import axiosInstance from '../../../../api/axios';
@@ -42,9 +43,9 @@ const AddProduct = () => {
   // Form State
   const initialFormState = {
     name: '',
-    categoryId: '',
-    subCategoryId: '',
-    subProjectTypeId: '',
+    categoryIds: [],
+    subCategoryIds: [],
+    subProjectTypeIds: [],
     brandId: '',
     mechanicalParameters: [''],
     electricalParameters: [''],
@@ -142,6 +143,11 @@ const AddProduct = () => {
     if (cityId) fetchDistricts(cityId);
   };
 
+  const formatOptions = (data) => data.map(item => ({
+    value: item._id,
+    label: item.name || item.companyName || 'Unnamed'
+  }));
+
 
 
   const handleEdit = async (product) => {
@@ -150,9 +156,12 @@ const AddProduct = () => {
     // Build initial form data
     const initialData = {
       name: product.name,
-      categoryId: product.categoryId?._id || '',
-      subCategoryId: product.subCategoryId?._id || '',
-      subProjectTypeId: product.subProjectTypeId?._id || '',
+      categoryIds: product.categoryIds?.map(c => ({ value: c._id, label: c.name })) || 
+                   (product.categoryId ? [{ value: product.categoryId._id, label: product.categoryId.name }] : []),
+      subCategoryIds: product.subCategoryIds?.map(c => ({ value: c._id, label: c.name })) || 
+                      (product.subCategoryId ? [{ value: product.subCategoryId._id, label: product.subCategoryId.name }] : []),
+      subProjectTypeIds: product.subProjectTypeIds?.map(c => ({ value: c._id, label: c.name })) || 
+                         (product.subProjectTypeId ? [{ value: product.subProjectTypeId._id, label: product.subProjectTypeId.name }] : []),
       brandId: product.brandId?._id || '',
       mechanicalParameters: product.mechanicalParameters?.length > 0 ? product.mechanicalParameters : [''],
       electricalParameters: product.electricalParameters?.length > 0 ? product.electricalParameters : [''],
@@ -167,16 +176,21 @@ const AddProduct = () => {
 
   const handleSubmit = async () => {
     // Validate
-    const required = ['name', 'categoryId'];
-    const missing = required.filter(k => !formData[k]);
-    if (missing.length > 0) {
-      showToast(`Missing fields: ${missing.join(', ')}`, 'error');
+    if (!formData.name) {
+      showToast('Product Name is required', 'error');
+      return;
+    }
+    if (!formData.categoryIds || formData.categoryIds.length === 0) {
+      showToast('Product Category is required', 'error');
       return;
     }
 
-    // Filter out empty arrays before submit
+    // Filter out empty arrays and extract IDs from select objects
     const payload = {
       ...formData,
+      categoryIds: formData.categoryIds.map(o => o.value),
+      subCategoryIds: formData.subCategoryIds.map(o => o.value),
+      subProjectTypeIds: formData.subProjectTypeIds.map(o => o.value),
       mechanicalParameters: formData.mechanicalParameters.filter(p => p.trim() !== ''),
       electricalParameters: formData.electricalParameters.filter(p => p.trim() !== ''),
       skuParameters: formData.skuParameters.filter(p => p.trim() !== '')
@@ -240,36 +254,42 @@ const AddProduct = () => {
 
           <div>
             <label className="block text-sm font-medium mb-1">Product Category *</label>
-            <select className="w-full border rounded p-2"
-              value={formData.categoryId} 
-              onChange={e => setFormData({ ...formData, categoryId: e.target.value, subCategoryId: '' })}
-            >
-              <option value="">Select Category</option>
-              {categories.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+            <Select
+              isMulti
+              options={formatOptions(categories)}
+              value={formData.categoryIds}
+              onChange={(vals) => setFormData({ ...formData, categoryIds: vals || [], subCategoryIds: [] })}
+              className="text-sm"
+              placeholder="Select Categories"
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">Sub Category</label>
-            <select className="w-full border rounded p-2"
-              value={formData.subCategoryId} 
-              onChange={e => setFormData({ ...formData, subCategoryId: e.target.value })}
-              disabled={!formData.categoryId}
-            >
-              <option value="">Select Sub Category</option>
-              {subCategories
-                .filter(c => (c.categoryId?._id || c.category?._id || c.categoryId || c.category) === formData.categoryId)
-                .map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+            <Select
+              isMulti
+              options={formatOptions(subCategories.filter(c => {
+                const parentId = c.categoryId?._id || c.category?._id || c.categoryId || c.category;
+                return formData.categoryIds.some(cat => cat.value === parentId);
+              }))}
+              value={formData.subCategoryIds}
+              onChange={(vals) => setFormData({ ...formData, subCategoryIds: vals || [] })}
+              className="text-sm"
+              placeholder="Select Sub Categories"
+              isDisabled={formData.categoryIds.length === 0}
+            />
           </div>
 
           <div>
             <label className="block text-sm font-medium mb-1">Sub Project Type</label>
-            <select className="w-full border rounded p-2"
-              value={formData.subProjectTypeId} onChange={e => setFormData({ ...formData, subProjectTypeId: e.target.value })}>
-              <option value="">Select Sub Project Type</option>
-              {subProjectTypes.map(c => <option key={c._id} value={c._id}>{c.name}</option>)}
-            </select>
+            <Select
+              isMulti
+              options={formatOptions(subProjectTypes)}
+              value={formData.subProjectTypeIds}
+              onChange={(vals) => setFormData({ ...formData, subProjectTypeIds: vals || [] })}
+              className="text-sm"
+              placeholder="Select Sub Project Types"
+            />
           </div>
 
           <div>

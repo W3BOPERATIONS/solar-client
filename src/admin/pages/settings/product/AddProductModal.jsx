@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X, Loader2, Upload, CheckCircle, AlertCircle, Plus } from 'lucide-react';
+import Select from 'react-select';
 import { productApi } from '../../../../api/productApi';
 
 const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, states, clusters, onSuccess, editingProduct }) => {
@@ -29,8 +30,8 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
   // Form State
   const [formData, setFormData] = useState({
     name: '',
-    categoryId: '',
-    subCategoryId: '',
+    categoryIds: [],
+    subCategoryIds: [],
     projectTypes: [], // [{from, to}]
     subProjectTypeIds: [], 
     brandId: '',
@@ -72,10 +73,13 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
       if (editingProduct) {
         setFormData({
           name: editingProduct.name || '',
-          categoryId: editingProduct.categoryId?._id || editingProduct.categoryId || '',
-          subCategoryId: editingProduct.subCategoryId?._id || editingProduct.subCategoryId || '',
+          categoryIds: editingProduct.categoryIds?.map(c => ({ value: c._id, label: c.name })) || 
+                       (editingProduct.categoryId ? [{ value: editingProduct.categoryId?._id || editingProduct.categoryId, label: editingProduct.categoryId?.name || 'Category' }] : []),
+          subCategoryIds: editingProduct.subCategoryIds?.map(c => ({ value: c._id, label: c.name })) || 
+                          (editingProduct.subCategoryId ? [{ value: editingProduct.subCategoryId?._id || editingProduct.subCategoryId, label: editingProduct.subCategoryId?.name || 'Sub Category' }] : []),
           projectTypes: editingProduct.projectTypes || (editingProduct.projectTypeFrom !== undefined && editingProduct.projectTypeTo !== undefined ? [{ from: editingProduct.projectTypeFrom, to: editingProduct.projectTypeTo }] : []),
-          subProjectTypeIds: editingProduct.subProjectTypeIds?.map(p => p._id || p) || (editingProduct.subProjectTypeId ? [editingProduct.subProjectTypeId?._id || editingProduct.subProjectTypeId] : []),
+          subProjectTypeIds: editingProduct.subProjectTypeIds?.map(p => ({ value: p._id || p, label: p.name || 'Sub Project Type' })) || 
+                             (editingProduct.subProjectTypeId ? [{ value: editingProduct.subProjectTypeId?._id || editingProduct.subProjectTypeId, label: editingProduct.subProjectTypeId?.name || 'Sub Project Type' }] : []),
           brandId: editingProduct.brandId?._id || editingProduct.brandId || '',
           serialNo: editingProduct.serialNo || '',
           subtype: editingProduct.subtype || '',
@@ -90,24 +94,11 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
         // Initialize filter states for edit mode
         setProductTypeFilter(editingProduct.categoryId?._id || editingProduct.categoryId || '');
         setBrandFilter(editingProduct.brandId?._id || editingProduct.brandId || '');
-
-        // Initialize SKU values from product data
-        if (editingProduct.skuParameters && Array.isArray(editingProduct.skuParameters)) {
-          const parsedParams = editingProduct.skuParameters.map(p => {
-            const [key, ...valParts] = p.split(':');
-            return { key: key.trim(), value: valParts.join(':').trim() };
-          });
-          setSkuValues(parsedParams);
-        } else {
-          setSkuValues([]);
-        }
-        
-        setHasTolerance(!!editingProduct.tolerance && editingProduct.tolerance !== 'None');
       } else {
         setFormData({
           name: '',
-          categoryId: '',
-          subCategoryId: '',
+          categoryIds: [],
+          subCategoryIds: [],
           projectTypes: [],
           subProjectTypeIds: [],
           brandId: '',
@@ -167,9 +158,9 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
     }
   };
 
-  const handleSubmit = async (e) => {
+    const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.name || !formData.categoryId) {
+    if (!formData.name || formData.categoryIds.length === 0) {
       showToast("Product Name and Category are required", "error");
       return;
     }
@@ -184,6 +175,9 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
       // Construct payload including selected geographic context
       const payload = {
         ...formData,
+        categoryIds: formData.categoryIds.map(o => o.value),
+        subCategoryIds: formData.subCategoryIds.map(o => o.value),
+        subProjectTypeIds: formData.subProjectTypeIds.map(o => o.value),
         stateId: (selectedStates[0] || (editingProduct ? (editingProduct.stateId?._id || editingProduct.stateId) : undefined)),
         clusterId: (selectedClusters[0] || (editingProduct ? (editingProduct.clusterId?._id || editingProduct.clusterId) : undefined)),
         technology: Array.isArray(formData.technology) ? formData.technology.join(', ') : formData.technology,
@@ -234,10 +228,15 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
   const selectedStatesNames = getSelectedStatesNames();
   const selectedClustersNames = getSelectedClustersNames();
 
+  const formatOptions = (data) => data.map(item => ({
+    value: item._id,
+    label: item.name || item.companyName || 'Unnamed'
+  }));
+
   // Derived options
   const filteredMappings = mappings.filter(m => 
-    (!formData.categoryId || (m.categoryId?._id || m.categoryId) === formData.categoryId) &&
-    (!formData.subCategoryId || (m.subCategoryId?._id || m.subCategoryId) === formData.subCategoryId)
+    (!formData.categoryIds.length || formData.categoryIds.some(cat => (m.categoryId?._id || m.categoryId) === cat.value)) &&
+    (!formData.subCategoryIds.length || formData.subCategoryIds.some(sub => (m.subCategoryId?._id || m.subCategoryId) === sub.value))
   );
 
   // Eliminate duplicates for the dropdown display
@@ -340,33 +339,31 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
           {/* 4. Project Category */}
           <div>
             <label className="block text-gray-500 text-xs mb-1">Project Category</label>
-            <select
-              className="w-full border border-gray-200 rounded p-2.5 outline-none text-sm text-gray-700 bg-white"
-              value={formData.categoryId}
-              onChange={(e) => setFormData({ ...formData, categoryId: e.target.value, subCategoryId: '', projectTypes: [], subProjectTypeIds: [] })}
-            >
-              <option value="" className="text-gray-400">Select Project Category</option>
-              {categories.map(c => (
-                <option key={c._id} value={c._id}>{c.name}</option>
-              ))}
-            </select>
+            <Select
+              isMulti
+              options={formatOptions(categories)}
+              value={formData.categoryIds}
+              onChange={(vals) => setFormData({ ...formData, categoryIds: vals || [], subCategoryIds: [] })}
+              className="text-sm"
+              placeholder="Select Project Categories"
+            />
           </div>
 
           {/* 5. Sub Category */}
           <div>
             <label className="block text-gray-500 text-xs mb-1">Sub Category</label>
-            <select
-              className="w-full border border-gray-200 rounded p-2.5 outline-none text-sm text-gray-700 bg-white"
-              value={formData.subCategoryId}
-              onChange={(e) => setFormData({ ...formData, subCategoryId: e.target.value, projectTypes: [], subProjectTypeIds: [] })}
-            >
-              <option value="" className="text-gray-400">Select Sub Category</option>
-              {subCategories
-                .filter(c => (c.categoryId?._id || c.categoryId) === formData.categoryId)
-                .map(c => (
-                <option key={c._id} value={c._id}>{c.name}</option>
-              ))}
-            </select>
+            <Select
+              isMulti
+              options={formatOptions(subCategories.filter(c => {
+                const parentId = c.categoryId?._id || c.category?._id || c.categoryId || c.category;
+                return formData.categoryIds.some(cat => cat.value === parentId);
+              }))}
+              value={formData.subCategoryIds}
+              onChange={(vals) => setFormData({ ...formData, subCategoryIds: vals || [] })}
+              className="text-sm"
+              placeholder="Select Sub Categories"
+              isDisabled={formData.categoryIds.length === 0}
+            />
           </div>
 
           {/* 6. Project Type Multi-Select */}
@@ -418,55 +415,16 @@ const AddProductModal = ({ isOpen, onClose, selectedStates, selectedClusters, st
           </div>
 
           {/* 7. Sub Project Type Multi-Select */}
-          <div className="relative sub-project-type-dropdown">
+          <div>
             <label className="block text-gray-500 text-xs mb-1">Sub Project Type</label>
-            <div
-              className={`w-full border border-gray-200 rounded p-2.5 outline-none text-sm text-gray-700 bg-white cursor-pointer flex flex-wrap gap-1 min-h-[42px]`}
-              onClick={() => setIsSubProjectTypeDropdownOpen(!isSubProjectTypeDropdownOpen)}
-            >
-              {formData.subProjectTypeIds.length === 0 ? (
-                <span className="text-gray-400">Select Sub Project Type</span>
-              ) : (
-                formData.subProjectTypeIds.map((id, i) => {
-                  const p = subProjectTypes.find(s => s._id === id) || { name: 'Unknown' };
-                  return (
-                    <span key={i} className="bg-blue-100 text-blue-800 text-xs px-2 py-0.5 rounded flex items-center gap-1">
-                      {p.name || p.subProjectType || p.type}
-                      <X size={12} className="cursor-pointer hover:text-red-500" onClick={(e) => {
-                        e.stopPropagation();
-                        setFormData(prev => ({ ...prev, subProjectTypeIds: prev.subProjectTypeIds.filter((_, idx) => idx !== i) }));
-                      }} />
-                    </span>
-                  );
-                })
-              )}
-            </div>
-            {isSubProjectTypeDropdownOpen && (
-              <div className="absolute z-50 w-full mt-1 bg-white border border-gray-200 rounded shadow-lg max-h-60 overflow-y-auto">
-                {subProjectTypes.map((p, i) => {
-                  const id = p._id || p;
-                  const isSelected = formData.subProjectTypeIds.includes(id);
-                  return (
-                    <label key={i} className="flex items-center px-4 py-2 hover:bg-gray-50 cursor-pointer border-b border-gray-50 last:border-0">
-                      <input
-                        type="checkbox"
-                        className="mr-3 h-4 w-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                        checked={isSelected}
-                        onChange={() => {
-                          setFormData(prev => ({
-                            ...prev,
-                            subProjectTypeIds: isSelected 
-                              ? prev.subProjectTypeIds.filter(item => item !== id)
-                              : [...prev.subProjectTypeIds, id]
-                          }));
-                        }}
-                      />
-                      <span className="text-sm text-gray-700">{p.name || p.subProjectType || p.type}</span>
-                    </label>
-                  );
-                })}
-              </div>
-            )}
+            <Select
+              isMulti
+              options={formatOptions(subProjectTypes)}
+              value={formData.subProjectTypeIds}
+              onChange={(vals) => setFormData({ ...formData, subProjectTypeIds: vals || [] })}
+              className="text-sm"
+              placeholder="Select Sub Project Types"
+            />
           </div>
 
           {/* 8. Product Serial No */}

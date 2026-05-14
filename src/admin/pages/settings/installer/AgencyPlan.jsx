@@ -741,13 +741,45 @@ const AgencyPlan = () => {
               <div className="flex gap-2 w-full md:w-auto">
                 <Rocket className="w-8 h-8 text-blue-600 shrink-0" />
                 <div className="w-full">
-                  <input className="text-2xl font-bold text-blue-700 w-full outline-none" value={formData.name} name="name" onChange={handleInputChange} placeholder="Plan Name" />
-                  <input className="text-sm text-gray-500 font-medium mt-1 w-full outline-none" value={formData.description} name="description" onChange={handleInputChange} placeholder="Plan Description" />
+                  {isEditingName ? (
+                    <input
+                      className="text-2xl font-bold text-blue-700 w-full outline-none bg-blue-50/50 rounded px-1 border-b border-blue-200"
+                      value={formData.name}
+                      name="name"
+                      onChange={handleInputChange}
+                      onBlur={() => setIsEditingName(false)}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 group cursor-pointer" onClick={() => setIsEditingName(true)}>
+                      <h3 className="text-2xl font-bold text-blue-700">{formData.name || 'Unnamed Agency Plan'}</h3>
+                      <Edit className="w-4 h-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  )}
+
+                  {isEditingDesc ? (
+                    <input
+                      className="text-sm text-gray-500 font-medium mt-1 w-full outline-none bg-gray-50 rounded px-1 border-b border-gray-200"
+                      value={formData.description}
+                      name="description"
+                      onChange={handleInputChange}
+                      onBlur={() => setIsEditingDesc(false)}
+                      autoFocus
+                    />
+                  ) : (
+                    <div className="flex items-center gap-2 group cursor-pointer mt-1" onClick={() => setIsEditingDesc(true)}>
+                      <p className="text-sm text-gray-500 font-medium">{formData.description || 'No description provided'}</p>
+                      <Edit className="w-3.5 h-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </div>
+                  )}
                 </div>
               </div>
               <div className="flex flex-col gap-1 shrink-0">
                  <label className="text-[10px] text-blue-600 font-black uppercase tracking-wider">Banner Color</label>
-                 <input type="color" name="planColor" value={formData.planColor} onChange={handleInputChange} className="h-8 w-full cursor-pointer rounded border-0 p-0" />
+                 <div className="flex items-center gap-2">
+                   <input type="color" name="planColor" value={formData.planColor} onChange={handleInputChange} className="h-8 w-16 cursor-pointer rounded border-0 p-0 overflow-hidden" />
+                   <span className="text-[10px] font-bold text-gray-400 uppercase">{formData.planColor}</span>
+                 </div>
               </div>
             </div>
 

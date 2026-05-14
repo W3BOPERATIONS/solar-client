@@ -1,22 +1,28 @@
 import React, { useState, useEffect } from 'react';
-import { Plus, Eye, EyeOff, Loader, Trash2 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Loader, Trash2, Edit } from 'lucide-react';
 import {
   getSupplierVendorPlans,
   saveSupplierVendorPlan,
-  deleteSupplierVendorPlan
+  deleteSupplierVendorPlan,
+  getSupplierVendorPlanCounts
 } from '../../../../services/vendor/vendorApi';
 import { locationAPI } from '../../../../api/api';
 import inventoryApi from '../../../../services/inventory/inventoryApi';
 import toast from 'react-hot-toast';
 
-const LocationCard = ({ title, subtitle, isSelected, onClick }) => (
+const LocationCard = ({ title, subtitle, isSelected, onClick, count = 0 }) => (
   <div
     onClick={onClick}
-    className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md ${isSelected
+    className={`p-6 rounded-xl border-2 transition-all cursor-pointer flex flex-col items-center justify-center text-center h-28 shadow-sm hover:shadow-md relative ${isSelected
       ? 'border-[#007bff] bg-blue-50 shadow-blue-100 shadow-lg -translate-y-1'
       : 'border-transparent bg-white hover:border-blue-200'
       }`}
   >
+    {count > 0 && (
+      <div className="absolute top-2 right-2 bg-[#007bff] text-white text-[10px] font-bold px-2 py-0.5 rounded-full shadow-sm">
+        {count}
+      </div>
+    )}
     <div className="font-bold text-base text-[#333] mb-1">{title}</div>
     <div className="text-xs text-gray-500 font-medium uppercase tracking-tight">{subtitle}</div>
   </div>
@@ -30,6 +36,18 @@ export default function SupplierVendors() {
   const [submitting, setSubmitting] = useState(false);
   const [allFetchedPlans, setAllFetchedPlans] = useState([]);
   const [globalPlanNames, setGlobalPlanNames] = useState([]);
+  const [planCounts, setPlanCounts] = useState({ byCountry: [], byState: [], byCluster: [], byWarehouse: [] });
+
+  const fetchPlanCounts = async () => {
+    try {
+      const res = await getSupplierVendorPlanCounts();
+      if (res.success && res.detailed) {
+        setPlanCounts(res.detailed);
+      }
+    } catch (error) {
+      console.error('Error fetching plan counts', error);
+    }
+  };
 
   const fetchGlobalNames = async () => {
     try {
@@ -44,6 +62,7 @@ export default function SupplierVendors() {
 
   useEffect(() => {
     fetchGlobalNames();
+    fetchPlanCounts();
   }, []);
 
   // Form State
@@ -212,6 +231,7 @@ export default function SupplierVendors() {
           if (response.success) {
               toast.success(`${activeTab} saved successfully`);
               fetchPlans();
+              fetchPlanCounts();
           }
       } catch (error) {
           console.error(error);
@@ -245,10 +265,27 @@ export default function SupplierVendors() {
 
           await fetchGlobalNames();
           fetchPlans();
+          fetchPlanCounts();
       } catch (error) {
           console.error(error);
           toast.error('Failed to delete configuration');
       }
+  };
+
+  const handleEdit = (plan) => {
+      setActiveTab(plan.name);
+      setFormSettings(prev => ({
+          ...prev,
+          [plan.name]: { ...plan }
+      }));
+      // Smooth scroll to the form container
+      const formElement = document.querySelector('.bg-white.rounded-md.shadow-sm.border.border-gray-200.pt-8');
+      if (formElement) {
+          formElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      } else {
+          window.scrollTo({ top: 350, behavior: 'smooth' });
+      }
+      toast.success(`Loaded ${plan.name} configuration for editing`);
   };
 
   const [isAddOpen, setIsAddOpen] = useState(false);
@@ -273,6 +310,7 @@ export default function SupplierVendors() {
           if (response.success) {
               toast.success('Plan added');
               await fetchGlobalNames();
+              fetchPlanCounts();
               setTabs(prev => Array.from(new Set([...prev, name])));
               setFormSettings(prev => ({ ...prev, [name]: getDefaultFormState() }));
               setActiveTab(name);
@@ -316,9 +354,19 @@ export default function SupplierVendors() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 <LocationCard title="All Countries" subtitle="ALL" isSelected={selectedLocation.country === 'all'} onClick={() => setSelectedLocation({ country: 'all', state: '', cluster: '', warehouse: '' })} />
-                {locationData.countries.map(c => (
-                  <LocationCard key={c._id} title={c.name} subtitle={c.code || c.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.country === c._id} onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', warehouse: '' })} />
-                ))}
+                {locationData.countries.map(c => {
+                  const count = planCounts.byCountry.find(i => i._id === c._id)?.count || 0;
+                  return (
+                    <LocationCard 
+                      key={c._id} 
+                      title={c.name} 
+                      subtitle={c.code || c.name.substring(0, 2).toUpperCase()} 
+                      isSelected={selectedLocation.country === c._id} 
+                      onClick={() => setSelectedLocation({ country: c._id, state: '', cluster: '', warehouse: '' })} 
+                      count={count}
+                    />
+                  );
+                })}
               </div>
             </div>
 
@@ -335,9 +383,19 @@ export default function SupplierVendors() {
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                   <LocationCard title="All States" subtitle="ALL" isSelected={selectedLocation.state === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, state: 'all', cluster: '', warehouse: '' }))} />
-                  {locationData.states.map(s => (
-                    <LocationCard key={s._id} title={s.name} subtitle={s.code || s.name.substring(0, 2).toUpperCase()} isSelected={selectedLocation.state === s._id} onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', warehouse: '' }))} />
-                  ))}
+                  {locationData.states.map(s => {
+                    const count = planCounts.byState.find(i => i._id === s._id)?.count || 0;
+                    return (
+                      <LocationCard 
+                        key={s._id} 
+                        title={s.name} 
+                        subtitle={s.code || s.name.substring(0, 2).toUpperCase()} 
+                        isSelected={selectedLocation.state === s._id} 
+                        onClick={() => setSelectedLocation(prev => ({ ...prev, state: s._id, cluster: '', warehouse: '' }))} 
+                        count={count}
+                      />
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -357,7 +415,17 @@ export default function SupplierVendors() {
                   <LocationCard title="All Clusters" subtitle="ALL" isSelected={selectedLocation.cluster === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: 'all', warehouse: '' }))} />
                   {locationData.clusters.map(c => {
                     const parentState = locationData.states.find(s => s._id === c.state) || locationData.states.find(s => s._id === selectedLocation.state);
-                    return <LocationCard key={c._id} title={c.name} subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'} isSelected={selectedLocation.cluster === c._id} onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, warehouse: '' }))} />;
+                    const count = planCounts.byCluster.find(i => i._id === c._id)?.count || 0;
+                    return (
+                      <LocationCard 
+                        key={c._id} 
+                        title={c.name} 
+                        subtitle={parentState ? (parentState.code || parentState.name.substring(0, 2).toUpperCase()) : 'CL'} 
+                        isSelected={selectedLocation.cluster === c._id} 
+                        onClick={() => setSelectedLocation(prev => ({ ...prev, cluster: c._id, warehouse: '' }))} 
+                        count={count}
+                      />
+                    );
                   })}
                 </div>
               </div>
@@ -378,7 +446,17 @@ export default function SupplierVendors() {
                   <LocationCard title="All Warehouses" subtitle="ALL" isSelected={selectedLocation.warehouse === 'all'} onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: 'all' }))} />
                   {locationData.warehouses.map(w => {
                     const parentCluster = locationData.clusters.find(c => c._id === selectedLocation.cluster);
-                    return <LocationCard key={w._id} title={w.name} subtitle={parentCluster ? parentCluster.name : 'WH'} isSelected={selectedLocation.warehouse === w._id} onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: w._id }))} />;
+                    const count = planCounts.byWarehouse.find(i => i._id === w._id)?.count || 0;
+                    return (
+                      <LocationCard 
+                        key={w._id} 
+                        title={w.name} 
+                        subtitle={parentCluster ? parentCluster.name : 'WH'} 
+                        isSelected={selectedLocation.warehouse === w._id} 
+                        onClick={() => setSelectedLocation(prev => ({ ...prev, warehouse: w._id }))} 
+                        count={count}
+                      />
+                    );
                   })}
                 </div>
               </div>
@@ -585,13 +663,22 @@ export default function SupplierVendors() {
                         </span>
                       </td>
                       <td className="p-4 text-center">
-                        <button 
-                          onClick={() => handleDelete(plan.name, plan._id)}
-                          className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white p-2 rounded transition-colors"
-                          title="Delete Configuration"
-                        >
-                          <Trash2 size={16} />
-                        </button>
+                        <div className="flex items-center justify-center gap-2">
+                          <button 
+                            onClick={() => handleEdit(plan)}
+                            className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white p-2 rounded transition-colors"
+                            title="Edit Configuration"
+                          >
+                            <Edit size={16} />
+                          </button>
+                          <button 
+                            onClick={() => handleDelete(plan.name, plan._id)}
+                            className="bg-red-50 text-red-500 hover:bg-red-500 hover:text-white p-2 rounded transition-colors"
+                            title="Delete Configuration"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

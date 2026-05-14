@@ -4,7 +4,6 @@ import api from '../../api/axios';
 export const getDepartments = async (params) => {
     try {
         const res = await api.get('/masters/departments', { params });
-        // The endpoint returns { success: true, count: N, data: items }, we'll return { success: true, data: data } to match the old shape and not break UI, or simply let the UI expect the raw response.
         return res.data; 
     } catch (err) {
         throw err.response?.data || err.message;
@@ -152,6 +151,33 @@ export const getSKUs = async () => {
 export const getProjectCategoryMappings = async (params) => {
     try {
         const res = await api.get('/masters/project-category-mappings', { params });
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
+export const getUsersByRole = async (role) => {
+    try {
+        const res = await api.get('/users', { params: { role } });
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
+export const getPartnerPlans = async () => {
+    try {
+        const res = await api.get('/partner-settings/plans');
+        return res.data;
+    } catch (err) {
+        throw err.response?.data || err.message;
+    }
+};
+
+export const getPartnerTypes = async () => {
+    try {
+        const res = await api.get('/partner-settings/types');
         return res.data;
     } catch (err) {
         throw err.response?.data || err.message;
