@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { getApprovals, updateApprovalStatus } from "../../../services/approvals/approvalsApi";
 import { useLocations } from '../../../hooks/useLocations';
+import { fetchApprovalRules } from '../../../services/settings/settingsApi';
 
 // Define table headers for each approval type
 const tableHeaders = {
@@ -172,6 +173,19 @@ export default function AdminApproval() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0); // For manual refresh
+  const [overdueRules, setOverdueRules] = useState([]);
+
+  useEffect(() => {
+    const fetchRules = async () => {
+      try {
+        const rulesData = await fetchApprovalRules();
+        setOverdueRules(rulesData);
+      } catch (err) {
+        console.error("Error fetching approval rules:", err);
+      }
+    };
+    fetchRules();
+  }, [refreshKey]);
 
   // Cascade Effects
   useEffect(() => {
@@ -203,6 +217,7 @@ export default function AdminApproval() {
           cluster: findName(clusters, selectedCluster),
           district: findName(districts, selectedDistrict)
         };
+        console.log("APPROV_FILTERS", filters, "SelectedState:", selectedState, "States:", states);
 
         const response = await getApprovals(filters);
         console.log("📊 Approval data fetched from database", response.length);
@@ -223,7 +238,7 @@ export default function AdminApproval() {
         response.forEach(item => {
           if (item.status === 'Approved') {
             newApproved.push({
-              id: item._id,
+              _mongoId: item._id,   // MongoDB ObjectId — never overwritten by data spread
               ...item.data,
               type: item.type,
               status: item.status,
@@ -234,7 +249,7 @@ export default function AdminApproval() {
             });
           } else if (item.status === 'Rejected') {
             newRejected.push({
-              id: item._id,
+              _mongoId: item._id,   // MongoDB ObjectId — never overwritten by data spread
               ...item.data,
               type: item.type,
               status: item.status,
@@ -246,12 +261,13 @@ export default function AdminApproval() {
           } else {
             if (newData[item.type]) {
               newData[item.type].push({
-                id: item._id,
+                _mongoId: item._id,   // MongoDB ObjectId — never overwritten by data spread
                 ...item.data,
                 type: item.type,
                 status: item.status,
                 requestedBy: item.requestedBy,
-                date: new Date(item.requestDate).toLocaleDateString()
+                date: new Date(item.requestDate).toLocaleDateString(),
+                requestDate: item.requestDate || item.createdAt
               });
             }
           }
@@ -275,15 +291,45 @@ export default function AdminApproval() {
 
   }, [selectedCountry, selectedState, selectedCluster, selectedDistrict, refreshKey, states, clusters, districts]);
 
+  // Helper functions for overdue logic
+  const isItemOverdue = (item) => {
+    if (item.status !== 'Pending') return false;
+    const rule = overdueRules.find(r => r.key === item.type);
+    if (!rule || rule.status !== 'Active') return false;
+
+    const reqDate = new Date(item.requestDate);
+    if (isNaN(reqDate.getTime())) return false;
+
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const reqDay = new Date(reqDate.getFullYear(), reqDate.getMonth(), reqDate.getDate());
+    const msPerDay = 24 * 60 * 60 * 1000;
+    const diffDays = Math.round((today - reqDay) / msPerDay);
+
+    return diffDays > rule.overdueDays;
+  };
+
+  const getOverdueCount = (type) => {
+    const items = data[type] || [];
+    return items.filter(isItemOverdue).length;
+  };
+
   // Calculate summary data
   const totalPending = Object.values(data).reduce((sum, items) => sum + items.length, 0);
+  const totalOverdue = Object.keys(data).reduce((sum, type) => sum + getOverdueCount(type), 0);
 
   const onboardingPending = ['driver', 'dealer', 'installer', 'franchisee'].reduce(
     (sum, type) => sum + (data[type]?.length || 0), 0
   );
+  const onboardingOverdue = ['driver', 'dealer', 'installer', 'franchisee'].reduce(
+    (sum, type) => sum + getOverdueCount(type), 0
+  );
 
   const companyPending = ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize', 'leave', 'resignation'].reduce(
     (sum, type) => sum + (data[type]?.length || 0), 0
+  );
+  const companyOverdue = ['recruitment', 'combokit', 'inventory', 'ticket', 'standard', 'customize', 'leave', 'resignation'].reduce(
+    (sum, type) => sum + getOverdueCount(type), 0
   );
 
   const onboardingApproved = approvedItems.filter(
@@ -315,14 +361,27 @@ export default function AdminApproval() {
     resignation: data.resignation?.length || 0
   };
 
-  const approveItem = async (id, type) => {
+  const overdueCounts = {
+    installer: getOverdueCount('installer'),
+    driver: getOverdueCount('driver'),
+    dealer: getOverdueCount('dealer'),
+    franchisee: getOverdueCount('franchisee'),
+    recruitment: getOverdueCount('recruitment'),
+    combokit: getOverdueCount('combokit') + getOverdueCount('standard') + getOverdueCount('customize'),
+    inventory: getOverdueCount('inventory'),
+    ticket: getOverdueCount('ticket'),
+    standard: getOverdueCount('standard'),
+    customize: getOverdueCount('customize'),
+    leave: getOverdueCount('leave'),
+    resignation: getOverdueCount('resignation')
+  };
+
+
+  const approveItem = async (_mongoId, type) => {
     try {
-      await updateApprovalStatus(id, 'Approved');
+      await updateApprovalStatus(_mongoId, 'Approved');
       alert('Item approved successfully!');
-      // Refresh data
-      // Triggering re-fetch by updating a dummy state or just calling fetchApprovalData if it was extracted
-      // For now, let's manually update local state for immediate feedback
-      const item = data[type].find(i => i.id === id);
+      const item = data[type].find(i => i._mongoId === _mongoId);
       if (item) {
         const approvedItem = {
           ...item,
@@ -333,7 +392,7 @@ export default function AdminApproval() {
         setApprovedItems(prev => [...prev, approvedItem]);
         setData(prev => ({
           ...prev,
-          [type]: prev[type].filter(i => i.id !== id)
+          [type]: prev[type].filter(i => i._mongoId !== _mongoId)
         }));
       }
     } catch (error) {
@@ -342,12 +401,11 @@ export default function AdminApproval() {
     }
   };
 
-  const rejectItem = async (id, type) => {
+  const rejectItem = async (_mongoId, type) => {
     try {
-      await updateApprovalStatus(id, 'Rejected', 'Rejected by Admin');
+      await updateApprovalStatus(_mongoId, 'Rejected', 'Rejected by Admin');
       alert('Item rejected!');
-      // Manual update for immediate feedback
-      const item = data[type].find(i => i.id === id);
+      const item = data[type].find(i => i._mongoId === _mongoId);
       if (item) {
         const rejectedItem = {
           ...item,
@@ -358,7 +416,7 @@ export default function AdminApproval() {
         setRejectedItems(prev => [...prev, rejectedItem]);
         setData(prev => ({
           ...prev,
-          [type]: prev[type].filter(i => i.id !== id)
+          [type]: prev[type].filter(i => i._mongoId !== _mongoId)
         }));
       }
     } catch (error) {
@@ -391,22 +449,22 @@ export default function AdminApproval() {
 
   const downloadExcel = () => {
     let csvContent = "Request ID,Type,Name,Status,Requested By,Date,Location\n";
+    const loc = findName(districts, selectedDistrict) || findName(clusters, selectedCluster) || findName(states, selectedState) || 'All';
 
     // Add pending items
     Object.keys(data).forEach(type => {
       data[type].forEach(item => {
-        csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},${item.status},${item.requestedBy},${item.date},${currentDistrict || currentCluster || currentState || 'All'}\n`;
+        csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},${item.status},${item.requestedBy},${item.date},${loc}\n`;
       });
     });
 
     // Add approved items
     approvedItems.forEach(item => {
-      csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},Approved,${item.requestedBy},${item.approvedDate || item.date},${currentDistrict || currentCluster || currentState || 'All'}\n`;
+      csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},Approved,${item.requestedBy},${item.approvedDate || item.date},${loc}\n`;
     });
 
     // Add rejected items
     rejectedItems.forEach(item => {
-      const loc = findName(districts, selectedDistrict) || findName(clusters, selectedCluster) || findName(states, selectedState) || 'All';
       csvContent += `${item.id},${getTypeDisplayName(item.type)},${item.name || item.driverName || item.dealerName || item.installerName || item.franchiseeName || item.candidateName},Rejected,${item.requestedBy},${item.rejectedDate || item.date},${loc}\n`;
     });
 
@@ -452,42 +510,60 @@ export default function AdminApproval() {
                 </td>
               </tr>
             ) : (
-              items.map((item, index) => (
-                <tr key={index} className="hover:bg-gray-50">
-                  {fieldMappings[type]?.map((field, idx) => (
-                    <td key={idx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                      {field === 'modules' && item[field] ? (
-                        <div className="flex flex-wrap gap-1">
-                          {item[field].map((module, modIdx) => (
-                            <span key={modIdx} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
-                              {module}
-                            </span>
-                          ))}
-                        </div>
-                      ) : field === 'timeline' && item[field] ? (
+              items.map((item, index) => {
+                const overdue = isItemOverdue(item);
+                return (
+                  <tr key={index} className={`hover:bg-gray-50 ${overdue ? 'bg-red-50/80 border-l-4 border-red-500' : ''}`}>
+                    {fieldMappings[type]?.map((field, idx) => (
+                      <td key={idx} className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                        {idx === 0 ? (
+                          <div className="flex items-center gap-2 font-mono font-medium">
+                            <span>{item[field] || 'N/A'}</span>
+                            {overdue && (
+                              <span className="bg-red-100 text-red-800 px-2 py-0.5 rounded text-xs font-bold border border-red-200 shadow-sm flex items-center gap-1 animate-pulse">
+                                <span>⚠</span> Overdue
+                              </span>
+                            )}
+                          </div>
+                        ) : field === 'modules' && item[field] ? (
+                          <div className="flex flex-wrap gap-1">
+                            {item[field].map((module, modIdx) => (
+                              <span key={modIdx} className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs">
+                                {module}
+                              </span>
+                            ))}
+                          </div>
+                        ) : field === 'timeline' && item[field] ? (
+                          <button
+                            onClick={() => viewTimeline(item)}
+                            className="px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 text-sm"
+                          >
+                            View Timeline
+                          </button>
+                        ) : (
+                          item[field] || 'N/A'
+                        )}
+                      </td>
+                    ))}
+                    <td className="px-6 py-4 whitespace-nowrap text-sm">
+                      <div className="flex gap-2">
                         <button
-                          onClick={() => viewTimeline(item)}
-                          className="px-3 py-1 border border-blue-600 text-blue-600 rounded hover:bg-blue-50 text-sm"
+                          onClick={() => approveItem(item._mongoId, type)}
+                          className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
                         >
-                          View Timeline
+                          Approve
                         </button>
-                      ) : (
-                        item[field] || 'N/A'
-                      )}
+                        <button
+                          onClick={() => rejectItem(item._mongoId, type)}
+                          className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 text-sm font-medium"
+                        >
+                          Reject
+                        </button>
+                      </div>
                     </td>
-                  ))}
-                  <td className="px-6 py-4 whitespace-nowrap text-sm">
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => approveItem(item.id, type)}
-                        className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm"
-                      >
-                        Approve
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -838,9 +914,14 @@ export default function AdminApproval() {
               </button>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="bg-gray-50 border rounded-lg p-4 text-center">
+              <div className="bg-gray-50 border rounded-lg p-4 text-center relative overflow-hidden shadow-sm">
                 <h6 className="text-sm font-medium text-gray-600">Total Pending</h6>
                 <h3 className="text-2xl font-bold text-yellow-600 mt-2">{totalPending}</h3>
+                {totalOverdue > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-red-100 text-red-700 px-2.5 py-0.5 rounded-full text-xs font-bold border border-red-300 shadow-sm animate-pulse">
+                    <span>⚠</span> {totalOverdue} Overdue
+                  </div>
+                )}
               </div>
               <div className="bg-gray-50 border rounded-lg p-4 text-center">
                 <h6 className="text-sm font-medium text-gray-600">Onboarding Approved</h6>
@@ -860,24 +941,44 @@ export default function AdminApproval() {
           {/* Approval Type Selection */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div
-              className={`approval-type-card bg-blue-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 ${currentApprovalType === 'onboarding' ? 'selected border-white' : 'border-transparent'
+              className={`approval-type-card bg-blue-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 relative ${currentApprovalType === 'onboarding' ? 'selected border-white' : 'border-transparent'
                 }`}
               onClick={() => handleApprovalTypeSelect('onboarding')}
             >
+              {onboardingOverdue > 0 && (
+                <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md border-2 border-white animate-pulse min-w-[24px]">
+                  {onboardingOverdue}
+                </div>
+              )}
               <UserPlus className="w-8 h-8 mx-auto mb-3" />
               <h5 className="text-lg font-semibold">Onboarding Approvals</h5>
               <h2 className="text-3xl font-bold my-2">{onboardingPending}</h2>
               <p className="text-blue-100">Pending Approval</p>
+              {onboardingOverdue > 0 && (
+                <div className="mt-3 inline-flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-md animate-pulse">
+                  ⚠ {onboardingOverdue} Overdue Approvals
+                </div>
+              )}
             </div>
             <div
-              className={`approval-type-card bg-green-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 ${currentApprovalType === 'company' ? 'selected border-white' : 'border-transparent'
+              className={`approval-type-card bg-green-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 relative ${currentApprovalType === 'company' ? 'selected border-white' : 'border-transparent'
                 }`}
               onClick={() => handleApprovalTypeSelect('company')}
             >
+              {companyOverdue > 0 && (
+                <div className="absolute top-3 right-3 bg-red-500 text-white px-2 py-1 rounded-full text-xs font-bold shadow-md border-2 border-white animate-pulse min-w-[24px]">
+                  {companyOverdue}
+                </div>
+              )}
               <ListTodo className="w-8 h-8 mx-auto mb-3" />
               <h5 className="text-lg font-semibold">Company User Approvals</h5>
               <h2 className="text-3xl font-bold my-2">{companyPending}</h2>
               <p className="text-green-100">Pending Approval</p>
+              {companyOverdue > 0 && (
+                <div className="mt-3 inline-flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-md animate-pulse">
+                  ⚠ {companyOverdue} Overdue Approvals
+                </div>
+              )}
             </div>
           </div>
 
@@ -885,20 +986,30 @@ export default function AdminApproval() {
           {currentApprovalType === 'onboarding' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { type: 'installer', color: 'bg-cyan-600', icon: HardHat, count: counts.installer, label: 'Installer Onboarding' },
-                { type: 'driver', color: 'bg-yellow-600', icon: Truck, count: counts.driver, label: 'Driver Onboarding' },
-                { type: 'dealer', color: 'bg-gray-600', icon: Store, count: counts.dealer, label: 'Dealer Onboarding' },
-                { type: 'franchisee', color: 'bg-gray-800', icon: Home, count: counts.franchisee, label: 'Franchisee Onboarding' }
+                { type: 'installer', color: 'bg-cyan-600', icon: HardHat, count: counts.installer, overdue: overdueCounts.installer, label: 'Installer Onboarding' },
+                { type: 'driver', color: 'bg-yellow-600', icon: Truck, count: counts.driver, overdue: overdueCounts.driver, label: 'Driver Onboarding' },
+                { type: 'dealer', color: 'bg-gray-600', icon: Store, count: counts.dealer, overdue: overdueCounts.dealer, label: 'Dealer Onboarding' },
+                { type: 'franchisee', color: 'bg-gray-800', icon: Home, count: counts.franchisee, overdue: overdueCounts.franchisee, label: 'Franchisee Onboarding' }
               ].map((card) => (
                 <div
                   key={card.type}
-                  className={`approval-card ${card.color} text-white rounded-lg shadow-sm p-4 text-center cursor-pointer border-2 ${currentSelectedCardType === card.type ? 'selected border-white' : 'border-transparent'
+                  className={`approval-card ${card.color} text-white rounded-lg shadow-sm p-4 text-center cursor-pointer border-2 relative ${currentSelectedCardType === card.type ? 'selected border-white' : 'border-transparent'
                     }`}
                   onClick={() => handleCardSelect(card.type)}
                 >
+                  {card.overdue > 0 && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold shadow-md border border-white animate-pulse min-w-[20px]">
+                      {card.overdue}
+                    </div>
+                  )}
                   <h5 className="font-semibold">{card.label}</h5>
                   <h2 className="text-2xl font-bold my-2">{card.count}</h2>
                   <p className="text-opacity-90">Pending Approval</p>
+                  {card.overdue > 0 && (
+                    <div className="mt-2 inline-flex items-center gap-1 bg-red-500 text-white px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm">
+                      ⚠ {card.overdue} Overdue
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -908,22 +1019,32 @@ export default function AdminApproval() {
           {currentApprovalType === 'company' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
               {[
-                { type: 'recruitment', color: 'bg-blue-600', icon: Users, count: counts.recruitment, label: 'Recruitment' },
-                { type: 'leave', color: 'bg-indigo-600', icon: Calendar, count: counts.leave, label: 'Leave Approval' },
-                { type: 'resignation', color: 'bg-red-600', icon: FileSpreadsheet, count: counts.resignation, label: 'Resignation Approval' },
-                { type: 'combokit', color: 'bg-green-600', icon: Package, count: counts.combokit, label: 'ComboKit Approvals' },
-                { type: 'inventory', color: 'bg-yellow-600', icon: Box, count: counts.inventory, label: 'Inventory Approvals' },
-                { type: 'ticket', color: 'bg-cyan-600', icon: Wrench, count: counts.ticket, label: 'Ticket Approvals' }
+                { type: 'recruitment', color: 'bg-blue-600', icon: Users, count: counts.recruitment, overdue: overdueCounts.recruitment, label: 'Recruitment' },
+                { type: 'leave', color: 'bg-indigo-600', icon: Calendar, count: counts.leave, overdue: overdueCounts.leave, label: 'Leave Approval' },
+                { type: 'resignation', color: 'bg-red-600', icon: FileSpreadsheet, count: counts.resignation, overdue: overdueCounts.resignation, label: 'Resignation Approval' },
+                { type: 'combokit', color: 'bg-green-600', icon: Package, count: counts.combokit, overdue: overdueCounts.combokit, label: 'ComboKit Approvals' },
+                { type: 'inventory', color: 'bg-yellow-600', icon: Box, count: counts.inventory, overdue: overdueCounts.inventory, label: 'Inventory Approvals' },
+                { type: 'ticket', color: 'bg-cyan-600', icon: Wrench, count: counts.ticket, overdue: overdueCounts.ticket, label: 'Ticket Approvals' }
               ].map((card) => (
                 <div
                   key={card.type}
-                  className={`approval-card ${card.color} text-white rounded-lg shadow-sm p-4 text-center cursor-pointer border-2 ${currentSelectedCardType === card.type ? 'selected border-white' : 'border-transparent'
+                  className={`approval-card ${card.color} text-white rounded-lg shadow-sm p-4 text-center cursor-pointer border-2 relative ${currentSelectedCardType === card.type ? 'selected border-white' : 'border-transparent'
                     }`}
                   onClick={() => handleCardSelect(card.type)}
                 >
+                  {card.overdue > 0 && (
+                    <div className="absolute top-2 right-2 bg-red-500 text-white px-2 py-0.5 rounded-full text-xs font-bold shadow-md border border-white animate-pulse min-w-[20px]">
+                      {card.overdue}
+                    </div>
+                  )}
                   <h5 className="font-semibold">{card.label}</h5>
                   <h2 className="text-2xl font-bold my-2">{card.count}</h2>
                   <p className="text-opacity-90">Pending Approval</p>
+                  {card.overdue > 0 && (
+                    <div className="mt-2 inline-flex items-center gap-1 bg-red-500 text-white px-2.5 py-0.5 rounded-full text-xs font-bold shadow-sm">
+                      ⚠ {card.overdue} Overdue
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -933,7 +1054,7 @@ export default function AdminApproval() {
           {currentSelectedCardType === 'combokit' && (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div
-                className={`combokit-type-card bg-blue-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 ${currentComboKitType === 'standard' ? 'selected border-white' : 'border-transparent'
+                className={`combokit-type-card bg-blue-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 relative ${currentComboKitType === 'standard' ? 'selected border-white' : 'border-transparent'
                   }`}
                 onClick={() => handleComboKitTypeSelect('standard')}
               >
@@ -941,9 +1062,14 @@ export default function AdminApproval() {
                 <h5 className="text-lg font-semibold">Standard ComboKit</h5>
                 <h2 className="text-3xl font-bold my-2">{counts.standard}</h2>
                 <p className="text-blue-100">Pending Approval</p>
+                {overdueCounts.standard > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                    ⚠ {overdueCounts.standard} Overdue Approvals
+                  </div>
+                )}
               </div>
               <div
-                className={`combokit-type-card bg-cyan-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 ${currentComboKitType === 'customize' ? 'selected border-white' : 'border-transparent'
+                className={`combokit-type-card bg-cyan-600 text-white rounded-lg shadow-sm p-6 text-center cursor-pointer border-2 relative ${currentComboKitType === 'customize' ? 'selected border-white' : 'border-transparent'
                   }`}
                 onClick={() => handleComboKitTypeSelect('customize')}
               >
@@ -951,6 +1077,11 @@ export default function AdminApproval() {
                 <h5 className="text-lg font-semibold">Customize Kit</h5>
                 <h2 className="text-3xl font-bold my-2">{counts.customize}</h2>
                 <p className="text-cyan-100">Pending Approval</p>
+                {overdueCounts.customize > 0 && (
+                  <div className="mt-2 inline-flex items-center gap-1 bg-red-500 text-white px-3 py-1 rounded-full text-xs font-bold shadow-sm">
+                    ⚠ {overdueCounts.customize} Overdue Approvals
+                  </div>
+                )}
               </div>
             </div>
           )}

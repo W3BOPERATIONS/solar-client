@@ -40,13 +40,13 @@ const normalizeItemToForm = (item) => {
     name: item?.name || '',
     country,
     state,
-    // Use plural array for singular field if it exists, to support multi-select UI
     district: districts.length > 0 ? districts : district,
     districts,
     cluster: clusters.length > 0 ? clusters : cluster,
     clusters,
     zone: zones.length > 0 ? zones : zone,
     zones,
+    city: '',
     areaType: item?.areaType || 'Urban',
     pincodes: item?.pincodes || [],
     isActive: item?.isActive !== undefined ? item.isActive : true,
@@ -72,12 +72,16 @@ export default function SetupLocations() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const [formData, setFormData] = useState({
+    name: '',
+    country: '',
+    state: '',
+    district: '',
     districts: [], // Multi-select
+    cluster: '',
     clusters: [], // Multi-select
+    zone: '',
     zones: [], // Multi-select
-    district: '', // Single parent
-    cluster: '', // Single parent
-    zone: '', // Single parent
+    city: '',
     areaType: 'Urban',
     pincodes: [],
     isActive: true,
@@ -530,20 +534,26 @@ export default function SetupLocations() {
 
   const resetForm = () => {
     setFormData({
-      districts: [],
-      clusters: [],
-      zones: [],
+      name: '',
+      country: '',
+      state: '',
       district: '',
+      districts: [],
       cluster: '',
+      clusters: [],
       zone: '',
+      zones: [],
+      city: '',
       areaType: 'Urban',
       pincodes: [],
       isActive: true,
     });
     setPendingCities([]);
     setNameError('');
-    setSelectedMasterId(''); // Reset selected master ID
-    setPincodeStr(''); // Reset pincode string
+    setSelectedMasterId('');
+    setPincodeStr('');
+    setEditingId(null);
+    setShowForm(false);
   };
 
   const downloadSampleExcel = () => {

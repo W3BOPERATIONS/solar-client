@@ -2,8 +2,13 @@ import axios from 'axios';
 import authStore from '../store/authStore.js';
 import useLoaderStore from '../store/loaderStore.js';
 
+const envApiUrl = import.meta.env.VITE_API_URL;
+const baseURL = envApiUrl || (import.meta.env.PROD
+  ? 'https://solar-f008.onrender.com/api'
+  : 'http://localhost:5000/api');
+
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },

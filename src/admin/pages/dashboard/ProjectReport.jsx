@@ -35,7 +35,7 @@ export default function ProjectReport() {
     fetchStates, 
     fetchClusters, 
     fetchDistricts 
-  } = useLocations();
+  } = useLocations('reports');
 
   // Location State
   const [selectedCountry, setSelectedCountry] = useState('all');
@@ -299,7 +299,7 @@ export default function ProjectReport() {
               <div className="flex items-center gap-2 mb-4"><MapPin className="text-blue-500" size={18} /><h3 className="text-sm font-bold text-[#1e293b] uppercase">Select State</h3></div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <SelectionCard id="all" name="All States" subtext="Regional" isSelected={selectedState === 'all'} onClick={handleStateToggle} />
-                {states.map(s => <SelectionCard key={s._id} id={s._id} name={s.name} subtext={s.code || 'ST'} isSelected={selectedState === s._id} onClick={handleStateToggle} />)}
+                {states.map(s => <SelectionCard key={s._id} id={s._id} name={`${s.name} ${s.count !== undefined ? `(${s.count})` : ''}`} subtext={s.code || 'ST'} isSelected={selectedState === s._id} onClick={handleStateToggle} />)}
               </div>
             </div>
           )}
@@ -310,7 +310,7 @@ export default function ProjectReport() {
               <div className="flex items-center gap-2 mb-4"><ClipboardList className="text-blue-500" size={18} /><h3 className="text-sm font-bold text-[#1e293b] uppercase">Select Cluster</h3></div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <SelectionCard id="all" name="All Clusters" subtext="Zonal" isSelected={selectedCluster === 'all'} onClick={handleClusterToggle} />
-                {clusters.map(cl => <SelectionCard key={cl._id} id={cl._id} name={cl.name} subtext={cl.code || 'CL'} isSelected={selectedCluster === cl._id} onClick={handleClusterToggle} />)}
+                {clusters.map(cl => <SelectionCard key={cl._id} id={cl._id} name={`${cl.name} ${cl.count !== undefined ? `(${cl.count})` : ''}`} subtext={cl.code || 'CL'} isSelected={selectedCluster === cl._id} onClick={handleClusterToggle} />)}
               </div>
             </div>
           )}
@@ -321,7 +321,7 @@ export default function ProjectReport() {
               <div className="flex items-center gap-2 mb-4"><MapPin className="text-blue-500" size={18} /><h3 className="text-sm font-bold text-[#1e293b] uppercase">Select District</h3></div>
               <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
                 <SelectionCard id="all" name="All Districts" subtext="Local" isSelected={selectedDistrict === 'all'} onClick={handleDistrictToggle} />
-                {districts.map(d => <SelectionCard key={d._id} id={d._id} name={d.name} subtext={d.code || 'DT'} isSelected={selectedDistrict === d._id} onClick={handleDistrictToggle} />)}
+                {districts.map(d => <SelectionCard key={d._id} id={d._id} name={`${d.name} ${d.count !== undefined ? `(${d.count})` : ''}`} subtext={d.code || 'DT'} isSelected={selectedDistrict === d._id} onClick={handleDistrictToggle} />)}
               </div>
             </div>
           )}
