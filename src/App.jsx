@@ -294,6 +294,13 @@ import Service from './accountManager/pages/my-task/Service';
 // Delivery Manager Imports
 import DeliveryManagerLayout from './deliveryManager/layouts/DeliveryManagerLayout';
 import DeliveryManagerDashboard from './deliveryManager/pages/Dashboard';
+import InwardManagement from './deliveryManager/pages/my-task/InwardManagement';
+import DMAtWarehouse from './deliveryManager/pages/my-task/AtWarehouse';
+import DMDeliveryManagement from './deliveryManager/pages/DeliveryManagement';
+import DMReturnProduct from './deliveryManager/pages/replacement-order/ReturnProduct';
+import DMReplaceProduct from './deliveryManager/pages/replacement-order/ReplaceProduct';
+import DMServiceTicket from './deliveryManager/pages/replacement-order/ServiceTicket';
+import DMReport from './deliveryManager/pages/Report';
 
 function ProtectedRoute({ children, requiredRole }) {
   const user = authStore((state) => state.user);
@@ -797,6 +804,13 @@ function App() {
               }
             >
               <Route path="dashboard" element={<DeliveryManagerDashboard />} />
+              <Route path="delivery-management" element={<DMDeliveryManagement />} />
+              <Route path="my-task/inward-management" element={<InwardManagement />} />
+              <Route path="my-task/at-warehouse" element={<DMAtWarehouse />} />
+              <Route path="replacement-order/return-products" element={<DMReturnProduct />} />
+              <Route path="replacement-order/replace-products" element={<DMReplaceProduct />} />
+              <Route path="replacement-order/service-ticket" element={<DMServiceTicket />} />
+              <Route path="report" element={<DMReport />} />
               <Route path="" element={<Navigate to="dashboard" />} />
             </Route>
 
