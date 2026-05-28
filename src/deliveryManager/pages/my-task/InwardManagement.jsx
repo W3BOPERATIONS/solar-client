@@ -20,7 +20,7 @@ export default function InwardManagement() {
     },
     {
       orderNo: 'ORD-2023-1002',
-      brand: 'Waree waree',
+      brand: 'Waree',
       product: 'Solar Panel 400W',
       technology: 'Bi-facial',
       projectType: 'Residential',

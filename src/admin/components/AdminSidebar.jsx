@@ -82,20 +82,31 @@ export default function AdminSidebar() {
     'reports': 'reports'
   };
 
-  const hasAccess = (sectionId) => {
+  const hasAccess = (sectionId, href) => {
     // 1. Admin always has access
     if (user?.role === 'admin') return true;
 
-    // 2. Check if section has a mapped module
-    const moduleKey = moduleMapping[sectionId];
-    if (!moduleKey) return true; // Default allow if not mapped (e.g. Dashboard)
+    // 2. Map standard sectionId or href to module key
+    let moduleKey = moduleMapping[sectionId];
+    if (!moduleKey && href) {
+      const pathParts = href.split('/');
+      const lastPart = pathParts[pathParts.length - 1];
+      moduleKey = lastPart.toLowerCase().replace(/-/g, '_');
+    }
 
-    // 3. Check Department Modules (Own + Delegated)
+    if (!moduleKey) return true;
+
+    // 3. First check new Dynamic RBAC panel permissions if available
+    if (user?.panelPermissions) {
+      const dynamicPerm = user.panelPermissions[moduleKey];
+      if (dynamicPerm !== undefined) {
+        return dynamicPerm.view;
+      }
+    }
+
+    // 4. Fallback: Check old Department Modules (Own + Delegated)
     const assignedModules = user?.department?.assignedModules || [];
-
-    // Flatten modules from delegated departments
     const delegatedModules = user?.delegatedDepartments?.flatMap(dept => dept.assignedModules || []) || [];
-
     const allModules = [...assignedModules, ...delegatedModules];
 
     const hasModule = allModules.some(m =>
@@ -558,7 +569,7 @@ export default function AdminSidebar() {
         </div>
 
         <nav className="flex-1 py-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-          {mainSections.filter(section => hasAccess(section.id)).map((section) => (
+          {mainSections.filter(section => hasAccess(section.id, section.href)).map((section) => (
             <div key={section.id} className="mb-1">
               {/* Main Section Header */}
               {section.children ? (
@@ -591,7 +602,7 @@ export default function AdminSidebar() {
                 <div className="mt-1 ml-6">
                   {section.children.map((child) => {
                     const renderChild = (item, depth = 1) => {
-                      if (!hasAccess(item.id)) return null;
+                      if (!hasAccess(item.id, item.href)) return null;
 
                       if (item.isGroup) {
                         return (

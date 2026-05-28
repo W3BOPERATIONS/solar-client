@@ -48,6 +48,7 @@ import DepartmentWiseModules from './admin/pages/settings/hr/DepartmentWiseModul
 import TemporaryInchargeSetting from './admin/pages/settings/hr/TemporaryInchargeSetting';
 import LeaveApprovals from './admin/pages/settings/hr/LeaveApprovals';
 import ResignApprovals from './admin/pages/settings/hr/ResignApprovals';
+import PanelsLevelWise from './admin/pages/settings/hr/PanelsLevelWise';
 
 // Vendor Settings
 import InstallerVendors from './admin/pages/settings/vendor/InstallerVendors';
@@ -460,6 +461,7 @@ function App() {
               <Route path="settings/hr/temporary-incharge-setting" element={<TemporaryInchargeSetting />} />
               <Route path="settings/hr/leave-approvals" element={<LeaveApprovals />} />
               <Route path="settings/hr/resign-approvals" element={<ResignApprovals />} />
+              <Route path="settings/hr/panels-level-wise" element={<PanelsLevelWise />} />
 
               {/* Vendor Settings */}
               <Route path="settings/vendor/installer-vendors" element={<InstallerVendors />} />
