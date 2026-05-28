@@ -271,6 +271,25 @@ import GlobalLoader from './components/GlobalLoader';
 // Account Manager Imports
 import AccountManagerLayout from './accountManager/layouts/AccountManagerLayout';
 import AccountManagerDashboard from './accountManager/pages/Dashboard';
+import SolarPanelBundlePlan from './accountManager/pages/SolarPanelBundlePlan';
+import ProcurementPlan from './accountManager/pages/ProcurementPlan';
+import Report from './accountManager/pages/Report';
+import OrderJourney from './accountManager/pages/my-task/OrderJourney';
+import CreateOrder from './accountManager/pages/my-task/order-journey/CreateOrder';
+import LoanOrders from './accountManager/pages/my-task/order-journey/LoanOrders';
+import DeliveryPlan from './accountManager/pages/my-task/order-journey/DeliveryPlan';
+import VendorPay from './accountManager/pages/my-task/order-journey/VendorPay';
+import ChannelPartnerPay from './accountManager/pages/my-task/order-journey/ChannelPartnerPay';
+import DriverPay from './accountManager/pages/my-task/order-journey/DriverPay';
+import AtWarehouse from './accountManager/pages/my-task/order-journey/AtWarehouse';
+import DeliveryManagement from './accountManager/pages/my-task/order-journey/DeliveryManagement';
+import ReplacementOrder from './accountManager/pages/my-task/ReplacementOrder';
+import ReturnProducts from './accountManager/pages/my-task/ReturnProducts';
+import ReplaceProducts from './accountManager/pages/my-task/ReplaceProducts';
+import WarehouseVendorPay from './accountManager/pages/my-task/WarehouseVendorPay';
+import VendorContractPay from './accountManager/pages/my-task/VendorContractPay';
+import TrackCPPayments from './accountManager/pages/my-task/TrackCPPayments';
+import Service from './accountManager/pages/my-task/Service';
 
 // Delivery Manager Imports
 import DeliveryManagerLayout from './deliveryManager/layouts/DeliveryManagerLayout';
@@ -744,6 +763,27 @@ function App() {
               }
             >
               <Route path="dashboard" element={<AccountManagerDashboard />} />
+              <Route path="solar-panel-bundle-plan" element={<SolarPanelBundlePlan />} />
+              <Route path="procurement-plan" element={<ProcurementPlan />} />
+              <Route path="report" element={<Report />} />
+              
+              {/* My Task Sub-Modules */}
+              <Route path="my-task/order-journey" element={<OrderJourney />} />
+              <Route path="my-task/order-journey/create-order" element={<CreateOrder />} />
+              <Route path="my-task/order-journey/loan-orders" element={<LoanOrders />} />
+              <Route path="my-task/order-journey/delivery-plan" element={<DeliveryPlan />} />
+              <Route path="my-task/order-journey/vendor-pay" element={<VendorPay />} />
+              <Route path="my-task/order-journey/channel-partner-pay" element={<ChannelPartnerPay />} />
+              <Route path="my-task/order-journey/driver-pay" element={<DriverPay />} />
+              <Route path="my-task/order-journey/at-warehouse" element={<AtWarehouse />} />
+              <Route path="my-task/order-journey/delivery-management" element={<DeliveryManagement />} />
+              <Route path="my-task/replacement-order/return-products" element={<ReturnProducts />} />
+              <Route path="my-task/replacement-order/replace-products" element={<ReplaceProducts />} />
+              <Route path="my-task/warehouse-vendor-pay" element={<WarehouseVendorPay />} />
+              <Route path="my-task/vendor-contract-pay" element={<VendorContractPay />} />
+              <Route path="my-task/track-cp-payments" element={<TrackCPPayments />} />
+              <Route path="my-task/service" element={<Service />} />
+
               <Route path="" element={<Navigate to="dashboard" />} />
             </Route>
 
