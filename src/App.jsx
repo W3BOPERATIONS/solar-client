@@ -268,6 +268,14 @@ import EmployeeLogin from './employee/pages/EmployeeLogin';
 // Components
 import GlobalLoader from './components/GlobalLoader';
 
+// Account Manager Imports
+import AccountManagerLayout from './accountManager/layouts/AccountManagerLayout';
+import AccountManagerDashboard from './accountManager/pages/Dashboard';
+
+// Delivery Manager Imports
+import DeliveryManagerLayout from './deliveryManager/layouts/DeliveryManagerLayout';
+import DeliveryManagerDashboard from './deliveryManager/pages/Dashboard';
+
 function ProtectedRoute({ children, requiredRole }) {
   const user = authStore((state) => state.user);
   const token = authStore((state) => state.token);
@@ -328,6 +336,10 @@ function App() {
           return '/dealer-manager/dashboard';
         case 'franchiseeManager':
           return '/franchisee-manager/dashboard';
+        case 'accountManager':
+          return '/account-manager/dashboard';
+        case 'deliveryManager':
+          return '/delivery-manager/dashboard';
         default:
           return '/login';
       }
@@ -721,6 +733,32 @@ function App() {
                 </ProtectedRoute>
               }
             />
+
+            {/* Account Manager Routes */}
+            <Route
+              path="/account-manager/*"
+              element={
+                <ProtectedRoute requiredRole="accountManager">
+                  <AccountManagerLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<AccountManagerDashboard />} />
+              <Route path="" element={<Navigate to="dashboard" />} />
+            </Route>
+
+            {/* Delivery Manager Routes */}
+            <Route
+              path="/delivery-manager/*"
+              element={
+                <ProtectedRoute requiredRole="deliveryManager">
+                  <DeliveryManagerLayout />
+                </ProtectedRoute>
+              }
+            >
+              <Route path="dashboard" element={<DeliveryManagerDashboard />} />
+              <Route path="" element={<Navigate to="dashboard" />} />
+            </Route>
 
             <Route path="/" element={<Navigate to={redirectPath()} />} />
             <Route path="/dashboard" element={<Navigate to={redirectPath()} />} />

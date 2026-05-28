@@ -13,6 +13,8 @@ export default function Login() {
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [showPartnerSelect, setShowPartnerSelect] = useState(false);
+  const [showManagerSelect, setShowManagerSelect] = useState(false);
 
   const setUser = authStore((state) => state.setUser);
   const setToken = authStore((state) => state.setToken);
@@ -37,6 +39,10 @@ export default function Login() {
         navigate('/dealer-manager/dashboard');
       } else if (response.data.user.role === 'franchiseeManager') {
         navigate('/franchisee-manager/dashboard');
+      } else if (response.data.user.role === 'accountManager') {
+        navigate('/account-manager/dashboard');
+      } else if (response.data.user.role === 'deliveryManager') {
+        navigate('/delivery-manager/dashboard');
       } else if (response.data.user.role === 'employee') {
         if (!response.data.user.trainingCompleted) {
           navigate('/employee/training');
@@ -196,7 +202,8 @@ export default function Login() {
               </button>
 
               <button
-                onClick={() => handleDemoLogin('dealer@solarkits.com', '123456')}
+                type="button"
+                onClick={() => setShowPartnerSelect(true)}
                 className="w-full flex items-center justify-between p-3 bg-white hover:bg-emerald-50 rounded-lg border border-gray-200 transition-all duration-200 group"
               >
                 <div className="flex items-center">
@@ -204,32 +211,17 @@ export default function Login() {
                     <Store size={16} className="text-emerald-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-medium text-slate-800 group-hover:text-emerald-700">Dealer</p>
-                    <p className="text-xs text-slate-500">dealer@solarkits.com</p>
+                    <p className="font-medium text-slate-800 group-hover:text-emerald-700">Partner</p>
+                    <p className="text-[10px] text-slate-400 mb-0.5">(e.g., Franchise, Dealer)</p>
+                    <p className="text-xs text-slate-500">Click to choose role</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-emerald-600">Click to use</span>
-              </button>
-
-              <button
-                onClick={() => handleDemoLogin('franchise@solarkits.com', '123456')}
-                className="w-full flex items-center justify-between p-3 bg-white hover:bg-purple-50 rounded-lg border border-gray-200 transition-all duration-200 group"
-              >
-                <div className="flex items-center">
-                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
-                    <Building2 size={16} className="text-purple-600" />
-                  </div>
-                  <div className="text-left">
-                    <p className="font-medium text-slate-800 group-hover:text-purple-700">Franchisee</p>
-                    <p className="text-xs text-slate-500">franchise@solarkits.com</p>
-                  </div>
-                </div>
-                <span className="text-xs font-medium text-purple-600">Click to use</span>
+                <span className="text-xs font-medium text-emerald-600">Click to select</span>
               </button>
 
               <button
                 type="button"
-                onClick={() => handleDemoLogin('dealermanager@solarkits.com', 'password123')}
+                onClick={() => setShowManagerSelect(true)}
                 className="w-full flex items-center justify-between p-3 bg-white hover:bg-blue-50 rounded-lg border border-gray-200 transition-all duration-200 group"
               >
                 <div className="flex items-center">
@@ -237,25 +229,41 @@ export default function Login() {
                     <Shield size={16} className="text-blue-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-medium text-slate-800 group-hover:text-blue-700">Dealer Manager</p>
-                    <p className="text-xs text-slate-500">dealermanager@solarkits.com</p>
+                    <p className="font-medium text-slate-800 group-hover:text-blue-700">Partner Manager</p>
+                    <p className="text-[10px] text-slate-400 mb-0.5">(e.g., Franchise Mgr, Dealer Mgr)</p>
+                    <p className="text-xs text-slate-500">Click to choose role</p>
                   </div>
                 </div>
-                <span className="text-xs font-medium text-blue-600">Click to use</span>
+                <span className="text-xs font-medium text-blue-600">Click to select</span>
               </button>
 
               <button
-                type="button"
-                onClick={() => handleDemoLogin('franchisemanager@example.com', 'password123')}
+                onClick={() => handleDemoLogin('accountmanager@solarkits.com', 'password123')}
+                className="w-full flex items-center justify-between p-3 bg-white hover:bg-purple-50 rounded-lg border border-gray-200 transition-all duration-200 group"
+              >
+                <div className="flex items-center">
+                  <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
+                    <Building2 size={16} className="text-purple-600" />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-medium text-slate-800 group-hover:text-purple-700">Account Manager</p>
+                    <p className="text-xs text-slate-500">accountmanager@solarkits.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-purple-600">Click to use</span>
+              </button>
+
+              <button
+                onClick={() => handleDemoLogin('deliverymanager@solarkits.com', 'password123')}
                 className="w-full flex items-center justify-between p-3 bg-white hover:bg-orange-50 rounded-lg border border-gray-200 transition-all duration-200 group"
               >
                 <div className="flex items-center">
                   <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
-                    <Building2 size={16} className="text-orange-600" />
+                    <Store size={16} className="text-orange-600" />
                   </div>
                   <div className="text-left">
-                    <p className="font-medium text-slate-800 group-hover:text-orange-700">Franchisee Manager</p>
-                    <p className="text-xs text-slate-500">franchisemanager@example.com</p>
+                    <p className="font-medium text-slate-800 group-hover:text-orange-700">Delivery Manager</p>
+                    <p className="text-xs text-slate-500">deliverymanager@solarkits.com</p>
                   </div>
                 </div>
                 <span className="text-xs font-medium text-orange-600">Click to use</span>
@@ -298,6 +306,25 @@ export default function Login() {
             </div>
           </div>
 
+          {/* All Login IDs Reference */}
+          <div className="mt-8 pt-6 border-t border-gray-200">
+            <h3 className="text-sm font-semibold text-slate-700 mb-3 text-center">
+              Available Test Login IDs
+            </h3>
+            <div className="text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-2">
+              <div><strong className="text-slate-700">Admin:</strong> admin@solarkits.com</div>
+              <div><strong className="text-slate-700">Dealer:</strong> dealer@solarkits.com</div>
+              <div><strong className="text-slate-700">Franchise:</strong> franchise@solarkits.com</div>
+              <div><strong className="text-slate-700">Dealer Mgr:</strong> dealermanager@solarkits.com</div>
+              <div><strong className="text-slate-700">Franchise Mgr:</strong> franchisemanager@example.com</div>
+              <div><strong className="text-slate-700">Account Mgr:</strong> accountmanager@solarkits.com</div>
+              <div><strong className="text-slate-700">Delivery Mgr:</strong> deliverymanager@solarkits.com</div>
+              <div className="md:col-span-2 text-center mt-2 pt-2 border-t border-slate-200 italic">
+                (Passwords are usually '123456' or 'password123')
+              </div>
+            </div>
+          </div>
+
           {/* Footer */}
           <div className="mt-8 pt-6 border-t border-gray-200 text-center">
             <p className="text-xs text-gray-500">
@@ -306,6 +333,118 @@ export default function Login() {
           </div>
         </div>
       </div>
+
+      {/* Partner Selection Modal */}
+      {showPartnerSelect && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-bold text-slate-800">Select Login Type</h3>
+              <button 
+                onClick={() => setShowPartnerSelect(false)}
+                className="text-gray-400 hover:text-gray-600 transition p-1 hover:bg-gray-100 rounded-full"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  handleDemoLogin('franchise@solarkits.com', '123456');
+                  setShowPartnerSelect(false);
+                }}
+                className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-100 transition-all group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mr-3 shadow-sm text-blue-600">
+                    <Building2 size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-blue-800">Franchise Login</p>
+                    <p className="text-xs text-blue-600/70">franchise@solarkits.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-blue-700 bg-white px-2 py-1 rounded">Select</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleDemoLogin('dealer@solarkits.com', '123456');
+                  setShowPartnerSelect(false);
+                }}
+                className="w-full flex items-center justify-between p-4 bg-emerald-50 hover:bg-emerald-100 rounded-xl border border-emerald-100 transition-all group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mr-3 shadow-sm text-emerald-600">
+                    <Store size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-emerald-800">Dealer Login</p>
+                    <p className="text-xs text-emerald-600/70">dealer@solarkits.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-emerald-700 bg-white px-2 py-1 rounded">Select</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Manager Selection Modal */}
+      {showManagerSelect && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm border border-gray-100">
+            <div className="flex justify-between items-center mb-5">
+              <h3 className="text-lg font-bold text-slate-800">Select Manager Type</h3>
+              <button 
+                onClick={() => setShowManagerSelect(false)}
+                className="text-gray-400 hover:text-gray-600 transition p-1 hover:bg-gray-100 rounded-full"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+              </button>
+            </div>
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  handleDemoLogin('franchisemanager@example.com', 'password123');
+                  setShowManagerSelect(false);
+                }}
+                className="w-full flex items-center justify-between p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-100 transition-all group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mr-3 shadow-sm text-indigo-600">
+                    <Building2 size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-indigo-800">Franchise Manager</p>
+                    <p className="text-xs text-indigo-600/70">franchisemanager@example.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-indigo-700 bg-white px-2 py-1 rounded">Select</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  handleDemoLogin('dealermanager@solarkits.com', 'password123');
+                  setShowManagerSelect(false);
+                }}
+                className="w-full flex items-center justify-between p-4 bg-teal-50 hover:bg-teal-100 rounded-xl border border-teal-100 transition-all group"
+              >
+                <div className="flex items-center">
+                  <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center mr-3 shadow-sm text-teal-600">
+                    <Store size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="font-semibold text-teal-800">Dealer Manager</p>
+                    <p className="text-xs text-teal-600/70">dealermanager@solarkits.com</p>
+                  </div>
+                </div>
+                <span className="text-xs font-medium text-teal-700 bg-white px-2 py-1 rounded">Select</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
