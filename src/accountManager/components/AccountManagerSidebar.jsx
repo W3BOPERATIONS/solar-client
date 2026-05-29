@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Settings, FileText, ClipboardList, ChevronDown, ChevronUp, Server, Truck, RefreshCw, Minus } from 'lucide-react';
 
+import authStore from '../../store/authStore';
+
 export default function AccountManagerSidebar() {
+  const { user } = authStore();
   const [isMyTaskOpen, setIsMyTaskOpen] = useState(true);
   const [openSubMenus, setOpenSubMenus] = useState({
     'Order Journey': false,
@@ -91,7 +94,16 @@ export default function AccountManagerSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto mt-4 space-y-1 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="px-4 space-y-1">
-          {topMenuItems.map(renderNavLink)}
+          {topMenuItems.filter(item => {
+            if (user?.role === 'admin') return true;
+            if (!user?.panelPermissions) return true;
+            const pathParts = item.path.split('/');
+            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+            for (const [key, perm] of Object.entries(user.panelPermissions)) {
+              if (key.endsWith(lastPart)) return perm.view;
+            }
+            return false;
+          }).map(renderNavLink)}
         </div>
 
         {/* My Task Dropdown */}
@@ -113,7 +125,18 @@ export default function AccountManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 shadow-inner">
-              {myTaskItems.map((subItem) => (
+              {myTaskItems.filter(item => {
+                if (user?.role === 'admin') return true;
+                if (!user?.panelPermissions) return true;
+                const pathToCheck = item.path || (item.subItems && item.subItems[0]?.path);
+                if (!pathToCheck) return true;
+                const pathParts = pathToCheck.split('/');
+                let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                  if (key.endsWith(lastPart)) return perm.view;
+                }
+                return false;
+              }).map((subItem) => (
                 <div key={subItem.path}>
                   <NavLink
                     to={subItem.hasDropdown ? '#' : subItem.path}
@@ -138,7 +161,16 @@ export default function AccountManagerSidebar() {
                   {/* Nested Sub-Menu items */}
                   {subItem.hasDropdown && openSubMenus[subItem.label] && subItem.subItems && (
                     <div className="bg-[#e9eef5] py-1 flex flex-col">
-                      {subItem.subItems.map((nested) => (
+                      {subItem.subItems.filter(nested => {
+                        if (user?.role === 'admin') return true;
+                        if (!user?.panelPermissions) return true;
+                        const pathParts = nested.path.split('/');
+                        let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                        for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                          if (key.endsWith(lastPart)) return perm.view;
+                        }
+                        return false;
+                      }).map((nested) => (
                         <NavLink
                           key={nested.path}
                           to={nested.path}
@@ -161,7 +193,16 @@ export default function AccountManagerSidebar() {
         </div>
 
         <div className="px-4 space-y-1 mt-1">
-          {bottomMenuItems.map(renderNavLink)}
+          {bottomMenuItems.filter(item => {
+            if (user?.role === 'admin') return true;
+            if (!user?.panelPermissions) return true;
+            const pathParts = item.path.split('/');
+            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+            for (const [key, perm] of Object.entries(user.panelPermissions)) {
+              if (key.endsWith(lastPart)) return perm.view;
+            }
+            return true;
+          }).map(renderNavLink)}
         </div>
       </nav>
     </div>

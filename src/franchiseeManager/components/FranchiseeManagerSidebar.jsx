@@ -33,7 +33,10 @@ import {
     ShieldAlert,
 } from 'lucide-react';
 
+import authStore from '../../store/authStore';
+
 export default function FranchiseeManagerSidebar() {
+    const { user } = authStore();
     const [isOpen, setIsOpen] = useState(true);
     const location = useLocation();
 
@@ -181,7 +184,22 @@ export default function FranchiseeManagerSidebar() {
                 </div>
 
                 <nav className="flex-1 py-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                    {mainSections.map((section) => (
+                    {mainSections.filter(section => {
+                        if (user?.role === 'admin') return true;
+                        if (!user?.panelPermissions) return true;
+                        const checkHref = (href) => {
+                            if (!href) return true;
+                            const pathParts = href.split('/');
+                            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                            for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                                if (key.endsWith(lastPart)) return perm.view;
+                            }
+                            return true;
+                        };
+                        if (section.href) return checkHref(section.href);
+                        if (section.children) return section.children.some(child => checkHref(child.href) || (child.children && child.children.some(sc => checkHref(sc.href))));
+                        return true;
+                    }).map((section) => (
                         <div key={section.id} className="mb-1">
                             {section.children ? (
                                 <>
@@ -201,7 +219,22 @@ export default function FranchiseeManagerSidebar() {
 
                                     {section.isExpanded && (
                                         <div className="mt-1 ml-6">
-                                            {section.children.map((child) => {
+                                            {section.children.filter(child => {
+                                                if (user?.role === 'admin') return true;
+                                                if (!user?.panelPermissions) return true;
+                                                const checkHref = (href) => {
+                                                    if (!href) return true;
+                                                    const pathParts = href.split('/');
+                                                    let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                                                    for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                                                        if (key.endsWith(lastPart)) return perm.view;
+                                                    }
+                                                    return true;
+                                                };
+                                                if (child.href) return checkHref(child.href);
+                                                if (child.children) return child.children.some(sc => checkHref(sc.href));
+                                                return true;
+                                            }).map((child) => {
                                                 if (child.isGroup) {
                                                     return (
                                                         <div key={child.id} className="mt-2">
@@ -221,7 +254,17 @@ export default function FranchiseeManagerSidebar() {
 
                                                             {child.isExpanded && child.children && (
                                                                 <div className="ml-4 mt-1 space-y-1 border-l border-gray-700 pl-2">
-                                                                    {child.children.map((subChild) => (
+                                                                    {child.children.filter(subChild => {
+                                                                        if (user?.role === 'admin') return true;
+                                                                        if (!user?.panelPermissions) return true;
+                                                                        if (!subChild.href) return true;
+                                                                        const pathParts = subChild.href.split('/');
+                                                                        let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                                                                        for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                                                                            if (key.endsWith(lastPart)) return perm.view;
+                                                                        }
+                                                                        return true;
+                                                                    }).map((subChild) => (
                                                                         <Link
                                                                             key={subChild.href}
                                                                             to={subChild.href}

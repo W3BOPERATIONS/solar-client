@@ -2,7 +2,10 @@ import React, { useState } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Settings, FileText, ClipboardList, ChevronDown, ChevronUp, Server, Truck, RefreshCw, Minus, CheckSquare } from 'lucide-react';
 
+import authStore from '../../store/authStore';
+
 export default function DeliveryManagerSidebar() {
+  const { user } = authStore();
   const [isMyTaskOpen, setIsMyTaskOpen] = useState(true);
   const [openSubMenus, setOpenSubMenus] = useState({
     'Replacement Order': true
@@ -68,7 +71,16 @@ export default function DeliveryManagerSidebar() {
               
               {isOpen && item.subItems && (
                 <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 mt-1">
-                  {item.subItems.map((subItem) => (
+                  {item.subItems.filter(subItem => {
+                        if (user?.role === 'admin') return true;
+                        if (!user?.panelPermissions) return true;
+                        const pathParts = subItem.path.split('/');
+                        let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                        for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                          if (key.endsWith(lastPart)) return perm.view;
+                        }
+                        return true;
+                  }).map((subItem) => (
                     <div key={subItem.path}>
                       <NavLink
                         to={subItem.path}
@@ -121,7 +133,16 @@ export default function DeliveryManagerSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto mt-4 space-y-1 pb-4">
         <div className="space-y-1">
-          {topMenuItems.map(renderNavLink)}
+          {topMenuItems.filter(item => {
+            if (user?.role === 'admin') return true;
+            if (!user?.panelPermissions) return true;
+            const pathParts = item.path.split('/');
+            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+            for (const [key, perm] of Object.entries(user.panelPermissions)) {
+              if (key.endsWith(lastPart)) return perm.view;
+            }
+            return true;
+          }).map(renderNavLink)}
         </div>
 
         {/* My Task Dropdown */}
@@ -143,7 +164,18 @@ export default function DeliveryManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 mt-1">
-              {myTaskItems.map((subItem) => (
+              {myTaskItems.filter(item => {
+                if (user?.role === 'admin') return true;
+                if (!user?.panelPermissions) return true;
+                const pathToCheck = item.path || (item.subItems && item.subItems[0]?.path);
+                if (!pathToCheck) return true;
+                const pathParts = pathToCheck.split('/');
+                let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+                for (const [key, perm] of Object.entries(user.panelPermissions)) {
+                  if (key.endsWith(lastPart)) return perm.view;
+                }
+                return true;
+              }).map((subItem) => (
                 <div key={subItem.path}>
                   <NavLink
                     to={subItem.path}
@@ -167,7 +199,16 @@ export default function DeliveryManagerSidebar() {
         </div>
 
         <div className="space-y-1 mt-1">
-          {bottomMenuItems.map(renderNavLink)}
+          {bottomMenuItems.filter(item => {
+            if (user?.role === 'admin') return true;
+            if (!user?.panelPermissions) return true;
+            const pathParts = item.path.split('/');
+            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
+            for (const [key, perm] of Object.entries(user.panelPermissions)) {
+              if (key.endsWith(lastPart)) return perm.view;
+            }
+            return true;
+          }).map(renderNavLink)}
         </div>
       </nav>
     </div>

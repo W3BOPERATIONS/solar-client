@@ -372,63 +372,8 @@ function App() {
       }
     };
 
-    return (
+    const sharedAdminRoutes = (
       <>
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-
-            {/* Candidate Portal Routes */}
-            <Route path="/candidate-login" element={<CandidateLogin />} />
-            <Route
-              path="/candidate-portal/*"
-              element={
-                <CandidateLayout />
-              }
-            >
-              <Route path="dashboard" element={<CandidateDashboard />} />
-              <Route path="test" element={<CandidateTest />} />
-              <Route path="complete-application" element={<CandidateCompleteApplication />} />
-              <Route path="" element={<Navigate to="test" />} />
-            </Route>
-
-            {/* Admin Routes */}
-            <Route
-              path="/admin/*"
-              element={
-                <ProtectedRoute requiredRole="admin">
-                  <AdminLayout />
-                </ProtectedRoute>
-              }
-            >
-              {/* Dashboard section */}
-              <Route path="dashboard" element={<AdminInventoryDashboard />} />
-              <Route path="dashboard/inventory" element={<AdminInventoryDashboard />} />
-              <Route path="dashboard/delivery" element={<AdminDeliveryDashboard />} />
-              <Route path="dashboard/installer" element={<AdminInstallerDashboard />} />
-              <Route path="dashboard/orders" element={<AdminOrdersDashboard />} />
-              <Route path="dashboard/orders-by-loan" element={<AdminOrdersByLoanDashboard />} />
-              <Route path="dashboard/vendors" element={<AdminVendorsDashboard />} />
-              <Route path="dashboard/project-report" element={<AdminProjectReport />} />
-
-              {/* User Performance sub-dashboards */}
-              <Route
-                path="dashboard/user-performance/partner-manager"
-                element={<FranchiseManagerDashboard />}
-              />
-              <Route
-                path="dashboard/user-performance/partner"
-                element={<FranchisePerformanceDashboard />}
-              />
-              <Route
-                path="dashboard/user-performance/dealer-manager"
-                element={<DealerManagerPerformanceDashboard />}
-              />
-              <Route
-                path="dashboard/user-performance/dealer"
-                element={<DealerPerformanceDashboard />}
-              />
-
               <Route path="departments" element={<AdminDepartments />} />
               <Route
                 path="departments/organization-chart"
@@ -485,15 +430,12 @@ function App() {
               <Route path="settings/delivery/vendor-delivery-plan" element={<VendorDeliveryPlan />} />
               <Route path="settings/delivery/vendor_delivery_plan" element={<VendorDeliveryPlan />} />
 
-
-
               {/* Installer Settings */}
               <Route path="settings/installer/solar-installer" element={<SolarInstaller />} />
               <Route path="settings/installer/tool-requirements" element={<ToolRequirements />} />
               <Route path="settings/installer/rating-setting" element={<RatingSetting />} />
               <Route path="settings/installer/agency" element={<Agency />} />
               <Route path="settings/installer/agency-plans" element={<AgencyPlan />} />
-
 
               {/* Inventory Settings */}
               <Route path="settings/inventory/inventory-overview" element={<InventoryOverview />} />
@@ -575,6 +517,67 @@ function App() {
               <Route path="reports/cluster" element={<AdminClusterReport />} />
               <Route path="reports/district" element={<AdminDistrictReport />} />
               <Route path="reports/city" element={<AdminCityReport />} />
+      </>
+    );
+
+    return (
+      <>
+        <Router>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+
+            {/* Candidate Portal Routes */}
+            <Route path="/candidate-login" element={<CandidateLogin />} />
+            <Route
+              path="/candidate-portal/*"
+              element={
+                <CandidateLayout />
+              }
+            >
+              <Route path="dashboard" element={<CandidateDashboard />} />
+              <Route path="test" element={<CandidateTest />} />
+              <Route path="complete-application" element={<CandidateCompleteApplication />} />
+              <Route path="" element={<Navigate to="test" />} />
+            </Route>
+
+            {/* Admin Routes */}
+            <Route
+              path="/admin/*"
+              element={
+                <ProtectedRoute requiredRole="admin">
+                  <AdminLayout />
+                </ProtectedRoute>
+              }
+            >
+              {/* Dashboard section */}
+              <Route path="dashboard" element={<AdminInventoryDashboard />} />
+              <Route path="dashboard/inventory" element={<AdminInventoryDashboard />} />
+              <Route path="dashboard/delivery" element={<AdminDeliveryDashboard />} />
+              <Route path="dashboard/installer" element={<AdminInstallerDashboard />} />
+              <Route path="dashboard/orders" element={<AdminOrdersDashboard />} />
+              <Route path="dashboard/orders-by-loan" element={<AdminOrdersByLoanDashboard />} />
+              <Route path="dashboard/vendors" element={<AdminVendorsDashboard />} />
+              <Route path="dashboard/project-report" element={<AdminProjectReport />} />
+
+              {/* User Performance sub-dashboards */}
+              <Route
+                path="dashboard/user-performance/partner-manager"
+                element={<FranchiseManagerDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/partner"
+                element={<FranchisePerformanceDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/dealer-manager"
+                element={<DealerManagerPerformanceDashboard />}
+              />
+              <Route
+                path="dashboard/user-performance/dealer"
+                element={<DealerPerformanceDashboard />}
+              />
+
+              {sharedAdminRoutes}
             </Route>
 
             {/* Dealer Routes */}
@@ -615,6 +618,8 @@ function App() {
               <Route path="solar-kit" element={<SolarKit />} />
               <Route path="loan" element={<Loan />} />
               <Route path="reports" element={<Reports />} />
+              
+              {sharedAdminRoutes}
             </Route>
 
             {/* Franchisee Routes */}
@@ -653,6 +658,8 @@ function App() {
               <Route path="project-management/install" element={<FranchiseeInstall />} />
               <Route path="project-management/service" element={<FranchiseeService />} />
               <Route path="project-management/track-service" element={<FranchiseeTrackService />} />
+              
+              {sharedAdminRoutes}
             </Route>
 
             {/* Dealer Manager Routes */}
@@ -696,6 +703,8 @@ function App() {
 
               <Route path="report" element={<DealerManagerReport />} />
               <Route path="" element={<Navigate to="dashboard" />} />
+              
+              {sharedAdminRoutes}
             </Route>
 
             {/* Franchisee Manager Routes */}
@@ -744,6 +753,8 @@ function App() {
               <Route path="report" element={<FranchiseeManagerReport />} />
 
               <Route path="" element={<Navigate to="dashboard" />} />
+              
+              {sharedAdminRoutes}
             </Route>
 
             {/* Employee Routes */}
@@ -792,7 +803,8 @@ function App() {
               <Route path="my-task/vendor-contract-pay" element={<VendorContractPay />} />
               <Route path="my-task/track-cp-payments" element={<TrackCPPayments />} />
               <Route path="my-task/service" element={<Service />} />
-
+              
+              {sharedAdminRoutes}
               <Route path="" element={<Navigate to="dashboard" />} />
             </Route>
 
@@ -810,9 +822,11 @@ function App() {
               <Route path="my-task/inward-management" element={<InwardManagement />} />
               <Route path="my-task/at-warehouse" element={<DMAtWarehouse />} />
               <Route path="replacement-order/return-products" element={<DMReturnProduct />} />
-              <Route path="replacement-order/replace-products" element={<DMReplaceProduct />} />
+              <Route path="replacement-order/replace-product" element={<DMReplaceProduct />} />
               <Route path="replacement-order/service-ticket" element={<DMServiceTicket />} />
               <Route path="report" element={<DMReport />} />
+              
+              {sharedAdminRoutes}
               <Route path="" element={<Navigate to="dashboard" />} />
             </Route>
 
