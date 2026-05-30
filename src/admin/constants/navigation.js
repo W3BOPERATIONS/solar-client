@@ -22,6 +22,8 @@ import {
   UserCog,
   Store as StoreIcon,
   Building,
+  Server,
+  RefreshCw,
 } from 'lucide-react';
 
 export const SIDEBAR_NAVIGATION = [
@@ -308,4 +310,48 @@ export const SIDEBAR_NAVIGATION = [
       { name: 'City', icon: FileBarChart, href: '/admin/reports/city' },
     ],
   },
+];
+
+export const ACCOUNT_MANAGER_NAVIGATION = [
+  { id: 'amDashboard', name: 'Account Dashboard', icon: Home, href: '/account-manager/dashboard' },
+  { id: 'amSolarPanelBundlePlan', name: 'Account Solar Panel Bundle Plan', icon: Settings, href: '/account-manager/solar-panel-bundle-plan' },
+  { id: 'amProcurementPlan', name: 'Account Procurement Plan', icon: FileText, href: '/account-manager/procurement-plan' },
+  { id: 'amReport', name: 'Account Report', icon: ClipboardList, href: '/account-manager/report' },
+  { 
+    id: 'amMyTask', 
+    name: 'Account My Task', 
+    icon: Server,
+    children: [
+      {
+        id: 'amOrderJourney',
+        name: 'Account Order Journey',
+        icon: Truck,
+        isGroup: true,
+        children: [
+          { name: 'Account Create Order', href: '/account-manager/my-task/order-journey/create-order' },
+          { name: 'Account Loan Orders', href: '/account-manager/my-task/order-journey/loan-orders' },
+          { name: 'Account Delivery Plan', href: '/account-manager/my-task/order-journey/delivery-plan' },
+          { name: 'Account Vendor Pay', href: '/account-manager/my-task/order-journey/vendor-pay' },
+          { name: 'Account Channel Partner Pay', href: '/account-manager/my-task/order-journey/channel-partner-pay' },
+          { name: 'Account Driver Pay', href: '/account-manager/my-task/order-journey/driver-pay' },
+          { name: 'Account At Warehouse', href: '/account-manager/my-task/order-journey/at-warehouse' },
+          { name: 'Account Delivery Management', href: '/account-manager/my-task/order-journey/delivery-management' },
+        ]
+      },
+      {
+        id: 'amReplacementOrder',
+        name: 'Account Replacement Order',
+        icon: RefreshCw,
+        isGroup: true,
+        children: [
+          { name: 'Account Return Products', href: '/account-manager/my-task/replacement-order/return-products' },
+          { name: 'Account Replace Products', href: '/account-manager/my-task/replacement-order/replace-products' }
+        ]
+      },
+      { name: 'Account Warehouse Vendor Pay', href: '/account-manager/my-task/warehouse-vendor-pay' },
+      { name: 'Account Vendor Contract Pay', href: '/account-manager/my-task/vendor-contract-pay' },
+      { name: 'Account Track CP Payments', href: '/account-manager/my-task/track-cp-payments' },
+      { name: 'Account Service', href: '/account-manager/my-task/service' },
+    ]
+  }
 ];

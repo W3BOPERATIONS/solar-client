@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 
 import authStore from '../../store/authStore';
+import DynamicMenuRenderer from '../../components/Sidebar/DynamicMenuRenderer';
 
 export default function FranchiseeSidebar() {
     const { user } = authStore();
@@ -154,6 +155,17 @@ export default function FranchiseeSidebar() {
         },
     ];
 
+    // Extract all existing routes
+    const existingRoutes = [];
+    const extractRoutes = (items) => {
+      if (!items) return;
+      items.forEach(item => {
+        if (item.href) existingRoutes.push(item.href);
+        if (item.children) extractRoutes(item.children);
+      });
+    };
+    extractRoutes(menuItems);
+
     return (
         <>
             <button
@@ -180,22 +192,7 @@ export default function FranchiseeSidebar() {
                 </div>
 
                 <nav className="flex-1 py-4 overflow-y-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:'none'] [scrollbar-width:'none']">
-                    {menuItems.filter((item) => {
-                        if (user?.role === 'admin') return true;
-                        if (!user?.panelPermissions) return true;
-                        const checkHref = (href) => {
-                            if (!href) return true;
-                            const pathParts = href.split('/');
-                            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                            for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                                if (key.endsWith(lastPart)) return perm.view;
-                            }
-                            return true;
-                        };
-                        if (item.href) return checkHref(item.href);
-                        if (item.children) return item.children.some(child => checkHref(child.href));
-                        return true;
-                    }).map((item) => (
+                    {menuItems.map((item) => (
                         <div key={item.id} className="mb-1">
                             {item.children ? (
                                 <>
@@ -214,17 +211,7 @@ export default function FranchiseeSidebar() {
                                     </button>
                                     {expandedSections[item.id] && (
                                         <div className="mt-1 ml-6">
-                                            {item.children.filter(child => {
-                                                if (user?.role === 'admin') return true;
-                                                if (!user?.panelPermissions) return true;
-                                                if (!child.href) return true;
-                                                const pathParts = child.href.split('/');
-                                                let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                                                for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                                                    if (key.endsWith(lastPart)) return perm.view;
-                                                }
-                                                return true;
-                                            }).map((child) => (
+                                            {item.children.map((child) => (
                                                 <Link
                                                     key={child.href}
                                                     to={child.href}
@@ -248,6 +235,8 @@ export default function FranchiseeSidebar() {
                             )}
                         </div>
                     ))}
+                    
+                    <DynamicMenuRenderer existingRoutes={existingRoutes} theme="dark" />
                 </nav>
             </aside>
         </>

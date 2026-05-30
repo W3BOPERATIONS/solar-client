@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Settings, FileText, ClipboardList, ChevronDown, ChevronUp, Server, Truck, RefreshCw, Minus, CheckSquare } from 'lucide-react';
 
 import authStore from '../../store/authStore';
+import DynamicMenuRenderer from '../../components/Sidebar/DynamicMenuRenderer';
 
 export default function DeliveryManagerSidebar() {
   const { user } = authStore();
@@ -47,6 +48,13 @@ export default function DeliveryManagerSidebar() {
     { icon: Minus, label: 'At Warehouse', path: '/delivery-manager/my-task/at-warehouse' },
   ];
 
+  const existingRoutes = [
+    ...topMenuItems.map(i => i.path),
+    ...bottomMenuItems.map(i => i.path),
+    ...bottomMenuItems.flatMap(i => i.subItems?.map(s => s.path) || []),
+    ...myTaskItems.map(i => i.path)
+  ].filter(Boolean);
+
   const renderNavLink = (item) => {
     if (item.hasDropdown) {
         const isAnySubItemActive = item.subItems?.some(subItem => location.pathname.includes(subItem.path));
@@ -71,16 +79,7 @@ export default function DeliveryManagerSidebar() {
               
               {isOpen && item.subItems && (
                 <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 mt-1">
-                  {item.subItems.filter(subItem => {
-                        if (user?.role === 'admin') return true;
-                        if (!user?.panelPermissions) return true;
-                        const pathParts = subItem.path.split('/');
-                        let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                        for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                          if (key.endsWith(lastPart)) return perm.view;
-                        }
-                        return true;
-                  }).map((subItem) => (
+                  {item.subItems.map((subItem) => (
                     <div key={subItem.path}>
                       <NavLink
                         to={subItem.path}
@@ -133,16 +132,7 @@ export default function DeliveryManagerSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto mt-4 space-y-1 pb-4">
         <div className="space-y-1">
-          {topMenuItems.filter(item => {
-            if (user?.role === 'admin') return true;
-            if (!user?.panelPermissions) return true;
-            const pathParts = item.path.split('/');
-            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-            for (const [key, perm] of Object.entries(user.panelPermissions)) {
-              if (key.endsWith(lastPart)) return perm.view;
-            }
-            return true;
-          }).map(renderNavLink)}
+          {topMenuItems.map(renderNavLink)}
         </div>
 
         {/* My Task Dropdown */}
@@ -164,18 +154,7 @@ export default function DeliveryManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 mt-1">
-              {myTaskItems.filter(item => {
-                if (user?.role === 'admin') return true;
-                if (!user?.panelPermissions) return true;
-                const pathToCheck = item.path || (item.subItems && item.subItems[0]?.path);
-                if (!pathToCheck) return true;
-                const pathParts = pathToCheck.split('/');
-                let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                  if (key.endsWith(lastPart)) return perm.view;
-                }
-                return true;
-              }).map((subItem) => (
+              {myTaskItems.map((subItem) => (
                 <div key={subItem.path}>
                   <NavLink
                     to={subItem.path}
@@ -199,17 +178,10 @@ export default function DeliveryManagerSidebar() {
         </div>
 
         <div className="space-y-1 mt-1">
-          {bottomMenuItems.filter(item => {
-            if (user?.role === 'admin') return true;
-            if (!user?.panelPermissions) return true;
-            const pathParts = item.path.split('/');
-            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-            for (const [key, perm] of Object.entries(user.panelPermissions)) {
-              if (key.endsWith(lastPart)) return perm.view;
-            }
-            return true;
-          }).map(renderNavLink)}
+          {bottomMenuItems.map(renderNavLink)}
         </div>
+
+        <DynamicMenuRenderer existingRoutes={existingRoutes} />
       </nav>
     </div>
   );

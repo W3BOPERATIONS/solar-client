@@ -36,6 +36,7 @@ import {
 
 import authStore from '../../store/authStore';
 import salesSettingsService from '../../services/settings/salesSettingsApi';
+import DynamicMenuRenderer from '../../components/Sidebar/DynamicMenuRenderer';
 
 export default function AdminSidebar() {
   const { user } = authStore();
@@ -543,6 +544,17 @@ export default function AdminSidebar() {
     },
   ];
 
+  // Extract all existing routes
+  const existingRoutes = [];
+  const extractRoutes = (items) => {
+    if (!items) return;
+    items.forEach(item => {
+      if (item.href) existingRoutes.push(item.href);
+      if (item.children) extractRoutes(item.children);
+    });
+  };
+  extractRoutes(mainSections);
+
   return (
     <>
       <button
@@ -658,6 +670,8 @@ export default function AdminSidebar() {
               )}
             </div>
           ))}
+
+          <DynamicMenuRenderer existingRoutes={existingRoutes} theme="dark" />
         </nav>
       </aside>
     </>

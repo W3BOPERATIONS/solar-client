@@ -3,6 +3,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { Home, Settings, FileText, ClipboardList, ChevronDown, ChevronUp, Server, Truck, RefreshCw, Minus } from 'lucide-react';
 
 import authStore from '../../store/authStore';
+import DynamicMenuRenderer from '../../components/Sidebar/DynamicMenuRenderer';
 
 export default function AccountManagerSidebar() {
   const { user } = authStore();
@@ -67,6 +68,16 @@ export default function AccountManagerSidebar() {
     { icon: Minus, label: 'Service', path: '/account-manager/my-task/service' },
   ];
 
+  const existingRoutes = [
+    ...topMenuItems.map(i => i.path),
+    ...bottomMenuItems.map(i => i.path),
+    ...myTaskItems.flatMap(i => [
+      i.path,
+      ...(i.subItems?.map(s => s.path) || []),
+      ...(i.subItems?.flatMap(s => s.subItems?.map(ss => ss.path) || []) || [])
+    ])
+  ].filter(Boolean);
+
   const renderNavLink = (item) => (
     <NavLink
       key={item.path}
@@ -94,16 +105,7 @@ export default function AccountManagerSidebar() {
       </div>
       <nav className="flex-1 overflow-y-auto mt-4 space-y-1 pb-4 [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
         <div className="px-4 space-y-1">
-          {topMenuItems.filter(item => {
-            if (user?.role === 'admin') return true;
-            if (!user?.panelPermissions) return true;
-            const pathParts = item.path.split('/');
-            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-            for (const [key, perm] of Object.entries(user.panelPermissions)) {
-              if (key.endsWith(lastPart)) return perm.view;
-            }
-            return false;
-          }).map(renderNavLink)}
+          {topMenuItems.map(renderNavLink)}
         </div>
 
         {/* My Task Dropdown */}
@@ -125,18 +127,7 @@ export default function AccountManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 shadow-inner">
-              {myTaskItems.filter(item => {
-                if (user?.role === 'admin') return true;
-                if (!user?.panelPermissions) return true;
-                const pathToCheck = item.path || (item.subItems && item.subItems[0]?.path);
-                if (!pathToCheck) return true;
-                const pathParts = pathToCheck.split('/');
-                let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                  if (key.endsWith(lastPart)) return perm.view;
-                }
-                return false;
-              }).map((subItem) => (
+              {myTaskItems.map((subItem) => (
                 <div key={subItem.path}>
                   <NavLink
                     to={subItem.hasDropdown ? '#' : subItem.path}
@@ -161,16 +152,7 @@ export default function AccountManagerSidebar() {
                   {/* Nested Sub-Menu items */}
                   {subItem.hasDropdown && openSubMenus[subItem.label] && subItem.subItems && (
                     <div className="bg-[#e9eef5] py-1 flex flex-col">
-                      {subItem.subItems.filter(nested => {
-                        if (user?.role === 'admin') return true;
-                        if (!user?.panelPermissions) return true;
-                        const pathParts = nested.path.split('/');
-                        let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-                        for (const [key, perm] of Object.entries(user.panelPermissions)) {
-                          if (key.endsWith(lastPart)) return perm.view;
-                        }
-                        return false;
-                      }).map((nested) => (
+                      {subItem.subItems.map((nested) => (
                         <NavLink
                           key={nested.path}
                           to={nested.path}
@@ -193,17 +175,10 @@ export default function AccountManagerSidebar() {
         </div>
 
         <div className="px-4 space-y-1 mt-1">
-          {bottomMenuItems.filter(item => {
-            if (user?.role === 'admin') return true;
-            if (!user?.panelPermissions) return true;
-            const pathParts = item.path.split('/');
-            let lastPart = pathParts[pathParts.length - 1].toLowerCase().replace(/-/g, '_');
-            for (const [key, perm] of Object.entries(user.panelPermissions)) {
-              if (key.endsWith(lastPart)) return perm.view;
-            }
-            return true;
-          }).map(renderNavLink)}
+          {bottomMenuItems.map(renderNavLink)}
         </div>
+
+        <DynamicMenuRenderer existingRoutes={existingRoutes} />
       </nav>
     </div>
   );
