@@ -25,6 +25,7 @@ import { toast } from 'react-hot-toast';
 import * as rbacApi from '../../../../services/settings/rbacApi';
 import { locationAPI } from '../../../../api/api';
 import { SIDEBAR_NAVIGATION, ACCOUNT_MANAGER_NAVIGATION } from '../../../constants/navigation';
+import AddNewCompanyUserModal from './AddNewCompanyUserModal';
 
 const AVAILABLE_ICONS = [
   { name: 'Layers', component: Layers },
@@ -382,6 +383,9 @@ export default function PanelsLevelWise() {
   // Search states
   const [userSearch, setUserSearch] = useState('');
   const [logSearch, setLogSearch] = useState('');
+
+  // Add User Modal state
+  const [showAddUserModal, setShowAddUserModal] = useState(false);
 
   // Location filter states
   const [locationData, setLocationData] = useState({
@@ -2206,15 +2210,24 @@ export default function PanelsLevelWise() {
                   <h3 className="text-lg font-bold text-slate-800">User Workspace Assignments</h3>
                   <p className="text-xs text-slate-400">Manage user panel mappings and individual overrides.</p>
                 </div>
-                <div className="relative w-full sm:w-72">
-                  <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
-                  <input
-                    type="text"
-                    className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700 text-sm font-semibold"
-                    placeholder="Search users..."
-                    value={userSearch}
-                    onChange={(e) => setUserSearch(e.target.value)}
-                  />
+                <div className="flex items-center gap-3 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="absolute left-3 top-2.5 text-slate-400" size={16} />
+                    <input
+                      type="text"
+                      className="w-full pl-9 pr-4 py-2 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700 text-sm font-semibold"
+                      placeholder="Search users..."
+                      value={userSearch}
+                      onChange={(e) => setUserSearch(e.target.value)}
+                    />
+                  </div>
+                  <button
+                    onClick={() => setShowAddUserModal(true)}
+                    className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-[#2e7d32] hover:bg-[#1b5e20] text-white rounded-xl text-sm font-bold shadow-sm transition"
+                  >
+                    <Plus size={16} />
+                    Fill Form
+                  </button>
                 </div>
               </div>
 
@@ -2814,6 +2827,11 @@ export default function PanelsLevelWise() {
           </div>
         </div>
       )}
+
+      <AddNewCompanyUserModal 
+        isOpen={showAddUserModal}
+        onClose={() => setShowAddUserModal(false)}
+      />
     </div>
   );
 }
