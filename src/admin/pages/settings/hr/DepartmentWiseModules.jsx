@@ -7,6 +7,7 @@ import {
   getDepartmentModules,
   deleteDepartmentModule
 } from '../../../../services/hr/departmentModuleApi';
+import { getPanels, getModules } from '../../../../services/settings/rbacApi';
 import { X, Trash2 } from 'lucide-react';
 
 const SIDEBAR_MODULES = [
@@ -96,16 +97,18 @@ const SIDEBAR_MODULES = [
 
 const DepartmentWiseModules = () => {
   const [departments, setDepartments] = useState([]);
-  const [modules, setModules] = useState([]);
+  const [panelsList, setPanelsList] = useState([]);
+  const [modulesList, setModulesList] = useState([]);
   const [stats, setStats] = useState({});
 
   // Form State
   const [selectedLevel, setSelectedLevel] = useState('country');
-  const [selectedPanel, setSelectedPanel] = useState(''); // NEW
-  const [selectedModuleData, setSelectedModuleData] = useState('');
+  const [selectedPanel, setSelectedPanel] = useState('');
+  const [selectedModuleData, setSelectedModuleData] = useState([]);
   const [selectedDeptId, setSelectedDeptId] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isModuleDropdownOpen, setIsModuleDropdownOpen] = useState(false);
 
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -132,10 +135,15 @@ const DepartmentWiseModules = () => {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [deptRes, statsRes] = await Promise.all([
+      const [deptRes, statsRes, pRes, mRes] = await Promise.all([
         getDepartments(),
         getAllDepartmentStats(),
+        getPanels(),
+        getModules()
       ]);
+
+      if (pRes?.success) setPanelsList(pRes.panels || []);
+      if (mRes?.success) setModulesList(mRes.modules || []);
 
       if (deptRes.success) {
         let grouped = [];
@@ -162,11 +170,6 @@ const DepartmentWiseModules = () => {
         setDepartments(grouped);
         setStats(mergedStats);
       }
-
-      // The original code had `if (modRes.success) setModules(modRes.modules);` but `modRes` was not defined.
-      // Assuming this was a placeholder or intended for a future API call,
-      // I'm commenting it out to avoid a reference error.
-      // if (modRes.success) setModules(modRes.modules);
     } catch (error) {
       console.error(error);
       toast.error('Failed to load initial data');
@@ -175,27 +178,126 @@ const DepartmentWiseModules = () => {
     }
   };
 
+  const getFilteredModulesForPanel = (panelId) => {
+    if (!panelId) return [];
+    const selectedPanelObj = panelsList.find(p => p._id === panelId);
+    if (!selectedPanelObj) return [];
+    
+    const pName = selectedPanelObj.name.toLowerCase();
+    
+    return modulesList.filter(mod => {
+      let matchesPanel = true;
+      let hasMatrixPermission = false;
+      const modName = mod.name.toLowerCase();
+      const modKey = mod.key.toLowerCase();
+
+      if (pName.includes('account')) {
+        hasMatrixPermission = modName.includes('account') || modKey.includes('account') || modKey.includes('am_');
+      } else if (pName.includes('delivery')) {
+        const deliveryModules = ['dashboard', 'my task', 'inward', 'at warehouse', 'delivery management', 'replacement order', 'return products', 'replace products', 'service ticket', 'report'];
+        hasMatrixPermission = deliveryModules.includes(modName) || modKey.includes('del_');
+        matchesPanel = hasMatrixPermission;
+      } else if (pName.includes('partner manager') || pName.includes('franchisee manager')) {
+        const pmModules = ['dashboard', 'leads', 'lead management', 'my task', 'app demo', 'franchisee onboarding', 'project management', 'franchisee performance', 'franchisee onboarding goals', 'franchisee setting', 'dealer management', 'raise ticket', 'find resources', 'report'];
+        hasMatrixPermission = pmModules.includes(modName) || modKey.includes('pm_');
+        matchesPanel = hasMatrixPermission;
+      } else if (pName.includes('partner') || pName.includes('franchisee')) {
+        const ptModules = ['dashboard', 'project signup', 'project management', 'survey bom', 'district manager', 'dealer manager', 'lead partner', 'my team', 'account', 'solarkits', 'settings'];
+        hasMatrixPermission = ptModules.includes(modName) || modKey.includes('pt_');
+        matchesPanel = hasMatrixPermission;
+      } else if (pName.includes('admin')) {
+        matchesPanel = !modName.includes('account ') && !modKey.includes('am_') && !modKey.includes('del_') && !modKey.includes('pm_') && !modKey.includes('pt_');
+        hasMatrixPermission = true;
+      } else {
+        hasMatrixPermission = true;
+      }
+
+      return hasMatrixPermission && matchesPanel;
+    });
+  };
+
+  const getHierarchicalModulesForPanel = (panelId) => {
+    const rawModules = getFilteredModulesForPanel(panelId);
+    
+    // Create a map for quick lookup
+    const moduleMap = new Map();
+    rawModules.forEach(mod => {
+      moduleMap.set(String(mod._id), { ...mod, children: [] });
+    });
+    
+    const roots = [];
+    
+    moduleMap.forEach(mod => {
+      if (mod.parentModule) {
+        const parentId = typeof mod.parentModule === 'object' ? String(mod.parentModule._id) : String(mod.parentModule);
+        const parent = moduleMap.get(parentId);
+        if (parent) {
+          parent.children.push(mod);
+        } else {
+          // Orphan module, treat as root
+          roots.push(mod);
+        }
+      } else {
+        roots.push(mod);
+      }
+    });
+    
+    // Flatten the hierarchy with depth for rendering
+    const flatten = (nodes, depth = 0) => {
+      let result = [];
+      nodes.forEach(node => {
+        result.push({ ...node, depth });
+        if (node.children && node.children.length > 0) {
+          result = result.concat(flatten(node.children, depth + 1));
+        }
+      });
+      return result;
+    };
+    
+    return flatten(roots);
+  };
+
   const handleAssign = async () => {
-    if (!selectedModuleData || !selectedDeptId || !selectedLevel) {
-      toast.error("Please select a valid Level, Module, and Department");
+    if (!selectedModuleData || selectedModuleData.length === 0 || !selectedDeptId || !selectedLevel) {
+      toast.error("Please select a valid Level, Module(s), and Department");
       return;
     }
-
-    const [moduleCategory, moduleName, moduleKey] = selectedModuleData.split('|');
 
     setSaving(true);
     try {
       // Check if already assigned
       const existingRes = await getDepartmentModules(selectedDeptId);
-      if (existingRes.success && existingRes.accessList) {
-        const isAlreadyAssigned = existingRes.accessList.some(
-          mapping => mapping.moduleId?.key === moduleKey && mapping.accessLevel === selectedLevel && mapping.enabled
-        );
-        if (isAlreadyAssigned) {
-          toast.error("Already assigned! This module is already active at this level.");
-          setSaving(false);
-          return;
+      
+      const newMappings = [];
+      let skippedCount = 0;
+
+      selectedModuleData.forEach(data => {
+        const [moduleCategory, moduleName, moduleKey] = data.split('|');
+        
+        let isAlreadyAssigned = false;
+        if (existingRes.success && existingRes.accessList) {
+          isAlreadyAssigned = existingRes.accessList.some(
+            mapping => mapping.moduleId?.key === moduleKey && mapping.accessLevel === selectedLevel && mapping.enabled
+          );
         }
+
+        if (isAlreadyAssigned) {
+          skippedCount++;
+        } else {
+          newMappings.push({
+            moduleKey,
+            moduleName,
+            moduleCategory,
+            accessLevel: selectedLevel,
+            enabled: true
+          });
+        }
+      });
+
+      if (newMappings.length === 0) {
+        toast.error("All selected modules are already assigned at this level!");
+        setSaving(false);
+        return;
       }
 
       const selectedDeptObj = departments.find(d => d._id === selectedDeptId);
@@ -204,15 +306,7 @@ const DepartmentWiseModules = () => {
       const promises = allIds.map(id => {
         const payload = {
           departmentId: id,
-          mappings: [
-            {
-              moduleKey,
-              moduleName,
-              moduleCategory,
-              accessLevel: selectedLevel,
-              enabled: true
-            }
-          ]
+          mappings: newMappings
         };
         return saveDepartmentModules(payload);
       });
@@ -221,13 +315,11 @@ const DepartmentWiseModules = () => {
       const allSuccess = responses.every(res => res.success);
 
       if (allSuccess) {
-        toast.success('Module assigned successfully');
-        // Reset form slightly
-        setSelectedModuleData('');
-        // Refresh stats completely to recount
+        toast.success(`Successfully assigned ${newMappings.length} module(s).${skippedCount > 0 ? ` Skipped ${skippedCount} existing.` : ''}`);
+        setSelectedModuleData([]);
         loadInitialData();
       } else {
-        toast.error(response.message || 'Failed to assign module');
+        toast.error(responses[0]?.message || 'Failed to assign modules');
       }
     } catch (error) {
       console.error(error);
@@ -312,46 +404,83 @@ const DepartmentWiseModules = () => {
                 </select>
               </div>
 
-              {/* Select Panel (Category) - NEW */}
+              {/* Select Panel */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Panel</label>
                 <select
                   value={selectedPanel}
                   onChange={(e) => {
                     setSelectedPanel(e.target.value);
-                    setSelectedModuleData(''); // Reset module when panel changes
+                    setSelectedModuleData([]);
                   }}
                   className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
                 >
                   <option value="">-- Select Panel --</option>
-                  {SIDEBAR_MODULES.map((group) => (
-                    <option key={group.category} value={group.category}>
-                      {group.category}
+                  {panelsList.map((panel) => (
+                    <option key={panel._id} value={panel._id}>
+                      {panel.name}
                     </option>
                   ))}
                 </select>
               </div>
 
-              {/* Select Modules */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">Select Module</label>
-                <select
-                  value={selectedModuleData}
-                  onChange={(e) => setSelectedModuleData(e.target.value)}
-                  disabled={!selectedPanel}
-                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500 disabled:bg-gray-100"
+              {/* Select Modules Custom Dropdown */}
+              <div className="relative">
+                <label className="block text-sm font-medium text-gray-700 mb-2">Select Modules</label>
+                <div 
+                  className={`w-full border border-gray-300 rounded px-3 py-2 text-sm text-gray-800 bg-white flex justify-between items-center ${!selectedPanel ? 'bg-gray-100 cursor-not-allowed text-gray-400' : 'cursor-pointer focus:ring-1 focus:ring-blue-500'}`}
+                  onClick={() => selectedPanel && setIsModuleDropdownOpen(!isModuleDropdownOpen)}
                 >
-                  <option value="">{selectedPanel ? '-- Choose Module --' : 'First Select Panel'}</option>
-                  {selectedPanel && SIDEBAR_MODULES.find(g => g.category === selectedPanel)?.modules.map((mod) => (
-                    <option
-                      key={mod.key}
-                      value={`${selectedPanel}|${mod.name}|${mod.key}`}
-                      className="font-normal text-gray-800"
-                    >
-                      {mod.name}
-                    </option>
-                  ))}
-                </select>
+                  <span className="truncate">
+                    {!selectedPanel 
+                      ? 'First Select Panel' 
+                      : selectedModuleData.length === 0 
+                        ? '-- Choose Modules --' 
+                        : `${selectedModuleData.length} module(s) selected`}
+                  </span>
+                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7"></path></svg>
+                </div>
+
+                {isModuleDropdownOpen && selectedPanel && (
+                  <>
+                    <div 
+                      className="fixed inset-0 z-10" 
+                      onClick={() => setIsModuleDropdownOpen(false)}
+                    ></div>
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded shadow-lg max-h-60 overflow-y-auto">
+                      {getHierarchicalModulesForPanel(selectedPanel).map((mod) => {
+                        const pObj = panelsList.find(p => p._id === selectedPanel);
+                        const categoryName = pObj ? pObj.name : 'Unknown';
+                        const modValue = `${categoryName}|${mod.name}|${mod.key}`;
+                        const isSelected = selectedModuleData.includes(modValue);
+                        const indent = '\u00A0\u00A0'.repeat(mod.depth * 2) + (mod.depth > 0 ? '└─ ' : '');
+
+                        return (
+                          <div
+                            key={mod.key}
+                            className="px-3 py-2 hover:bg-gray-100 cursor-pointer flex items-center text-sm"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isSelected) {
+                                setSelectedModuleData(selectedModuleData.filter(v => v !== modValue));
+                              } else {
+                                setSelectedModuleData([...selectedModuleData, modValue]);
+                              }
+                            }}
+                          >
+                            <input 
+                              type="checkbox"
+                              checked={isSelected}
+                              readOnly
+                              className="mr-2 cursor-pointer rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                            />
+                            <span className="font-normal text-gray-800 whitespace-pre">{indent}{mod.name}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
               </div>
 
               {/* Select Department */}

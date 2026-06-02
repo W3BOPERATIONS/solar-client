@@ -355,3 +355,29 @@ export const ACCOUNT_MANAGER_NAVIGATION = [
     ]
   }
 ];
+
+export const DELIVERY_NAVIGATION = [
+  { id: 'delDashboard', name: 'Dashboard', icon: 'Home', href: '/delivery-manager/dashboard' },
+  { id: 'delDeliveryManagement', name: 'Delivery Management', icon: 'Truck', href: '/delivery-manager/delivery-management' },
+  { 
+    id: 'delReplacementOrder', 
+    name: 'Replacement Order', 
+    icon: 'RefreshCw',
+    isGroup: true,
+    children: [
+      { id: 'delReturnProducts', name: 'Return Products', href: '/delivery-manager/replacement-order/return-products' },
+      { id: 'delReplaceProducts', name: 'Replace Products', href: '/delivery-manager/replacement-order/replace-products' },
+      { name: 'Service Ticket', href: '/delivery-manager/replacement-order/service-ticket' }
+    ]
+  },
+  { id: 'delReport', name: 'Report', icon: 'ClipboardList', href: '/delivery-manager/report' },
+  { 
+    id: 'delMyTask', 
+    name: 'My Task', 
+    icon: 'Server',
+    children: [
+      { name: 'InWard', href: '/delivery-manager/my-task/inward-management' },
+      { id: 'delAtWarehouse', name: 'At Warehouse', href: '/delivery-manager/my-task/at-warehouse' },
+    ]
+  }
+];

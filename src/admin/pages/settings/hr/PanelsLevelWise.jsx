@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Layers,
   Plus,
@@ -24,7 +24,7 @@ import {
 import { toast } from 'react-hot-toast';
 import * as rbacApi from '../../../../services/settings/rbacApi';
 import { locationAPI } from '../../../../api/api';
-import { SIDEBAR_NAVIGATION, ACCOUNT_MANAGER_NAVIGATION } from '../../../constants/navigation';
+import { SIDEBAR_NAVIGATION, ACCOUNT_MANAGER_NAVIGATION, DELIVERY_NAVIGATION } from '../../../constants/navigation';
 import AddNewCompanyUserModal from './AddNewCompanyUserModal';
 
 const AVAILABLE_ICONS = [
@@ -96,7 +96,9 @@ const parseSidebarModules = (navigationList) => {
           }
         } else {
           let childKey = '';
-          if (child.href) {
+          if (child.id) {
+            childKey = toSnakeCase(child.id);
+          } else if (child.href) {
             const parts = child.href.split('/');
             childKey = parts[parts.length - 1].toLowerCase().replace(/-/g, '_');
           } else {
@@ -347,6 +349,20 @@ const getStaticModulesForPanelName = (pName) => {
 };
 
 
+const getRoutePrefixForPanel = (panelId, panels) => {
+  if (!panelId || !panels) return '/';
+  const panel = panels.find(p => p._id === panelId);
+  if (!panel) return '/';
+  const pName = panel.name.toLowerCase();
+  if (pName.includes('account')) return '/account-manager/';
+  if (pName.includes('delivery')) return '/delivery-manager/';
+  if (pName.includes('partner manager') || pName.includes('franchisee manager')) return '/partner-manager/';
+  if (pName.includes('partner') || pName.includes('franchisee')) return '/partner/';
+  if (pName.includes('admin')) return '/admin/';
+  return `/${pName.replace(/\s+/g, '-')}/`;
+};
+
+
 export default function PanelsLevelWise() {
   // Navigation & Tabs state
   const [activeTab, setActiveTab] = useState('panels'); // matrix | panels | modules | users | logs
@@ -503,10 +519,10 @@ export default function PanelsLevelWise() {
     try {
       setLoading(true);
 
-      // Auto-sync modules from the SIDEBAR_NAVIGATION and ACCOUNT_MANAGER_NAVIGATION structures!
-      const combinedNavigation = [...SIDEBAR_NAVIGATION, ...ACCOUNT_MANAGER_NAVIGATION];
+      // Auto-sync modules from the static structures in the background (fire and forget)
+      const combinedNavigation = [...SIDEBAR_NAVIGATION, ...ACCOUNT_MANAGER_NAVIGATION, ...DELIVERY_NAVIGATION];
       const parsedModules = parseSidebarModules(combinedNavigation);
-      await rbacApi.syncModules(parsedModules);
+      rbacApi.syncModules(parsedModules).catch(err => console.error("Sync failed:", err));
 
       const [matrixRes, usersRes, logsRes] = await Promise.all([
         rbacApi.getPermissionMatrix(),
@@ -942,7 +958,77 @@ export default function PanelsLevelWise() {
   );
 
   // Grouped modules for tree matrices
-  const groupedModules = getGroupedModules();
+  const groupedModules = useMemo(() => getGroupedModules(), [modules]);
+
+  const getPanelFilteredModules = () => {
+    if (!userAssignForm.panelId) return [];
+
+    const relevantModuleIds = new Set();
+    const selectedPanelId = userAssignForm.panelId;
+
+    // Filter based on panel name to restrict modules to their rightful panels
+    const selectedPanel = panels.find(p => p._id === selectedPanelId);
+    const pName = selectedPanel ? selectedPanel.name.toLowerCase() : '';
+
+    // Check matrix state and apply name heuristics
+    modules.forEach(mod => {
+      const perm = matrixState[`${selectedPanelId}_${mod._id}`];
+      let hasMatrixPermission = perm && (perm.can_view || perm.can_add || perm.can_edit || perm.can_delete);
+
+      let matchesPanel = true;
+      const modName = mod.name.toLowerCase();
+      const modKey = mod.key.toLowerCase();
+
+      // Heuristic to enforce strict panel boundaries
+      if (pName.includes('account')) {
+        hasMatrixPermission = modName.includes('account') || modKey.includes('account') || modKey.includes('am_');
+      } else if (pName.includes('delivery')) {
+        const deliveryModules = ['dashboard', 'my task', 'inward', 'at warehouse', 'delivery management', 'replacement order', 'return products', 'replace products', 'service ticket', 'report'];
+        hasMatrixPermission = deliveryModules.includes(modName) || modKey.includes('del_');
+        matchesPanel = hasMatrixPermission; // strictly enforce
+      } else if (pName.includes('partner manager') || pName.includes('franchisee manager')) {
+        const pmModules = ['dashboard', 'leads', 'lead management', 'my task', 'app demo', 'franchisee onboarding', 'project management', 'franchisee performance', 'franchisee onboarding goals', 'franchisee setting', 'dealer management', 'raise ticket', 'find resources', 'report'];
+        hasMatrixPermission = pmModules.includes(modName) || modKey.includes('pm_');
+        matchesPanel = hasMatrixPermission; // strictly enforce
+      } else if (pName.includes('partner') || pName.includes('franchisee')) {
+        const ptModules = ['dashboard', 'project signup', 'project management', 'survey bom', 'district manager', 'dealer manager', 'lead partner', 'my team', 'account', 'solarkits', 'settings'];
+        hasMatrixPermission = ptModules.includes(modName) || modKey.includes('pt_');
+        matchesPanel = hasMatrixPermission; // strictly enforce
+      } else if (pName.includes('admin')) {
+        // Admin shouldn't see explicit Account, Delivery, Partner, Dealer modules directly under its panel settings unless it's their own
+        matchesPanel = !modName.includes('account ') && !modKey.includes('am_');
+      }
+
+      if (hasMatrixPermission && matchesPanel) {
+        relevantModuleIds.add(mod._id);
+        if (mod.parentModule) {
+          const pId = typeof mod.parentModule === 'object' ? mod.parentModule._id : mod.parentModule;
+          relevantModuleIds.add(pId);
+        }
+      }
+    });
+
+    // For Admin and Account, automatically include submodules if parent is present.
+    // For Delivery, Partner Manager, etc., we want STRICT inclusion so unrelated submodules (like Captable under Report) don't bleed in.
+    if (pName.includes('admin') || pName.includes('account')) {
+      modules.forEach(mod => {
+        if (mod.parentModule) {
+          const pId = typeof mod.parentModule === 'object' ? mod.parentModule._id : mod.parentModule;
+          if (relevantModuleIds.has(pId)) {
+            // For admin, don't auto-include account submodules
+            const modName = mod.name.toLowerCase();
+            const modKey = mod.key.toLowerCase();
+            if (pName.includes('admin') && (modName.includes('account ') || modKey.includes('am_'))) {
+              return;
+            }
+            relevantModuleIds.add(mod._id);
+          }
+        }
+      });
+    }
+
+    return groupedModules.filter(mod => relevantModuleIds.has(mod._id));
+  };
 
   return (
     <div className="p-6 bg-slate-50 min-h-screen text-slate-800">
@@ -1208,224 +1294,9 @@ export default function PanelsLevelWise() {
                 ) : (
                   <div className="space-y-3">
                     {panels.map((panel) => {
-                      let displayModules = [];
-                      const pName = panel.name.toLowerCase();
+                      let displayModules = getStaticModulesForPanelName(panel.name);
                       
-                      if (pName.includes('account')) {
-                        displayModules = [
-                          { _id: 'am_1', name: 'Dashboard' },
-                          { _id: 'am_2', name: 'My Task' },
-                          { _id: 'am_3', name: 'Order Journey', parentModule: 'am_2' },
-                          { _id: 'am_4', name: 'Replacement Order', parentModule: 'am_2' },
-                          { _id: 'am_5', name: 'Warehouse Vendor Pay', parentModule: 'am_2' },
-                          { _id: 'am_6', name: 'Vendor Contract Pay', parentModule: 'am_2' },
-                          { _id: 'am_7', name: 'Track CP Payments', parentModule: 'am_2' },
-                          { _id: 'am_8', name: 'Service', parentModule: 'am_2' },
-                          { _id: 'am_9', name: 'Solar Panel Bundle Plan' },
-                          { _id: 'am_10', name: 'Procurement Plan' },
-                          { _id: 'am_11', name: 'Report' },
-                        ];
-                      } else if (pName.includes('delivery')) {
-                        displayModules = [
-                          { _id: 'del_1', name: 'Dashboard' },
-                          { _id: 'del_2', name: 'My Task' },
-                          { _id: 'del_3', name: 'InWard', parentModule: 'del_2' },
-                          { _id: 'del_4', name: 'At Warehouse', parentModule: 'del_2' },
-                          { _id: 'del_5', name: 'Delivery Management' },
-                          { _id: 'del_6', name: 'Replacement Order' },
-                          { _id: 'del_7', name: 'Return Products', parentModule: 'del_6' },
-                          { _id: 'del_8', name: 'Replace Products', parentModule: 'del_6' },
-                          { _id: 'del_9', name: 'Service Ticket', parentModule: 'del_6' },
-                          { _id: 'del_10', name: 'Report' },
-                        ];
-                      } else if (pName.includes('partner manager') || pName.includes('franchisee manager')) {
-                        displayModules = [
-                          { _id: 'pm_1', name: 'Dashboard' },
-                          { _id: 'pm_2', name: 'Leads' },
-                          { _id: 'pm_3', name: 'Lead Management' },
-                          { _id: 'pm_4', name: 'My Task' },
-                          { _id: 'pm_4_1', name: 'App Demo', parentModule: 'pm_4' },
-                          { _id: 'pm_4_2', name: 'Franchisee Onboarding', parentModule: 'pm_4' },
-                          { _id: 'pm_4_3', name: 'Project Management', parentModule: 'pm_4' },
-                          { _id: 'pm_4_4', name: 'Franchisee Performance', parentModule: 'pm_4' },
-                          { _id: 'pm_5', name: 'Franchisee Onboarding Goals' },
-                          { _id: 'pm_6', name: 'Franchisee Setting' },
-                          { _id: 'pm_7', name: 'Dealer Management' },
-                          { _id: 'pm_8', name: 'Raise Ticket' },
-                          { _id: 'pm_9', name: 'Find Resources' },
-                          { _id: 'pm_10', name: 'Report' },
-                        ];
-                      } else if (pName.includes('partner') || pName.includes('franchisee')) {
-                        displayModules = [
-                          { _id: 'pt_1', name: 'Dashboard' },
-                          { _id: 'pt_2', name: 'Project Signup' },
-                          { _id: 'pt_3', name: 'Project Management' },
-                          { _id: 'pt_4', name: 'Survey Bom' },
-                          { _id: 'pt_5', name: 'District Manager' },
-                          { _id: 'pt_6', name: 'Dealer Manager' },
-                          { _id: 'pt_7', name: 'Lead Partner' },
-                          { _id: 'pt_8', name: 'My Team' },
-                          { _id: 'pt_9', name: 'Account' },
-                          { _id: 'pt_10', name: 'Solarkits' },
-                          { _id: 'pt_11', name: 'Settings' },
-                        ];
-                      } else if (pName.includes('admin')) {
-                        displayModules = [
-                          { _id: 'ad_1', name: 'Dashboard' },
-                          { _id: 'ad_1_1', name: 'User Performance', parentModule: 'ad_1' },
-                          { _id: 'ad_1_1_1', name: 'Partner Manager Dashboard', parentModule: 'ad_1_1' },
-                          { _id: 'ad_1_1_2', name: 'Partner Dashboard', parentModule: 'ad_1_1' },
-                          { _id: 'ad_1_2', name: 'Orders', parentModule: 'ad_1' },
-                          { _id: 'ad_1_3', name: 'Orders by Loan', parentModule: 'ad_1' },
-                          { _id: 'ad_1_4', name: 'Installer', parentModule: 'ad_1' },
-                          { _id: 'ad_1_5', name: 'Delivery', parentModule: 'ad_1' },
-                          { _id: 'ad_1_6', name: 'Inventory', parentModule: 'ad_1' },
-                          { _id: 'ad_1_7', name: 'Vendors', parentModule: 'ad_1' },
-                          { _id: 'ad_1_8', name: 'Project Report', parentModule: 'ad_1' },
-                          
-                          { _id: 'ad_2', name: 'Departments' },
-                          { _id: 'ad_2_1', name: 'Organization chart', parentModule: 'ad_2' },
-                          
-                          { _id: 'ad_3', name: 'Approvals' },
-                          
-                          { _id: 'ad_4', name: 'Project Management' },
-                          { _id: 'ad_4_1', name: 'Company', parentModule: 'ad_4' },
-                          { _id: 'ad_4_1_1', name: 'Management', parentModule: 'ad_4_1' },
-                          { _id: 'ad_4_1_2', name: 'Install', parentModule: 'ad_4_1' },
-                          { _id: 'ad_4_1_3', name: 'Service', parentModule: 'ad_4_1' },
-                          { _id: 'ad_4_1_4', name: 'Track Service', parentModule: 'ad_4_1' },
-                          { _id: 'ad_4_2', name: 'Partners', parentModule: 'ad_4' },
-                          { _id: 'ad_4_2_1', name: 'Management', parentModule: 'ad_4_2' },
-                          { _id: 'ad_4_2_2', name: 'Install', parentModule: 'ad_4_2' },
-                          { _id: 'ad_4_2_3', name: 'Service', parentModule: 'ad_4_2' },
-                          { _id: 'ad_4_2_4', name: 'Track Service', parentModule: 'ad_4_2' },
-                          { _id: 'ad_4_3', name: 'Installer Agency', parentModule: 'ad_4' },
-                          { _id: 'ad_4_3_1', name: 'Management', parentModule: 'ad_4_3' },
-                          { _id: 'ad_4_3_2', name: 'Install', parentModule: 'ad_4_3' },
-                          { _id: 'ad_4_3_3', name: 'Service', parentModule: 'ad_4_3' },
-                          { _id: 'ad_4_3_4', name: 'Track Service', parentModule: 'ad_4_3' },
-
-                          { _id: 'ad_5', name: 'Operations' },
-                          { _id: 'ad_5_1', name: 'Our Warehouse', parentModule: 'ad_5' },
-                          { _id: 'ad_5_2', name: 'Add Inventory Request', parentModule: 'ad_5' },
-                          { _id: 'ad_5_3', name: 'Inventory Management', parentModule: 'ad_5' },
-                          { _id: 'ad_5_4', name: 'Brand Manufacturer', parentModule: 'ad_5' },
-                          { _id: 'ad_5_4_1', name: 'Add Brand Manufacturer', parentModule: 'ad_5_4' },
-                          { _id: 'ad_5_4_2', name: 'Brand Supplier Overview', parentModule: 'ad_5_4' },
-
-                          { _id: 'ad_6', name: 'Settings' },
-                          { _id: 'ad_6_1', name: 'Location Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_1_1', name: 'Setup Locations', parentModule: 'ad_6_1' },
-                          
-                          { _id: 'ad_6_2', name: 'HR Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_2_1', name: 'Role Settings', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_2', name: 'Create Department', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_3', name: 'Department-wise Modules', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_4', name: 'Panels - select level wise panels', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_5', name: 'Temporary Incharge Setting', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_6', name: 'Leave Approvals', parentModule: 'ad_6_2' },
-                          { _id: 'ad_6_2_7', name: 'Resign Approvals', parentModule: 'ad_6_2' },
-                          
-                          { _id: 'ad_6_3', name: 'Vendor Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_3_1', name: 'Installer Vendors', parentModule: 'ad_6_3' },
-                          { _id: 'ad_6_3_2', name: 'Supplier Type', parentModule: 'ad_6_3' },
-                          { _id: 'ad_6_3_3', name: 'Supplier Vendors', parentModule: 'ad_6_3' },
-                          
-                          { _id: 'ad_6_4', name: 'Sales Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_4_1', name: 'Set Price', parentModule: 'ad_6_4' },
-                          { _id: 'ad_6_4_2', name: 'Set Price For AMC', parentModule: 'ad_6_4' },
-                          { _id: 'ad_6_4_3', name: 'Offers', parentModule: 'ad_6_4' },
-                          { _id: 'ad_6_4_4', name: 'Solar Panel Bundle Setting', parentModule: 'ad_6_4' },
-                          
-                          { _id: 'ad_6_5', name: 'Marketing Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_5_1', name: 'Campaign Management', parentModule: 'ad_6_5' },
-                          
-                          { _id: 'ad_6_6', name: 'Settings Operations', parentModule: 'ad_6' },
-                          { _id: 'ad_6_6_1', name: 'Delivery Settings', parentModule: 'ad_6_6' },
-                          { _id: 'ad_6_6_1_1', name: 'Delivery Type', parentModule: 'ad_6_6_1' },
-                          { _id: 'ad_6_6_1_2', name: 'Vehicle Selection', parentModule: 'ad_6_6_1' },
-                          { _id: 'ad_6_6_1_3', name: 'Vendor Delivery Plan', parentModule: 'ad_6_6_1' },
-                          { _id: 'ad_6_6_2', name: 'Inventory Management', parentModule: 'ad_6_6' },
-                          { _id: 'ad_6_6_2_1', name: 'Inventory Overview', parentModule: 'ad_6_6_2' },
-                          { _id: 'ad_6_6_2_2', name: 'Restock Order Limit', parentModule: 'ad_6_6_2' },
-                          { _id: 'ad_6_6_2_3', name: 'Combokit Brand Overview', parentModule: 'ad_6_6_2' },
-                          { _id: 'ad_6_6_3', name: 'Order Procurement', parentModule: 'ad_6_6' },
-                          { _id: 'ad_6_6_3_1', name: 'Order Procurement', parentModule: 'ad_6_6_3' },
-                          
-                          { _id: 'ad_6_7', name: 'Installer Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_7_1', name: 'Solar Installer', parentModule: 'ad_6_7' },
-                          { _id: 'ad_6_7_2', name: 'Installer Tool Requirements', parentModule: 'ad_6_7' },
-                          { _id: 'ad_6_7_3', name: 'Rating Setting', parentModule: 'ad_6_7' },
-                          { _id: 'ad_6_7_4', name: 'Installer Agency Plans', parentModule: 'ad_6_7' },
-                          
-                          { _id: 'ad_6_8', name: 'Product Configuration', parentModule: 'ad_6' },
-                          { _id: 'ad_6_8_1', name: 'Add Project Type', parentModule: 'ad_6_8' },
-                          { _id: 'ad_6_8_2', name: 'Add Project Category', parentModule: 'ad_6_8' },
-                          { _id: 'ad_6_8_3', name: 'Add Product', parentModule: 'ad_6_8' },
-                          { _id: 'ad_6_8_4', name: 'SKU', parentModule: 'ad_6_8' },
-                          { _id: 'ad_6_8_5', name: 'Price Master', parentModule: 'ad_6_8' },
-                          { _id: 'ad_6_8_6', name: 'Add Unit Management', parentModule: 'ad_6_8' },
-                          
-                          { _id: 'ad_6_9', name: 'ComboKit', parentModule: 'ad_6' },
-                          { _id: 'ad_6_9_1', name: 'Create Solarkit', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_2', name: 'Create AMC Plans', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_3', name: 'AMC Services', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_4', name: 'Solarkit Bundle Plans', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_5', name: 'Add ComboKit', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_6', name: 'Customize Combokit', parentModule: 'ad_6_9' },
-                          { _id: 'ad_6_9_7', name: 'Combokit Overview', parentModule: 'ad_6_9' },
-                          
-                          { _id: 'ad_6_10', name: 'Partner Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_10_1', name: 'Partner Plans', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_2', name: 'Partner Points & Reward Setting', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_3', name: 'Partner Onboarding Goals', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_4', name: 'Partner Profession Type', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_5', name: 'Add Partner', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_6', name: 'Partner Manager Setting', parentModule: 'ad_6_10' },
-                          { _id: 'ad_6_10_7', name: 'Partner Buy Lead Setting', parentModule: 'ad_6_10' },
-                          
-                          { _id: 'ad_6_11', name: 'HRMS Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_11_1', name: 'HRMS Settings', parentModule: 'ad_6_11' },
-                          { _id: 'ad_6_11_2', name: 'Vacancy Module', parentModule: 'ad_6_11' },
-                          { _id: 'ad_6_11_3', name: 'Candidates List', parentModule: 'ad_6_11' },
-                          { _id: 'ad_6_11_4', name: 'Candidate Test Setting', parentModule: 'ad_6_11' },
-                          { _id: 'ad_6_11_5', name: 'Candidate Training Setting', parentModule: 'ad_6_11' },
-                          
-                          { _id: 'ad_6_12', name: 'Project Management Settings', parentModule: 'ad_6' },
-                          { _id: 'ad_6_12_1', name: 'Project Journey Stage Setting', parentModule: 'ad_6_12' },
-                          { _id: 'ad_6_12_2', name: 'Project Management Overdue Setting', parentModule: 'ad_6_12' },
-                          { _id: 'ad_6_12_3', name: 'Project Management Configuration', parentModule: 'ad_6_12' },
-                          { _id: 'ad_6_12_4', name: 'Project Documentation Setting', parentModule: 'ad_6_12' },
-                          { _id: 'ad_6_12_5', name: 'Placeholder Name Setting', parentModule: 'ad_6_12' },
-                          
-                          { _id: 'ad_6_13', name: 'Quote', parentModule: 'ad_6' },
-                          { _id: 'ad_6_13_1', name: 'Quote Setting', parentModule: 'ad_6_13' },
-                          { _id: 'ad_6_13_2', name: 'Survey BOM Setting', parentModule: 'ad_6_13' },
-                          { _id: 'ad_6_13_3', name: 'Terrace Setting', parentModule: 'ad_6_13' },
-                          { _id: 'ad_6_13_4', name: 'Structure Setting', parentModule: 'ad_6_13' },
-                          { _id: 'ad_6_13_5', name: 'Building Setting', parentModule: 'ad_6_13' },
-                          { _id: 'ad_6_13_6', name: 'Discom Master', parentModule: 'ad_6_13' },
-                          
-                          { _id: 'ad_6_14', name: 'Overdue Setting', parentModule: 'ad_6' },
-                          { _id: 'ad_6_14_1', name: 'Approval Overdue Setting', parentModule: 'ad_6_14' },
-                          { _id: 'ad_6_14_2', name: 'Overdue Task Setting', parentModule: 'ad_6_14' },
-                          { _id: 'ad_6_14_3', name: 'Overdue Status Setting', parentModule: 'ad_6_14' },
-                          
-                          { _id: 'ad_6_15', name: 'Loan Setting', parentModule: 'ad_6' },
-                          { _id: 'ad_6_16', name: 'Checklist Setting', parentModule: 'ad_6' },
-
-                          { _id: 'ad_7', name: 'Report' },
-                          { _id: 'ad_7_1', name: 'Financial & P&L', parentModule: 'ad_7' },
-                          { _id: 'ad_7_2', name: 'Cashflow', parentModule: 'ad_7' },
-                          { _id: 'ad_7_3', name: 'Inventory', parentModule: 'ad_7' },
-                          { _id: 'ad_7_4', name: 'Loans', parentModule: 'ad_7' },
-                          { _id: 'ad_7_5', name: 'Captable', parentModule: 'ad_7' },
-                          { _id: 'ad_7_6', name: 'Revenue By CP Types', parentModule: 'ad_7' },
-                          { _id: 'ad_7_7', name: 'Cluster', parentModule: 'ad_7' },
-                          { _id: 'ad_7_8', name: 'District', parentModule: 'ad_7' },
-                          { _id: 'ad_7_9', name: 'City', parentModule: 'ad_7' },
-                        ];
-                      } else {
+                      if (displayModules.length === 0) {
                         displayModules = modules.filter(mod => {
                           const perm = matrixState[`${panel._id}_${mod._id}`];
                           return perm && (perm.can_view || perm.can_add || perm.can_edit || perm.can_delete);
@@ -2716,7 +2587,12 @@ export default function PanelsLevelWise() {
                 <select
                   className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:outline-none focus:border-blue-500 text-slate-700 text-sm font-semibold"
                   value={userAssignForm.panelId}
-                  onChange={(e) => setUserAssignForm({ ...userAssignForm, panelId: e.target.value })}
+                  onChange={(e) => {
+                    const newPanelId = e.target.value;
+                    if (newPanelId !== userAssignForm.panelId) {
+                      setUserAssignForm({ ...userAssignForm, panelId: newPanelId, customPermissions: [] });
+                    }
+                  }}
                   required
                 >
                   <option value="">-- Choose Workspace Panel --</option>
@@ -2761,47 +2637,61 @@ export default function PanelsLevelWise() {
                       </tr>
                     </thead>
                     <tbody>
-                      {groupedModules.map((mod) => {
-                        const override = userAssignForm.customPermissions.find(
-                          (cp) => cp.moduleId === mod._id || cp.moduleId?._id === mod._id
-                        );
+                      {!userAssignForm.panelId ? (
+                        <tr>
+                          <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">
+                            Please select a Workspace Panel to view its modules.
+                          </td>
+                        </tr>
+                      ) : getPanelFilteredModules().length === 0 ? (
+                        <tr>
+                          <td colSpan="5" className="py-8 text-center text-slate-500 text-sm">
+                            No modules assigned to this panel. Configure the Panel Matrix first.
+                          </td>
+                        </tr>
+                      ) : (
+                        getPanelFilteredModules().map((mod) => {
+                          const override = userAssignForm.customPermissions.find(
+                            (cp) => cp.moduleId === mod._id || cp.moduleId?._id === mod._id
+                          );
 
-                        return (
-                          <tr
-                            key={mod._id}
-                            className={`border-b border-slate-150 hover:bg-slate-50/70 transition ${
-                              mod.isSubmodule ? 'bg-slate-50/40 font-normal' : 'bg-slate-100/50 font-bold'
-                            }`}
-                          >
-                            <td className="py-3 px-4 text-slate-800 text-xs">
-                              {mod.isSubmodule && <span className="text-slate-400 mr-1.5">↳</span>}
-                              {mod.name}
-                            </td>
-                            {['view', 'add', 'edit', 'delete'].map((act) => {
-                              const actField = `can_${act}`;
-                              const val = override ? override[actField] : undefined;
+                          return (
+                            <tr
+                              key={mod._id}
+                              className={`border-b border-slate-150 hover:bg-slate-50/70 transition ${
+                                mod.isSubmodule ? 'bg-slate-50/40 font-normal' : 'bg-slate-100/50 font-bold'
+                              }`}
+                            >
+                              <td className="py-3 px-4 text-slate-800 text-xs">
+                                {mod.isSubmodule && <span className="text-slate-400 mr-1.5">↳</span>}
+                                {mod.name}
+                              </td>
+                              {['view', 'add', 'edit', 'delete'].map((act) => {
+                                const actField = `can_${act}`;
+                                const val = override ? override[actField] : undefined;
 
-                              return (
-                                <td key={act} className="py-2 px-1 text-center">
-                                  <button
-                                    type="button"
-                                    onClick={() => handleToggleUserOverride(mod._id, actField, val)}
-                                    className={`w-8 h-8 rounded-lg flex items-center justify-center border font-extrabold text-xs transition-all ${
-                                      val === true
-                                        ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
-                                        : val === false
-                                        ? 'bg-rose-600 border-rose-600 text-white shadow-sm'
-                                        : 'bg-white border-slate-200 text-slate-400 hover:border-slate-350'
-                                    }`}
-                                  >
-                                    {val === true ? '✓' : val === false ? '✗' : '-'}
-                                  </button>
-                                </td>
-                              );
-                            })}
-                          </tr>
-                        );
-                      })}
+                                return (
+                                  <td key={act} className="py-2 px-1 text-center">
+                                    <button
+                                      type="button"
+                                      onClick={() => handleToggleUserOverride(mod._id, actField, val)}
+                                      className={`w-8 h-8 rounded-lg flex items-center justify-center border font-extrabold text-xs transition-all ${
+                                        val === true
+                                          ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm'
+                                          : val === false
+                                          ? 'bg-rose-600 border-rose-600 text-white shadow-sm'
+                                          : 'bg-white border-slate-200 text-slate-400 hover:border-slate-350'
+                                      }`}
+                                    >
+                                      {val === true ? '✓' : val === false ? '✗' : '-'}
+                                    </button>
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })
+                      )}
                     </tbody>
                   </table>
                 </div>
