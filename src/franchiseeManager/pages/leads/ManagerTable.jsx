@@ -15,18 +15,19 @@ import {
 
 const FranchiseeManagerTable = () => {
     const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+    const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [selectedDateRange, setSelectedDateRange] = useState('today');
     const [selectedDistrict, setSelectedDistrict] = useState('');
     const [customDate, setCustomDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Sample leads data
+    // Sample leads data updated with requested columns
     const leads = [
-        { id: 1, srNo: 1, status: 'New', leadId: 'ss/24-25/004', name: 'Sushil', mobile: '6535846505', designation: 'Electrician' },
-        { id: 2, srNo: 2, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', designation: 'Civil Contractor' },
-        { id: 3, srNo: 3, status: 'New', leadId: 'ss/24-25/004', name: 'Sharad', mobile: '6535846505', designation: 'Electrician' },
-        { id: 4, srNo: 4, status: 'New', leadId: 'ss/24-25/004', name: 'Varis', mobile: '6535846505', designation: 'Civil Contractor' },
-        { id: 5, srNo: 5, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', designation: 'Electrician' },
+        { id: 1, srNo: 1, status: 'New', leadId: 'ss/24-25/004', name: 'Sushil', mobile: '6535846505', email: 'sushil@example.com', state: 'Gujarat', district: 'Rajkot', profession: 'Electrician', industryType: 'Construction' },
+        { id: 2, srNo: 2, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', email: 'darshit@example.com', state: 'Gujarat', district: 'Ahmedabad', profession: 'Civil Contractor', industryType: 'Real Estate' },
+        { id: 3, srNo: 3, status: 'New', leadId: 'ss/24-25/004', name: 'Sharad', mobile: '6535846505', email: 'sharad@example.com', state: 'Gujarat', district: 'Surat', profession: 'Electrician', industryType: 'Construction' },
+        { id: 4, srNo: 4, status: 'New', leadId: 'ss/24-25/004', name: 'Varis', mobile: '6535846505', email: 'varis@example.com', state: 'Gujarat', district: 'Vadodara', profession: 'Civil Contractor', industryType: 'Real Estate' },
+        { id: 5, srNo: 5, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', email: 'darshit2@example.com', state: 'Gujarat', district: 'Jamnagar', profession: 'Electrician', industryType: 'Construction' },
     ];
 
     const handleDateRangeChange = (e) => {
@@ -66,6 +67,7 @@ const FranchiseeManagerTable = () => {
                         <div className="flex flex-wrap items-center gap-2">
                             {/* Add Button */}
                             <button
+                                onClick={() => setIsAddModalOpen(true)}
                                 className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors flex items-center"
                             >
                                 <Plus size={16} className="mr-1" />
@@ -217,7 +219,19 @@ const FranchiseeManagerTable = () => {
                                     Mobile No.
                                 </th>
                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                    Designation
+                                    Email
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                    State
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                    District
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                    Profession
+                                </th>
+                                <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                    Industry Type
                                 </th>
                                 <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                     Confirm
@@ -254,7 +268,11 @@ const FranchiseeManagerTable = () => {
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.leadId}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{lead.name}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.mobile}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.designation}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.email}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.state}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.district}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.profession}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.industryType}</td>
                                     <td className="px-4 py-2 whitespace-nowrap">
                                         <button className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
                                             Confirm
@@ -285,6 +303,112 @@ const FranchiseeManagerTable = () => {
                     </div>
                 </div>
             </div>
+
+            {/* Add Lead Modal */}
+            {isAddModalOpen && (
+                <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg w-full max-w-4xl mx-4 max-h-[90vh] overflow-y-auto">
+                        <div className="p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h4 className="text-xl font-bold text-gray-800">Add Lead</h4>
+                                <button onClick={() => setIsAddModalOpen(false)} className="text-2xl hover:text-gray-600">
+                                    <X className="w-6 h-6" />
+                                </button>
+                            </div>
+
+                            <form>
+                                <div className="mb-4">
+                                    <h6 className="text-[#0f4e8d] font-semibold flex items-center">
+                                        <span className="mr-2">▶</span> Lead
+                                    </h6>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Channel Partner Lead No.</label>
+                                        <input type="text" className="w-full p-2 border rounded bg-gray-100" value="CP/24-25/013" disabled />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Registration Date:</label>
+                                        <input type="date" className="w-full p-2 border rounded" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Name</label>
+                                        <input type="text" name="name" className="w-full p-2 border rounded" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Phone No.</label>
+                                        <input type="text" name="mobile" className="w-full p-2 border rounded" />
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                                        <select name="state" className="w-full p-2 border rounded">
+                                            <option value="">Select State</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
+                                        <select name="cluster" className="w-full p-2 border rounded">
+                                            <option value="">Select Cluster</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
+                                        <select name="district" className="w-full p-2 border rounded">
+                                            <option value="">Select District</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                                        <select name="city" className="w-full p-2 border rounded">
+                                            <option value="">Select City</option>
+                                        </select>
+                                    </div>
+                                </div>
+
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Rural</label>
+                                        <input type="text" name="rural" className="w-full p-2 border rounded" />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Source Of Media</label>
+                                        <select name="sourceOfMedia" className="w-full p-2 border rounded">
+                                            <option value="">Select Source Of Media</option>
+                                            <option value="website">Website</option>
+                                            <option value="applead">Application Lead</option>
+                                            <option value="leadpartener">Lead Partner</option>
+                                            <option value="fb">Facebook</option>
+                                            <option value="whatsappmarketing">WhatsApp Marketing</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Profession</label>
+                                        <select name="profession" className="w-full p-2 border rounded">
+                                            <option value="">Select Profession</option>
+                                            <option value="solardealer">Solar Dealer</option>
+                                            <option value="electrician">Electrician</option>
+                                            <option value="elecshop">Electrician shop</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </form>
+
+                            <div className="flex justify-end gap-2 mt-6">
+                                <button onClick={() => setIsAddModalOpen(false)} className="px-4 py-2 bg-gray-200 rounded hover:bg-gray-300 transition-colors">
+                                    Close
+                                </button>
+                                <button onClick={() => { alert('Lead saved!'); setIsAddModalOpen(false); }} className="px-4 py-2 bg-[#0f4e8d] text-white rounded hover:bg-[#0d3e70] transition-colors">
+                                    Save changes
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

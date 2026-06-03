@@ -20,6 +20,7 @@ import {
     X
 } from 'lucide-react';
 import Chart from 'react-apexcharts';
+import FranchiseeManagerPerformanceList from '../myTask/FranchiseePerformance';
 
 const FranchiseeManagerDashboard = () => {
     const mapRef = useRef(null);
@@ -208,7 +209,7 @@ const FranchiseeManagerDashboard = () => {
                 <div className="flex items-center">
                     <h2 className="text-2xl font-bold text-white flex items-center">
                         <Home className="mr-2" size={28} />
-                        Franchisee Manager Dashboard
+                        Partner Manager Dashboard
                     </h2>
                 </div>
             </div>
@@ -616,6 +617,13 @@ const FranchiseeManagerDashboard = () => {
                         </div>
                     </div>
                 </div>
+            </div>
+
+            <hr className="my-6 border-gray-200" />
+
+            {/* Franchisee Performance Module Moved Here */}
+            <div className="mt-8">
+                <FranchiseeManagerPerformanceList />
             </div>
         </div>
     );

@@ -1,67 +1,86 @@
-import React from 'react';
-import { Link } from 'react-router-dom';
-import { Users, User, CheckCircle, ChevronRight } from 'lucide-react';
+import React, { useState } from 'react';
+import { Users, User, ChevronRight } from 'lucide-react';
+import CompanyLead from './CompanyLead';
+import ManagerTable from './ManagerTable';
 
 const FranchiseeManagerOnboardingLeads = () => {
+    const [activeTab, setActiveTab] = useState('my-leads');
+    const [selectedState, setSelectedState] = useState('');
+    const [selectedDistrict, setSelectedDistrict] = useState('');
+
     return (
         <div className="container mx-auto px-4 py-6">
             {/* Page Header with Breadcrumb */}
-            <div className="mb-6">
+            <div className="mb-6 flex justify-between items-center">
                 <div className="flex items-center text-sm text-gray-600">
-                    <Link
-                        to="/frenchiseManager/frenchiseManagerOnboarding_leads"
-                        className="text-blue-600 hover:text-blue-800 font-medium flex items-center"
-                    >
+                    <span className="text-blue-600 font-medium flex items-center">
                         Leads
-                    </Link>
+                    </span>
                     <ChevronRight size={16} className="mx-2 text-gray-400" />
                     <span className="text-gray-500">Onboarding</span>
                 </div>
+                
+                {/* Global Filters */}
+                <div className="flex space-x-4">
+                    <div>
+                        <select 
+                            className="w-48 p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value={selectedState}
+                            onChange={(e) => setSelectedState(e.target.value)}
+                        >
+                            <option value="">Select State</option>
+                            <option value="gujarat">Gujarat</option>
+                            <option value="maharashtra">Maharashtra</option>
+                        </select>
+                    </div>
+                    <div>
+                        <select 
+                            className="w-48 p-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-1 focus:ring-blue-500"
+                            value={selectedDistrict}
+                            onChange={(e) => setSelectedDistrict(e.target.value)}
+                        >
+                            <option value="">Select District</option>
+                            <option value="rajkot">Rajkot</option>
+                            <option value="ahmedabad">Ahmedabad</option>
+                            <option value="surat">Surat</option>
+                        </select>
+                    </div>
+                </div>
             </div>
 
-            {/* Navigation Cards */}
-            <div className="max-w-6xl mx-auto">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 justify-center">
+            {/* Navigation Cards as Tabs */}
+            <div className="max-w-4xl mx-auto mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 justify-center">
                     {/* Company Lead Card */}
-                    <Link
-                        to="/frenchiseManager/frenchiseManager_onboardingCompanylead"
-                        className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
+                    <button
+                        onClick={() => setActiveTab('company')}
+                        className={`transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg rounded-xl overflow-hidden focus:outline-none ${activeTab === 'company' ? 'ring-4 ring-blue-300 ring-opacity-50' : ''}`}
                     >
-                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-xl shadow-lg p-8 h-48 flex flex-col items-center justify-center group">
-                            <Users size={48} className="mb-4 group-hover:scale-110 transition-transform duration-300" />
-                            <span className="text-xl font-bold text-center">Company Lead</span>
+                        <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white shadow-lg p-6 h-40 flex flex-col items-center justify-center group relative">
+                            <Users size={40} className="mb-3 group-hover:scale-110 transition-transform duration-300" />
+                            <span className="text-lg font-bold text-center">Company Lead</span>
+                            <span className="mt-2 text-2xl font-black bg-white bg-opacity-20 px-4 py-1 rounded-full">15</span>
                         </div>
-                    </Link>
+                    </button>
 
                     {/* My Lead Card */}
-                    <Link
-                        to="/frenchiseManager/frenchiseManager_table"
-                        className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
+                    <button
+                        onClick={() => setActiveTab('my-leads')}
+                        className={`transform transition-all duration-300 hover:-translate-y-1 hover:shadow-lg rounded-xl overflow-hidden focus:outline-none ${activeTab === 'my-leads' ? 'ring-4 ring-green-300 ring-opacity-50' : ''}`}
                     >
-                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-xl shadow-lg p-8 h-48 flex flex-col items-center justify-center group">
-                            <User size={48} className="mb-4 group-hover:scale-110 transition-transform duration-300" />
-                            <span className="text-xl font-bold text-center">My Lead</span>
+                        <div className="bg-gradient-to-br from-green-500 to-green-600 text-white shadow-lg p-6 h-40 flex flex-col items-center justify-center group relative">
+                            <User size={40} className="mb-3 group-hover:scale-110 transition-transform duration-300" />
+                            <span className="text-lg font-bold text-center">My Lead</span>
+                            <span className="mt-2 text-2xl font-black bg-white bg-opacity-20 px-4 py-1 rounded-full">14</span>
                         </div>
-                    </Link>
-
-                    {/* Franchisee Qualified Card */}
-                    <Link
-                        to="/frenchiseManager/frenchiseManagerqualify_table"
-                        className="transform transition-all duration-300 hover:-translate-y-2 hover:shadow-xl"
-                    >
-                        <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-xl shadow-lg p-8 h-48 flex flex-col items-center justify-center group">
-                            <CheckCircle size={48} className="mb-4 group-hover:scale-110 transition-transform duration-300" />
-                            <span className="text-xl font-bold text-center">Franchisee Qualified</span>
-                        </div>
-                    </Link>
+                    </button>
                 </div>
+            </div>
 
-                {/* Optional: Description Section */}
-                <div className="mt-12 text-center text-gray-600">
-                    <p className="text-sm">
-                        Select a category to manage your leads and track franchisee onboarding progress
-                    </p>
-                </div>
+            {/* Render Selected Table Component */}
+            <div className="mt-4 border-t pt-6 border-gray-200">
+                {activeTab === 'company' && <CompanyLead />}
+                {activeTab === 'my-leads' && <ManagerTable />}
             </div>
         </div>
     );

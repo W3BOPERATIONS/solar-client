@@ -25,8 +25,12 @@ import {
     Package,
     Crown,
     Award,
-    Activity
+    Activity,
+    ChevronDown
 } from 'lucide-react';
+
+import api from '../../../api/axios.js';
+
 
 const FranchiseeManagerLeadManagement = () => {
     const [selectedDistrict, setSelectedDistrict] = useState(null);
@@ -40,6 +44,99 @@ const FranchiseeManagerLeadManagement = () => {
     const [showToast, setShowToast] = useState(false);
     const [toastMessage, setToastMessage] = useState('');
     const [loading, setLoading] = useState(false);
+
+    // ── Cascading filter state + data ──────────────────────────────────────
+    const [filterCountry, setFilterCountry]   = useState('');
+    const [filterState, setFilterState]       = useState('');
+    const [filterCluster, setFilterCluster]   = useState('');
+    const [filterDistrict, setFilterDistrict] = useState('');
+
+    // Dynamic lists from API
+    const [countryList, setCountryList]   = useState([]);
+    const [stateList, setStateList]       = useState([]);
+    const [clusterList, setClusterList]   = useState([]);
+    const [districtList, setDistrictList] = useState([]);
+
+    // Fetch active countries on mount
+    useEffect(() => {
+        api.get('/locations/countries', { silent: true })
+            .then(res => {
+                const data = res.data?.data || res.data || [];
+                setCountryList(Array.isArray(data) ? data : []);
+            })
+            .catch(() => setCountryList([]));
+    }, []);
+
+    // Fetch states when country changes
+    useEffect(() => {
+        if (!filterCountry) { setStateList([]); return; }
+        const country = countryList.find(c => c.name === filterCountry);
+        if (!country?._id) return;
+        api.get('/locations/states', { params: { country: country._id }, silent: true })
+            .then(res => {
+                const data = res.data?.data || res.data || [];
+                setStateList(Array.isArray(data) ? data : []);
+            })
+            .catch(() => setStateList([]));
+    }, [filterCountry, countryList]);
+
+    // Fetch districts when state changes  (Country → State → District → Cluster)
+    useEffect(() => {
+        if (!filterState) { setDistrictList([]); return; }
+        const state = stateList.find(s => s.name === filterState);
+        if (!state?._id) return;
+        api.get('/locations/districts', { params: { state: state._id }, silent: true })
+            .then(res => {
+                const data = res.data?.data || res.data || [];
+                setDistrictList(Array.isArray(data) ? data : []);
+            })
+            .catch(() => setDistrictList([]));
+    }, [filterState, stateList]);
+
+    // Fetch clusters when district changes
+    useEffect(() => {
+        if (!filterDistrict) { setClusterList([]); return; }
+        const district = districtList.find(d => d.name === filterDistrict);
+        if (!district?._id) return;
+        api.get('/locations/clusters', { params: { district: district._id }, silent: true })
+            .then(res => {
+                const data = res.data?.data || res.data || [];
+                setClusterList(Array.isArray(data) ? data : []);
+            })
+            .catch(() => setClusterList([]));
+    }, [filterDistrict, districtList]);
+
+    const handleFilterCountryChange = (val) => {
+        setFilterCountry(val);
+        setFilterState('');
+        setFilterDistrict('');
+        setFilterCluster('');
+        setStateList([]); setDistrictList([]); setClusterList([]);
+    };
+    const handleFilterStateChange = (val) => {
+        setFilterState(val);
+        setFilterDistrict('');
+        setFilterCluster('');
+        setDistrictList([]); setClusterList([]);
+    };
+    const handleFilterDistrictChange = (val) => {
+        setFilterDistrict(val);
+        setFilterCluster('');
+        setClusterList([]);
+        // Auto-select matching district in the main panel
+        const match = districts.find(d => d.name.toLowerCase() === val.toLowerCase());
+        if (match) handleSelectDistrict(match.id);
+    };
+    const handleFilterClusterChange = (val) => {
+        setFilterCluster(val);
+    };
+    const handleResetFilters = () => {
+        setFilterCountry('');
+        setFilterState('');
+        setFilterDistrict('');
+        setFilterCluster('');
+        setStateList([]); setDistrictList([]); setClusterList([]);
+    };
 
     // Data
     const districts = [
@@ -79,6 +176,14 @@ const FranchiseeManagerLeadManagement = () => {
                 const assigned = Math.floor(Math.random() * 15);
                 const capacity = 30 - assigned;
 
+                // Randomly subscribe to 2-4 plans out of 5
+                const subscribedPlans = [];
+                for(let p=1; p<=5; p++) {
+                    if (Math.random() > 0.3) subscribedPlans.push(p);
+                }
+                // Ensure at least one plan is subscribed
+                if(subscribedPlans.length === 0) subscribedPlans.push(1);
+
                 newFranchisees.push({
                     id: i,
                     name: `Franchisee ${i}`,
@@ -86,7 +191,8 @@ const FranchiseeManagerLeadManagement = () => {
                     assigned: assigned,
                     capacity: capacity > 0 ? capacity : 0,
                     performance: (70 + Math.random() * 25).toFixed(1) + '%',
-                    status: capacity > 0 ? 'available' : 'full'
+                    status: capacity > 0 ? 'available' : 'full',
+                    subscribedPlans: subscribedPlans
                 });
             }
 
@@ -217,11 +323,16 @@ const FranchiseeManagerLeadManagement = () => {
         }
     };
 
-    // Filter franchisees based on search
-    const filteredFranchisees = franchisees.filter(f =>
-        f.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        f.location.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Filter franchisees based on search and selected lead plan
+    const filteredFranchisees = franchisees.filter(f => {
+        const matchesSearch = f.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                              f.location.toLowerCase().includes(searchTerm.toLowerCase());
+        
+        // If a lead plan is selected, only show franchisees who have subscribed to it
+        const matchesPlan = selectedLeadPlan ? f.subscribedPlans?.includes(selectedLeadPlan.id) : true;
+        
+        return matchesSearch && matchesPlan;
+    });
 
     // Get remaining leads for selected plan
     const getRemainingLeads = () => {
@@ -241,6 +352,193 @@ const FranchiseeManagerLeadManagement = () => {
                         </h4>
                         <p className="text-sm text-gray-500 mt-1">Assign leads to franchisees across districts</p>
                     </div>
+                </div>
+
+                {/* ── State / Cluster / District Filter Bar ─────────────────────── */}
+                <div style={{
+                    background: 'white',
+                    borderRadius: '10px',
+                    boxShadow: '0 2px 10px rgba(0,0,0,0.07)',
+                    padding: '14px 20px',
+                    marginBottom: '18px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: '12px',
+                    borderLeft: '4px solid #3b82f6'
+                }}>
+                    {/* Label */}
+                    <div style={{ display: 'flex', alignItems: 'center', color: '#3b82f6', fontWeight: 600, fontSize: '14px', minWidth: 'max-content' }}>
+                        <Filter size={16} style={{ marginRight: '6px' }} />
+                        Filter by:
+                    </div>
+
+                    {/* Country Dropdown */}
+                    <div style={{ position: 'relative', minWidth: '150px', flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '0.05em' }}>Country</label>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={filterCountry}
+                                onChange={e => handleFilterCountryChange(e.target.value)}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 32px 8px 12px',
+                                    border: filterCountry ? '1.5px solid #f59e0b' : '1.5px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    color: filterCountry ? '#92400e' : '#6b7280',
+                                    background: filterCountry ? '#fffbeb' : '#f9fafb',
+                                    appearance: 'none',
+                                    cursor: 'pointer',
+                                    fontWeight: filterCountry ? 600 : 400,
+                                    outline: 'none'
+                                }}
+                            >
+                                <option value="">Select Country</option>
+                                {countryList.map(c => (
+                                    <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+                        </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{ color: '#d1d5db', fontSize: '18px', alignSelf: 'flex-end', paddingBottom: '6px' }}>›</div>
+
+                    {/* State Dropdown */}
+                    <div style={{ position: 'relative', minWidth: '150px', flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '0.05em' }}>State</label>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={filterState}
+                                onChange={e => handleFilterStateChange(e.target.value)}
+                                disabled={!filterCountry}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 32px 8px 12px',
+                                    border: filterState ? '1.5px solid #3b82f6' : '1.5px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    color: filterState ? '#1d4ed8' : '#6b7280',
+                                    background: filterState ? '#eff6ff' : (!filterCountry ? '#f3f4f6' : '#f9fafb'),
+                                    appearance: 'none',
+                                    cursor: filterCountry ? 'pointer' : 'not-allowed',
+                                    fontWeight: filterState ? 600 : 400,
+                                    opacity: filterCountry ? 1 : 0.55,
+                                    outline: 'none'
+                                }}
+                            >
+                                <option value="">Select State</option>
+                                {stateList.map(s => (
+                                    <option key={s._id || s.name} value={s.name}>{s.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+                        </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{ color: '#d1d5db', fontSize: '18px', alignSelf: 'flex-end', paddingBottom: '6px' }}>›</div>
+
+                    {/* District Dropdown */}
+                    <div style={{ position: 'relative', minWidth: '150px', flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '0.05em' }}>District</label>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={filterDistrict}
+                                onChange={e => handleFilterDistrictChange(e.target.value)}
+                                disabled={!filterState}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 32px 8px 12px',
+                                    border: filterDistrict ? '1.5px solid #10b981' : '1.5px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    color: filterDistrict ? '#065f46' : '#6b7280',
+                                    background: filterDistrict ? '#ecfdf5' : (!filterState ? '#f3f4f6' : '#f9fafb'),
+                                    appearance: 'none',
+                                    cursor: filterState ? 'pointer' : 'not-allowed',
+                                    fontWeight: filterDistrict ? 600 : 400,
+                                    opacity: filterState ? 1 : 0.55,
+                                    outline: 'none'
+                                }}
+                            >
+                                <option value="">Select District</option>
+                                {districtList.map(d => (
+                                    <option key={d._id || d.name} value={d.name}>{d.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+                        </div>
+                    </div>
+
+                    {/* Arrow */}
+                    <div style={{ color: '#d1d5db', fontSize: '18px', alignSelf: 'flex-end', paddingBottom: '6px' }}>›</div>
+
+                    {/* Cluster Dropdown */}
+                    <div style={{ position: 'relative', minWidth: '150px', flex: '1 1 150px' }}>
+                        <label style={{ display: 'block', fontSize: '10px', fontWeight: 600, color: '#6b7280', textTransform: 'uppercase', marginBottom: '3px', letterSpacing: '0.05em' }}>Cluster</label>
+                        <div style={{ position: 'relative' }}>
+                            <select
+                                value={filterCluster}
+                                onChange={e => handleFilterClusterChange(e.target.value)}
+                                disabled={!filterDistrict}
+                                style={{
+                                    width: '100%',
+                                    padding: '8px 32px 8px 12px',
+                                    border: filterCluster ? '1.5px solid #8b5cf6' : '1.5px solid #e5e7eb',
+                                    borderRadius: '8px',
+                                    fontSize: '13px',
+                                    color: filterCluster ? '#6d28d9' : '#6b7280',
+                                    background: filterCluster ? '#f5f3ff' : (!filterDistrict ? '#f3f4f6' : '#f9fafb'),
+                                    appearance: 'none',
+                                    cursor: filterDistrict ? 'pointer' : 'not-allowed',
+                                    fontWeight: filterCluster ? 600 : 400,
+                                    opacity: filterDistrict ? 1 : 0.55,
+                                    outline: 'none'
+                                }}
+                            >
+                                <option value="">Select Cluster</option>
+                                {clusterList.map(c => (
+                                    <option key={c._id || c.name} value={c.name}>{c.name}</option>
+                                ))}
+                            </select>
+                            <ChevronDown size={14} style={{ position: 'absolute', right: '10px', top: '50%', transform: 'translateY(-50%)', color: '#9ca3af', pointerEvents: 'none' }} />
+                        </div>
+                    </div>
+
+                    {/* Active filter pills */}
+                    {(filterCountry || filterState || filterCluster || filterDistrict) && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap', marginLeft: 'auto' }}>
+                            {filterCountry && (
+                                <span style={{ background: '#fef3c7', color: '#92400e', fontSize: '12px', padding: '3px 10px', borderRadius: '20px', fontWeight: 500 }}>
+                                    🌍 {filterCountry}
+                                </span>
+                            )}
+                            {filterState && (
+                                <span style={{ background: '#dbeafe', color: '#1d4ed8', fontSize: '12px', padding: '3px 10px', borderRadius: '20px', fontWeight: 500 }}>
+                                    📍 {filterState}
+                                </span>
+                            )}
+                            {filterCluster && (
+                                <span style={{ background: '#ede9fe', color: '#6d28d9', fontSize: '12px', padding: '3px 10px', borderRadius: '20px', fontWeight: 500 }}>
+                                    🗂️ {filterCluster}
+                                </span>
+                            )}
+                            {filterDistrict && (
+                                <span style={{ background: '#d1fae5', color: '#065f46', fontSize: '12px', padding: '3px 10px', borderRadius: '20px', fontWeight: 500 }}>
+                                    🏘️ {filterDistrict}
+                                </span>
+                            )}
+                            <button
+                                onClick={handleResetFilters}
+                                style={{ background: '#fee2e2', color: '#b91c1c', fontSize: '12px', padding: '3px 10px', borderRadius: '20px', border: 'none', cursor: 'pointer', fontWeight: 500, display: 'flex', alignItems: 'center', gap: '4px' }}
+                            >
+                                <X size={12} /> Reset Filters
+                            </button>
+                        </div>
+                    )}
                 </div>
 
                 {/* Toast Notification */}
@@ -293,7 +591,7 @@ const FranchiseeManagerLeadManagement = () => {
                 {/* Main Content */}
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
                     {/* District Section */}
-                    <div className="lg:col-span-3">
+                    <div className="lg:col-span-3 order-1">
                         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                                 <h6 className="font-semibold text-gray-700 flex items-center">
@@ -366,7 +664,7 @@ const FranchiseeManagerLeadManagement = () => {
                     </div>
 
                     {/* Lead Plans Section */}
-                    <div className="lg:col-span-4">
+                    <div className="lg:col-span-4 order-3">
                         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                                 <h6 className="font-semibold text-gray-700 flex items-center">
@@ -426,7 +724,7 @@ const FranchiseeManagerLeadManagement = () => {
                     </div>
 
                     {/* Franchisee Section */}
-                    <div className="lg:col-span-5">
+                    <div className="lg:col-span-5 order-2">
                         <div className="bg-white rounded-lg shadow-sm overflow-hidden">
                             <div className="bg-gray-50 px-4 py-3 border-b border-gray-200">
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between">
@@ -487,13 +785,19 @@ const FranchiseeManagerLeadManagement = () => {
                                                         </div>
                                                         <div className="text-right">
                                                             {franchisee.status === 'available' ? (
-                                                                <button
-                                                                    onClick={() => handleOpenAssignmentModal(franchisee.id)}
-                                                                    className="bg-blue-500 text-white text-xs px-3 py-1.5 rounded-md hover:bg-blue-600 transition-colors flex items-center"
-                                                                >
-                                                                    <Plus size={12} className="mr-1" />
-                                                                    Assign
-                                                                </button>
+                                                                (() => {
+                                                                    const noLeadsAvailable = selectedLeadPlan && (selectedLeadPlan.total - selectedLeadPlan.assigned <= 0);
+                                                                    return (
+                                                                        <button
+                                                                            onClick={() => handleOpenAssignmentModal(franchisee.id)}
+                                                                            disabled={noLeadsAvailable}
+                                                                            className={`${noLeadsAvailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'} text-white text-xs px-3 py-1.5 rounded-md transition-colors flex items-center`}
+                                                                        >
+                                                                            <Plus size={12} className="mr-1" />
+                                                                            Assign
+                                                                        </button>
+                                                                    );
+                                                                })()
                                                             ) : (
                                                                 <span className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded-full">
                                                                     Full

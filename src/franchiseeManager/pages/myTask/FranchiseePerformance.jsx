@@ -46,7 +46,7 @@ const FranchiseeManagerPerformanceList = () => {
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 justify-center">
                     {/* Performer Card */}
                     <Link
-                        to="/franchiseeManager/frenchiseManagerfrenchiseperformername"
+                        to="/franchisee-manager/performance/performer"
                         className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl"
                     >
                         <div className="bg-green-600 rounded-xl shadow-lg overflow-hidden">
@@ -75,7 +75,7 @@ const FranchiseeManagerPerformanceList = () => {
 
                     {/* Active Card */}
                     <Link
-                        to="/franchiseeManager/frenchiseManagerfrenchiseactive"
+                        to="/franchisee-manager/performance/active"
                         className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl"
                     >
                         <div className="bg-gray-500 rounded-xl shadow-lg overflow-hidden">
@@ -104,7 +104,7 @@ const FranchiseeManagerPerformanceList = () => {
 
                     {/* In-Active Card */}
                     <Link
-                        to="/franchiseeManager/frenchiseManagerfrenchiseinactive"
+                        to="/franchisee-manager/performance/inactive"
                         className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl"
                     >
                         <div className="bg-red-500 rounded-xl shadow-lg overflow-hidden">

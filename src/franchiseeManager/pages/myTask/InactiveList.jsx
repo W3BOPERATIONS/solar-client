@@ -173,7 +173,8 @@ const FranchiseeManagerInactiveList = () => {
                         return (
                             <Link
                                 key={franchisee.id}
-                                to="/franchiseeManager/frenchiseManagerfrenchisenamedashboard"
+                                to="/franchisee-manager/performance/performer-dashboard"
+                                state={{ performerId: franchisee.id, performerName: franchisee.name }}
                                 className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl no-underline"
                             >
                                 <div

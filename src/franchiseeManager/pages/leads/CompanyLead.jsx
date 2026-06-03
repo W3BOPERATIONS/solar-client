@@ -17,7 +17,7 @@ const FranchiseeManagerOnboardingCompanyLead = () => {
                 {/* In Bound Card */}
                 <div className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                     <Link
-                        to="/frenchiseManager/frenchiseManager_onboardingsubleads?id=1"
+                        to="/franchisee-manager/leads/sub-leads/1"
                         className="block p-6"
                     >
                         <div className="flex items-center justify-between">
@@ -40,7 +40,7 @@ const FranchiseeManagerOnboardingCompanyLead = () => {
                 {/* Out Bound Card */}
                 <div className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                     <Link
-                        to="/frenchiseManager/frenchiseManager_onboardingsubleads?id=2"
+                        to="/franchisee-manager/leads/sub-leads/2"
                         className="block p-6"
                     >
                         <div className="flex items-center justify-between">
@@ -63,7 +63,7 @@ const FranchiseeManagerOnboardingCompanyLead = () => {
                 {/* App Lead Card */}
                 <div className="bg-white rounded-xl shadow-sm hover:shadow-lg transition-all duration-300 hover:-translate-y-1">
                     <Link
-                        to="/frenchiseManager/frenchiseManager_onboardingsubleads?id=3"
+                        to="/franchisee-manager/leads/sub-leads/3"
                         className="block p-6"
                     >
                         <div className="flex items-center justify-between">

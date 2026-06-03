@@ -103,8 +103,7 @@ export default function FranchiseeManagerSidebar() {
                     children: [
                         { name: 'Project In Progress', href: '/franchisee-manager/my-task/project-management/project-in-progress', icon: Clock },
                     ]
-                },
-                { name: 'Franchisee Performance', href: '/franchisee-manager/my-task/franchisee-performance', icon: BarChart },
+                }
             ]
         },
         {
@@ -190,7 +189,7 @@ export default function FranchiseeManagerSidebar() {
                         </div>
                         <div>
                             <h1 className="text-xl font-bold">SOLARKITS</h1>
-                            <p className="text-xs text-gray-400">Franchisee Manager</p>
+                            <p className="text-xs text-gray-400">Partner Manager</p>
                         </div>
                     </div>
                 </div>

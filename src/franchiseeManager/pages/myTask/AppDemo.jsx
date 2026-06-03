@@ -34,21 +34,135 @@ const FranchiseeManagerAppDemo = () => {
     const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
     const [selectedLead, setSelectedLead] = useState(null);
     const [scheduleDate, setScheduleDate] = useState('');
+    const [scheduleTime, setScheduleTime] = useState('');
+    const [demoRemarks, setDemoRemarks] = useState('');
+    const [assignedTo, setAssignedTo] = useState('');
     const [showSummary, setShowSummary] = useState(false);
     const [recordings, setRecordings] = useState([]);
     const [isRecording, setIsRecording] = useState(false);
+    const [quickFilter, setQuickFilter] = useState('All');
 
     const mediaRecorderRef = useRef(null);
     const recordedChunksRef = useRef([]);
 
-    // Sample leads data
-    const leads = [
-        { id: 1, srNo: 1, status: 'New', leadId: 'ss/24-25/004', name: 'Sushil', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025' },
-        { id: 2, srNo: 2, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', designation: 'Civil Contractor', appLogin: true, loginDate: '15/05/2025' },
-        { id: 3, srNo: 3, status: 'New', leadId: 'ss/24-25/004', name: 'Sharad', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025' },
-        { id: 4, srNo: 4, status: 'New', leadId: 'ss/24-25/004', name: 'Varis', mobile: '6535846505', designation: 'Civil Contractor', appLogin: true, loginDate: '15/05/2025' },
-        { id: 5, srNo: 5, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025' },
+    const todayDate = new Date().toISOString().split('T')[0];
+    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+    const nextWeekDate = new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0];
+
+    const initialLeads = [
+        { id: 1, srNo: 1, status: 'New', leadId: 'ss/24-25/004', name: 'Sushil', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025', scheduledDate: null, scheduledTime: null, demoRemarks: '', assignedTo: '', screenshotUploaded: false, completionDate: null, district: 'paddhari' },
+        { id: 2, srNo: 2, status: 'Scheduled', leadId: 'ss/24-25/005', name: 'Darshit (Today)', mobile: '6535846505', designation: 'Civil Contractor', appLogin: true, loginDate: '15/05/2025', scheduledDate: todayDate, scheduledTime: '14:30', demoRemarks: 'Urgent Demo', assignedTo: 'Rahul', screenshotUploaded: false, completionDate: null, district: 'tankara' },
+        { id: 3, srNo: 3, status: 'Scheduled', leadId: 'ss/24-25/006', name: 'Sharad (Tomorrow)', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025', scheduledDate: tomorrowDate, scheduledTime: '10:00', demoRemarks: '', assignedTo: '', screenshotUploaded: false, completionDate: null, district: 'chotila' },
+        { id: 4, srNo: 4, status: 'Scheduled', leadId: 'ss/24-25/007', name: 'Varis (Upcoming)', mobile: '6535846505', designation: 'Civil Contractor', appLogin: true, loginDate: '15/05/2025', scheduledDate: nextWeekDate, scheduledTime: '16:00', demoRemarks: 'Next week', assignedTo: 'Amit', screenshotUploaded: false, completionDate: null, district: 'paddhari' },
+        { id: 5, srNo: 5, status: 'Completed', leadId: 'ss/24-25/008', name: 'Darshit (Done)', mobile: '6535846505', designation: 'Electrician', appLogin: true, loginDate: '15/05/2025', scheduledDate: '2025-05-10', scheduledTime: '11:00', demoRemarks: 'Good Demo', assignedTo: 'Rahul', screenshotUploaded: true, completionDate: '11/05/2025', district: 'tankara' },
+        { id: 6, srNo: 6, status: 'New', leadId: 'ss/24-25/009', name: 'WithoutLogin', mobile: '6535846505', designation: 'Electrician', appLogin: false, loginDate: null, scheduledDate: null, scheduledTime: null, demoRemarks: '', assignedTo: '', screenshotUploaded: false, completionDate: null, district: 'chotila' },
     ];
+
+    // Sample leads data in state (persisted to localStorage)
+    const [leads, setLeads] = useState(() => {
+        const saved = localStorage.getItem('appDemoLeads');
+        if (saved) {
+            try {
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error("Error parsing leads from localStorage", e);
+            }
+        }
+        return initialLeads;
+    });
+
+    React.useEffect(() => {
+        localStorage.setItem('appDemoLeads', JSON.stringify(leads));
+    }, [leads]);
+
+    const fileInputRef = useRef(null);
+
+    const handleAddLead = () => {
+        const newLead = {
+            id: Date.now(),
+            srNo: leads.length + 1,
+            status: 'New',
+            leadId: `ss/24-25/0${Math.floor(Math.random() * 100) + 10}`,
+            name: 'New Partner',
+            mobile: '9876543210',
+            designation: 'Contractor',
+            appLogin: true,
+            loginDate: new Date().toLocaleDateString('en-GB'),
+            scheduledDate: null,
+            scheduledTime: null,
+            demoRemarks: '',
+            assignedTo: '',
+            screenshotUploaded: false,
+            completionDate: null,
+            district: 'paddhari'
+        };
+        setLeads([...leads, newLead]);
+    };
+
+    const handleImportClick = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    const handleImportFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            alert(`File "${file.name}" imported successfully!`);
+            // Add a mock lead to show it worked
+            handleAddLead();
+        }
+    };
+
+    const handleFilterSubmit = () => {
+        setIsFilterModalOpen(false);
+    };
+
+    const handleDeleteLead = (id) => {
+        if (window.confirm("Are you sure you want to delete this lead?")) {
+            setLeads(leads.filter(lead => lead.id !== id));
+        }
+    };
+
+    // Derived filtered leads based on appLogin and quickFilters
+    const filteredLeads = leads.filter(lead => {
+        // App Demo task automatically becomes active only when partner successfully logs in
+        if (!lead.appLogin) return false;
+
+        // Apply District filter if selected
+        if (selectedDistrict && lead.district !== selectedDistrict) return false;
+
+        // Apply Custom Date filter if selected Range is 'custom'
+        if (selectedDateRange === 'custom' && customDate) {
+            // Compare loginDate or scheduledDate depending on what you prefer.
+            // Let's filter by scheduledDate to match the quick filters, or loginDate if not scheduled.
+            // Simplified: let's filter if loginDate includes the customDate components (which might be tricky format-wise)
+            // Assuming scheduledDate is YYYY-MM-DD
+            if (lead.scheduledDate !== customDate) return false;
+        }
+
+        // Apply quick filter logic
+        if (quickFilter === 'All') return true;
+        if (quickFilter === 'Completed Demo') return lead.status === 'Completed';
+        
+        const todayStr = new Date().toISOString().split('T')[0];
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        const tomorrowStr = tomorrow.toISOString().split('T')[0];
+
+        if (quickFilter === "Today's Demo") return lead.scheduledDate === todayStr && lead.status === 'Scheduled';
+        if (quickFilter === "Tomorrow's Demo") return lead.scheduledDate === tomorrowStr && lead.status === 'Scheduled';
+        if (quickFilter === "Upcoming Demo") return lead.scheduledDate && lead.scheduledDate > tomorrowStr && lead.status === 'Scheduled';
+        
+        if (quickFilter === "Custom Date" && customDate) {
+            return lead.scheduledDate === customDate;
+        }
+
+        return true;
+    }).filter(lead => {
+        // Also apply searchTerm filter
+        return lead.name.toLowerCase().includes(searchTerm.toLowerCase()) || lead.leadId.toLowerCase().includes(searchTerm.toLowerCase());
+    });
 
     const handleDateRangeChange = (e) => {
         setSelectedDateRange(e.target.value);
@@ -60,13 +174,29 @@ const FranchiseeManagerAppDemo = () => {
 
     const handleScheduleClick = (lead) => {
         setSelectedLead(lead);
+        setScheduleDate(lead.scheduledDate || '');
+        setScheduleTime(lead.scheduledTime || '');
+        setDemoRemarks(lead.demoRemarks || '');
+        setAssignedTo(lead.assignedTo || '');
         setIsScheduleModalOpen(true);
-        setScheduleDate('');
     };
 
     const handleScheduleSubmit = (e) => {
         e.preventDefault();
-        if (scheduleDate) {
+        if (scheduleDate && scheduleTime && selectedLead) {
+            setLeads(prev => prev.map(lead => {
+                if (lead.id === selectedLead.id) {
+                    return {
+                        ...lead,
+                        status: 'Scheduled',
+                        scheduledDate: scheduleDate,
+                        scheduledTime: scheduleTime,
+                        demoRemarks: demoRemarks,
+                        assignedTo: assignedTo
+                    };
+                }
+                return lead;
+            }));
             setShowSummary(true);
             setIsScheduleModalOpen(false);
         }
@@ -76,8 +206,26 @@ const FranchiseeManagerAppDemo = () => {
         const file = e.target.files[0];
         if (file) {
             console.log(`Uploaded file for lead ${leadId}:`, file.name);
-            // Handle file upload logic here
+            setLeads(prev => prev.map(lead => {
+                if (lead.id === leadId) {
+                    return { ...lead, screenshotUploaded: true };
+                }
+                return lead;
+            }));
         }
+    };
+
+    const handleDemoSubmit = (leadId) => {
+        setLeads(prev => prev.map(lead => {
+            if (lead.id === leadId) {
+                return { 
+                    ...lead, 
+                    status: 'Completed', 
+                    completionDate: new Date().toLocaleDateString()
+                };
+            }
+            return lead;
+        }));
     };
 
     // Screen recording functionality
@@ -171,7 +319,10 @@ const FranchiseeManagerAppDemo = () => {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                             <div className="flex flex-wrap items-center gap-2">
                                 {/* Add Button */}
-                                <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors flex items-center">
+                                <button 
+                                    onClick={handleAddLead}
+                                    className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors flex items-center"
+                                >
                                     <Plus size={16} className="mr-1" />
                                     ADD
                                 </button>
@@ -186,9 +337,21 @@ const FranchiseeManagerAppDemo = () => {
                                 </button>
 
                                 {/* Import Lead Button */}
-                                <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors">
-                                    Import Lead
-                                </button>
+                                <div>
+                                    <input 
+                                        type="file" 
+                                        ref={fileInputRef} 
+                                        onChange={handleImportFileChange} 
+                                        style={{ display: 'none' }} 
+                                        accept=".csv, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.ms-excel"
+                                    />
+                                    <button 
+                                        onClick={handleImportClick}
+                                        className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors"
+                                    >
+                                        Import Lead
+                                    </button>
+                                </div>
                             </div>
 
                             {/* Search Bar */}
@@ -209,6 +372,50 @@ const FranchiseeManagerAppDemo = () => {
                                     </button>
                                 </div>
                             </div>
+                        </div>
+                        
+                        {/* Quick Filters */}
+                        <div className="mt-4 flex flex-wrap items-center gap-2">
+                            {['All', "Today's Demo", "Tomorrow's Demo", "Upcoming Demo", "Completed Demo", "Custom Date"].map(filter => (
+                                filter !== "Custom Date" ? (
+                                    <button
+                                        key={filter}
+                                        onClick={() => {
+                                            setQuickFilter(filter);
+                                            if (filter !== 'Custom Date') setCustomDate('');
+                                        }}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                                            quickFilter === filter
+                                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200 border border-transparent'
+                                        }`}
+                                    >
+                                        {filter}
+                                    </button>
+                                ) : (
+                                    <div key={filter} className={`flex items-center rounded-full border overflow-hidden transition-colors ${
+                                        quickFilter === 'Custom Date' 
+                                            ? 'border-blue-300 bg-blue-50' 
+                                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                                    }`}>
+                                        <span className={`px-3 py-1.5 text-xs font-semibold ${
+                                            quickFilter === 'Custom Date' ? 'text-blue-800 bg-blue-100' : 'text-gray-600 bg-gray-100'
+                                        }`}>
+                                            Date Filter
+                                        </span>
+                                        <input
+                                            type="date"
+                                            className="px-2 py-1 text-xs focus:outline-none bg-transparent text-gray-700 w-32"
+                                            value={customDate}
+                                            onChange={(e) => {
+                                                setCustomDate(e.target.value);
+                                                setQuickFilter('Custom Date');
+                                            }}
+                                            onClick={() => setQuickFilter('Custom Date')}
+                                        />
+                                    </div>
+                                )
+                            ))}
                         </div>
                     </div>
 
@@ -288,7 +495,10 @@ const FranchiseeManagerAppDemo = () => {
                                         >
                                             Close
                                         </button>
-                                        <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors">
+                                        <button 
+                                            onClick={handleFilterSubmit}
+                                            className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+                                        >
                                             Submit
                                         </button>
                                     </div>
@@ -319,12 +529,49 @@ const FranchiseeManagerAppDemo = () => {
                                                 required
                                             />
                                         </div>
+                                        <div className="mb-4">
+                                            <label htmlFor="scheduleTime" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Select Time
+                                            </label>
+                                            <input
+                                                type="time"
+                                                id="scheduleTime"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                value={scheduleTime}
+                                                onChange={(e) => setScheduleTime(e.target.value)}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="mb-4">
+                                            <label htmlFor="demoRemarks" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Remarks/Notes
+                                            </label>
+                                            <textarea
+                                                id="demoRemarks"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                value={demoRemarks}
+                                                onChange={(e) => setDemoRemarks(e.target.value)}
+                                                rows="2"
+                                            ></textarea>
+                                        </div>
+                                        <div className="mb-4">
+                                            <label htmlFor="assignedTo" className="block text-sm font-medium text-gray-700 mb-1">
+                                                Assigned Executive/Trainer (Optional)
+                                            </label>
+                                            <input
+                                                type="text"
+                                                id="assignedTo"
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                                value={assignedTo}
+                                                onChange={(e) => setAssignedTo(e.target.value)}
+                                            />
+                                        </div>
 
-                                        {scheduleDate && (
+                                        {scheduleDate && scheduleTime && (
                                             <div className="bg-blue-50 p-3 rounded-md">
                                                 <h6 className="font-semibold text-sm mb-2">Scheduled Summary:</h6>
                                                 <p className="text-sm">
-                                                    <strong>Demo Scheduled On:</strong> {scheduleDate}
+                                                    <strong>Demo Scheduled On:</strong> {scheduleDate} at {scheduleTime}
                                                 </p>
                                             </div>
                                         )}
@@ -387,29 +634,27 @@ const FranchiseeManagerAppDemo = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {leads.map((lead) => (
+                                {filteredLeads.map((lead) => (
                                     <tr key={lead.id} className="hover:bg-gray-50">
-                                        {/* Actions Dropdown */}
+                                        {/* Delete Action */}
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <div className="relative group">
-                                                <button className="text-gray-600 hover:text-gray-900">
-                                                    <MoreVertical size={20} />
-                                                </button>
-                                                <div className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                                                    <div className="py-1">
-                                                        <a href="#" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                                            <Trash2 size={16} className="mr-2 text-red-500" />
-                                                            Delete Request
-                                                        </a>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <button 
+                                                onClick={() => handleDeleteLead(lead.id)}
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-full transition-colors"
+                                                title="Delete Demo Request"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </td>
 
                                         {/* Data Cells */}
                                         <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.srNo}</td>
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <span className="px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-xs font-semibold">
+                                            <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                                                lead.status === 'Completed' ? 'bg-green-100 text-green-800' :
+                                                lead.status === 'Scheduled' ? 'bg-blue-100 text-blue-800' :
+                                                'bg-pink-100 text-pink-800'
+                                            }`}>
                                                 {lead.status}
                                             </span>
                                         </td>
@@ -429,20 +674,57 @@ const FranchiseeManagerAppDemo = () => {
                                             </div>
                                         </td>
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <input
-                                                type="file"
-                                                onChange={(e) => handleFileUpload(lead.id, e)}
-                                                className="text-sm text-gray-500 file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                                            />
+                                            {lead.status === 'Scheduled' && !lead.screenshotUploaded && (
+                                                <input
+                                                    type="file"
+                                                    onChange={(e) => handleFileUpload(lead.id, e)}
+                                                    className="text-sm text-gray-500 file:mr-2 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 max-w-[150px]"
+                                                    accept="image/*"
+                                                />
+                                            )}
+                                            {lead.screenshotUploaded && lead.status !== 'Completed' && (
+                                                <div className="flex items-center text-green-600 text-xs font-medium">
+                                                    <CheckCircle size={14} className="mr-1" /> Proof Uploaded
+                                                </div>
+                                            )}
+                                            {lead.status === 'Completed' && (
+                                                <span className="text-xs text-gray-500">Proof Submitted</span>
+                                            )}
                                         </td>
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <button
-                                                onClick={() => handleScheduleClick(lead)}
-                                                className="bg-green-500 text-white text-xs px-3 py-1.5 rounded-md hover:bg-green-600 transition-colors flex items-center"
-                                            >
-                                                <Calendar size={14} className="mr-1" />
-                                                Schedule
-                                            </button>
+                                            {lead.status === 'New' && (
+                                                <button
+                                                    onClick={() => handleScheduleClick(lead)}
+                                                    className="bg-green-500 text-white text-xs px-3 py-1.5 rounded-md hover:bg-green-600 transition-colors flex items-center"
+                                                >
+                                                    <Calendar size={14} className="mr-1" />
+                                                    Schedule
+                                                </button>
+                                            )}
+                                            {lead.status === 'Scheduled' && (
+                                                <div className="flex flex-col gap-2">
+                                                    <div className="text-xs text-gray-600 flex items-center">
+                                                        <CalendarIcon size={12} className="mr-1" /> 
+                                                        {lead.scheduledDate} {lead.scheduledTime}
+                                                    </div>
+                                                    <button
+                                                        onClick={() => handleDemoSubmit(lead.id)}
+                                                        disabled={!lead.screenshotUploaded}
+                                                        className={`text-xs px-3 py-1.5 rounded-md transition-colors flex items-center justify-center ${
+                                                            lead.screenshotUploaded 
+                                                            ? 'bg-blue-600 text-white hover:bg-blue-700' 
+                                                            : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+                                                        }`}
+                                                    >
+                                                        Submit
+                                                    </button>
+                                                </div>
+                                            )}
+                                            {lead.status === 'Completed' && (
+                                                <span className="text-xs font-medium text-green-600">
+                                                    Done on {lead.completionDate}
+                                                </span>
+                                            )}
                                         </td>
                                     </tr>
                                 ))}
@@ -477,7 +759,7 @@ const FranchiseeManagerAppDemo = () => {
                             <div className="p-4">
                                 <h5 className="font-bold mb-4 text-blue-600 flex items-center">
                                     <FileText size={20} className="mr-2" />
-                                    Franchisee Manager App Demo Summary
+                                    Partner Manager App Demo Summary
                                 </h5>
 
                                 <div className="mb-3 text-sm">

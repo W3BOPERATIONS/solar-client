@@ -229,17 +229,28 @@ import FranchiseeTrackService from './franchisee/pages/projectManagement/TrackSe
 import FranchiseeManagerLayout from './franchiseeManager/layouts/FranchiseeManagerLayout';
 import FranchiseeManagerDashboard from './franchiseeManager/pages/dashboard/FranchiseeManagerDashboard';
 import FranchiseeManagerLeads from './franchiseeManager/pages/leads/Leads';
+import FMCompanyLead from './franchiseeManager/pages/leads/CompanyLead';
+import FMManagerTable from './franchiseeManager/pages/leads/ManagerTable';
+import FMSubLeads from './franchiseeManager/pages/leads/SubLeads';
+import FMQualifyTable from './franchiseeManager/pages/leads/QualifyTable';
 import FranchiseeManagerLeadManagement from './franchiseeManager/pages/leadManagement/LeadManagement';
 import FranchiseeManagerOnboardingGoals from './franchiseeManager/pages/onboardingGoals/OnboardingGoals';
 import FranchiseeManagerFindResources from './franchiseeManager/pages/resources/FindResources';
 import FranchiseeManagerReport from './franchiseeManager/pages/report/Report';
+import FranchiseeManagerProfile from './franchiseeManager/pages/profile/FranchiseeManagerProfile';
 
 // My Task
 import FMAppDemo from './franchiseeManager/pages/myTask/AppDemo';
 import FMFranchiseeSignup from './franchiseeManager/pages/myTask/franchiseeOnboarding/FranchiseeSignup';
+import FMKYCProcess from './franchiseeManager/pages/myTask/franchiseeOnboarding/KYCProcess';
 import FMFranchiseeOrientation from './franchiseeManager/pages/myTask/franchiseeOnboarding/FranchiseeOrientation';
+import FMOrientationVideo from './franchiseeManager/pages/myTask/franchiseeOnboarding/OrientationVideo';
 import FMProjectInProgress from './franchiseeManager/pages/myTask/projectManagement/ProjectInProgress';
 import FMFranchiseePerformance from './franchiseeManager/pages/myTask/FranchiseePerformance';
+import FMFranchiseePerformerName from './franchiseeManager/pages/myTask/PerformerName';
+import FMFranchiseeActiveList from './franchiseeManager/pages/myTask/ActiveList';
+import FMFranchiseeInactiveList from './franchiseeManager/pages/myTask/InactiveList';
+import FMFranchiseePerformerDashboard from './franchiseeManager/pages/myTask/PerformerDashboard';
 
 // Franchise Setting
 import FMComboKitCustomization from './franchiseeManager/pages/franchiseSetting/ComboKitCustomization';
@@ -718,6 +729,10 @@ function App() {
             >
               <Route path="dashboard" element={<FranchiseeManagerDashboard />} />
               <Route path="leads" element={<FranchiseeManagerLeads />} />
+              <Route path="leads/company" element={<FMCompanyLead />} />
+              <Route path="leads/my-leads" element={<FMManagerTable />} />
+              <Route path="leads/sub-leads/:id" element={<FMSubLeads />} />
+              <Route path="leads/qualified" element={<FMQualifyTable />} />
               <Route path="lead-management" element={<FranchiseeManagerLeadManagement />} />
 
               <Route path="onboarding-goals" element={<FranchiseeManagerOnboardingGoals />} />
@@ -725,11 +740,17 @@ function App() {
               {/* My Task Sub-menu */}
               <Route path="my-task/app-demo" element={<FMAppDemo />} />
               <Route path="my-task/franchisee-onboarding/franchisee-signup" element={<FMFranchiseeSignup />} />
+              <Route path="my-task/franchisee-onboarding/kyc-process" element={<FMKYCProcess />} />
               <Route path="my-task/franchisee-onboarding/franchisee-orientation" element={<FMFranchiseeOrientation />} />
+              <Route path="my-task/franchisee-onboarding/orientation-video" element={<FMOrientationVideo />} />
               <Route path="my-task/franchisee-onboarding" element={<Navigate to="franchisee-signup" />} />
               <Route path="my-task/project-management/project-in-progress" element={<FMProjectInProgress />} />
               <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
               <Route path="my-task/franchisee-performance" element={<FMFranchiseePerformance />} />
+              <Route path="performance/performer" element={<FMFranchiseePerformerName />} />
+              <Route path="performance/active" element={<FMFranchiseeActiveList />} />
+              <Route path="performance/inactive" element={<FMFranchiseeInactiveList />} />
+              <Route path="performance/performer-dashboard" element={<FMFranchiseePerformerDashboard />} />
               <Route path="my-task" element={<Navigate to="app-demo" />} />
 
               {/* Franchise Setting Sub-menu */}

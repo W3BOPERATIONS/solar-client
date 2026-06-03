@@ -237,4 +237,9 @@ export const departmentAPI = {
   getAll: () => api.get('/department-modules/departments'),
 };
 
+export const performanceAPI = {
+  getFranchiseePerformance: (params) => api.get('/performance/franchise', { params }),
+  getDealerPerformance: (params) => api.get('/performance/dealer', { params }),
+};
+
 export default api;

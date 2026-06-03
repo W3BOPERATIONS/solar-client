@@ -43,61 +43,40 @@ const FranchiseeManagerKYC = () => {
     const [selectedKycStatus, setSelectedKycStatus] = useState('');
     const [customDate, setCustomDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedDistrict, setSelectedDistrict] = useState('');
+    const [topDateFilter, setTopDateFilter] = useState('');
 
-    // Sample KYC data
-    const kycData = [
-        {
-            id: 1,
-            srNo: 1,
-            status: 'New',
-            statusColor: 'pink',
-            leadId: 'ss/24-25/004',
-            startDate: '2025-03-19',
-            billPayment: '4000/6.05KW',
-            personName: '74838h',
-            mobile: '6535846505',
-            state: 'Gujarat',
-            district: 'Rajkot',
-            city: 'Rajkot',
-            channelPartner: 'sushil',
-            projectType: 'Residential 3 To 10 KW (National Portal)',
-            subType: 'On Grid'
-        },
-        {
-            id: 2,
-            srNo: 2,
-            status: 'Pending',
-            statusColor: 'orange',
-            leadId: 'ss/24-25/004',
-            startDate: '2025-03-19',
-            billPayment: '4000/6.05KW',
-            personName: '74838h',
-            mobile: '6535846505',
-            state: 'Gujarat',
-            district: 'Rajkot',
-            city: 'Rajkot',
-            channelPartner: 'sushil',
-            projectType: 'Residential 3 To 10 KW (National Portal)',
-            subType: 'On Grid'
-        },
-        {
-            id: 3,
-            srNo: 3,
-            status: 'Overdue',
-            statusColor: 'green',
-            leadId: 'ss/24-25/004',
-            startDate: '2025-03-19',
-            billPayment: '4000/6.05KW',
-            personName: '74838h',
-            mobile: '6535846505',
-            state: 'Gujarat',
-            district: 'Rajkot',
-            city: 'Rajkot',
-            channelPartner: 'sushil',
-            projectType: 'Residential 3 To 10 KW (National Portal)',
-            subType: 'On Grid'
+    const [bottomFilter, setBottomFilter] = useState('');
+    const [bottomCustomDate, setBottomCustomDate] = useState('');
+    const todayDate = new Date().toISOString().split('T')[0];
+    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
+    // KYC data state initialized from completed App Demo leads in localStorage
+    const [kycData, setKycData] = useState(() => {
+        try {
+            const savedAppDemoLeads = localStorage.getItem('appDemoLeads');
+            if (savedAppDemoLeads) {
+                const parsedLeads = JSON.parse(savedAppDemoLeads);
+                // Filter only completed demos and format them for the signup table
+                const completedLeads = parsedLeads.filter(lead => lead.status === 'Completed').map((lead, index) => ({
+                    id: lead.id,
+                    srNo: index + 1,
+                    status: 'New', // Initially 'New' in the Signup stage
+                    statusColor: 'pink',
+                    leadId: lead.leadId,
+                    name: lead.name,
+                    mobile: lead.mobile,
+                    designation: lead.designation,
+                    district: lead.district,
+                    followupDate: todayDate // Default follow up to today
+                }));
+                return completedLeads;
+            }
+        } catch (e) {
+            console.error("Error loading leads from localStorage", e);
         }
-    ];
+        return [];
+    });
 
     const handleDateRangeChange = (e) => {
         setSelectedDateRange(e.target.value);
@@ -120,6 +99,31 @@ const FranchiseeManagerKYC = () => {
                 return 'bg-gray-100 text-gray-800';
         }
     };
+
+    const handleDeleteLead = (id) => {
+        if (window.confirm("Are you sure you want to delete this record?")) {
+            setKycData(kycData.filter(record => record.id !== id));
+        }
+    };
+
+    const filteredKycData = kycData.filter(record => {
+        if (selectedDistrict && record.district !== selectedDistrict) return false;
+        if (topDateFilter && record.followupDate !== topDateFilter) return false;
+        
+        if (bottomFilter === 'Today') return record.followupDate === todayDate;
+        if (bottomFilter === 'Tomorrow') return record.followupDate === tomorrowDate;
+        if (bottomFilter === 'Custom Date' && bottomCustomDate) return record.followupDate === bottomCustomDate;
+
+        return true;
+    }).filter(record => {
+        return record.name.toLowerCase().includes(searchTerm.toLowerCase()) || record.leadId.toLowerCase().includes(searchTerm.toLowerCase());
+    });
+
+    // Calculate dynamic stats
+    const totalKyc = kycData.length;
+    const pendingKyc = kycData.filter(record => record.status === 'New' || record.status === 'Pending').length;
+    const approvedKyc = kycData.filter(record => record.status === 'Completed').length;
+    const overdueKyc = kycData.filter(record => record.status === 'Overdue').length;
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -150,10 +154,24 @@ const FranchiseeManagerKYC = () => {
                         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                             <div className="flex flex-wrap items-center gap-2">
                                 {/* Add Button */}
-                                <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors flex items-center">
+                                {/* <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors flex items-center">
                                     <Plus size={16} className="mr-1" />
                                     ADD
-                                </button>
+                                </button> */}
+
+                                {/* District Filter Dropdown */}
+                                <div className="relative">
+                                    <select 
+                                        className="px-4 py-2 border border-gray-300 rounded-full text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={selectedDistrict}
+                                        onChange={(e) => setSelectedDistrict(e.target.value)}
+                                    >
+                                        <option value="">Districts</option>
+                                        <option value="Rajkot">Rajkot</option>
+                                        <option value="Tankara">Tankara</option>
+                                        <option value="Chotila">Chotila</option>
+                                    </select>
+                                </div>
 
                                 {/* Filter Button */}
                                 <button
@@ -164,10 +182,21 @@ const FranchiseeManagerKYC = () => {
                                     Filter
                                 </button>
 
+                                {/* Date Filter */}
+                                <div className="relative">
+                                    <input
+                                        type="date"
+                                        className="px-4 py-2 border border-gray-300 rounded-full text-sm font-semibold text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        value={topDateFilter}
+                                        onChange={(e) => setTopDateFilter(e.target.value)}
+                                        title="Filter by Date"
+                                    />
+                                </div>
+
                                 {/* Import Lead Button */}
-                                <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors">
+                                {/* <button className="px-4 py-2 bg-[#0f4e8d] text-white rounded-full text-sm font-semibold hover:bg-[#0d3e70] transition-colors">
                                     Import Lead
-                                </button>
+                                </button> */}
                             </div>
 
                             {/* Search Bar */}
@@ -296,90 +325,67 @@ const FranchiseeManagerKYC = () => {
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                         SrNo.
                                     </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
+                                    {/* <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                         Status
-                                    </th>
+                                    </th> */}
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                         Lead Id
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Start Date
-                                    </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Elec.Bill Payment/KW
-                                    </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Person/Company Name
+                                        Name
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                         Mobile No.
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        State
+                                        Designation
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
                                         District
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        City
+                                        Followup
                                     </th>
                                     <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Channel Partner
-                                    </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Project Type
-                                    </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        Sub Type
-                                    </th>
-                                    <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-white uppercase tracking-wider">
-                                        View
+                                        Signup
                                     </th>
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {kycData.map((record) => (
+                                {filteredKycData.map((record) => (
                                     <tr key={record.id} className="hover:bg-gray-50">
-                                        {/* Actions Dropdown */}
+                                        {/* Delete Action */}
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <div className="relative group">
-                                                <button className="text-gray-600 hover:text-gray-900">
-                                                    <MoreVertical size={20} />
-                                                </button>
-                                                <div className="absolute left-0 mt-2 w-48 bg-white rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-10">
-                                                    <div className="py-1">
-                                                        <a href="#" className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100">
-                                                            <Trash2 size={16} className="mr-2 text-red-500" />
-                                                            Delete Request
-                                                        </a>
-                                                    </div>
-                                                </div>
-                                            </div>
+                                            <button 
+                                                onClick={() => handleDeleteLead(record.id)}
+                                                className="text-red-500 hover:text-red-700 hover:bg-red-50 p-1.5 rounded-full transition-colors"
+                                                title="Delete Record"
+                                            >
+                                                <Trash2 size={18} />
+                                            </button>
                                         </td>
 
                                         {/* Data Cells */}
                                         <td className="px-4 py-2 whitespace-nowrap text-xs">{record.srNo}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap">
+                                        {/* <td className="px-4 py-2 whitespace-nowrap">
                                             <span className={`px-3 py-1 ${getStatusBadge(record.status)} rounded-full text-xs font-semibold`}>
                                                 {record.status}
                                             </span>
-                                        </td>
+                                        </td> */}
                                         <td className="px-4 py-2 whitespace-nowrap text-xs">{record.leadId}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.startDate}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.billPayment}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.personName}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-xs font-medium text-gray-900">{record.name}</td>
                                         <td className="px-4 py-2 whitespace-nowrap text-xs">{record.mobile}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.state}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.designation}</td>
                                         <td className="px-4 py-2 whitespace-nowrap text-xs">{record.district}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.city}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.channelPartner}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.projectType}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-xs">{record.subType}</td>
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            <Link to="/franchiseeManager/frenchiseManager_kycprocess">
-                                                <button className="px-3 py-1 bg-[#2c68a3] text-white text-xs rounded-full hover:bg-[#1e4c7a] transition-colors flex items-center">
-                                                    <Eye size={12} className="mr-1" />
-                                                    view
+                                            <button className="px-3 py-1 bg-white border border-red-500 text-red-500 text-xs font-semibold rounded hover:bg-red-50 transition-colors">
+                                                Followup
+                                            </button>
+                                        </td>
+                                        <td className="px-4 py-2 whitespace-nowrap">
+                                            <Link to={`/franchisee-manager/my-task/franchisee-onboarding/kyc-process`}>
+                                                <button className="px-3 py-1 bg-[#2c68a3] text-white text-xs font-semibold rounded hover:bg-[#1e4c7a] transition-colors">
+                                                    Signup
                                                 </button>
                                             </Link>
                                         </td>
@@ -389,19 +395,63 @@ const FranchiseeManagerKYC = () => {
                         </table>
                     </div>
 
-                    {/* Pagination */}
-                    <div className="px-4 py-3 border-t border-gray-200 bg-gray-50">
+                    {/* Pagination & Bottom Filters */}
+                    <div className="px-4 py-3 border-t border-gray-200 bg-gray-50 flex flex-col space-y-4">
+                        {/* Followup Filters Section */}
+                        <div className="flex flex-wrap items-center gap-3">
+                            <span className="text-sm font-semibold text-gray-700">Followups:</span>
+                            {['All', 'Today', 'Tomorrow', 'Custom Date'].map(filter => (
+                                filter !== 'Custom Date' ? (
+                                    <button
+                                        key={filter}
+                                        onClick={() => {
+                                            setBottomFilter(filter === 'All' ? '' : filter);
+                                            setBottomCustomDate('');
+                                        }}
+                                        className={`px-3 py-1.5 rounded-full text-xs font-semibold transition-colors ${
+                                            (bottomFilter === filter || (filter === 'All' && !bottomFilter))
+                                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                                : 'bg-white text-gray-600 hover:bg-gray-100 border border-gray-200'
+                                        }`}
+                                    >
+                                        {filter}
+                                    </button>
+                                ) : (
+                                    <div key={filter} className={`flex items-center rounded-full border overflow-hidden transition-colors ${
+                                        bottomFilter === 'Custom Date' 
+                                            ? 'border-blue-300 bg-blue-50' 
+                                            : 'border-gray-200 bg-white hover:bg-gray-50'
+                                    }`}>
+                                        <span className={`px-3 py-1.5 text-xs font-semibold ${
+                                            bottomFilter === 'Custom Date' ? 'text-blue-800 bg-blue-100' : 'text-gray-600 bg-gray-100'
+                                        }`}>
+                                            Date Filter
+                                        </span>
+                                        <input
+                                            type="date"
+                                            className="px-2 py-1 text-xs focus:outline-none bg-transparent text-gray-700 w-32"
+                                            value={bottomCustomDate}
+                                            onChange={(e) => {
+                                                setBottomCustomDate(e.target.value);
+                                                setBottomFilter('Custom Date');
+                                            }}
+                                            onClick={() => setBottomFilter('Custom Date')}
+                                        />
+                                    </div>
+                                )
+                            ))}
+                        </div>
+
                         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                             <div className="text-sm text-gray-700">
-                                Showing <span className="font-medium">1-3</span> of <span className="font-medium">14</span> entries
+                                Showing <span className="font-medium">1-{filteredKycData.length}</span> of <span className="font-medium">{filteredKycData.length}</span> entries
                             </div>
                             <div className="flex items-center space-x-2">
                                 <button className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm text-gray-500 hover:bg-gray-50 disabled:opacity-50" disabled>
                                     <ChevronLeft size={16} />
                                 </button>
                                 <button className="px-3 py-1 border border-blue-600 rounded-md bg-blue-600 text-white text-sm">1</button>
-                                <button className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm text-gray-700 hover:bg-gray-50">2</button>
-                                <button className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm text-gray-700 hover:bg-gray-50">
+                                <button className="px-3 py-1 border border-gray-300 rounded-md bg-white text-sm text-gray-700 hover:bg-gray-50 disabled:opacity-50" disabled>
                                     <ChevronRightIcon size={16} />
                                 </button>
                             </div>
@@ -415,7 +465,7 @@ const FranchiseeManagerKYC = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Total KYC</p>
-                                <p className="text-2xl font-bold text-gray-700">156</p>
+                                <p className="text-2xl font-bold text-gray-700">{totalKyc}</p>
                             </div>
                             <div className="bg-blue-100 p-3 rounded-full">
                                 <CheckCircle size={24} className="text-blue-600" />
@@ -428,7 +478,7 @@ const FranchiseeManagerKYC = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Pending</p>
-                                <p className="text-2xl font-bold text-orange-600">43</p>
+                                <p className="text-2xl font-bold text-orange-600">{pendingKyc}</p>
                             </div>
                             <div className="bg-orange-100 p-3 rounded-full">
                                 <Clock size={24} className="text-orange-600" />
@@ -441,7 +491,7 @@ const FranchiseeManagerKYC = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Approved</p>
-                                <p className="text-2xl font-bold text-green-600">89</p>
+                                <p className="text-2xl font-bold text-green-600">{approvedKyc}</p>
                             </div>
                             <div className="bg-green-100 p-3 rounded-full">
                                 <CheckCircle size={24} className="text-green-600" />
@@ -454,7 +504,7 @@ const FranchiseeManagerKYC = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Overdue</p>
-                                <p className="text-2xl font-bold text-red-600">24</p>
+                                <p className="text-2xl font-bold text-red-600">{overdueKyc}</p>
                             </div>
                             <div className="bg-red-100 p-3 rounded-full">
                                 <AlertCircle size={24} className="text-red-600" />

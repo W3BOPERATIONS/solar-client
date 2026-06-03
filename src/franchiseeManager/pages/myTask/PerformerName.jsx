@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import {
     BarChart3,
@@ -14,8 +14,49 @@ import {
     CheckCircle,
     FileText
 } from 'lucide-react';
+import api from '../../../api/api';
 
 const FranchiseeManagerPerformerName = () => {
+    const [partnerTypes, setPartnerTypes] = useState([]);
+    const [partnerPlans, setPartnerPlans] = useState([]);
+    const [selectedType, setSelectedType] = useState('');
+    const [selectedPlan, setSelectedPlan] = useState('');
+
+    useEffect(() => {
+        // Reset selected plan when type changes
+        setSelectedPlan('');
+    }, [selectedType]);
+
+    useEffect(() => {
+        const fetchFilters = async () => {
+            try {
+                const [typesRes, plansRes] = await Promise.all([
+                    api.get('/partner-settings/types'),
+                    api.get('/partner-settings/plans')
+                ]);
+                
+                if (typesRes.data) {
+                    setPartnerTypes(typesRes.data);
+                }
+                if (plansRes.data) {
+                    // Extract unique plan names
+                    const uniquePlans = [];
+                    const planNames = new Set();
+                    plansRes.data.forEach(plan => {
+                        if (!planNames.has(plan.name)) {
+                            planNames.add(plan.name);
+                            uniquePlans.push(plan);
+                        }
+                    });
+                    setPartnerPlans(uniquePlans);
+                }
+            } catch (error) {
+                console.error('Error fetching filters:', error);
+            }
+        };
+        fetchFilters();
+    }, []);
+
     // Sample performer franchisees data
     const performers = [
         {
@@ -83,10 +124,31 @@ const FranchiseeManagerPerformerName = () => {
                             <BarChart3 className="mr-2" size={24} />
                             Franchisee Performer List
                         </h2>
-                        <h2 className="text-xl md:text-2xl font-bold text-white flex items-center">
-                            <Home className="mr-2" size={24} />
-                            Rajkot
-                        </h2>
+                        <div className="flex flex-col sm:flex-row gap-4 mt-4 md:mt-0">
+                            <select 
+                                className="bg-white text-gray-800 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-400 font-semibold"
+                                value={selectedType}
+                                onChange={(e) => setSelectedType(e.target.value)}
+                            >
+                                <option value="">Select Partner Type</option>
+                                {partnerTypes.map(type => (
+                                    <option key={type._id} value={type.name}>{type.name}</option>
+                                ))}
+                            </select>
+                            
+                            <select 
+                                className="bg-white text-gray-800 rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-teal-400 font-semibold"
+                                value={selectedPlan}
+                                onChange={(e) => setSelectedPlan(e.target.value)}
+                            >
+                                <option value="">Select Partner Plan</option>
+                                {partnerPlans
+                                    .filter(plan => !selectedType || (plan.partnerType && plan.partnerType.includes(selectedType)))
+                                    .map(plan => (
+                                    <option key={plan._id} value={plan.name}>{plan.name}</option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -152,7 +214,8 @@ const FranchiseeManagerPerformerName = () => {
                         return (
                             <Link
                                 key={performer.id}
-                                to="/franchiseeManager/frenchiseManagerfrenchisenamedashboard"
+                                to="/franchisee-manager/performance/performer-dashboard"
+                                state={{ performerId: performer.id, performerName: performer.name }}
                                 className="transform transition-all duration-300 hover:scale-105 hover:shadow-xl no-underline"
                             >
                                 <div className="bg-teal-600 text-white rounded-xl shadow-lg h-full p-5 hover:bg-teal-700 transition-colors">
