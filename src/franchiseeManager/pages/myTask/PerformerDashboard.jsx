@@ -119,7 +119,10 @@ const FranchiseePerformerDashboard = () => {
 
                 // Fetch App Users created by this partner
                 const usersRes = await userAPI.getAll({ createdBy: performerId });
-                const usersData = usersRes.data?.data || usersRes.data || [];
+                let usersData = usersRes.data?.data || usersRes.data || [];
+                if (!Array.isArray(usersData)) {
+                    usersData = [];
+                }
                 setAppUsers(usersData);
                 
                 // Filter out District Managers
@@ -127,7 +130,10 @@ const FranchiseePerformerDashboard = () => {
 
                 // Fetch Projects for overdue tasks
                 const projectsRes = await projectAPI.getAll({ createdBy: performerId });
-                const projectsData = projectsRes.data?.data || projectsRes.data || [];
+                let projectsData = projectsRes.data?.data || projectsRes.data || [];
+                if (!Array.isArray(projectsData)) {
+                    projectsData = [];
+                }
                 
                 // Calculate Overdue Tasks based on Admin Overdue Settings
                 const today = new Date();

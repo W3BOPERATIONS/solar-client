@@ -129,16 +129,17 @@ const FranchiseeManagerDashboard = () => {
     useEffect(() => {
         // Load Google Maps API
         const loadGoogleMaps = () => {
-            if (!window.google) {
-                const script = document.createElement('script');
-                script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCGt03YWLd6CUTWIZQlBDtdvrTAAIfSqlM&callback=initMap`;
-                script.async = true;
-                script.defer = true;
-                window.initMap = initMap;
-                document.head.appendChild(script);
-            } else {
-                initMap();
+            if (window.google || document.querySelector('script[src*="maps.googleapis.com"]')) {
+                if (window.google) initMap();
+                else window.initMap = initMap;
+                return;
             }
+            const script = document.createElement('script');
+            script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCGt03YWLd6CUTWIZQlBDtdvrTAAIfSqlM&loading=async&callback=initMap`;
+            script.async = true;
+            script.defer = true;
+            window.initMap = initMap;
+            document.head.appendChild(script);
         };
 
         const initMap = () => {
@@ -337,56 +338,56 @@ const FranchiseeManagerDashboard = () => {
 
             {/* Filters Row */}
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-4">
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Franchisee Type</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Franchisee Type</option>
                     <option value="starter">Starter</option>
                     <option value="enterprise">Enterprise</option>
                     <option value="solarbusiness">Solar Business</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Franchisee</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Franchisee</option>
                     <option value="performer">Performer</option>
                     <option value="active">Active</option>
                     <option value="inactive">In-Active</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Cluster</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Cluster</option>
                     <option value="rajkot">Rajkot</option>
                     <option value="ahmedabad">Ahmedabad</option>
                     <option value="baroda">Baroda</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select District</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select District</option>
                     <option value="tankara">Tankara</option>
                     <option value="morbi">Morbi</option>
                     <option value="gondal">Gondal</option>
                     <option value="jasdan">Jasdan</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Category</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Category</option>
                     <option value="solarrooftop">Solar Rooftop</option>
                     <option value="solarpump">Solar Pump</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Sub Category</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Sub Category</option>
                     <option value="residential">Residential</option>
                     <option value="commercial">Commercial</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Project Type</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Project Type</option>
                     <option value="3-5kw">3kw - 5kw</option>
                     <option value="5-10kw">5kw - 10kw</option>
                     <option value="10-20kw">10kw - 20kw</option>
                 </select>
 
-                <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
-                    <option disabled selected>Select Sub type</option>
+                <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option disabled value="">Select Sub type</option>
                     <option value="ongrid">Ongrid</option>
                     <option value="offgrid">Offgrid</option>
                     <option value="hybrid">Hybrid</option>
@@ -459,14 +460,14 @@ const FranchiseeManagerDashboard = () => {
             {/* Donut Charts Section */}
             <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option disabled selected>Select District</option>
+                    <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option disabled value="">Select District</option>
                         <option value="paddhari">Paddhari</option>
                         <option value="tankara">Tankara</option>
                         <option value="morbi">Morbi</option>
                     </select>
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option disabled selected>Select Franchisee Type</option>
+                    <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option disabled value="">Select Franchisee Type</option>
                         <option value="startup">StartUp</option>
                         <option value="enterprise">Enterprise</option>
                         <option value="solarbusiness">Solar Business</option>
@@ -521,22 +522,22 @@ const FranchiseeManagerDashboard = () => {
             {/* Bottom Filters */}
             <div className="flex flex-wrap gap-4 mb-6">
                 <div className="w-full md:w-1/4">
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option disabled selected>Select Project Type</option>
+                    <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option disabled value="">Select Project Type</option>
                         <option value="residential">Residential</option>
                         <option value="commercial">Commercial</option>
                     </select>
                 </div>
                 <div className="w-full md:w-1/4">
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option disabled selected>Select Project Type</option>
+                    <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option disabled value="">Select Project Type</option>
                         <option value="residential">Residential</option>
                         <option value="commercial">Commercial</option>
                     </select>
                 </div>
                 <div className="w-full md:w-1/4">
-                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md">
-                        <option disabled selected>Select Time Period</option>
+                    <select defaultValue="" className="w-full px-3 py-2 border border-gray-300 rounded-md">
+                        <option disabled value="">Select Time Period</option>
                         <option value="today">Today</option>
                         <option value="week">This Week</option>
                         <option value="month">This Month</option>
