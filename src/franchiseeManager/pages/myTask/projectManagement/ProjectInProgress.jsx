@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import Select from 'react-select';
+import { Link, useNavigate } from 'react-router-dom';
 import {
     Home,
     Building,
@@ -30,10 +31,17 @@ import {
     Check,
     X
 } from 'lucide-react';
+import { projectApi } from '../../../../services/project/projectApi';
+import { getProjects } from '../../../../services/project/projectService';
 
 const FranchiseeManagerProjectInProgress = () => {
+    const navigate = useNavigate();
     const [projectType, setProjectType] = useState('residential'); // 'residential' or 'commercial'
     const [activeProcess, setActiveProcess] = useState('consumerRegistered');
+    const [categoriesList, setCategoriesList] = useState([]);
+    const [subCategoriesList, setSubCategoriesList] = useState([]);
+    const [projectTypesList, setProjectTypesList] = useState([]);
+    const [subProjectTypesList, setSubProjectTypesList] = useState([]);
     const [filters, setFilters] = useState({
         category: [],
         subCategory: [],
@@ -41,104 +49,180 @@ const FranchiseeManagerProjectInProgress = () => {
         subProjectType: []
     });
     const [cpFilter, setCpFilter] = useState('all');
-    const [showFilters, setShowFilters] = useState(false);
+    const [showFilters, setShowFilters] = useState(true);
+    
+    // Dynamic Settings
+    const [dynamicStages, setDynamicStages] = useState([]);
+    const [overdueSettings, setOverdueSettings] = useState({});
+    
+    // Real Data
+    const [allProjects, setAllProjects] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Sample CP list
-    const cpList = [
-        'All Franchisees/Installers',
-        'SolarTech Solutions',
-        'Green Energy',
-        'SunPower'
-    ];
+    useEffect(() => {
+        const fetchMasters = async () => {
+            try {
+                // Fetching master data from master API
+                const { getCategories, getSubCategories, getProjectCategoryMappings, getSubProjectTypes } = await import('../../../../services/core/masterApi');
+                
+                const [catRes, subCatRes, mappingRes, subProjTypesRes, stagesRes, overdueRes] = await Promise.all([
+                    getCategories(),
+                    getSubCategories(),
+                    getProjectCategoryMappings(),
+                    getSubProjectTypes(),
+                    projectApi.getJourneyStages().catch(() => []),
+                    projectApi.getOverdueSettings().catch(() => [])
+                ]);
 
-    // Process data mapping
-    const processData = {
-        consumerRegistered: [
-            { id: 1, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'Initial Inquiry', completedIn: '2 days', currentTask: 'Consumer Registration', overdueDays: '3 days', cp: 'SolarTech Solutions' },
-            { id: 2, customer: 'Priya Sharma', projectId: 'PRJ-1002', previousTask: 'Initial Inquiry', completedIn: '1 day', currentTask: 'Consumer Registration', overdueDays: '5 days', cp: 'Green Energy' },
-            { id: 3, customer: 'Vijay Mehta', projectId: 'PRJ-1003', previousTask: 'Initial Inquiry', completedIn: '3 days', currentTask: 'Consumer Registration', overdueDays: '2 days', cp: 'SunPower' },
-        ],
-        applicationSubmission: [
-            { id: 4, customer: 'Anjali Desai', projectId: 'PRJ-1004', previousTask: 'Consumer Registration', completedIn: '3 days', currentTask: 'Application Submission', overdueDays: '4 days', cp: 'SolarTech Solutions' },
-            { id: 5, customer: 'Sanjay Gupta', projectId: 'PRJ-1005', previousTask: 'Consumer Registration', completedIn: '2 days', currentTask: 'Application Submission', overdueDays: '1 day', cp: 'Green Energy' },
-        ],
-        feasibilityCheck: [
-            { id: 6, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTasks: ['Consumer Registered', 'Application Submission'], completedIn: '5 days', currentTask: 'Feasibility Check', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-            { id: 7, customer: 'Priya Sharma', projectId: 'PRJ-1002', previousTasks: ['Consumer Registered', 'Application Submission'], completedIn: '4 days', currentTask: 'Feasibility Check', overdueDays: '3 days', cp: 'Green Energy' },
-        ],
-        meterCharge: [
-            { id: 8, customer: 'Anjali Desai', projectId: 'PRJ-1004', previousTasks: ['Consumer Registered', 'Application Submission', 'Feasibility Check'], completedIn: '3 days', currentTask: 'Meter Charge', overdueDays: '1 day', cp: 'SolarTech Solutions' },
-        ],
-        vendorSelection: [
-            { id: 9, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTasks: ['Consumer Registered', 'Application Submission', 'Feasibility Check', 'Meter Charge'], completedIn: '7 days', currentTask: 'Vendor Selection', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-        ],
-        workStart: [
-            { id: 10, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTasks: ['Consumer Registered', 'Application Submission', 'Feasibility Check', 'Meter Charge', 'Vendor Selection'], completedIn: '5 days', currentTask: 'Work Start', overdueDays: '3 days', cp: 'SolarTech Solutions' },
-        ],
-        solarInstallation: [
-            { id: 11, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'Work Start', completedIn: '10 days', currentTask: 'Solar Installation', overdueDays: '5 days', cp: 'SolarTech Solutions' },
-        ],
-        pcr: [
-            { id: 12, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'Solar Installation', completedIn: '7 days', currentTask: 'PCR', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-        ],
-        commissioning: [
-            { id: 13, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'PCR', completedIn: '5 days', currentTask: 'Commissioning', overdueDays: '1 day', cp: 'SolarTech Solutions' },
-        ],
-        meterchange: [
-            { id: 14, customer: 'Anjali Desai', projectId: 'PRJ-1004', previousTask: 'Commissioning', completedIn: '3 days', currentTask: 'Meter Change', overdueDays: '4 days', cp: 'SolarTech Solutions' },
-            { id: 15, customer: 'Sanjay Gupta', projectId: 'PRJ-1005', previousTask: 'Commissioning', completedIn: '2 days', currentTask: 'Meter Change', overdueDays: '1 day', cp: 'Green Energy' },
-        ],
-        inspection: [
-            { id: 16, customer: 'Anjali Desai', projectId: 'PRJ-1004', previousTask: 'Meter Change', completedIn: '3 days', currentTask: 'Meter Inspection', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-            { id: 17, customer: 'Sanjay Gupta', projectId: 'PRJ-1005', previousTask: 'Meter Change', completedIn: '2 days', currentTask: 'Meter Inspection', overdueDays: '1 day', cp: 'Green Energy' },
-        ],
-        subsidyrequest: [
-            { id: 18, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'Commissioning', completedIn: '5 days', currentTask: 'Subsidy Request', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-            { id: 19, customer: 'Priya Sharma', projectId: 'PRJ-1002', previousTask: 'Commissioning', completedIn: '4 days', currentTask: 'Subsidy Request', overdueDays: '3 days', cp: 'Green Energy' },
-        ],
-        subsidydisbursal: [
-            { id: 20, customer: 'Ramesh Patel', projectId: 'PRJ-1001', previousTask: 'Subsidy Request', completedIn: '7 days', currentTask: 'Subsidy Disbursal', overdueDays: '2 days', cp: 'SolarTech Solutions' },
-            { id: 21, customer: 'Priya Sharma', projectId: 'PRJ-1002', previousTask: 'Subsidy Request', completedIn: '5 days', currentTask: 'Subsidy Disbursal', overdueDays: '1 day', cp: 'Green Energy' },
-        ],
-    };
+                if (catRes && catRes.data) {
+                    setCategoriesList(catRes.data);
+                } else if (Array.isArray(catRes)) {
+                    setCategoriesList(catRes);
+                }
 
-    // Process counts
-    const processCounts = {
-        consumerRegistered: 42,
-        applicationSubmission: 38,
-        feasibilityCheck: 28,
-        meterCharge: 24,
-        vendorSelection: 15,
-        workStart: 12,
-        solarInstallation: 8,
-        pcr: 5,
-        commissioning: 3,
-        meterchange: 28,
-        inspection: 24,
-        subsidyrequest: 28,
-        subsidydisbursal: 24,
+                if (stagesRes && Array.isArray(stagesRes)) {
+                    // Sort stages by order if applicable
+                    const sortedStages = stagesRes.sort((a, b) => (a.order || 0) - (b.order || 0));
+                    setDynamicStages(sortedStages);
+                    if (sortedStages.length > 0) {
+                        setActiveProcess(sortedStages[0]._id || sortedStages[0].name.replace(/\s+/g, '').toLowerCase());
+                    }
+                }
+
+                if (overdueRes && Array.isArray(overdueRes)) {
+                    // Build a map of SLA configurations for quick lookup
+                    // Admin stores them per Category/SubCategory, so we merge processConfigs
+                    let allSLA = {};
+                    overdueRes.forEach(setting => {
+                        if (setting.processConfig) {
+                            allSLA = { ...allSLA, ...setting.processConfig };
+                        }
+                    });
+                    setOverdueSettings(allSLA);
+                }
+
+                if (subCatRes && subCatRes.data) {
+                    setSubCategoriesList(subCatRes.data);
+                    if (subCatRes.data.length > 0) {
+                        setProjectType(subCatRes.data[0]._id);
+                    }
+                } else if (Array.isArray(subCatRes)) {
+                    setSubCategoriesList(subCatRes);
+                    if (subCatRes.length > 0) {
+                        setProjectType(subCatRes[0]._id);
+                    }
+                }
+
+                if (subProjTypesRes && subProjTypesRes.data) {
+                    setSubProjectTypesList(subProjTypesRes.data);
+                } else if (Array.isArray(subProjTypesRes)) {
+                    setSubProjectTypesList(subProjTypesRes);
+                }
+
+                // Extract unique project types (ranges) from mappings
+                const mappings = mappingRes?.data || (Array.isArray(mappingRes) ? mappingRes : []);
+                const uniqueRanges = [];
+                const rangeMap = new Map();
+
+                mappings.forEach(mapping => {
+                    if (mapping.projectTypeFrom !== undefined && mapping.projectTypeTo !== undefined) {
+                        const rangeStr = `${mapping.projectTypeFrom} to ${mapping.projectTypeTo} kW`;
+                        if (!rangeMap.has(rangeStr)) {
+                            rangeMap.set(rangeStr, true);
+                            uniqueRanges.push({
+                                _id: `${mapping.projectTypeFrom}-${mapping.projectTypeTo}`,
+                                name: rangeStr
+                            });
+                        }
+                    }
+                });
+                
+                setProjectTypesList(uniqueRanges);
+            } catch (error) {
+                console.error("Error fetching master data:", error);
+            }
+        };
+        fetchMasters();
+    }, []);
+
+    useEffect(() => {
+        const fetchProjectsData = async () => {
+            try {
+                setIsLoading(true);
+                // Fetch projects from backend
+                const data = await getProjects();
+                
+                // Assuming data.data holds the array of projects
+                const projectsList = Array.isArray(data.data) ? data.data : (Array.isArray(data) ? data : []);
+                setAllProjects(projectsList);
+            } catch (error) {
+                console.error("Error fetching projects:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchProjectsData();
+    }, []);
+
+    // Get unique CP list from projects
+    const cpList = ['All Franchisees/Installers'];
+    allProjects.forEach(p => {
+        if (p.cp && !cpList.includes(p.cp)) {
+            cpList.push(p.cp);
+        }
+    });
+
+    // Dynamic Process Counts from real projects
+    const getProcessCount = (stageName) => {
+        if (!stageName) return 0;
+        return allProjects.filter(p => {
+            // Match exactly with project status, or fallback to statusStage
+            if (p.status && p.status.toLowerCase() === stageName.toLowerCase()) return true;
+            if (p.statusStage && p.statusStage.toLowerCase() === stageName.replace(/\s+/g, '').toLowerCase()) return true;
+            return false;
+        }).length;
     };
 
     // Filter processes based on project type
     const getProcesses = () => {
+        if (dynamicStages && dynamicStages.length > 0) {
+            return dynamicStages.map(stage => {
+                const id = stage._id || stage.name.replace(/\s+/g, '').toLowerCase();
+                const matchedCount = getProcessCount(stage.name);
+                const count = matchedCount;
+
+                return {
+                    id: id,
+                    label: stage.name,
+                    count: count,
+                    main: 'Project Processes', // Admin stages don't have main categories
+                    colSpan: 2
+                };
+            });
+        }
+        
+        // Fallback if no dynamic stages are configured
         const allProcesses = [
-            { id: 'consumerRegistered', label: 'Consumer Registered', count: processCounts.consumerRegistered, main: 'Project Signup', colSpan: 2 },
-            { id: 'applicationSubmission', label: 'Application Submission', count: processCounts.applicationSubmission, main: 'Project Signup', colSpan: 2 },
-            { id: 'feasibilityCheck', label: 'Feasibility Check', count: processCounts.feasibilityCheck, main: 'Feasibility Approval', colSpan: 2 },
-            { id: 'meterCharge', label: 'Meter Charge', count: processCounts.meterCharge, main: 'Feasibility Approval', colSpan: 2 },
-            { id: 'vendorSelection', label: 'Vendor Selection', count: processCounts.vendorSelection, main: 'Installation Status', colSpan: 5 },
-            { id: 'workStart', label: 'Work Start', count: processCounts.workStart, main: 'Installation Status', colSpan: 5 },
-            { id: 'solarInstallation', label: 'Solar Installation', count: processCounts.solarInstallation, main: 'Installation Status', colSpan: 5 },
-            { id: 'pcr', label: 'PCR', count: processCounts.pcr, main: 'Installation Status', colSpan: 5 },
-            { id: 'commissioning', label: 'Commissioning', count: processCounts.commissioning, main: 'Installation Status', colSpan: 5 },
-            { id: 'meterchange', label: 'Meter Change', count: processCounts.meterchange, main: 'Meter Installation', colSpan: 2 },
-            { id: 'inspection', label: 'Meter Inspection', count: processCounts.inspection, main: 'Meter Installation', colSpan: 2 },
+            { id: 'consumerRegistered', label: 'Consumer Registered', count: getProcessCount('Consumer Registered'), main: 'Project Signup', colSpan: 2 },
+            { id: 'applicationSubmission', label: 'Application Submission', count: getProcessCount('Application Submission'), main: 'Project Signup', colSpan: 2 },
+            { id: 'feasibilityCheck', label: 'Feasibility Check', count: getProcessCount('Feasibility Check'), main: 'Feasibility Approval', colSpan: 2 },
+            { id: 'meterCharge', label: 'Meter Charge', count: getProcessCount('Meter Charge'), main: 'Feasibility Approval', colSpan: 2 },
+            { id: 'vendorSelection', label: 'Vendor Selection', count: getProcessCount('Vendor Selection'), main: 'Installation Status', colSpan: 5 },
+            { id: 'workStart', label: 'Work Start', count: getProcessCount('Work Start'), main: 'Installation Status', colSpan: 5 },
+            { id: 'solarInstallation', label: 'Solar Installation', count: getProcessCount('Solar Installation'), main: 'Installation Status', colSpan: 5 },
+            { id: 'pcr', label: 'PCR', count: getProcessCount('PCR'), main: 'Installation Status', colSpan: 5 },
+            { id: 'commissioning', label: 'Commissioning', count: getProcessCount('Commissioning'), main: 'Installation Status', colSpan: 5 },
+            { id: 'meterchange', label: 'Meter Change', count: getProcessCount('Meter Change'), main: 'Meter Installation', colSpan: 2 },
+            { id: 'inspection', label: 'Meter Inspection', count: getProcessCount('Meter Inspection'), main: 'Meter Installation', colSpan: 2 },
         ];
 
-        if (projectType === 'residential') {
+        const selectedSubCat = subCategoriesList.find(s => s._id === projectType);
+        const isResidential = selectedSubCat ? selectedSubCat.name.toLowerCase() === 'residential' : projectType === 'residential';
+
+        if (isResidential) {
             allProcesses.push(
-                { id: 'subsidyrequest', label: 'Subsidy Request', count: processCounts.subsidyrequest, main: 'Subsidy', colSpan: 2 },
-                { id: 'subsidydisbursal', label: 'Subsidy Disbursal', count: processCounts.subsidydisbursal, main: 'Subsidy', colSpan: 2 }
+                { id: 'subsidyrequest', label: 'Subsidy Request', count: getProcessCount('Subsidy Request'), main: 'Subsidy', colSpan: 2 },
+                { id: 'subsidydisbursal', label: 'Subsidy Disbursal', count: getProcessCount('Subsidy Disbursal'), main: 'Subsidy', colSpan: 2 }
             );
         }
 
@@ -154,7 +238,8 @@ const FranchiseeManagerProjectInProgress = () => {
             if (!categories.find(c => c.name === process.main)) {
                 categories.push({
                     name: process.main,
-                    colSpan: process.main === 'Installation Status' ? 5 : process.main === 'Subsidy' ? 2 : 2
+                    // If it's dynamic (Project Processes), span across all process columns
+                    colSpan: process.main === 'Project Processes' ? processes.length : (process.main === 'Installation Status' ? 5 : process.main === 'Subsidy' ? 2 : 2)
                 });
             }
         });
@@ -163,60 +248,92 @@ const FranchiseeManagerProjectInProgress = () => {
     };
 
     const getActionButton = (process, item) => {
-        switch (process) {
-            case 'vendorSelection':
-                return (
-                    <button
-                        onClick={() => window.location.href = '/vendor-selection?id=' + item.id}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                    >
-                        Vendor Selection
-                        <ArrowRight size={12} className="ml-1" />
-                    </button>
-                );
-            case 'workStart':
-                return (
-                    <button
-                        onClick={() => window.location.href = '/work-start?id=' + item.id}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                    >
-                        Work Start
-                        <ArrowRight size={12} className="ml-1" />
-                    </button>
-                );
-            case 'solarInstallation':
-                return (
-                    <button
-                        onClick={() => window.location.href = '/solar-installation?id=' + item.id}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                    >
-                        Installation
-                        <ArrowRight size={12} className="ml-1" />
-                    </button>
-                );
-            case 'pcr':
-                return (
-                    <button
-                        onClick={() => window.location.href = '/pcr?id=' + item.id}
-                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
-                    >
-                        PCR
-                        <ArrowRight size={12} className="ml-1" />
-                    </button>
-                );
-            default:
-                return (
-                    <button className="px-3 py-1 bg-gray-100 text-gray-700 text-xs rounded-md hover:bg-gray-200 transition-colors flex items-center">
-                        <Eye size={12} className="mr-1" />
-                        View Details
-                    </button>
-                );
-        }
+        // Fallback for getting the label if process object isn't passed directly
+        const stage = getProcesses().find(p => p.id === process) || { label: process };
+
+        // Function to convert camelCase or Title Case to kebab-case
+        const formatSlug = (str) => {
+            if (!str) return 'details';
+            return str
+                .replace(/([a-z])([A-Z])/g, '$1-$2') // Insert hyphen between lower & upper
+                .replace(/\s+/g, '-')                // Replace spaces with hyphens
+                .toLowerCase();
+        };
+
+        const routeSlug = formatSlug(stage.label);
+
+        return (
+            <button
+                onClick={() => navigate(`/franchisee-manager/my-task/project-management/stage/${routeSlug}?id=${item.id}&stageId=${process}&stageName=${encodeURIComponent(stage.label)}`)}
+                className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center shadow-sm"
+            >
+                <Eye size={12} className="mr-1" />
+                View Details
+            </button>
+        );
     };
 
-    const filteredData = activeProcess && processData[activeProcess]
-        ? processData[activeProcess].filter(item => cpFilter === 'all' || item.cp === cpFilter)
-        : [];
+    // Helper function to calculate actual overdue days based on admin SLA settings
+    const calculateOverdueDays = (item, stageName) => {
+        // If we don't have SLA settings or standard completion time in item, fallback to item.overdueDays
+        let adminAllowedDays = null;
+        
+        // Find matching SLA setting by stage name
+        if (overdueSettings && Object.keys(overdueSettings).length > 0) {
+            const key = Object.keys(overdueSettings).find(k => k.toLowerCase() === stageName.toLowerCase());
+            if (key) {
+                adminAllowedDays = parseInt(overdueSettings[key]); // e.g., 2
+            }
+        }
+        
+        if (adminAllowedDays !== null && !isNaN(adminAllowedDays)) {
+            // For mock calculation: parse the "completedIn" like "2 days"
+            const completedInDays = parseInt(item.completedIn) || 0; 
+            // If the time taken (completedInDays) > admin allowed SLA, it's overdue
+            const overdue = completedInDays - adminAllowedDays;
+            if (overdue > 0) {
+                return overdue;
+            }
+            return 0; // Not overdue
+        }
+        
+        // Fallback to mock data if no SLA defined in admin
+        return parseInt(item.overdueDays) || 0;
+    };
+
+    // Helper to calculate previous task
+    const getPreviousTask = (currentStatus) => {
+        if (!dynamicStages || dynamicStages.length === 0 || !currentStatus) return 'Initial';
+        const currentIndex = dynamicStages.findIndex(s => s.name.toLowerCase() === currentStatus.toLowerCase());
+        if (currentIndex > 0) {
+            return dynamicStages[currentIndex - 1].name;
+        }
+        return 'Initial Inquiry';
+    };
+
+    // Helper to calculate completed in days based on created/updated diff
+    const getCompletedInDays = (item) => {
+        if (!item.createdAt || !item.updatedAt) return 'N/A';
+        const created = new Date(item.createdAt);
+        const updated = new Date(item.updatedAt);
+        const diffTime = Math.abs(updated - created);
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+        return diffDays > 0 ? `${diffDays} days` : '1 day';
+    };
+
+    const activeStage = getProcesses().find(p => p.id === activeProcess) || { label: 'Consumer Registration' };
+    
+    let filteredData = [];
+    if (activeStage) {
+        filteredData = allProjects.filter(p => {
+            const matchesStage = (p.status && p.status.toLowerCase() === activeStage.label.toLowerCase()) || 
+                                 (p.statusStage && p.statusStage.toLowerCase() === activeStage.label.replace(/\s+/g, '').toLowerCase());
+            
+            const matchesCp = cpFilter === 'all' || p.cp === cpFilter;
+            
+            return matchesStage && matchesCp;
+        });
+    }
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -248,37 +365,55 @@ const FranchiseeManagerProjectInProgress = () => {
 
                     {showFilters && (
                         <div className="p-4">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" multiple size={3}>
-                                        <option value="solar-panel">Solar Panel</option>
-                                        <option value="solar-rooftop">Solar Rooftop</option>
-                                        <option value="solar-pump">Solar Pump</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
+                                    <Select 
+                                        isMulti 
+                                        options={categoriesList.map(cat => ({ value: cat._id, label: cat.name }))}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Category..."
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Sub Category</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" multiple size={3}>
-                                        <option value="residential">Residential</option>
-                                        <option value="commercial">Commercial</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Sub Category</label>
+                                    <Select 
+                                        isMulti 
+                                        options={subCategoriesList.map(subCat => ({ value: subCat._id, label: subCat.name }))}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Sub Category..."
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" multiple size={3}>
-                                        <option value="3-5kw">3Kw-5Kw</option>
-                                        <option value="5-10kw">5Kw-10Kw</option>
-                                        <option value="10-20kw">10Kw-20Kw</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Project Type</label>
+                                    <Select 
+                                        isMulti 
+                                        options={projectTypesList.map(type => ({ value: type._id || type.id, label: type.name }))}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Project Type..."
+                                        noOptionsMessage={() => "No project types found"}
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Sub Project Type</label>
-                                    <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" multiple size={3}>
-                                        <option value="on-grid">On-Grid</option>
-                                        <option value="off-grid">Off-grid</option>
-                                        <option value="hybrid">Hybrid</option>
-                                    </select>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Sub Project Type</label>
+                                    <Select 
+                                        isMulti 
+                                        options={subProjectTypesList.map(type => ({ value: type._id, label: type.name }))}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Sub Project Type..."
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
                                 </div>
                             </div>
                             <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center">
@@ -290,29 +425,38 @@ const FranchiseeManagerProjectInProgress = () => {
                 </div>
 
                 {/* Project Type Selection */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    <div
-                        onClick={() => setProjectType('residential')}
-                        className={`cursor-pointer rounded-xl shadow-sm transition-all hover:shadow-md ${projectType === 'residential' ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
-                            }`}
-                    >
-                        <div className="p-6 text-center">
-                            <Home size={48} className="mx-auto mb-3 text-blue-500" />
-                            <h4 className="text-xl font-semibold text-gray-800">Residential</h4>
-                            <p className="text-sm text-gray-500 mt-1">Manage residential solar projects</p>
-                        </div>
-                    </div>
-                    <div
-                        onClick={() => setProjectType('commercial')}
-                        className={`cursor-pointer rounded-xl shadow-sm transition-all hover:shadow-md ${projectType === 'commercial' ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
-                            }`}
-                    >
-                        <div className="p-6 text-center">
-                            <Building size={48} className="mx-auto mb-3 text-blue-500" />
-                            <h4 className="text-xl font-semibold text-gray-800">Commercial</h4>
-                            <p className="text-sm text-gray-500 mt-1">Manage commercial solar projects</p>
-                        </div>
-                    </div>
+                <div className={`grid grid-cols-1 md:grid-cols-${Math.min(subCategoriesList.length || 2, 4)} gap-6 mb-6`}>
+                    {subCategoriesList.length > 0 ? (
+                        subCategoriesList.map((cat) => {
+                            const isResidential = cat.name.toLowerCase() === 'residential';
+                            const isCommercial = cat.name.toLowerCase() === 'commercial';
+                            const IconComponent = isResidential ? Home : isCommercial ? Building : Grid;
+                            return (
+                                <div
+                                    key={cat._id}
+                                    onClick={() => setProjectType(cat._id)}
+                                    className={`cursor-pointer rounded-xl shadow-sm transition-all hover:shadow-md ${projectType === cat._id ? 'ring-2 ring-blue-500 bg-blue-50' : 'bg-white'
+                                        }`}
+                                >
+                                    <div className="p-6 text-center">
+                                        <IconComponent size={48} className="mx-auto mb-3 text-blue-500" />
+                                        <h4 className="text-xl font-semibold text-gray-800">{cat.name}</h4>
+                                        <p className="text-sm text-gray-500 mt-1">{cat.description || `Manage ${cat.name.toLowerCase()} solar projects`}</p>
+                                    </div>
+                                </div>
+                            );
+                        })
+                    ) : (
+                        // Fallback skeleton or default
+                        <>
+                            <div className="cursor-pointer rounded-xl shadow-sm transition-all hover:shadow-md ring-2 ring-blue-500 bg-blue-50 animate-pulse">
+                                <div className="p-6 text-center h-32"></div>
+                            </div>
+                            <div className="cursor-pointer rounded-xl shadow-sm transition-all hover:shadow-md bg-white animate-pulse">
+                                <div className="p-6 text-center h-32"></div>
+                            </div>
+                        </>
+                    )}
                 </div>
 
                 {/* Process Table */}
@@ -339,19 +483,23 @@ const FranchiseeManagerProjectInProgress = () => {
 
                                 {/* Sub Processes */}
                                 <tr className="bg-gray-100">
-                                    {getProcesses().map((process) => (
+                                    {getProcesses().map((process) => {
+                                        const selectedSubCat = subCategoriesList.find(s => s._id === projectType);
+                                        const isCommercial = selectedSubCat ? selectedSubCat.name.toLowerCase() === 'commercial' : projectType === 'commercial';
+                                        
+                                        return (
                                         <td
                                             key={process.id}
                                             onClick={() => {
-                                                if (projectType === 'commercial' && process.id.includes('subsidy')) return;
+                                                if (isCommercial && process.id.includes('subsidy')) return;
                                                 setActiveProcess(process.id);
                                             }}
                                             className={`px-3 py-2 text-xs font-medium text-center border-r border-gray-200 cursor-pointer transition-colors ${activeProcess === process.id ? 'bg-blue-500 text-white' : 'hover:bg-gray-200'
-                                                } ${projectType === 'commercial' && process.id.includes('subsidy') ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                } ${isCommercial && process.id.includes('subsidy') ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             {process.label} ({process.count})
                                         </td>
-                                    ))}
+                                    )})}
                                 </tr>
                             </thead>
                             <tbody>
@@ -368,10 +516,9 @@ const FranchiseeManagerProjectInProgress = () => {
                                                         onChange={(e) => setCpFilter(e.target.value)}
                                                         className="px-3 py-1 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
                                                     >
-                                                        <option value="all">All Franchisees/Installers</option>
-                                                        <option value="SolarTech Solutions">SolarTech Solutions</option>
-                                                        <option value="Green Energy">Green Energy</option>
-                                                        <option value="SunPower">SunPower</option>
+                                                        {cpList.map((cp, idx) => (
+                                                            <option key={idx} value={cp === 'All Franchisees/Installers' ? 'all' : cp}>{cp}</option>
+                                                        ))}
                                                     </select>
                                                 </div>
 
@@ -392,29 +539,27 @@ const FranchiseeManagerProjectInProgress = () => {
                                                         </thead>
                                                         <tbody className="bg-white divide-y divide-gray-200">
                                                             {filteredData.map((item) => (
-                                                                <tr key={item.id} className="hover:bg-gray-50">
-                                                                    <td className="px-4 py-2 text-sm">{item.customer}</td>
+                                                                <tr key={item._id || item.id} className="hover:bg-gray-50">
+                                                                    <td className="px-4 py-2 text-sm">{item.projectName || item.customer}</td>
                                                                     <td className="px-4 py-2 text-sm">{item.projectId}</td>
                                                                     <td className="px-4 py-2 text-sm">
-                                                                        {item.previousTasks ? (
-                                                                            <div className="flex items-center space-x-1">
-                                                                                {item.previousTasks.map((task, idx) => (
-                                                                                    <span key={idx} className="flex items-center text-xs">
-                                                                                        {task} <CheckCircle size={12} className="ml-1 text-green-500" />
-                                                                                        {idx < item.previousTasks.length - 1 && <ChevronRight size={12} className="mx-1 text-gray-400" />}
-                                                                                    </span>
-                                                                                ))}
-                                                                            </div>
-                                                                        ) : (
-                                                                            item.previousTask
-                                                                        )}
+                                                                        {getPreviousTask(item.status || item.currentTask)}
                                                                     </td>
                                                                     <td className="px-4 py-2 text-sm">
-                                                                        <span className="text-green-600 font-medium">{item.completedIn}</span>
+                                                                        <span className="text-green-600 font-medium">
+                                                                            {getCompletedInDays(item)}
+                                                                        </span>
                                                                     </td>
-                                                                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{item.currentTask}</td>
+                                                                    <td className="px-4 py-2 text-sm font-medium text-gray-900">{item.status || item.currentTask}</td>
                                                                     <td className="px-4 py-2 text-sm">
-                                                                        <span className="text-red-600 font-medium">{item.overdueDays}</span>
+                                                                        {(() => {
+                                                                            const overdue = calculateOverdueDays(item, activeStage.label);
+                                                                            return (
+                                                                                <span className={`font-medium ${overdue > 0 ? 'text-red-600' : 'text-green-600'}`}>
+                                                                                {overdue > 0 ? `${overdue} days` : '0 days'}
+                                                                            </span>
+                                                                            );
+                                                                        })()}
                                                                     </td>
                                                                     <td className="px-4 py-2 text-sm">{item.cp}</td>
                                                                     <td className="px-4 py-2 text-sm">
@@ -447,7 +592,7 @@ const FranchiseeManagerProjectInProgress = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Total Projects</p>
-                                <p className="text-2xl font-bold text-gray-700">156</p>
+                                <p className="text-2xl font-bold text-gray-700">{allProjects.length}</p>
                             </div>
                             <div className="bg-blue-100 p-3 rounded-full">
                                 <Zap size={20} className="text-blue-600" />
@@ -458,7 +603,9 @@ const FranchiseeManagerProjectInProgress = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">In Progress</p>
-                                <p className="text-2xl font-bold text-orange-600">89</p>
+                                <p className="text-2xl font-bold text-orange-600">
+                                    {allProjects.filter(p => p.status && p.status !== 'Completed' && p.status !== 'Commissioning').length}
+                                </p>
                             </div>
                             <div className="bg-orange-100 p-3 rounded-full">
                                 <Clock size={20} className="text-orange-600" />
@@ -469,7 +616,9 @@ const FranchiseeManagerProjectInProgress = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Completed</p>
-                                <p className="text-2xl font-bold text-green-600">43</p>
+                                <p className="text-2xl font-bold text-green-600">
+                                    {allProjects.filter(p => p.status === 'Completed' || p.status === 'Commissioning').length}
+                                </p>
                             </div>
                             <div className="bg-green-100 p-3 rounded-full">
                                 <CheckCircle size={20} className="text-green-600" />
@@ -480,7 +629,12 @@ const FranchiseeManagerProjectInProgress = () => {
                         <div className="flex items-center justify-between">
                             <div>
                                 <p className="text-sm text-gray-500">Overdue</p>
-                                <p className="text-2xl font-bold text-red-600">24</p>
+                                <p className="text-2xl font-bold text-red-600">
+                                    {allProjects.filter(p => {
+                                        // Mock overdue count based on dynamic calculation
+                                        return calculateOverdueDays(p, p.status || '') > 0;
+                                    }).length}
+                                </p>
                             </div>
                             <div className="bg-red-100 p-3 rounded-full">
                                 <AlertCircle size={20} className="text-red-600" />

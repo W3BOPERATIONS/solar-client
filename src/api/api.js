@@ -242,4 +242,11 @@ export const performanceAPI = {
   getDealerPerformance: (params) => api.get('/performance/dealer', { params }),
 };
 
+export const ticketAPI = {
+  getAll: (params) => api.get('/tickets', { params }),
+  getById: (id) => api.get(`/tickets/${id}`),
+  create: (data) => api.post('/tickets', data),
+  updateStatus: (id, data) => api.put(`/tickets/${id}/status`, data),
+};
+
 export default api;

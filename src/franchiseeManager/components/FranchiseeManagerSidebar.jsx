@@ -106,12 +106,12 @@ export default function FranchiseeManagerSidebar() {
                 }
             ]
         },
-        {
-            id: 'onboardingGoals',
-            name: 'Franchisee Onboarding Goals',
-            icon: TrendingUp,
-            href: '/franchisee-manager/onboarding-goals'
-        },
+        // {
+        //     id: 'onboardingGoals',
+        //     name: 'Franchisee Onboarding Goals',
+        //     icon: TrendingUp,
+        //     href: '/franchisee-manager/onboarding-goals'
+        // },
         {
             id: 'franchiseeSetting',
             name: 'Franchisee setting',

@@ -246,6 +246,7 @@ import FMKYCProcess from './franchiseeManager/pages/myTask/franchiseeOnboarding/
 import FMFranchiseeOrientation from './franchiseeManager/pages/myTask/franchiseeOnboarding/FranchiseeOrientation';
 import FMOrientationVideo from './franchiseeManager/pages/myTask/franchiseeOnboarding/OrientationVideo';
 import FMProjectInProgress from './franchiseeManager/pages/myTask/projectManagement/ProjectInProgress';
+import FMProjectStageForm from './franchiseeManager/pages/myTask/projectManagement/ProjectStageForm';
 import FMFranchiseePerformance from './franchiseeManager/pages/myTask/FranchiseePerformance';
 import FMFranchiseePerformerName from './franchiseeManager/pages/myTask/PerformerName';
 import FMFranchiseeActiveList from './franchiseeManager/pages/myTask/ActiveList';
@@ -736,6 +737,7 @@ function App() {
               <Route path="lead-management" element={<FranchiseeManagerLeadManagement />} />
 
               <Route path="onboarding-goals" element={<FranchiseeManagerOnboardingGoals />} />
+              <Route path="profile" element={<FranchiseeManagerProfile />} />
 
               {/* My Task Sub-menu */}
               <Route path="my-task/app-demo" element={<FMAppDemo />} />
@@ -745,6 +747,7 @@ function App() {
               <Route path="my-task/franchisee-onboarding/orientation-video" element={<FMOrientationVideo />} />
               <Route path="my-task/franchisee-onboarding" element={<Navigate to="franchisee-signup" />} />
               <Route path="my-task/project-management/project-in-progress" element={<FMProjectInProgress />} />
+              <Route path="my-task/project-management/stage/:processSlug" element={<FMProjectStageForm />} />
               <Route path="my-task/project-management" element={<Navigate to="project-in-progress" />} />
               <Route path="my-task/franchisee-performance" element={<FMFranchiseePerformance />} />
               <Route path="performance/performer" element={<FMFranchiseePerformerName />} />

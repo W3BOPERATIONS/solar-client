@@ -25,7 +25,12 @@ export default function Login() {
     setLoading(true);
 
     try {
-      const response = await authAPI.login({ email, password });
+      let loginEmail = email;
+      // Temporary bypass to support the new partner manager email without database migration
+      if (email.toLowerCase() === 'partnermanager@example.com') {
+        loginEmail = 'franchisemanager@example.com';
+      }
+      const response = await authAPI.login({ email: loginEmail, password });
       setToken(response.data.token);
       setUser(response.data.user);
 
@@ -316,7 +321,7 @@ export default function Login() {
               <div><strong className="text-slate-700">Dealer:</strong> dealer@solarkits.com</div>
               <div><strong className="text-slate-700">Franchise:</strong> franchise@solarkits.com</div>
               <div><strong className="text-slate-700">Dealer Mgr:</strong> dealermanager@solarkits.com</div>
-              <div><strong className="text-slate-700">Franchise Mgr:</strong> franchisemanager@example.com</div>
+              <div><strong className="text-slate-700">Partner Mgr:</strong> partnermanager@example.com</div>
               <div><strong className="text-slate-700">Account Mgr:</strong> accountmanager@solarkits.com</div>
               <div><strong className="text-slate-700">Delivery Mgr:</strong> deliverymanager@solarkits.com</div>
               <div className="md:col-span-2 text-center mt-2 pt-2 border-t border-slate-200 italic">
@@ -406,7 +411,7 @@ export default function Login() {
             <div className="space-y-3">
               <button
                 onClick={() => {
-                  handleDemoLogin('franchisemanager@example.com', 'password123');
+                  handleDemoLogin('partnermanager@example.com', 'password123');
                   setShowManagerSelect(false);
                 }}
                 className="w-full flex items-center justify-between p-4 bg-indigo-50 hover:bg-indigo-100 rounded-xl border border-indigo-100 transition-all group"
@@ -416,13 +421,14 @@ export default function Login() {
                     <Building2 size={20} />
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-indigo-800">Franchise Manager</p>
-                    <p className="text-xs text-indigo-600/70">franchisemanager@example.com</p>
+                    <p className="font-semibold text-indigo-800">Partner Manager</p>
+                    <p className="text-xs text-indigo-600/70">partnermanager@example.com</p>
                   </div>
                 </div>
                 <span className="text-xs font-medium text-indigo-700 bg-white px-2 py-1 rounded">Select</span>
               </button>
 
+              {/*
               <button
                 onClick={() => {
                   handleDemoLogin('dealermanager@solarkits.com', 'password123');
@@ -441,6 +447,7 @@ export default function Login() {
                 </div>
                 <span className="text-xs font-medium text-teal-700 bg-white px-2 py-1 rounded">Select</span>
               </button>
+              */}
             </div>
           </div>
         </div>

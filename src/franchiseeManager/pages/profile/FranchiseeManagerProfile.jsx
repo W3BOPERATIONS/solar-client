@@ -8,6 +8,20 @@ export default function FranchiseeManagerProfile() {
     const [timeFilter, setTimeFilter] = useState('Day');
 
     const [dynamicStats, setDynamicStats] = useState(null);
+    const [assignedGoals, setAssignedGoals] = useState(['partner', 'project']); // Default to show
+    const [partnerData, setPartnerData] = useState({
+        assignCompanyLeads: 20,
+        franchiseeOnboardedLeads: 5,
+        selfLeads: 10,
+        selfOnboarded: 3,
+        totalTarget: 30,
+        conversionPct: 40
+    });
+    const [projectData, setProjectData] = useState({
+        totalProjectsAssigned: 15,
+        projectsCompleted: 7,
+        targetAchievementPct: 46
+    });
 
     useEffect(() => {
         const fetchStats = async () => {
@@ -20,7 +34,22 @@ export default function FranchiseeManagerProfile() {
                 console.error('Error fetching profile stats:', error);
             }
         };
+
+        const fetchDashboardData = async () => {
+            try {
+                const response = await api.get('/franchisee/dashboard-stats');
+                if (response.data && response.data.partnerData) {
+                    setAssignedGoals(response.data.assignedGoals || ['partner', 'project']);
+                    setPartnerData(response.data.partnerData);
+                    setProjectData(response.data.projectData);
+                }
+            } catch (error) {
+                console.log("Using fallback goals data");
+            }
+        };
+
         fetchStats();
+        fetchDashboardData();
     }, []);
 
     // Stats data mapping matching the provided image
@@ -82,7 +111,7 @@ export default function FranchiseeManagerProfile() {
 
                     <div className="border-t border-gray-100 pt-6">
                         <h4 className="text-blue-600 font-semibold mb-4">Contact Information</h4>
-                        
+
                         <div className="space-y-4">
                             <div>
                                 <p className="text-xs text-gray-500 mb-1">Email Address:</p>
@@ -125,11 +154,10 @@ export default function FranchiseeManagerProfile() {
                                 <button
                                     key={tab}
                                     onClick={() => setActiveTab(tab)}
-                                    className={`px-6 py-4 text-sm font-medium whitespace-nowrap transition-colors ${
-                                        activeTab === tab 
-                                            ? 'text-blue-600 border-b-2 border-blue-600' 
+                                    className={`px-6 py-4 text-sm font-medium whitespace-nowrap transition-colors ${activeTab === tab
+                                            ? 'text-blue-600 border-b-2 border-blue-600'
                                             : 'text-gray-500 hover:text-gray-700 hover:bg-gray-50'
-                                    }`}
+                                        }`}
                                 >
                                     {tab}
                                 </button>
@@ -139,7 +167,7 @@ export default function FranchiseeManagerProfile() {
                         {/* Content Area */}
                         <div className="p-6">
                             {activeTab === 'Overview' && (
-                                <div className="border-2 border-red-500 p-6 rounded-lg relative">
+                                <div className="p-6 rounded-lg relative">
                                     <div className="flex justify-between items-center mb-6">
                                         <div>
                                             <h3 className="text-xl font-bold text-gray-800 mb-1">{user?.name ? `${user.name}'s Profile` : "Sharad's Profile"}</h3>
@@ -150,11 +178,10 @@ export default function FranchiseeManagerProfile() {
                                                 <button
                                                     key={filter}
                                                     onClick={() => setTimeFilter(filter)}
-                                                    className={`px-4 py-1 text-xs font-medium rounded-md transition-all ${
-                                                        timeFilter === filter
+                                                    className={`px-4 py-1 text-xs font-medium rounded-md transition-all ${timeFilter === filter
                                                             ? 'bg-green-500 text-white shadow-sm'
                                                             : 'text-gray-500 hover:text-gray-700'
-                                                    }`}
+                                                        }`}
                                                 >
                                                     {filter}
                                                 </button>
@@ -164,8 +191,8 @@ export default function FranchiseeManagerProfile() {
 
                                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                         {stats.map((stat, index) => (
-                                            <div 
-                                                key={index} 
+                                            <div
+                                                key={index}
                                                 className={`${stat.bgColor} rounded-xl p-4 flex flex-col items-center justify-center text-center h-28 shadow-sm`}
                                             >
                                                 <span className={`text-sm font-medium mb-1 ${stat.textColor}`}>{stat.label}</span>
@@ -183,6 +210,90 @@ export default function FranchiseeManagerProfile() {
                                             </div>
                                         ))}
                                     </div>
+
+                                    {/* Appended Goals section from Onboarding Goals */}
+                                    {(assignedGoals.includes('partner') || assignedGoals.includes('project')) && (
+                                        <div className="mt-8 pt-8 border-t border-gray-100">
+                                            <h3 className="text-lg font-bold text-gray-800 mb-6">Onboarding & Project Goals</h3>
+
+                                            {assignedGoals.includes('partner') && partnerData && (
+                                                <div className="bg-gray-50 border border-gray-200 rounded-lg p-6 mb-8 relative">
+                                                    <h3 className="text-lg font-bold text-slate-700 mb-4 border-b pb-2">Partner Onboarding Goals</h3>
+                                                    <div className="absolute top-6 right-6 text-right">
+                                                        <p className="text-sm font-medium text-gray-700">App Demo Approval Date: {new Date().toLocaleDateString()}</p>
+                                                        <p className="text-sm font-bold text-red-500 mt-1">Due Date: 90 Days</p>
+                                                    </div>
+
+                                                    <div className="mb-6">
+                                                        <h3 className="font-semibold text-indigo-900 mb-1">Assign company leads: {partnerData.assignCompanyLeads}</h3>
+                                                        <p className="font-bold text-indigo-600 mb-2">Franchisee onboarded leads: {partnerData.franchiseeOnboardedLeads}</p>
+
+                                                        <div className="relative pt-1 mt-4">
+                                                            <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                                <span>0</span>
+                                                                <span className="text-red-500 font-bold bg-white px-2 rounded border border-red-200 shadow-sm relative -top-3">{partnerData.franchiseeOnboardedLeads}</span>
+                                                                <span>{partnerData.assignCompanyLeads}</span>
+                                                            </div>
+                                                            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
+                                                                <div style={{ width: `${Math.min((partnerData.franchiseeOnboardedLeads / partnerData.assignCompanyLeads) * 100, 100)}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-red-400"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div>
+                                                        <h3 className="font-semibold text-indigo-900 mb-1">Self leads: {partnerData.selfLeads}</h3>
+                                                        <p className="font-bold text-indigo-600 mb-2">Franchisee onboarder self leads: {partnerData.selfOnboarded}</p>
+
+                                                        <div className="relative pt-1 mt-4">
+                                                            <div className="flex justify-between text-xs text-gray-400 mb-1">
+                                                                <span>0</span>
+                                                                <span className="text-blue-500 font-bold bg-white px-2 rounded border border-blue-200 shadow-sm relative -top-3">{partnerData.selfOnboarded}</span>
+                                                                <span>{partnerData.selfLeads}</span>
+                                                            </div>
+                                                            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
+                                                                <div style={{ width: `${Math.min((partnerData.selfOnboarded / partnerData.selfLeads) * 100, 100)}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-400"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="absolute bottom-6 right-6 text-right">
+                                                        <p className="text-sm font-bold text-gray-800">Total Franchisee Target: {partnerData.totalTarget}</p>
+                                                        <p className="text-sm font-bold text-gray-800 mt-1">Conversion in(%): {partnerData.conversionPct}%</p>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {assignedGoals.includes('project') && projectData && (
+                                                <div className="bg-blue-50 border border-blue-200 rounded-lg p-6 relative">
+                                                    <h3 className="text-lg font-bold text-blue-800 mb-4 border-b border-blue-200 pb-2">Project Completion Goals</h3>
+                                                    <div className="absolute top-6 right-6 text-right">
+                                                        <p className="text-sm font-medium text-gray-700">Quarter: Q3 {new Date().getFullYear()}</p>
+                                                        <p className="text-sm font-bold text-orange-500 mt-1">Due Date: 45 Days</p>
+                                                    </div>
+
+                                                    <div className="mb-6">
+                                                        <h3 className="font-semibold text-blue-900 mb-1">Total Solar Projects Assigned: {projectData.totalProjectsAssigned}</h3>
+                                                        <p className="font-bold text-blue-600 mb-2">Projects Successfully Completed: {projectData.projectsCompleted}</p>
+
+                                                        <div className="relative pt-1 mt-4">
+                                                            <div className="flex justify-between text-xs text-gray-500 mb-1">
+                                                                <span>0</span>
+                                                                <span className="text-blue-500 font-bold bg-white px-2 rounded border border-blue-200 shadow-sm relative -top-3">{projectData.projectsCompleted}</span>
+                                                                <span>{projectData.totalProjectsAssigned}</span>
+                                                            </div>
+                                                            <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-blue-200">
+                                                                <div style={{ width: `${projectData.targetAchievementPct}%` }} className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-blue-500"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="absolute bottom-6 right-6 text-right">
+                                                        <p className="text-sm font-bold text-gray-800">Target Achievement: {projectData.targetAchievementPct}%</p>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
