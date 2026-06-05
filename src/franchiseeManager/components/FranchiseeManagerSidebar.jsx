@@ -85,13 +85,13 @@ export default function FranchiseeManagerSidebar() {
                 { name: 'App Demo', href: '/franchisee-manager/my-task/app-demo', icon: Smartphone },
                 {
                     id: 'franchiseeOnboarding',
-                    name: 'Franchisee onboarding',
+                    name: 'Partner onboarding',
                     icon: UserPlus,
                     isGroup: true,
                     isExpanded: expandedSections.franchiseeOnboarding,
                     children: [
-                        { name: 'Franchisee Signup', href: '/franchisee-manager/my-task/franchisee-onboarding/franchisee-signup', icon: UserPlus },
-                        { name: 'Franchisee Orientation', href: '/franchisee-manager/my-task/franchisee-onboarding/franchisee-orientation', icon: BookOpen },
+                        { name: 'Partner Signup', href: '/franchisee-manager/my-task/franchisee-onboarding/franchisee-signup', icon: UserPlus },
+                        { name: 'Partner Orientation', href: '/franchisee-manager/my-task/franchisee-onboarding/franchisee-orientation', icon: BookOpen },
                     ]
                 },
                 {
@@ -114,7 +114,7 @@ export default function FranchiseeManagerSidebar() {
         // },
         {
             id: 'franchiseeSetting',
-            name: 'Franchisee setting',
+            name: 'Partner setting',
             icon: Settings,
             isExpanded: expandedSections.franchiseeSetting,
             children: [
@@ -129,7 +129,7 @@ export default function FranchiseeManagerSidebar() {
             icon: Users,
             isExpanded: expandedSections.dealerManagement,
             children: [
-                { name: 'Assign To Franchisee', href: '/franchisee-manager/dealer-management/assign-to-franchisee', icon: UserCheck },
+                { name: 'Assign To Partner', href: '/franchisee-manager/dealer-management/assign-to-franchisee', icon: UserCheck },
                 { name: 'Track Dealer', href: '/franchisee-manager/dealer-management/track-dealer', icon: Activity },
                 { name: 'Reasign To Company', href: '/franchisee-manager/dealer-management/reasign-to-company', icon: RefreshCw },
             ]
@@ -179,12 +179,13 @@ export default function FranchiseeManagerSidebar() {
             </button>
 
             <aside
+                id="franchisee-sidebar"
                 className={`${isOpen ? 'w-64' : 'w-0'
                     } bg-gray-900 text-white transition-all duration-300 overflow-hidden flex flex-col lg:w-64 h-screen`}
             >
                 <div className="p-6 border-b border-gray-700">
                     <div className="flex items-center space-x-2">
-                        <div className="w-10 h-10 bg-indigo-500 rounded-lg flex items-center justify-center">
+                        <div className="w-10 h-10 bg-white/20 rounded-lg flex items-center justify-center">
                             <Home size={24} />
                         </div>
                         <div>
@@ -201,7 +202,7 @@ export default function FranchiseeManagerSidebar() {
                                 <>
                                     <button
                                         onClick={() => toggleSection(section.id)}
-                                        className={`w-full flex items-center justify-between px-4 py-3 mx-2 text-left hover:bg-gray-800 rounded-lg transition ${location.pathname.startsWith(section.href || `/${section.id}`) ? 'bg-gray-800' : ''}`}
+                                        className={`w-full flex items-center justify-between px-4 py-3 mx-2 text-left hover:bg-white/10 rounded-lg transition ${location.pathname.startsWith(section.href || `/${section.id}`) ? 'bg-white/10' : ''}`}
                                     >
                                         <div className="flex items-center space-x-3">
                                             <section.icon size={20} />
@@ -221,7 +222,7 @@ export default function FranchiseeManagerSidebar() {
                                                         <div key={child.id} className="mt-2">
                                                             <button
                                                                  onClick={() => toggleSection(child.id)}
-                                                                 className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-gray-800 rounded-lg transition ${child.isExpanded ? 'bg-gray-800 text-white' : ''}`}
+                                                                 className={`w-full flex items-center justify-between px-3 py-2 text-left text-sm hover:bg-white/10 rounded-lg transition ${child.isExpanded ? 'bg-white/10 text-white' : ''}`}
                                                              >
                                                                  <div className="flex items-center space-x-2">
                                                                      {child.icon && <child.icon size={16} />}
@@ -239,7 +240,7 @@ export default function FranchiseeManagerSidebar() {
                                                                          <Link
                                                                              key={subChild.href}
                                                                              to={subChild.href}
-                                                                             className={`flex items-center space-x-2 px-3 py-2 text-sm text-gray-300 hover:text-white hover:bg-gray-800 rounded-lg transition ${location.pathname === subChild.href ? 'text-white bg-gray-800 font-medium' : ''}`}
+                                                                             className={`flex items-center space-x-2 px-3 py-2 text-sm text-gray-100 hover:text-white hover:bg-white/10 rounded-lg transition ${location.pathname === subChild.href ? 'text-white bg-white/10 font-medium' : ''}`}
                                                                          >
                                                                              <span className="mr-2">−</span>
                                                                              {subChild.icon && <subChild.icon size={14} />}
@@ -256,7 +257,7 @@ export default function FranchiseeManagerSidebar() {
                                                     <Link
                                                         key={child.href}
                                                         to={child.href}
-                                                        className={`flex items-center space-x-2 px-3 py-2 text-sm text-gray-200 hover:text-white hover:bg-gray-800 rounded-lg transition ${location.pathname === child.href ? 'text-white bg-gray-800 font-medium' : ''}`}
+                                                        className={`flex items-center space-x-2 px-3 py-2 text-sm text-gray-100 hover:text-white hover:bg-white/10 rounded-lg transition ${location.pathname === child.href ? 'text-white bg-white/10 font-medium' : ''}`}
                                                     >
                                                         {child.icon && <child.icon size={16} />}
                                                         <span>{child.name}</span>
@@ -269,7 +270,7 @@ export default function FranchiseeManagerSidebar() {
                             ) : (
                                 <Link
                                     to={section.href}
-                                    className={`block px-4 py-3 mx-2 hover:bg-gray-800 rounded-lg transition flex items-center space-x-3 ${location.pathname === section.href ? 'bg-gray-800' : ''}`}
+                                    className={`block px-4 py-3 mx-2 hover:bg-white/10 rounded-lg transition flex items-center space-x-3 ${location.pathname === section.href ? 'bg-white/10' : ''}`}
                                 >
                                     <section.icon size={20} />
                                     <span className="font-medium text-sm">{section.name}</span>

@@ -2,9 +2,43 @@
 @tailwind components;
 @tailwind utilities;
 
+@layer base {
+  :root {
+    --theme-primary: #2563eb; /* blue-600 */
+    --theme-primary-hover: #1d4ed8; /* blue-700 */
+    --theme-bg: #eff6ff; /* blue-50 */
+    --theme-text: #1e3a8a; /* blue-900 */
+  }
 
+  .theme-purple {
+    --theme-primary: #9333ea; /* purple-600 */
+    --theme-primary-hover: #7e22ce; /* purple-700 */
+    --theme-bg: #faf5ff; /* purple-50 */
+    --theme-text: #581c87; /* purple-900 */
+  }
 
+  .theme-green {
+    --theme-primary: #16a34a; /* green-600 */
+    --theme-primary-hover: #15803d; /* green-700 */
+    --theme-bg: #f0fdf4; /* green-50 */
+    --theme-text: #14532d; /* green-900 */
+  }
 
+  .theme-orange {
+    --theme-primary: #ea580c; /* orange-600 */
+    --theme-primary-hover: #c2410c; /* orange-700 */
+    --theme-bg: #fff7ed; /* orange-50 */
+    --theme-text: #7c2d12; /* orange-900 */
+  }
+}
+
+@layer utilities {
+  .theme-bg-primary { background-color: var(--theme-primary) !important; }
+  .theme-bg-primary-hover:hover { background-color: var(--theme-primary-hover) !important; }
+  .theme-text-primary { color: var(--theme-primary) !important; }
+  .theme-bg-soft { background-color: var(--theme-bg) !important; }
+  .theme-text-dark { color: var(--theme-text) !important; }
+}
 /* Add these styles to your main CSS file */
 .clickable {
   cursor: pointer;

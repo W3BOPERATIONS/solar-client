@@ -46,7 +46,9 @@ const FranchiseeManagerProjectInProgress = () => {
         category: [],
         subCategory: [],
         projectType: [],
-        subProjectType: []
+        subProjectType: [],
+        partnerType: [],
+        partnerPlan: []
     });
     const [cpFilter, setCpFilter] = useState('all');
     const [showFilters, setShowFilters] = useState(true);
@@ -59,20 +61,40 @@ const FranchiseeManagerProjectInProgress = () => {
     const [allProjects, setAllProjects] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
+    const [partnerTypeOptions, setPartnerTypeOptions] = useState([]);
+    const [partnerPlanOptions, setPartnerPlanOptions] = useState([]);
+
     useEffect(() => {
         const fetchMasters = async () => {
             try {
                 // Fetching master data from master API
                 const { getCategories, getSubCategories, getProjectCategoryMappings, getSubProjectTypes } = await import('../../../../services/core/masterApi');
-                
-                const [catRes, subCatRes, mappingRes, subProjTypesRes, stagesRes, overdueRes] = await Promise.all([
+                // You can also use an instance of axios (e.g. api) if it's imported, but let's just fetch them along with others
+                const apiModule = await import('../../../../api/api');
+                const api = apiModule.default || apiModule;
+
+                const [catRes, subCatRes, mappingRes, subProjTypesRes, stagesRes, overdueRes, pTypeRes, pPlanRes] = await Promise.all([
                     getCategories(),
                     getSubCategories(),
                     getProjectCategoryMappings(),
                     getSubProjectTypes(),
                     projectApi.getJourneyStages().catch(() => []),
-                    projectApi.getOverdueSettings().catch(() => [])
+                    projectApi.getOverdueSettings().catch(() => []),
+                    api.get('/partner-settings/types').catch(() => ({ data: [] })),
+                    api.get('/partner-settings/plans').catch(() => ({ data: [] }))
                 ]);
+
+                // Set dynamic partner types
+                if (pTypeRes && pTypeRes.data) {
+                    const tData = Array.isArray(pTypeRes.data) ? pTypeRes.data : [];
+                    setPartnerTypeOptions(tData.map(t => ({ value: t._id, label: t.name || t.type })));
+                }
+
+                // Set dynamic partner plans
+                if (pPlanRes && pPlanRes.data) {
+                    const pData = Array.isArray(pPlanRes.data) ? pPlanRes.data : [];
+                    setPartnerPlanOptions(pData.map(p => ({ value: p._id, label: p.name })));
+                }
 
                 if (catRes && catRes.data) {
                     setCategoriesList(catRes.data);
@@ -265,7 +287,7 @@ const FranchiseeManagerProjectInProgress = () => {
         return (
             <button
                 onClick={() => navigate(`/franchisee-manager/my-task/project-management/stage/${routeSlug}?id=${item.id}&stageId=${process}&stageName=${encodeURIComponent(stage.label)}`)}
-                className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center shadow-sm"
+                className="px-3 py-1 theme-bg-primary text-white text-xs rounded-md theme-bg-primary-hover transition-colors flex items-center shadow-sm"
             >
                 <Eye size={12} className="mr-1" />
                 View Details
@@ -365,7 +387,7 @@ const FranchiseeManagerProjectInProgress = () => {
 
                     {showFilters && (
                         <div className="p-4">
-                            <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-6">
+                            <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-3 gap-6 mb-6">
                                 <div>
                                     <label className="block text-sm font-semibold text-gray-700 mb-2">Category</label>
                                     <Select 
@@ -415,8 +437,32 @@ const FranchiseeManagerProjectInProgress = () => {
                                         styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
                                     />
                                 </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Partner Type</label>
+                                    <Select 
+                                        isMulti 
+                                        options={partnerTypeOptions}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Partner Type..."
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-semibold text-gray-700 mb-2">Partner Plan</label>
+                                    <Select 
+                                        isMulti 
+                                        options={partnerPlanOptions}
+                                        className="basic-multi-select"
+                                        classNamePrefix="select"
+                                        placeholder="Select Partner Plan..."
+                                        menuPortalTarget={document.body}
+                                        styles={{ menuPortal: base => ({ ...base, zIndex: 9999 }) }}
+                                    />
+                                </div>
                             </div>
-                            <button className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors flex items-center">
+                            <button className="px-4 py-2 theme-bg-primary text-white rounded-md theme-bg-primary-hover transition-colors flex items-center">
                                 <Filter size={16} className="mr-2" />
                                 Apply Filters
                             </button>
@@ -439,7 +485,7 @@ const FranchiseeManagerProjectInProgress = () => {
                                         }`}
                                 >
                                     <div className="p-6 text-center">
-                                        <IconComponent size={48} className="mx-auto mb-3 text-blue-500" />
+                                        <IconComponent size={48} className="mx-auto mb-3 theme-text-primary" />
                                         <h4 className="text-xl font-semibold text-gray-800">{cat.name}</h4>
                                         <p className="text-sm text-gray-500 mt-1">{cat.description || `Manage ${cat.name.toLowerCase()} solar projects`}</p>
                                     </div>
@@ -469,7 +515,7 @@ const FranchiseeManagerProjectInProgress = () => {
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead>
                                 {/* Main Categories */}
-                                <tr className="bg-blue-50">
+                                <tr className="theme-bg-soft">
                                     {getMainCategories().map((category, idx) => (
                                         <th
                                             key={idx}
@@ -494,7 +540,7 @@ const FranchiseeManagerProjectInProgress = () => {
                                                 if (isCommercial && process.id.includes('subsidy')) return;
                                                 setActiveProcess(process.id);
                                             }}
-                                            className={`px-3 py-2 text-xs font-medium text-center border-r border-gray-200 cursor-pointer transition-colors ${activeProcess === process.id ? 'bg-blue-500 text-white' : 'hover:bg-gray-200'
+                                            className={`px-3 py-2 text-xs font-medium text-center border-r border-gray-200 cursor-pointer transition-colors ${activeProcess === process.id ? 'theme-bg-primary text-white' : 'hover:bg-gray-200'
                                                 } ${isCommercial && process.id.includes('subsidy') ? 'opacity-50 cursor-not-allowed' : ''}`}
                                         >
                                             {process.label} ({process.count})
@@ -533,7 +579,7 @@ const FranchiseeManagerProjectInProgress = () => {
                                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Completed In</th>
                                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Current Task</th>
                                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Overdue Days</th>
-                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">CP Name</th>
+                                                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Partner Name</th>
                                                                 <th className="px-4 py-2 text-left text-xs font-medium text-gray-600 uppercase">Action</th>
                                                             </tr>
                                                         </thead>

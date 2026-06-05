@@ -25,75 +25,112 @@ const DealerManagerAssignToCP = () => {
     const [showSuccessAlert, setShowSuccessAlert] = useState(false);
     const [alertMessage, setAlertMessage] = useState('');
 
-    // Sample CP data
-    const cpList = [
-        { id: 1, name: 'Amit Mishra', region: 'North', dealers: 12, performance: '92%' },
-        { id: 2, name: 'Sumit Gupta', region: 'West', dealers: 8, performance: '88%' },
-        { id: 3, name: 'Harsh Gohel', region: 'Central', dealers: 15, performance: '95%' },
-        { id: 4, name: 'Priya Sharma', region: 'South', dealers: 10, performance: '90%' }
-    ];
+    const [cpList, setCpList] = useState([]);
+    const [districtData, setDistrictData] = useState([]);
+    const [loading, setLoading] = useState(false);
 
-    // Sample district data with dealers
-    const districtData = [
-        {
-            id: 1,
-            name: 'Jasdan',
-            totalDealers: 8,
-            dealers: [
-                { id: 1, name: 'Jasdan Auto Works', joinDate: '2023-01-15', cp: 'Amit Mishra', quotations: 24, projects: 18, performance: '85%' },
-                { id: 2, name: 'Jasdan Motors', joinDate: '2023-02-10', cp: 'Amit Mishra', quotations: 18, projects: 12, performance: '78%' },
-                { id: 3, name: 'Jasdan Solar Solutions', joinDate: '2023-03-05', cp: 'Amit Mishra', quotations: 32, projects: 25, performance: '92%' }
-            ]
-        },
-        {
-            id: 2,
-            name: 'Upleta',
-            totalDealers: 5,
-            dealers: [
-                { id: 4, name: 'Upleta Auto Care', joinDate: '2023-03-05', cp: 'Sumit Gupta', quotations: 32, projects: 25, performance: '88%' },
-                { id: 5, name: 'Upleta Energy', joinDate: '2023-04-12', cp: 'Sumit Gupta', quotations: 21, projects: 16, performance: '82%' }
-            ]
-        },
-        {
-            id: 3,
-            name: 'Paddhari',
-            totalDealers: 7,
-            dealers: [
-                { id: 6, name: 'Paddhari Motors', joinDate: '2023-04-01', cp: 'Harsh Gohel', quotations: 19, projects: 14, performance: '79%' },
-                { id: 7, name: 'Paddhari Auto Solutions', joinDate: '2023-05-12', cp: 'Harsh Gohel', quotations: 27, projects: 22, performance: '91%' },
-                { id: 8, name: 'Paddhari Solar', joinDate: '2023-06-08', cp: 'Harsh Gohel', quotations: 15, projects: 11, performance: '75%' }
-            ]
-        },
-        {
-            id: 4,
-            name: 'Gondal',
-            totalDealers: 6,
-            dealers: [
-                { id: 9, name: 'Gondal Traders', joinDate: '2023-02-18', cp: 'Priya Sharma', quotations: 28, projects: 23, performance: '89%' },
-                { id: 10, name: 'Gondal Energy Solutions', joinDate: '2023-07-01', cp: 'Priya Sharma', quotations: 22, projects: 17, performance: '84%' }
-            ]
-        }
-    ];
+    // Fetch initial CP List
+    React.useEffect(() => {
+        const fetchCPs = async () => {
+            try {
+                const { default: api } = await import('../../../api/axios.js');
+                const res = await api.get('/users?role=channelPartner');
+                // Format the user list to cpList
+                const formatted = (res.data?.users || []).map(user => ({
+                    id: user._id,
+                    name: user.name,
+                    region: user.state || 'N/A',
+                    dealers: 0, // Would need actual aggregation from backend, default to 0
+                    performance: 'N/A'
+                }));
+                // Fallback to franchisee role if no channel partners
+                if (formatted.length === 0) {
+                    const fallbackRes = await api.get('/users?role=franchisee');
+                    const fallbackFormatted = (fallbackRes.data?.users || []).map(user => ({
+                        id: user._id,
+                        name: user.name,
+                        region: user.state || 'N/A',
+                        dealers: 0,
+                        performance: 'N/A'
+                    }));
+                    setCpList(fallbackFormatted);
+                } else {
+                    setCpList(formatted);
+                }
+            } catch (err) {
+                console.error("Error fetching CPs:", err);
+            }
+        };
+        fetchCPs();
+    }, []);
 
-    // CP options for dropdown
-    const cpOptions = cpList.map(cp => cp.name);
-
-    const handleCPClick = (cp) => {
+    // Fetch dealers when a CP is selected (for their district/state mapping)
+    const handleCPClick = async (cp) => {
         setSelectedCP(cp);
         setShowDistrictCards(true);
         setSelectedDistrict(null);
         setShowDealerTable(false);
+        setLoading(true);
+
+        try {
+            const { default: api } = await import('../../../api/axios.js');
+            // Fetch unassigned dealers or dealers assigned to this CP (using state/district loosely)
+            const res = await api.get(`/users?role=dealer`);
+            const dealers = res.data?.users || [];
+            
+            // Group dealers by district
+            const grouped = dealers.reduce((acc, dealer) => {
+                const dist = dealer.district || 'Unassigned';
+                if (!acc[dist]) {
+                    acc[dist] = {
+                        id: dist,
+                        name: dist,
+                        totalDealers: 0,
+                        dealers: []
+                    };
+                }
+                acc[dist].dealers.push({
+                    id: dealer._id,
+                    name: dealer.name,
+                    joinDate: dealer.createdAt ? new Date(dealer.createdAt).toLocaleDateString() : 'N/A',
+                    cp: dealer.assignedTo || 'Unassigned',
+                    quotations: 0, // Mock stats
+                    projects: 0, // Mock stats
+                    performance: 'N/A'
+                });
+                acc[dist].totalDealers++;
+                return acc;
+            }, {});
+
+            setDistrictData(Object.values(grouped));
+        } catch (error) {
+            console.error("Error fetching dealers:", error);
+        } finally {
+            setLoading(false);
+        }
     };
+
+    const cpOptions = cpList.map(cp => cp.name);
 
     const handleDistrictClick = (district) => {
         setSelectedDistrict(district);
         setShowDealerTable(true);
     };
 
-    const handleRaiseRequest = (dealerName, selectedCPValue) => {
-        setAlertMessage(`Request raised successfully for ${dealerName} to ${selectedCPValue}`);
-        setShowSuccessAlert(true);
-        setTimeout(() => setShowSuccessAlert(false), 3000);
+    const handleRaiseRequest = async (dealerId, dealerName, selectedCPValue) => {
+        try {
+            const { default: api } = await import('../../../api/axios.js');
+            // Assuming there's a dealer manager route or user update route for assigning
+            await api.put(`/users/${dealerId}`, { assignedTo: selectedCPValue });
+            setAlertMessage(`Request raised successfully for ${dealerName} to ${selectedCPValue}`);
+            setShowSuccessAlert(true);
+            setTimeout(() => setShowSuccessAlert(false), 3000);
+        } catch (error) {
+            console.error("Error assigning dealer:", error);
+            setAlertMessage(`Failed to assign ${dealerName}`);
+            setShowSuccessAlert(true);
+            setTimeout(() => setShowSuccessAlert(false), 3000);
+        }
     };
 
     return (
@@ -276,10 +313,10 @@ const DealerManagerAssignToCP = () => {
                                                 </td>
                                                 <td className="px-6 py-4 whitespace-nowrap">
                                                     <button
-                                                        onClick={() => {
+                                                        onClick={(event) => {
                                                             const select = event.target.closest('tr').querySelector('select');
-                                                            const selectedCP = select ? select.value : dealer.cp;
-                                                            handleRaiseRequest(dealer.name, selectedCP);
+                                                            const selectedCPValue = select ? select.value : dealer.cp;
+                                                            handleRaiseRequest(dealer.id, dealer.name, selectedCPValue);
                                                         }}
                                                         className="px-3 py-1.5 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
                                                     >

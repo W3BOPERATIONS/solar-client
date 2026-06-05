@@ -138,21 +138,47 @@ const FranchiseeManagerLeadManagement = () => {
         setStateList([]); setDistrictList([]); setClusterList([]);
     };
 
-    // Data
-    const districts = [
-        { id: 1, name: "Ahmedabad", leads: 350, franchisees: 12, color: "#17a2b8" },
-        { id: 2, name: "Surat", leads: 280, franchisees: 9, color: "#20c997" },
-        { id: 3, name: "Vadodara", leads: 190, franchisees: 7, color: "#6f42c1" },
-        { id: 4, name: "Rajkot", leads: 150, franchisees: 5, color: "#fd7e14" }
-    ];
+    const [districts, setDistricts] = useState([]);
+    const [leadPlans, setLeadPlans] = useState([]);
 
-    const [leadPlans, setLeadPlans] = useState([
-        { id: 1, name: "High Priority", type: "high-priority", total: 50, assigned: 20, cost: 500, color: "#e74c3c", icon: AlertCircle },
-        { id: 2, name: "Medium Priority", type: "medium-priority", total: 100, assigned: 45, cost: 300, color: "#f39c12", icon: Clock },
-        { id: 3, name: "Low Cost", type: "low-cost", total: 200, assigned: 120, cost: 150, color: "#3498db", icon: CreditCard },
-        { id: 4, name: "Exclusive", type: "exclusive", total: 25, assigned: 10, cost: 800, color: "#9b59b6", icon: Crown },
-        { id: 5, name: "Bulk", type: "bulk", total: 300, assigned: 180, cost: 80, color: "#2ecc71", icon: Package }
-    ]);
+    // Fetch initial data
+    useEffect(() => {
+        // Fetch all districts for the left panel (or ideally based on selected state, but we fetch all for now)
+        api.get('/locations/districts')
+            .then(res => {
+                const data = res.data?.data || res.data || [];
+                // Map to required UI format
+                const mappedDistricts = data.map((d, index) => ({
+                    _id: d._id,
+                    id: d._id, // Use _id as id for compatibility
+                    name: d.name,
+                    leads: Math.floor(Math.random() * 500), // Mock count until aggregated
+                    franchisees: Math.floor(Math.random() * 20), // Mock count until aggregated
+                    color: ['#17a2b8', '#20c997', '#6f42c1', '#fd7e14'][index % 4]
+                }));
+                setDistricts(mappedDistricts);
+            })
+            .catch(err => console.error("Error fetching districts", err));
+
+        // Fetch all lead plans
+        api.get('/buy-lead-settings')
+            .then(res => {
+                const data = res.data || [];
+                const mappedPlans = data.map((plan, index) => ({
+                    _id: plan._id,
+                    id: plan._id,
+                    name: plan.name,
+                    type: plan.category || 'standard',
+                    total: plan.numLeads || 0,
+                    assigned: plan.currentLeadsCount || 0,
+                    cost: plan.perLeadRupees || 0,
+                    color: ['#e74c3c', '#f39c12', '#3498db', '#9b59b6', '#2ecc71'][index % 5],
+                    icon: AlertCircle // Default icon, could map based on type
+                }));
+                setLeadPlans(mappedPlans);
+            })
+            .catch(err => console.error("Error fetching lead plans", err));
+    }, []);
 
     // Load franchisees when district changes
     useEffect(() => {
@@ -163,42 +189,47 @@ const FranchiseeManagerLeadManagement = () => {
         }
     }, [selectedDistrict]);
 
-    // Load franchisees
+    // Load franchisees from API based on selected district
     const loadFranchisees = () => {
+        if (!selectedDistrict || !selectedDistrict._id) return;
         setLoading(true);
 
-        // Simulate API call
-        setTimeout(() => {
-            const franchiseeCount = selectedDistrict ? selectedDistrict.franchisees : 8;
-            const newFranchisees = [];
-
-            for (let i = 1; i <= franchiseeCount; i++) {
-                const assigned = Math.floor(Math.random() * 15);
-                const capacity = 30 - assigned;
-
-                // Randomly subscribe to 2-4 plans out of 5
-                const subscribedPlans = [];
-                for(let p=1; p<=5; p++) {
-                    if (Math.random() > 0.3) subscribedPlans.push(p);
+        api.get('/users', { params: { role: 'franchisee', district: selectedDistrict._id } })
+            .then(res => {
+                const users = res.data?.users || res.data || [];
+                const mappedFranchisees = users.map((u, i) => ({
+                    _id: u._id,
+                    id: u._id,
+                    name: u.name || `Partner ${i + 1}`,
+                    location: `${selectedDistrict.name} - ${u.address || 'Local'}`,
+                    assigned: 0, // Mock assigned until backend aggregates
+                    capacity: 30, // Mock capacity
+                    performance: '80%', // Mock performance
+                    status: 'available',
+                    subscribedPlans: leadPlans.map(p => p.id) // Mock subscriptions
+                }));
+                setFranchisees(mappedFranchisees);
+                setLoading(false);
+            })
+            .catch(err => {
+                console.error("Error fetching partners", err);
+                // Fallback dummy data if API fails or no users
+                const newFranchisees = [];
+                for (let i = 1; i <= 5; i++) {
+                    newFranchisees.push({
+                        id: `dummy-${i}`,
+                        name: `Partner ${i} (Demo)`,
+                        location: `${selectedDistrict.name} - Demo Area`,
+                        assigned: Math.floor(Math.random() * 10),
+                        capacity: 20,
+                        performance: '85%',
+                        status: 'available',
+                        subscribedPlans: leadPlans.map(p => p.id)
+                    });
                 }
-                // Ensure at least one plan is subscribed
-                if(subscribedPlans.length === 0) subscribedPlans.push(1);
-
-                newFranchisees.push({
-                    id: i,
-                    name: `Franchisee ${i}`,
-                    location: `${selectedDistrict ? selectedDistrict.name : 'District'} - Area ${String.fromCharCode(64 + i)}`,
-                    assigned: assigned,
-                    capacity: capacity > 0 ? capacity : 0,
-                    performance: (70 + Math.random() * 25).toFixed(1) + '%',
-                    status: capacity > 0 ? 'available' : 'full',
-                    subscribedPlans: subscribedPlans
-                });
-            }
-
-            setFranchisees(newFranchisees);
-            setLoading(false);
-        }, 500);
+                setFranchisees(newFranchisees);
+                setLoading(false);
+            });
     };
 
     // Select district
@@ -214,22 +245,24 @@ const FranchiseeManagerLeadManagement = () => {
     };
 
     // Open assignment modal
-    const handleOpenAssignmentModal = (franchiseeId) => {
-        if (!selectedDistrict || !selectedLeadPlan) {
-            showSuccessMessage('Please select a district and lead plan first', 'error');
+    const handleOpenAssignmentModal = (planId) => {
+        if (!selectedDistrict || !currentFranchiseeId) {
+            showSuccessMessage('Please select a district and partner first', 'error');
             return;
         }
 
-        const franchisee = franchisees.find(f => f.id === franchiseeId);
-        const availableLeads = selectedLeadPlan.total - selectedLeadPlan.assigned;
+        const plan = leadPlans.find(p => p.id === planId);
+        setSelectedLeadPlan(plan);
+
+        const franchisee = franchisees.find(f => f.id === currentFranchiseeId);
+        const availableLeads = plan.total - plan.assigned;
         const maxLeads = Math.min(availableLeads, franchisee.capacity);
 
         if (maxLeads <= 0) {
-            showSuccessMessage('No leads available or franchisee capacity full', 'error');
+            showSuccessMessage('No leads available or partner capacity full', 'error');
             return;
         }
 
-        setCurrentFranchiseeId(franchiseeId);
         setLeadCount(Math.min(5, maxLeads));
         setShowAssignmentModal(true);
     };
@@ -303,6 +336,7 @@ const FranchiseeManagerLeadManagement = () => {
         setSelectedDistrict(null);
         setSelectedLeadPlan(null);
         setFranchisees([]);
+        setCurrentFranchiseeId(null);
     };
 
     // Finalize all assignments
@@ -708,10 +742,20 @@ const FranchiseeManagerLeadManagement = () => {
                                                                 <span className="text-xs text-gray-500">{remaining} available</span>
                                                             </div>
                                                         </div>
-                                                        <div className="ml-2">
-                                                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full">
+                                                        <div className="ml-2 flex flex-col items-end justify-between h-full">
+                                                            <span className="text-xs bg-gray-200 text-gray-700 px-2 py-1 rounded-full mb-2">
                                                                 {plan.total}
                                                             </span>
+                                                            {remaining > 0 ? (
+                                                                <button
+                                                                    onClick={(e) => { e.stopPropagation(); handleOpenAssignmentModal(plan.id); }}
+                                                                    disabled={!currentFranchiseeId}
+                                                                    className={`${!currentFranchiseeId ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'} text-white text-xs px-3 py-1.5 rounded-md transition-colors flex items-center`}
+                                                                >
+                                                                    <Plus size={12} className="mr-1" />
+                                                                    Assign
+                                                                </button>
+                                                            ) : null}
                                                         </div>
                                                     </div>
                                                 </div>
@@ -730,12 +774,12 @@ const FranchiseeManagerLeadManagement = () => {
                                 <div className="flex flex-col md:flex-row md:items-center md:justify-between">
                                     <h6 className="font-semibold text-gray-700 flex items-center mb-2 md:mb-0">
                                         <User className="text-blue-500 mr-2" size={16} />
-                                        Franchisees for Assignment
+                                        Partner for Assignment
                                     </h6>
                                     <div className="relative">
                                         <input
                                             type="text"
-                                            placeholder="Search franchisee..."
+                                            placeholder="Search partner..."
                                             className="w-full md:w-64 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:outline-none focus:ring-1 focus:ring-blue-500"
                                             value={searchTerm}
                                             onChange={(e) => setSearchTerm(e.target.value)}
@@ -748,24 +792,25 @@ const FranchiseeManagerLeadManagement = () => {
                                 {loading ? (
                                     <div className="text-center py-8">
                                         <Loader className="animate-spin text-gray-400 mx-auto mb-2" size={24} />
-                                        <p className="text-sm text-gray-500">Loading franchisees...</p>
+                                        <p className="text-sm text-gray-500">Loading partners...</p>
                                     </div>
                                 ) : !selectedDistrict ? (
                                     <div className="text-center py-8">
                                         <Users className="text-gray-300 mx-auto mb-2" size={32} />
-                                        <p className="text-sm text-gray-500">Select a district to view franchisees</p>
+                                        <p className="text-sm text-gray-500">Select a district to view partners</p>
                                     </div>
                                 ) : filteredFranchisees.length === 0 ? (
                                     <div className="text-center py-8">
                                         <Users className="text-gray-300 mx-auto mb-2" size={32} />
-                                        <p className="text-sm text-gray-500">No franchisees found</p>
+                                        <p className="text-sm text-gray-500">No partners found</p>
                                     </div>
                                 ) : (
                                     <div className="space-y-2">
                                         {filteredFranchisees.map(franchisee => (
                                             <div
                                                 key={franchisee.id}
-                                                className="border-l-4 border-blue-400 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow"
+                                                onClick={() => setCurrentFranchiseeId(franchisee.id)}
+                                                className={`border-l-4 border-blue-400 bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow cursor-pointer ${currentFranchiseeId === franchisee.id ? 'ring-2 ring-blue-500' : ''}`}
                                             >
                                                 <div className="p-3">
                                                     <div className="flex items-start">
@@ -785,19 +830,9 @@ const FranchiseeManagerLeadManagement = () => {
                                                         </div>
                                                         <div className="text-right">
                                                             {franchisee.status === 'available' ? (
-                                                                (() => {
-                                                                    const noLeadsAvailable = selectedLeadPlan && (selectedLeadPlan.total - selectedLeadPlan.assigned <= 0);
-                                                                    return (
-                                                                        <button
-                                                                            onClick={() => handleOpenAssignmentModal(franchisee.id)}
-                                                                            disabled={noLeadsAvailable}
-                                                                            className={`${noLeadsAvailable ? 'bg-gray-400 cursor-not-allowed' : 'bg-blue-500 hover:bg-blue-600'} text-white text-xs px-3 py-1.5 rounded-md transition-colors flex items-center`}
-                                                                        >
-                                                                            <Plus size={12} className="mr-1" />
-                                                                            Assign
-                                                                        </button>
-                                                                    );
-                                                                })()
+                                                                <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                                                                    Available
+                                                                </span>
                                                             ) : (
                                                                 <span className="text-xs bg-gray-300 text-gray-700 px-2 py-1 rounded-full">
                                                                     Full

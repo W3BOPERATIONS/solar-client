@@ -19,337 +19,89 @@ const TrackDealerDashboard = () => {
     const [currentDataType, setCurrentDataType] = useState(null); // 'cp' or 'company'
     const [showModal, setShowModal] = useState(false);
     const [modalData, setModalData] = useState(null);
+    const [data, setData] = useState({});
+    const [districts, setDistricts] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // Sample data with dealer details
-    const data = {
-        Paddhari: {
-            cps: [
-                {
-                    id: 'franchisee001',
-                    name: 'John Smith',
-                    dealers: 5,
-                    dealersList: [
-                        {
-                            id: 'DLR001',
-                            name: 'Paddhari Auto Works',
-                            joinDate: '2023-01-15',
-                            status: 'Active',
-                            quotations: 24,
-                            projects: 18,
-                            efficiency: 85
-                        },
-                        {
-                            id: 'DLR002',
-                            name: 'Smith Motors',
-                            joinDate: '2023-02-10',
-                            status: 'Active',
-                            quotations: 18,
-                            projects: 12,
-                            efficiency: 67
-                        },
-                        {
-                            id: 'DLR003',
-                            name: 'City Auto Care',
-                            joinDate: '2023-03-05',
-                            status: 'Inactive',
-                            quotations: 10,
-                            projects: 5,
-                            efficiency: 50
-                        },
-                        {
-                            id: 'DLR004',
-                            name: 'Paddhari Electric',
-                            joinDate: '2023-04-20',
-                            status: 'Active',
-                            quotations: 30,
-                            projects: 25,
-                            efficiency: 83
-                        },
-                        {
-                            id: 'DLR005',
-                            name: 'Premium Auto',
-                            joinDate: '2023-05-15',
-                            status: 'Pending',
-                            quotations: 12,
-                            projects: 8,
-                            efficiency: 67
-                        }
-                    ]
-                },
-                {
-                    id: 'franchisee002',
-                    name: 'Emma Johnson',
-                    dealers: 3,
-                    dealersList: [
-                        {
-                            id: 'DLR006',
-                            name: 'Johnson Motors',
-                            joinDate: '2023-02-15',
-                            status: 'Active',
-                            quotations: 22,
-                            projects: 18,
-                            efficiency: 82
-                        },
-                        {
-                            id: 'DLR007',
-                            name: 'Quick Service Center',
-                            joinDate: '2023-03-10',
-                            status: 'Active',
-                            quotations: 15,
-                            projects: 10,
-                            efficiency: 67
-                        },
-                        {
-                            id: 'DLR008',
-                            name: 'Paddhari Solutions',
-                            joinDate: '2023-06-05',
-                            status: 'Active',
-                            quotations: 28,
-                            projects: 20,
-                            efficiency: 71
-                        }
-                    ]
-                },
-                {
-                    id: 'franchisee003',
-                    name: 'Michael Brown',
-                    dealers: 4,
-                    dealersList: [
-                        {
-                            id: 'DLR009',
-                            name: 'Brown Auto Group',
-                            joinDate: '2023-01-20',
-                            status: 'Active',
-                            quotations: 35,
-                            projects: 28,
-                            efficiency: 80
-                        },
-                        {
-                            id: 'DLR010',
-                            name: 'Express Service',
-                            joinDate: '2023-02-25',
-                            status: 'Inactive',
-                            quotations: 8,
-                            projects: 3,
-                            efficiency: 38
-                        },
-                        {
-                            id: 'DLR011',
-                            name: 'Paddhari Motors',
-                            joinDate: '2023-04-10',
-                            status: 'Active',
-                            quotations: 20,
-                            projects: 15,
-                            efficiency: 75
-                        },
-                        {
-                            id: 'DLR012',
-                            name: 'City Car Care',
-                            joinDate: '2023-05-30',
-                            status: 'Active',
-                            quotations: 25,
-                            projects: 20,
-                            efficiency: 80
-                        }
-                    ]
-                }
-            ],
-            companies: [
-                {
-                    id: 'COMP001',
-                    name: 'Tech Solutions Inc',
-                    dealers: 7,
-                    dealersList: [
-                        {
-                            id: 'DLR013',
-                            name: 'Tech Auto Paddhari',
-                            joinDate: '2023-01-10',
-                            status: 'Active',
-                            quotations: 40,
-                            projects: 32,
-                            efficiency: 80
-                        },
-                        {
-                            id: 'DLR014',
-                            name: 'Digital Solutions',
-                            joinDate: '2023-02-15',
-                            status: 'Active',
-                            quotations: 25,
-                            projects: 18,
-                            efficiency: 72
-                        },
-                        {
-                            id: 'DLR015',
-                            name: 'Tech Repair Center',
-                            joinDate: '2023-03-20',
-                            status: 'Active',
-                            quotations: 30,
-                            projects: 22,
-                            efficiency: 73
-                        },
-                        {
-                            id: 'DLR016',
-                            name: 'Paddhari Tech Hub',
-                            joinDate: '2023-04-05',
-                            status: 'Inactive',
-                            quotations: 12,
-                            projects: 5,
-                            efficiency: 42
-                        },
-                        {
-                            id: 'DLR017',
-                            name: 'Innovative Auto',
-                            joinDate: '2023-05-12',
-                            status: 'Active',
-                            quotations: 35,
-                            projects: 28,
-                            efficiency: 80
-                        },
-                        {
-                            id: 'DLR018',
-                            name: 'Tech Motors',
-                            joinDate: '2023-06-18',
-                            status: 'Pending',
-                            quotations: 15,
-                            projects: 8,
-                            efficiency: 53
-                        },
-                        {
-                            id: 'DLR019',
-                            name: 'Digital Auto Care',
-                            joinDate: '2023-07-22',
-                            status: 'Active',
-                            quotations: 28,
-                            projects: 20,
-                            efficiency: 71
-                        }
-                    ]
-                },
-                {
-                    id: 'COMP002',
-                    name: 'Green Energy Ltd',
-                    dealers: 4,
-                    dealersList: [
-                        {
-                            id: 'DLR020',
-                            name: 'Green Auto Paddhari',
-                            joinDate: '2023-02-20',
-                            status: 'Active',
-                            quotations: 32,
-                            projects: 25,
-                            efficiency: 78
-                        },
-                        {
-                            id: 'DLR021',
-                            name: 'Eco Motors',
-                            joinDate: '2023-03-25',
-                            status: 'Active',
-                            quotations: 22,
-                            projects: 16,
-                            efficiency: 73
-                        },
-                        {
-                            id: 'DLR022',
-                            name: 'Sustainable Auto',
-                            joinDate: '2023-05-10',
-                            status: 'Active',
-                            quotations: 28,
-                            projects: 20,
-                            efficiency: 71
-                        },
-                        {
-                            id: 'DLR023',
-                            name: 'Green Energy Solutions',
-                            joinDate: '2023-06-15',
-                            status: 'Active',
-                            quotations: 30,
-                            projects: 22,
-                            efficiency: 73
-                        }
-                    ]
-                },
-                {
-                    id: 'COMP003',
-                    name: 'Global Logistics',
-                    dealers: 5,
-                    dealersList: [
-                        {
-                            id: 'DLR024',
-                            name: 'Global Auto Paddhari',
-                            joinDate: '2023-01-15',
-                            status: 'Active',
-                            quotations: 45,
-                            projects: 35,
-                            efficiency: 78
-                        },
-                        {
-                            id: 'DLR025',
-                            name: 'Logistics Motors',
-                            joinDate: '2023-02-20',
-                            status: 'Active',
-                            quotations: 30,
-                            projects: 22,
-                            efficiency: 73
-                        },
-                        {
-                            id: 'DLR026',
-                            name: 'Express Logistics',
-                            joinDate: '2023-04-05',
-                            status: 'Inactive',
-                            quotations: 15,
-                            projects: 6,
-                            efficiency: 40
-                        },
-                        {
-                            id: 'DLR027',
-                            name: 'Paddhari Logistics',
-                            joinDate: '2023-05-12',
-                            status: 'Active',
-                            quotations: 35,
-                            projects: 28,
-                            efficiency: 80
-                        },
-                        {
-                            id: 'DLR028',
-                            name: 'Global Transport Solutions',
-                            joinDate: '2023-06-20',
-                            status: 'Active',
-                            quotations: 40,
-                            projects: 32,
-                            efficiency: 80
-                        }
-                    ]
-                }
-            ]
-        },
-        Upleta: {
-            cps: [
-                { id: 'franchisee004', name: 'Sarah Davis', dealers: 6 },
-                { id: 'franchisee005', name: 'Robert Wilson', dealers: 3 }
-            ],
-            companies: [
-                { id: 'COMP004', name: 'Health Plus', dealers: 8 },
-                { id: 'COMP005', name: 'EduTech Solutions', dealers: 5 }
-            ]
-        },
-        Jasdan: {
-            cps: [
-                { id: 'franchisee006', name: 'Jennifer Lee', dealers: 7 },
-                { id: 'franchisee007', name: 'David Miller', dealers: 4 },
-                { id: 'franchisee008', name: 'Lisa Taylor', dealers: 4 }
-            ],
-            companies: [
-                { id: 'COMP006', name: 'Food Distributors', dealers: 9 },
-                { id: 'COMP007', name: 'Auto Parts Ltd', dealers: 6 }
-            ]
-        }
-    };
+    React.useEffect(() => {
+        const fetchTrackingData = async () => {
+            try {
+                const { default: api } = await import('../../../api/axios.js');
+                const [cpRes, dealerRes] = await Promise.all([
+                    api.get('/users?role=channelPartner'),
+                    api.get('/users?role=dealer')
+                ]);
+                
+                const cps = cpRes.data?.users || [];
+                const dealers = dealerRes.data?.users || [];
 
-    const districts = [
-        { name: 'Paddhari', dealers: 12, performance: 78, performanceClass: 'bg-blue-500' },
-        { name: 'Upleta', dealers: 18, performance: 85, performanceClass: 'bg-green-500' },
-        { name: 'Jasdan', dealers: 15, performance: 65, performanceClass: 'bg-yellow-500' }
-    ];
+                const districtMap = {};
+                
+                // Group dealers by district
+                dealers.forEach(dealer => {
+                    const distName = dealer.district || dealer.city || 'Unassigned';
+                    if (!districtMap[distName]) {
+                        districtMap[distName] = { cps: [], companies: [], rawDealers: [] };
+                    }
+                    districtMap[distName].rawDealers.push(dealer);
+                });
+
+                const formattedDistricts = [];
+                const formattedData = {};
+
+                Object.keys(districtMap).forEach(distName => {
+                    const distDealers = districtMap[distName].rawDealers;
+                    
+                    // Simulate CPs for this district
+                    const distCPs = cps.map(cp => {
+                        const assignedDealers = distDealers.filter(d => d.assignedTo === cp.name || d.assignedTo === cp._id);
+                        return {
+                            id: cp._id,
+                            name: cp.name,
+                            dealers: assignedDealers.length,
+                            dealersList: assignedDealers.map(d => ({
+                                id: d._id,
+                                name: d.name,
+                                joinDate: d.createdAt ? new Date(d.createdAt).toLocaleDateString() : 'N/A',
+                                status: d.status || 'Active',
+                                quotations: 0,
+                                projects: 0,
+                                efficiency: 80
+                            }))
+                        };
+                    });
+
+                    formattedData[distName] = {
+                        cps: distCPs,
+                        companies: [] // If company specific logic exists, handle here
+                    };
+
+                    formattedDistricts.push({
+                        name: distName,
+                        dealers: distDealers.length,
+                        performance: 85, // Mock performance
+                        performanceClass: 'bg-blue-500'
+                    });
+                });
+
+                if (formattedDistricts.length > 0) {
+                    setData(formattedData);
+                    setDistricts(formattedDistricts);
+                } else {
+                    // Fallback static data if no dynamic available
+                    setDistricts([
+                        { name: 'Paddhari', dealers: 0, performance: 0, performanceClass: 'bg-blue-500' }
+                    ]);
+                }
+            } catch (err) {
+                console.error("Error fetching tracking data:", err);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchTrackingData();
+    }, []);
+    // Data states are managed by useState above
 
     const handleDistrictClick = (district) => {
         setSelectedDistrict(district);
@@ -405,6 +157,9 @@ const TrackDealerDashboard = () => {
                 </div>
 
                 {/* District Cards */}
+                {loading ? (
+                    <div className="text-center py-10">Loading districts...</div>
+                ) : (
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
                     {districts.map((district) => (
                         <div
@@ -426,6 +181,7 @@ const TrackDealerDashboard = () => {
                         </div>
                     ))}
                 </div>
+                )}
 
                 {/* CP and Company Options */}
                 {selectedDistrict && (

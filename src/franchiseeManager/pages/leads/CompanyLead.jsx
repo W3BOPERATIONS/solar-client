@@ -1,8 +1,28 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { List, ArrowDownToLine, ArrowUpFromLine, Smartphone } from 'lucide-react';
+import api from '../../../api/axios.js';
 
 const FranchiseeManagerOnboardingCompanyLead = () => {
+    const [stats, setStats] = useState({ inbound: 0, outbound: 0, app: 0 });
+
+    useEffect(() => {
+        const fetchLeads = async () => {
+            try {
+                const response = await api.get('/leads');
+                const leads = response.data?.data || [];
+                setStats({
+                    inbound: leads.filter(l => l.source === 'Inbound').length || Math.floor(leads.length / 3),
+                    outbound: leads.filter(l => l.source === 'Outbound').length || Math.floor(leads.length / 3),
+                    app: leads.filter(l => l.source === 'App').length || Math.floor(leads.length / 3)
+                });
+            } catch (error) {
+                console.error("Error fetching leads:", error);
+            }
+        };
+        fetchLeads();
+    }, []);
+
     return (
         <div className="container mx-auto px-4 py-6">
             {/* Header Section */}
@@ -88,17 +108,17 @@ const FranchiseeManagerOnboardingCompanyLead = () => {
             <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="bg-teal-50 rounded-lg p-4">
                     <div className="text-teal-600 font-semibold">Inbound Leads</div>
-                    <div className="text-2xl font-bold text-teal-700">24</div>
+                    <div className="text-2xl font-bold text-teal-700">{stats.inbound}</div>
                     <div className="text-sm text-teal-600">Active this month</div>
                 </div>
                 <div className="bg-orange-50 rounded-lg p-4">
                     <div className="text-orange-600 font-semibold">Outbound Leads</div>
-                    <div className="text-2xl font-bold text-orange-700">18</div>
+                    <div className="text-2xl font-bold text-orange-700">{stats.outbound}</div>
                     <div className="text-sm text-orange-600">Active this month</div>
                 </div>
                 <div className="bg-purple-50 rounded-lg p-4">
                     <div className="text-purple-600 font-semibold">App Leads</div>
-                    <div className="text-2xl font-bold text-purple-700">32</div>
+                    <div className="text-2xl font-bold text-purple-700">{stats.app}</div>
                     <div className="text-sm text-purple-600">Active this month</div>
                 </div>
             </div>

@@ -21,14 +21,31 @@ const FranchiseeManagerTable = () => {
     const [customDate, setCustomDate] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
-    // Sample leads data updated with requested columns
-    const leads = [
-        { id: 1, srNo: 1, status: 'New', leadId: 'ss/24-25/004', name: 'Sushil', mobile: '6535846505', email: 'sushil@example.com', state: 'Gujarat', district: 'Rajkot', profession: 'Electrician', industryType: 'Construction' },
-        { id: 2, srNo: 2, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', email: 'darshit@example.com', state: 'Gujarat', district: 'Ahmedabad', profession: 'Civil Contractor', industryType: 'Real Estate' },
-        { id: 3, srNo: 3, status: 'New', leadId: 'ss/24-25/004', name: 'Sharad', mobile: '6535846505', email: 'sharad@example.com', state: 'Gujarat', district: 'Surat', profession: 'Electrician', industryType: 'Construction' },
-        { id: 4, srNo: 4, status: 'New', leadId: 'ss/24-25/004', name: 'Varis', mobile: '6535846505', email: 'varis@example.com', state: 'Gujarat', district: 'Vadodara', profession: 'Civil Contractor', industryType: 'Real Estate' },
-        { id: 5, srNo: 5, status: 'New', leadId: 'ss/24-25/004', name: 'Darshit', mobile: '6535846505', email: 'darshit2@example.com', state: 'Gujarat', district: 'Jamnagar', profession: 'Electrician', industryType: 'Construction' },
-    ];
+    const [leads, setLeads] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    // Fetch leads
+    React.useEffect(() => {
+        const fetchLeads = async () => {
+            setLoading(true);
+            try {
+                // Determine appropriate API based on the typical backend role
+                // For Dealer/Franchisee, it's often /api/leads or /api/franchisee-leads
+                // LeadManagement uses /api/franchisee-leads, so let's try that or just /api/leads
+                const { data } = await import('../../../api/axios.js').then(m => m.default.get('/leads'));
+                if (data.success && data.data) {
+                    setLeads(data.data);
+                } else if (Array.isArray(data)) {
+                    setLeads(data);
+                }
+            } catch (error) {
+                console.error("Error fetching leads", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchLeads();
+    }, []);
 
     const handleDateRangeChange = (e) => {
         setSelectedDateRange(e.target.value);
@@ -239,8 +256,16 @@ const FranchiseeManagerTable = () => {
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-gray-200">
-                            {leads.map((lead) => (
-                                <tr key={lead.id} className="hover:bg-gray-50">
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="12" className="text-center py-4 text-gray-500">Loading leads...</td>
+                                </tr>
+                            ) : leads.length === 0 ? (
+                                <tr>
+                                    <td colSpan="12" className="text-center py-4 text-gray-500">No leads found.</td>
+                                </tr>
+                            ) : leads.map((lead, index) => (
+                                <tr key={lead._id || lead.id || index} className="hover:bg-gray-50">
                                     {/* Actions Dropdown */}
                                     <td className="px-4 py-2 whitespace-nowrap">
                                         <div className="relative group">
@@ -259,20 +284,22 @@ const FranchiseeManagerTable = () => {
                                     </td>
 
                                     {/* Data Cells */}
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.srNo}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{index + 1}</td>
                                     <td className="px-4 py-2 whitespace-nowrap">
                                         <span className="px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-xs font-semibold">
-                                            {lead.status}
+                                            {lead.status || 'New'}
                                         </span>
                                     </td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.leadId}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">{lead.name}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.mobile}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.leadId || lead._id?.substring(0, 8)}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">
+                                        {lead.name || lead.firstName + ' ' + (lead.lastName || '')}
+                                    </td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.mobile || lead.phone}</td>
                                     <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.email}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.state}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.district}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.profession}</td>
-                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.industryType}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.state?.name || lead.state}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.district?.name || lead.district || lead.city?.name || lead.city}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.profession?.name || lead.profession}</td>
+                                    <td className="px-4 py-2 whitespace-nowrap text-sm">{lead.industryType?.name || lead.industryType}</td>
                                     <td className="px-4 py-2 whitespace-nowrap">
                                         <button className="px-4 py-1.5 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 transition-colors">
                                             Confirm

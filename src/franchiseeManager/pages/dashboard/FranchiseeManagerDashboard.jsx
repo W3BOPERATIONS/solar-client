@@ -204,8 +204,7 @@ const FranchiseeManagerDashboard = () => {
         <div className="container-fluid px-4 py-4 bg-gray-50 min-h-screen">
             {/* Dashboard Header */}
             <div
-                className="text-white p-4 rounded-2xl mb-4 shadow-lg"
-                style={{ background: 'linear-gradient(135deg, #2c3e50, #3498db)' }}
+                className="text-white p-4 rounded-2xl mb-4 shadow-lg theme-bg-primary"
             >
                 <div className="flex items-center">
                     <h2 className="text-2xl font-bold text-white flex items-center">
@@ -398,7 +397,7 @@ const FranchiseeManagerDashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
                 {/* Map */}
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3">
+                    <div className="theme-bg-primary px-4 py-3">
                         <h5 className="text-white font-semibold flex items-center">
                             <MapPin className="mr-2" size={18} />
                             Gujarat District Map
@@ -409,7 +408,7 @@ const FranchiseeManagerDashboard = () => {
 
                 {/* Franchisee Commission Summary Table */}
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3">
+                    <div className="theme-bg-primary px-4 py-3">
                         <h5 className="text-white font-semibold">Franchisee Commission Summary</h5>
                     </div>
                     <div className="overflow-x-auto">
@@ -551,7 +550,7 @@ const FranchiseeManagerDashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Pie Chart */}
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3">
+                    <div className="theme-bg-primary px-4 py-3">
                         <h5 className="text-white font-semibold flex items-center">
                             <PieChart className="mr-2" size={18} />
                             Orders by Brand & kW
@@ -569,7 +568,7 @@ const FranchiseeManagerDashboard = () => {
 
                 {/* Summary Cards */}
                 <div className="bg-white rounded-lg shadow-sm overflow-hidden">
-                    <div className="bg-blue-600 px-4 py-3">
+                    <div className="theme-bg-primary px-4 py-3">
                         <h5 className="text-white font-semibold flex items-center">
                             <BarChart3 className="mr-2" size={18} />
                             Brand & kW Order Summary

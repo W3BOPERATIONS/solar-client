@@ -25,23 +25,29 @@ const FranchiseeManagerComboKitCustomization = () => {
     const [selectedState, setSelectedState] = useState(null);
     const [selectedCity, setSelectedCity] = useState(null);
     const [editingRow, setEditingRow] = useState(null);
-    const [comboKits, setComboKits] = useState([
-        {
-            id: 1,
-            franchiseeType: 'Enterprise',
-            franchiseeName: 'Sunshine Solar Pvt Ltd',
-            category: 'Solar Panel',
-            subCategory: 'Residential',
-            projectType: '5Kw-10Kw',
-            subProjectType: 'OnGrid',
-            panel: 'Adani Solar Panel',
-            inverter: 'Adani Inverter',
-            bosKit: 'Adani BOS Kit',
-            totalSelling: '50Kw',
-            totalDays: '30days',
-            approval: 'pending'
-        }
-    ]);
+    const [comboKits, setComboKits] = useState([]);
+    const [loading, setLoading] = useState(false);
+
+    React.useEffect(() => {
+        const fetchComboKits = async () => {
+            setLoading(true);
+            try {
+                const { data } = await import('../../../api/axios.js').then(m => m.default.get('/combokit/all-customized-combokits'));
+                if (data.success && data.data) {
+                    setComboKits(data.data);
+                } else if (Array.isArray(data)) {
+                    setComboKits(data);
+                } else if (data.customizedComboKits) {
+                    setComboKits(data.customizedComboKits);
+                }
+            } catch (error) {
+                console.error("Error fetching combokits:", error);
+            } finally {
+                setLoading(false);
+            }
+        };
+        fetchComboKits();
+    }, []);
 
     // State data with cities
     const stateData = {
@@ -231,13 +237,23 @@ const FranchiseeManagerComboKitCustomization = () => {
                                 </tr>
                             </thead>
                             <tbody className="bg-white divide-y divide-gray-200">
-                                {comboKits.map((kit) => (
-                                    <tr key={kit.id} className="hover:bg-gray-50">
+                                {loading ? (
+                                    <tr>
+                                        <td colSpan="13" className="text-center py-4 text-gray-500">Loading combo kits...</td>
+                                    </tr>
+                                ) : comboKits.length === 0 ? (
+                                    <tr>
+                                        <td colSpan="13" className="text-center py-4 text-gray-500">No customized combo kits found.</td>
+                                    </tr>
+                                ) : comboKits.map((kit, index) => {
+                                    const kitId = kit._id || kit.id || index;
+                                    return (
+                                    <tr key={kitId} className="hover:bg-gray-50">
                                         {/* Customize Button Cell */}
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            {editingRow === kit.id ? (
+                                            {editingRow === kitId ? (
                                                 <button
-                                                    onClick={() => handleDoneClick(kit.id)}
+                                                    onClick={() => handleDoneClick(kitId)}
                                                     className="px-3 py-1 bg-yellow-500 text-white text-xs rounded-md hover:bg-yellow-600 transition-colors flex items-center"
                                                 >
                                                     <Save size={12} className="mr-1" />
@@ -245,7 +261,7 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </button>
                                             ) : (
                                                 <button
-                                                    onClick={() => handleCustomizeClick(kit.id)}
+                                                    onClick={() => handleCustomizeClick(kitId)}
                                                     className="px-3 py-1 bg-blue-600 text-white text-xs rounded-md hover:bg-blue-700 transition-colors flex items-center"
                                                 >
                                                     <Settings size={12} className="mr-1" />
@@ -255,13 +271,13 @@ const FranchiseeManagerComboKitCustomization = () => {
                                         </td>
 
                                         {/* Editable Cells */}
-                                        {editingRow === kit.id ? (
+                                        {editingRow === kitId ? (
                                             // Edit Mode - Dropdowns
                                             <>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.franchiseeType}
-                                                        onChange={(e) => handleValueChange(kit.id, 'franchiseeType', e.target.value)}
+                                                        value={kit.franchiseeType || kit.franchisee?.type || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'franchiseeType', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.franchiseeType.map(opt => (
@@ -271,8 +287,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.franchiseeName}
-                                                        onChange={(e) => handleValueChange(kit.id, 'franchiseeName', e.target.value)}
+                                                        value={kit.franchiseeName || kit.franchisee?.name || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'franchiseeName', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.franchiseeName.map(opt => (
@@ -282,8 +298,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.category}
-                                                        onChange={(e) => handleValueChange(kit.id, 'category', e.target.value)}
+                                                        value={kit.category || kit.solarKit?.category?.name || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'category', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.category.map(opt => (
@@ -293,8 +309,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.subCategory}
-                                                        onChange={(e) => handleValueChange(kit.id, 'subCategory', e.target.value)}
+                                                        value={kit.subCategory || kit.solarKit?.subCategory?.name || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'subCategory', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.subCategory.map(opt => (
@@ -304,8 +320,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.projectType}
-                                                        onChange={(e) => handleValueChange(kit.id, 'projectType', e.target.value)}
+                                                        value={kit.projectType || kit.solarKit?.projectType?.name || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'projectType', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.projectType.map(opt => (
@@ -315,8 +331,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.subProjectType}
-                                                        onChange={(e) => handleValueChange(kit.id, 'subProjectType', e.target.value)}
+                                                        value={kit.subProjectType || kit.solarKit?.subProjectType?.name || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'subProjectType', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.subProjectType.map(opt => (
@@ -326,8 +342,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.panel}
-                                                        onChange={(e) => handleValueChange(kit.id, 'panel', e.target.value)}
+                                                        value={kit.panel || kit.customizations?.panel || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'panel', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.panel.map(opt => (
@@ -337,8 +353,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.inverter}
-                                                        onChange={(e) => handleValueChange(kit.id, 'inverter', e.target.value)}
+                                                        value={kit.inverter || kit.customizations?.inverter || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'inverter', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.inverter.map(opt => (
@@ -348,8 +364,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.bosKit}
-                                                        onChange={(e) => handleValueChange(kit.id, 'bosKit', e.target.value)}
+                                                        value={kit.bosKit || kit.customizations?.bosKit || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'bosKit', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.bosKit.map(opt => (
@@ -359,8 +375,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.totalSelling}
-                                                        onChange={(e) => handleValueChange(kit.id, 'totalSelling', e.target.value)}
+                                                        value={kit.totalSelling || kit.totalCapacity || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'totalSelling', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.totalSelling.map(opt => (
@@ -370,8 +386,8 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                                 <td className="px-4 py-2">
                                                     <select
-                                                        value={kit.totalDays}
-                                                        onChange={(e) => handleValueChange(kit.id, 'totalDays', e.target.value)}
+                                                        value={kit.totalDays || ''}
+                                                        onChange={(e) => handleValueChange(kitId, 'totalDays', e.target.value)}
                                                         className="w-full px-2 py-1 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                                                     >
                                                         {dropdownOptions.totalDays.map(opt => (
@@ -381,53 +397,55 @@ const FranchiseeManagerComboKitCustomization = () => {
                                                 </td>
                                             </>
                                         ) : (
-                                            // View Mode - Text
+                                            // View Mode - Static Text
                                             <>
-                                                <td className="px-4 py-2 text-sm">{kit.franchiseeType}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.franchiseeName}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.category}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.subCategory}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.projectType}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.subProjectType}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.panel}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.inverter}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.bosKit}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.totalSelling}</td>
-                                                <td className="px-4 py-2 text-sm">{kit.totalDays}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.franchiseeType || kit.franchisee?.type || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.franchiseeName || kit.franchisee?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.category || kit.solarKit?.category?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.subCategory || kit.solarKit?.subCategory?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.projectType || kit.solarKit?.projectType?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.subProjectType || kit.solarKit?.subProjectType?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.panel || kit.customizations?.panel || kit.solarKit?.solarPanel?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.inverter || kit.customizations?.inverter || kit.solarKit?.inverter?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.bosKit || kit.customizations?.bosKit || kit.solarKit?.bosKit?.name || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.totalSelling || kit.totalCapacity || '-'}</td>
+                                                <td className="px-4 py-2 text-sm">{kit.totalDays || '-'}</td>
                                             </>
                                         )}
 
                                         {/* Approval Button Cell */}
                                         <td className="px-4 py-2 whitespace-nowrap">
-                                            {kit.approval === 'approved' ? (
-                                                <span className="px-2 py-1 bg-green-100 text-green-700 rounded-full text-xs flex items-center">
-                                                    <CheckCircle size={12} className="mr-1" />
+                                            {kit.approval === 'approved' || kit.status === 'Approved' ? (
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                                                    <CheckCircle size={14} className="mr-1" />
                                                     Approved
                                                 </span>
-                                            ) : kit.approval === 'rejected' ? (
-                                                <span className="px-2 py-1 bg-red-100 text-red-700 rounded-full text-xs flex items-center">
-                                                    <AlertCircle size={12} className="mr-1" />
+                                            ) : kit.approval === 'rejected' || kit.status === 'Rejected' ? (
+                                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                                                    <X size={14} className="mr-1" />
                                                     Rejected
                                                 </span>
                                             ) : (
-                                                <div className="flex space-x-1">
+                                                <div className="flex space-x-2">
                                                     <button
-                                                        onClick={() => handleApproval(kit.id, 'approved')}
-                                                        className="px-2 py-1 bg-green-500 text-white text-xs rounded hover:bg-green-600 transition-colors"
+                                                        onClick={() => handleApproval(kitId, 'approved')}
+                                                        className="p-1 rounded-full text-green-600 hover:bg-green-100 transition-colors"
+                                                        title="Approve"
                                                     >
-                                                        <Check size={12} />
+                                                        <Check size={18} />
                                                     </button>
                                                     <button
-                                                        onClick={() => handleApproval(kit.id, 'rejected')}
-                                                        className="px-2 py-1 bg-red-500 text-white text-xs rounded hover:bg-red-600 transition-colors"
+                                                        onClick={() => handleApproval(kitId, 'rejected')}
+                                                        className="p-1 rounded-full text-red-600 hover:bg-red-100 transition-colors"
+                                                        title="Reject"
                                                     >
-                                                        <X size={12} />
+                                                        <X size={18} />
                                                     </button>
                                                 </div>
                                             )}
                                         </td>
                                     </tr>
-                                ))}
+                                )})}
                             </tbody>
                         </table>
                     </div>
