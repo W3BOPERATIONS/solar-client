@@ -206,10 +206,13 @@ import Reports from './dealer/pages/reports/Reports';
 import FranchiseeLayout from './franchisee/layouts/FranchiseeLayout';
 import FranchiseDashboard from './franchisee/pages/dashboard/FranchiseDashboard';
 import DistrictManager from './franchisee/pages/DistrictManager/DistrictManager';
+import CreateDistrictManager from './franchisee/pages/DistrictManager/CreateDistrictManager';
 import LeadAssignDashboard from './franchisee/pages/dashboard/LeadAssignDashboard';
 import SurveyBom from './franchisee/pages/SurveyBom/SurveyBom';
 import DealerManager from './franchisee/pages/DealerManager/DealerManager';
+import CreateDealerManager from './franchisee/pages/DealerManager/CreateDealerManager';
 import CreateLeadPartner from './franchisee/pages/LeadPartner/CreateLeadPartner';
+import CreateLeadPartnerForm from './franchisee/pages/LeadPartner/CreateLeadPartnerForm';
 import LeadManagement from './franchisee/pages/LeadPartner/LeadManagement';
 import MyTeam from './franchisee/pages/MyTeam/MyTeam';
 import TrackPayments from './franchisee/pages/Account/TrackPayments';
@@ -648,8 +651,11 @@ function App() {
 
               <Route path="survey-bom" element={<SurveyBom />} />
               <Route path="district-manager" element={<DistrictManager />} />
+              <Route path="district-manager/create" element={<CreateDistrictManager />} />
               <Route path="dealer-manager" element={<DealerManager />} />
+              <Route path="dealer-manager/create" element={<CreateDealerManager />} />
               <Route path="lead-partner/create" element={<CreateLeadPartner />} />
+              <Route path="lead-partner/create-form" element={<CreateLeadPartnerForm />} />
               <Route path="lead-partner/management" element={<LeadManagement />} />
 
               <Route path="my-team" element={<MyTeam />} />

@@ -24,7 +24,8 @@ import {
     Lock
 } from 'lucide-react';
 import Chart from 'react-apexcharts';
-import { locationAPI } from '../../../api/api';
+import { locationAPI, userAPI } from '../../../api/api';
+import { getApprovals } from '../../../services/approvals/approvalsApi';
 
 const FranchiseDealerManager = () => {
     const navigate = useNavigate();
@@ -48,74 +49,86 @@ const FranchiseDealerManager = () => {
         return () => window.removeEventListener('click', handleClickOutside);
     }, []);
 
-    // Sample Manager Data
-    const [managers] = useState([
-        {
-            name: "Smith",
-            role: "Dealer Manager",
-            email: "john@example.com",
-            phone: "+1234567890",
-            district: "rajkot",
-            projectType: "Residential (25 kW)",
-            completed: 12,
-            pending: 3,
-            image: "https://cdn-icons-png.flaticon.com/512/219/219970.png",
-            joinDate: "2023-01-15",
-            performance: {
-                leads: { total: 12, active: 10, completed: 75 },
-                survey: { total: 5, active: 4, completed: 75 },
-                quote: { total: 10, active: 8, completed: 60 },
-                projectSignup: { total: 5, active: 3, completed: 50 },
-                install: { total: 4, active: 3, completed: 80 },
-                services: { total: 3, active: 2, completed: 66 }
-            },
-            projects: [
-                {
-                    name: "Solar Home Project",
-                    size: "5 kW",
-                    date: "2023-02-15",
-                    amount: 45000,
-                    status: "Completed"
-                },
-                {
-                    name: "Commercial Solar",
-                    size: "10 kW",
-                    date: "2023-03-10",
-                    amount: 80000,
-                    status: "In Progress"
+    const [managers, setManagers] = useState([]);
+
+    const fetchManagers = async () => {
+        try {
+            let fetchedManagers = [];
+            
+            // Fetch approved users
+            try {
+                const res = await userAPI.getAll({ role: 'dealerManager' });
+                if (res.data && res.data.users) {
+                    fetchedManagers = res.data.users.map(user => ({
+                        _id: user._id,
+                        name: user.name,
+                        role: "Dealer Manager",
+                        email: user.email,
+                        phone: user.phone,
+                        district: user.district, // Stores district ID
+                        projectType: "All Projects",
+                        completed: 0,
+                        pending: 0,
+                        image: user.profileImage || "https://cdn-icons-png.flaticon.com/512/219/219970.png",
+                        joinDate: new Date(user.createdAt).toLocaleDateString(),
+                        status: 'Active',
+                        performance: {
+                            leads: { total: 0, active: 0, completed: 0 },
+                            survey: { total: 0, active: 0, completed: 0 },
+                            quote: { total: 0, active: 0, completed: 0 },
+                            projectSignup: { total: 0, active: 0, completed: 0 },
+                            install: { total: 0, active: 0, completed: 0 },
+                            services: { total: 0, active: 0, completed: 0 }
+                        },
+                        projects: []
+                    }));
                 }
-            ]
-        },
-        {
-            name: "Jay Kumar",
-            role: "Dealer Manager",
-            email: "jane@example.com",
-            phone: "+9876543210",
-            district: "ahmedabad",
-            projectType: "Commercial (15 kW)",
-            completed: 8,
-            pending: 5,
-            image: "https://cdn-icons-png.flaticon.com/512/219/219970.png",
-            joinDate: "2023-02-20",
-            performance: {
-                leads: { total: 15, active: 8, completed: 53 },
-                survey: { total: 7, active: 3, completed: 43 },
-                quote: { total: 12, active: 6, completed: 50 },
-                projectSignup: { total: 6, active: 2, completed: 33 },
-                install: { total: 5, active: 2, completed: 40 },
-                services: { total: 4, active: 1, completed: 25 }
-            },
-            projects: [
-                {
-                    name: "Industrial Solar",
-                    size: "50 kW",
-                    date: "2023-04-05",
-                    amount: 250000,
-                    status: "In Progress"
+            } catch (err) {
+                console.error("Error fetching approved users:", err);
+            }
+
+            // Fetch pending approvals
+            try {
+                const approvalRes = await getApprovals({ type: 'dealerManager', status: 'Pending' });
+                if (approvalRes && Array.isArray(approvalRes)) {
+                    const pendingManagers = approvalRes.map(app => ({
+                        _id: app._id,
+                        name: app.data?.name || "Unknown",
+                        role: "Dealer Manager",
+                        email: app.data?.email || "Unknown",
+                        phone: app.data?.phone || "Unknown",
+                        district: app.data?.districtId || app.data?.district || "Unknown", // the ID
+                        projectType: app.data?.projectType || "All Projects",
+                        completed: 0,
+                        pending: 0,
+                        image: "https://cdn-icons-png.flaticon.com/512/219/219970.png",
+                        joinDate: new Date(app.createdAt).toLocaleDateString(),
+                        status: 'Pending',
+                        performance: {
+                            leads: { total: 0, active: 0, completed: 0 },
+                            survey: { total: 0, active: 0, completed: 0 },
+                            quote: { total: 0, active: 0, completed: 0 },
+                            projectSignup: { total: 0, active: 0, completed: 0 },
+                            install: { total: 0, active: 0, completed: 0 },
+                            services: { total: 0, active: 0, completed: 0 }
+                        },
+                        projects: []
+                    }));
+                    fetchedManagers = [...fetchedManagers, ...pendingManagers];
                 }
-            ]
+            } catch (err) {
+                console.error("Error fetching pending approvals:", err);
+            }
+
+            setManagers(fetchedManagers);
+        } catch (error) {
+            console.error("Error fetching managers:", error);
         }
-    ]);
+    };
+
+    useEffect(() => {
+        fetchManagers();
+    }, []);
 
     const [states, setStates] = useState([]);
     const [districts, setDistricts] = useState([]);
@@ -271,7 +284,14 @@ const FranchiseDealerManager = () => {
                             alt="avatar"
                         />
                         <div>
-                            <h5 className="text-xl font-semibold mb-1">{manager.name}</h5>
+                            <h5 className="text-xl font-semibold mb-1 flex items-center">
+                                {manager.name}
+                                {manager.status === 'Pending' && (
+                                    <span className="ml-3 text-xs bg-yellow-100 text-yellow-800 px-2 py-0.5 rounded-full border border-yellow-200">
+                                        Pending Approval
+                                    </span>
+                                )}
+                            </h5>
                             <span className="bg-gray-600 text-white px-2 py-1 rounded text-xs">{manager.role}</span>
                         </div>
                     </div>
@@ -312,7 +332,7 @@ const FranchiseDealerManager = () => {
                         <div>
                             <strong className="text-gray-900 block mb-1">District</strong>
                             <MapPin size={14} className="inline text-red-500 mr-1" />
-                            {manager.district.charAt(0).toUpperCase() + manager.district.slice(1)}
+                            {manager.district ? manager.district.charAt(0).toUpperCase() + manager.district.slice(1) : 'Unknown District'}
                         </div>
                     </div>
                 </div>

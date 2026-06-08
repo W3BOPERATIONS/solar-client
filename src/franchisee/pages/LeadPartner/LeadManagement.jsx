@@ -1,5 +1,6 @@
 // FranchiseProjectManagementAssignLead.jsx
 import React, { useState, useEffect } from 'react';
+import { locationAPI, userAPI, leadAPI } from '../../../api/api';
 import {
     UserPlus,
     History,
@@ -27,159 +28,183 @@ const FranchiseProjectManagementAssignLead = () => {
     const [selectedPartner, setSelectedPartner] = useState(null);
     const [historyFilter, setHistoryFilter] = useState('all');
 
-    // Sample data
-    const [solarLeads] = useState([
-        {
-            id: 'L001',
-            customerName: 'Rajesh Kumar',
-            phone: '+91 9876543210',
-            email: 'rajesh@email.com',
-            address: '123 Main St, Mumbai',
-            projectType: 'Residential',
-            systemSize: '5 kW',
-            budget: '₹2,50,000',
-            status: 'New',
-            source: 'Website',
-            createdDate: '2024-01-15',
-        },
-        {
-            id: 'L002',
-            customerName: 'Priya Sharma',
-            phone: '+91 9876543211',
-            email: 'priya@email.com',
-            address: '456 Park Ave, Delhi',
-            projectType: 'Commercial',
-            systemSize: '10 kW',
-            budget: '₹4,80,000',
-            status: 'New',
-            source: 'Referral',
-            createdDate: '2024-01-16',
-        },
-        {
-            id: 'L003',
-            customerName: 'Amit Patel',
-            phone: '+91 9876543212',
-            email: 'amit@email.com',
-            address: '789 Sector 15, Noida',
-            projectType: 'Industrial',
-            systemSize: '20 kW',
-            budget: '₹9,00,000',
-            status: 'New',
-            source: 'Social Media',
-            createdDate: '2024-01-17',
-        },
-    ]);
+    // History Filters
+    const [historyProjectCategory, setHistoryProjectCategory] = useState('');
+    const [historyProjectSubCategory, setHistoryProjectSubCategory] = useState('');
+    const [historyProjectType, setHistoryProjectType] = useState('');
+    const [historySubProjectType, setHistorySubProjectType] = useState('');
 
-    const [dealers] = useState([
-        {
-            id: 'D001',
-            name: 'Sushil Piprotar',
-            type: 'Dealer',
-            email: 'dealer@sunenergy.com',
-            phone: '+91 9876543201',
-            location: 'Mumbai',
-            status: 'Active',
-            assignedLeads: 12,
-            performance: '95%',
-        },
-        {
-            id: 'D002',
-            name: 'Khushant Mer',
-            type: 'Dealer',
-            email: 'info@greenpower.com',
-            phone: '+91 9876543202',
-            location: 'Delhi',
-            status: 'Active',
-            assignedLeads: 8,
-            performance: '88%',
-        },
-        {
-            id: 'D003',
-            name: 'Sarad Sukla',
-            type: 'Dealer',
-            email: 'contact@solartech.com',
-            phone: '+91 9876543203',
-            location: 'Bangalore',
-            status: 'Active',
-            assignedLeads: 15,
-            performance: '92%',
-        },
-    ]);
+    // Location States
+    const [states, setStates] = useState([]);
+    const [districts, setDistricts] = useState([]);
+    const [cities, setCities] = useState([]);
+    
+    const [selectedState, setSelectedState] = useState('');
+    const [selectedDistrict, setSelectedDistrict] = useState('');
+    const [selectedCity, setSelectedCity] = useState('');
 
-    const [salesManagers] = useState([
-        {
-            id: 'SM001',
-            name: 'Rahul Verma',
-            type: 'Sales Manager',
-            email: 'rahul@company.com',
-            phone: '+91 9876543301',
-            location: 'North Region',
-            status: 'Active',
-            assignedLeads: 25,
-            performance: '98%',
-        },
-        {
-            id: 'SM002',
-            name: 'Neha Singh',
-            type: 'Sales Manager',
-            email: 'neha@company.com',
-            phone: '+91 9876543302',
-            location: 'South Region',
-            status: 'Active',
-            assignedLeads: 18,
-            performance: '94%',
-        },
-        {
-            id: 'SM003',
-            name: 'Ankit Sharma',
-            type: 'Sales Manager',
-            email: 'ankit@company.com',
-            phone: '+91 9876543303',
-            location: 'West Region',
-            status: 'Active',
-            assignedLeads: 22,
-            performance: '96%',
-        },
-    ]);
+    // Dynamic state
+    const [solarLeads, setSolarLeads] = useState([]);
+    const [dealers, setDealers] = useState([]);
+    const [districtManagers, setDistrictManagers] = useState([]);
+    const [assignmentHistory, setAssignmentHistory] = useState([]);
+    const [isLoading, setIsLoading] = useState(false);
 
-    const [assignmentHistory, setAssignmentHistory] = useState([
-        {
-            leadId: 'L001',
-            leadName: 'Rajesh Kumar',
-            assignedToId: 'D001',
-            assignedToName: 'Sun Energy Dealers',
-            assignedToType: 'Dealer',
-            assignedBy: 'Admin User',
-            assignedDate: '2024-01-15 10:30 AM',
-            status: 'Assigned',
-            projectType: 'Residential',
-            systemSize: '5 kW',
-        },
-        {
-            leadId: 'L002',
-            leadName: 'Priya Sharma',
-            assignedToId: 'SM001',
-            assignedToName: 'Rahul Verma',
-            assignedToType: 'Sales Manager',
-            assignedBy: 'System Admin',
-            assignedDate: '2024-01-14 02:15 PM',
-            status: 'In Progress',
-            projectType: 'Commercial',
-            systemSize: '10 kW',
-        },
-        {
-            leadId: 'L003',
-            leadName: 'Amit Patel',
-            assignedToId: 'D002',
-            assignedToName: 'Green Power Solutions',
-            assignedToType: 'Dealer',
-            assignedBy: 'Sales Head',
-            assignedDate: '2024-01-13 11:00 AM',
-            status: 'Completed',
-            projectType: 'Industrial',
-            systemSize: '20 kW',
-        },
-    ]);
+    // Fetch dynamic data
+    const fetchUsers = async () => {
+        try {
+            const [dealerRes, dealerManagerRes] = await Promise.all([
+                userAPI.getUsersByRole('dealer'),
+                userAPI.getUsersByRole('dealerManager')
+            ]);
+            
+            const dealersList = [];
+            if (dealerRes.data && dealerRes.data.users) {
+                dealersList.push(...dealerRes.data.users);
+            }
+            if (dealerManagerRes.data && dealerManagerRes.data.users) {
+                dealersList.push(...dealerManagerRes.data.users);
+            }
+
+            setDealers(dealersList.map(u => ({
+                id: u._id,
+                name: u.name,
+                type: 'Dealer',
+                email: u.email,
+                phone: u.phone,
+                location: u.city || u.district || 'N/A',
+                status: u.status || 'Active',
+                assignedLeads: 0,
+                performance: 'N/A'
+            })));
+
+            const dmRes = await userAPI.getUsersByRole('franchiseeManager');
+            if (dmRes.data && dmRes.data.users) {
+                setDistrictManagers(dmRes.data.users.map(u => ({
+                    id: u._id,
+                    name: u.name,
+                    type: 'District Manager',
+                    email: u.email,
+                    phone: u.phone,
+                    location: u.city || u.district || 'N/A',
+                    status: u.status || 'Active',
+                    assignedLeads: 0,
+                    performance: 'N/A'
+                })));
+            }
+        } catch (error) {
+            console.error("Error fetching users:", error);
+        }
+    };
+
+    const fetchLeadsAndHistory = async () => {
+        try {
+            const leadsRes = await leadAPI.getAllLeads();
+            if (leadsRes.data && leadsRes.data.data) {
+                const leads = leadsRes.data.data;
+                
+                // Unassigned or all leads
+                setSolarLeads(leads.map(l => ({
+                    id: l._id,
+                    customerName: l.name,
+                    phone: l.mobile,
+                    email: l.email,
+                    address: `${l.district?.name || ''}, ${l.city?.name || ''}`,
+                    projectType: l.solarType,
+                    systemSize: l.kw,
+                    budget: l.billAmount ? `₹${l.billAmount}` : 'N/A',
+                    status: l.status,
+                    createdDate: new Date(l.createdAt).toLocaleDateString(),
+                    assignedTo: l.assignedTo,
+                    assignedToType: l.assignedToType
+                })));
+
+                // Build history from assigned leads
+                const history = leads
+                    .filter(l => l.assignedTo)
+                    .map(l => ({
+                        leadId: l._id,
+                        leadName: l.name,
+                        assignedToId: l.assignedTo?._id,
+                        assignedToName: l.assignedTo?.name || 'Unknown',
+                        assignedToType: l.assignedToType || 'Dealer',
+                        assignedBy: 'System',
+                        assignedDate: new Date(l.updatedAt).toLocaleString(),
+                        status: l.status,
+                        projectType: l.solarType,
+                        systemSize: l.kw
+                    }));
+                
+                setAssignmentHistory(history);
+            }
+        } catch (error) {
+            console.error("Error fetching leads:", error);
+        }
+    };
+
+    useEffect(() => {
+        fetchUsers();
+        fetchLeadsAndHistory();
+    }, []);
+
+    // Location API Effects
+    useEffect(() => {
+        const fetchStates = async () => {
+            try {
+                const response = await locationAPI.getAllStates();
+                if (response.data && response.data.data) {
+                    setStates(response.data.data);
+                }
+            } catch (error) {
+                console.error("Error fetching states:", error);
+            }
+        };
+        fetchStates();
+    }, []);
+
+    useEffect(() => {
+        const fetchDistricts = async () => {
+            if (!selectedState) {
+                setDistricts([]);
+                return;
+            }
+            try {
+                const response = await locationAPI.getAllDistricts({ stateId: selectedState });
+                if (response.data && response.data.data) {
+                    setDistricts(response.data.data);
+                }
+            } catch (error) {
+                console.error("Error fetching districts:", error);
+            }
+        };
+        fetchDistricts();
+    }, [selectedState]);
+
+    useEffect(() => {
+        const fetchCities = async () => {
+            if (!selectedDistrict) {
+                setCities([]);
+                return;
+            }
+            try {
+                const response = await locationAPI.getAllCities({ districtId: selectedDistrict });
+                if (response.data && response.data.data) {
+                    setCities(response.data.data);
+                }
+            } catch (error) {
+                console.error("Error fetching cities:", error);
+            }
+        };
+        fetchCities();
+    }, [selectedDistrict]);
+
+    // Filtered Leads
+    const filteredLeads = solarLeads.filter(lead => {
+        if (!selectedCity) return true;
+        const cityObj = cities.find(c => c._id === selectedCity);
+        if (!cityObj) return true;
+        return lead.address.toLowerCase().includes(cityObj.name.toLowerCase());
+    });
 
     // Helper Functions
     const getLocationFromAddress = (address) => {
@@ -203,14 +228,18 @@ const FranchiseProjectManagementAssignLead = () => {
 
     // Render Functions
     const renderLeadCards = () => {
-        return solarLeads.map((lead) => {
+        if (filteredLeads.length === 0) {
+            return <div className="text-gray-500 py-4">No leads found for the selected location.</div>;
+        }
+
+        return filteredLeads.map((lead, index) => {
             const isSelected = selectedLead === lead.id;
             const location = getLocationFromAddress(lead.address);
 
             return (
                 <div
                     key={lead.id}
-                    className={`inline-block w-[180px] h-[140px] rounded-lg border-2 mr-2 mb-2 relative cursor-pointer transition-all duration-300 ${isSelected
+                    className={`inline-block w-[190px] h-[145px] rounded-lg border-2 mr-2 mb-2 relative cursor-pointer transition-all duration-300 ${isSelected
                         ? 'border-blue-500 bg-gradient-to-br from-blue-50 to-cyan-50'
                         : 'border-gray-200 bg-white hover:border-gray-300'
                         }`}
@@ -225,24 +254,34 @@ const FranchiseProjectManagementAssignLead = () => {
                         </div>
                     )}
                     <div className="p-3">
-                        <div className="flex items-center mb-2">
-                            <div className="rounded-full bg-gray-100 p-1 mr-2">
-                                <User size={14} className="text-blue-600" />
+                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-center max-w-[85%]">
+                                <div className="rounded-full bg-blue-50 p-1 mr-2 shrink-0">
+                                    <User size={12} className="text-blue-600" />
+                                </div>
+                                <div className="min-w-0">
+                                    <h6 className="mb-0 font-bold text-sm truncate">{lead.customerName}</h6>
+                                    <div className="text-[10px] text-gray-500 font-semibold mt-0.5">Lead #{index + 1}</div>
+                                </div>
                             </div>
-                            <h6 className="mb-0 font-bold text-sm truncate">{lead.customerName}</h6>
                         </div>
 
-                        <div className="text-xs text-gray-600 mb-1 flex items-center">
-                            <Home size={10} className="mr-1" />
-                            <span>{lead.projectType}</span>
+                        <div className="text-xs text-gray-600 mb-1 flex items-center justify-between">
+                            <div className="flex items-center min-w-0 pr-1">
+                                <Home size={10} className="mr-1 text-gray-400 shrink-0" />
+                                <span className="truncate">{lead.projectType}</span>
+                            </div>
+                            <div className="text-[10px] text-gray-400 shrink-0">
+                                {lead.createdDate}
+                            </div>
                         </div>
                         <div className="text-xs text-gray-600 mb-1 flex items-center">
-                            <Bolt size={10} className="mr-1" />
-                            <span>{lead.systemSize}</span>
+                            <Bolt size={10} className="mr-1 text-gray-400 shrink-0" />
+                            <span className="truncate">{lead.systemSize}</span>
                         </div>
                         <div className="text-xs text-gray-600 flex items-center">
-                            <IndianRupee size={10} className="mr-1" />
-                            <span>{lead.budget}</span>
+                            <IndianRupee size={10} className="mr-1 text-gray-400 shrink-0" />
+                            <span className="truncate">{lead.budget}</span>
                         </div>
                     </div>
                 </div>
@@ -251,8 +290,8 @@ const FranchiseProjectManagementAssignLead = () => {
     };
 
     const renderPartnerCards = () => {
-        const partners = selectedPartnerType === 'dealer' ? dealers : salesManagers;
-        const partnerTypeLabel = selectedPartnerType === 'dealer' ? 'Dealer' : 'Sales Manager';
+        const partners = selectedPartnerType === 'dealer' ? dealers : districtManagers;
+        const partnerTypeLabel = selectedPartnerType === 'dealer' ? 'Dealer' : 'District Manager';
 
         if (partners.length === 0) {
             return (
@@ -316,7 +355,11 @@ const FranchiseProjectManagementAssignLead = () => {
     };
 
     const renderAvailableLeadsGrid = () => {
-        return solarLeads.map((lead) => {
+        if (filteredLeads.length === 0) {
+            return <div className="text-gray-500 py-4 text-center">No leads found for the selected location.</div>;
+        }
+
+        return filteredLeads.map((lead) => {
             const statusClass = getStatusBadgeClass(lead.status);
             const location = getLocationFromAddress(lead.address);
 
@@ -367,11 +410,17 @@ const FranchiseProjectManagementAssignLead = () => {
     };
 
     const renderHistoryTable = () => {
-        const filteredHistory = historyFilter === 'all'
-            ? assignmentHistory
-            : assignmentHistory.filter(assignment =>
+        let filteredHistory = assignmentHistory;
+        
+        if (historyFilter !== 'all') {
+            filteredHistory = filteredHistory.filter(assignment =>
                 assignment.assignedToType.toLowerCase().replace(' ', '_') === historyFilter
             );
+        }
+
+        if (historyProjectCategory) {
+            filteredHistory = filteredHistory.filter(assignment => assignment.projectType.includes(historyProjectCategory));
+        }
 
         return filteredHistory.map((assignment, index) => {
             const statusClass = getStatusBadgeClass(assignment.status);
@@ -381,7 +430,7 @@ const FranchiseProjectManagementAssignLead = () => {
 
             return (
                 <tr key={index} className="border-b hover:bg-gray-50">
-                    <td className="py-3 px-4 font-semibold">{assignment.leadId}</td>
+                    <td className="py-3 px-4 font-semibold">Lead #{String(index + 1).padStart(3, '0')}</td>
                     <td className="py-3 px-4">{assignment.leadName}</td>
                     <td className="py-3 px-4">
                         <div className="font-semibold">{assignment.projectType}</div>
@@ -404,7 +453,7 @@ const FranchiseProjectManagementAssignLead = () => {
         });
     };
 
-    const assignLead = () => {
+    const assignLead = async () => {
         if (selectedLead === null) {
             alert('Please select a solar project lead');
             return;
@@ -421,35 +470,28 @@ const FranchiseProjectManagementAssignLead = () => {
         if (selectedPartnerType === 'dealer') {
             partner = dealers.find(d => d.id === selectedPartner);
         } else {
-            partner = salesManagers.find(sm => sm.id === selectedPartner);
+            partner = districtManagers.find(sm => sm.id === selectedPartner);
         }
 
-        // Create new assignment
-        const now = new Date();
-        const dateStr = now.toISOString().split('T')[0];
-        const timeStr = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        try {
+            // API Call to assign
+            await leadAPI.assignLeadToPartner(lead.id, {
+                assignedTo: partner.id,
+                assignedToType: partner.type
+            });
 
-        const newAssignment = {
-            leadId: lead.id,
-            leadName: lead.customerName,
-            assignedToId: partner.id,
-            assignedToName: partner.name,
-            assignedToType: partner.type,
-            assignedBy: 'Current User',
-            assignedDate: `${dateStr} ${timeStr}`,
-            status: 'Assigned',
-            projectType: lead.projectType,
-            systemSize: lead.systemSize,
-        };
+            alert(`Solar project lead ${lead.customerName} assigned to ${partner.name} successfully!`);
+            
+            // Refetch to update UI with latest assignment history
+            fetchLeadsAndHistory();
 
-        // Add to history
-        setAssignmentHistory([newAssignment, ...assignmentHistory]);
-
-        alert(`Solar project lead ${lead.customerName} assigned to ${partner.name} successfully!`);
-
-        // Reset form
-        setSelectedLead(null);
-        setSelectedPartner(null);
+            // Reset form
+            setSelectedLead(null);
+            setSelectedPartner(null);
+        } catch (error) {
+            console.error('Error assigning lead:', error);
+            alert('Failed to assign lead. Please try again.');
+        }
     };
 
     const isAssignButtonEnabled = selectedLead !== null && selectedPartner !== null;
@@ -505,6 +547,70 @@ const FranchiseProjectManagementAssignLead = () => {
                                 <h5 className="text-lg font-bold text-green-600 mb-0">Assign Solar Project Lead</h5>
                             </div>
 
+                            {/* Location Filters */}
+                            <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                                <h6 className="text-blue-600 font-semibold mb-3 flex items-center">
+                                    <MapPin size={16} className="mr-2" />
+                                    Filter Leads by Location
+                                </h6>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">State</label>
+                                        <select
+                                            className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={selectedState}
+                                            onChange={(e) => {
+                                                setSelectedState(e.target.value);
+                                                setSelectedDistrict('');
+                                                setSelectedCity('');
+                                            }}
+                                        >
+                                            <option value="">All States</option>
+                                            {states.map((state) => (
+                                                <option key={state._id} value={state._id}>
+                                                    {state.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">District</label>
+                                        <select
+                                            className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={selectedDistrict}
+                                            onChange={(e) => {
+                                                setSelectedDistrict(e.target.value);
+                                                setSelectedCity('');
+                                            }}
+                                            disabled={!selectedState}
+                                        >
+                                            <option value="">All Districts</option>
+                                            {districts.map((district) => (
+                                                <option key={district._id} value={district._id}>
+                                                    {district.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                                        <select
+                                            className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            value={selectedCity}
+                                            onChange={(e) => setSelectedCity(e.target.value)}
+                                            disabled={!selectedDistrict}
+                                        >
+                                            <option value="">All Cities</option>
+                                            {cities.map((city) => (
+                                                <option key={city._id} value={city._id}>
+                                                    {city.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* Lead Selection */}
                             <div className="mb-4">
                                 <h6 className="text-blue-600 font-semibold mb-3 flex items-center">
@@ -545,14 +651,14 @@ const FranchiseProjectManagementAssignLead = () => {
                                         </div>
                                     </div>
 
-                                    {/* Sales Manager Card */}
+                                    {/* District Manager Card */}
                                     <div
-                                        className={`inline-block w-[140px] h-[90px] rounded-lg border-2 mr-2 cursor-pointer transition-all duration-300 ${selectedPartnerType === 'sales_manager'
+                                        className={`inline-block w-[140px] h-[90px] rounded-lg border-2 mr-2 cursor-pointer transition-all duration-300 ${selectedPartnerType === 'district_manager'
                                             ? 'border-green-500 bg-gradient-to-br from-green-50 to-emerald-50'
                                             : 'border-gray-200 bg-white hover:border-gray-300'
                                             }`}
                                         onClick={() => {
-                                            setSelectedPartnerType('sales_manager');
+                                            setSelectedPartnerType('district_manager');
                                             setSelectedPartner(null);
                                         }}
                                     >
@@ -560,7 +666,7 @@ const FranchiseProjectManagementAssignLead = () => {
                                             <div className="w-10 h-10 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mb-2">
                                                 <Users size={20} className="text-blue-600" />
                                             </div>
-                                            <span className="font-bold text-blue-600">Sales Manager</span>
+                                            <span className="font-bold text-blue-600 text-sm text-center leading-tight">District Manager</span>
                                         </div>
                                     </div>
                                 </div>
@@ -570,10 +676,10 @@ const FranchiseProjectManagementAssignLead = () => {
                             <div className="mb-4">
                                 <h6 className="text-blue-600 font-semibold mb-3 flex items-center">
                                     <UserRound size={16} className="mr-2" />
-                                    Select {selectedPartnerType === 'dealer' ? 'Dealer' : 'Sales Manager'}
+                                    Select {selectedPartnerType === 'dealer' ? 'Dealer' : 'District Manager'}
                                 </h6>
                                 <p className="text-gray-500 mb-3 text-sm">
-                                    Choose a {selectedPartnerType === 'dealer' ? 'dealer' : 'sales manager'} to assign lead:
+                                    Choose a {selectedPartnerType === 'dealer' ? 'dealer' : 'district manager'} to assign lead:
                                 </p>
 
                                 <div className="overflow-x-auto whitespace-nowrap pb-3">
@@ -597,22 +703,6 @@ const FranchiseProjectManagementAssignLead = () => {
                             </div>
                         </div>
                     </div>
-
-                    {/* Available Leads */}
-                    <div className="bg-white rounded-lg shadow-sm mb-4 border-0">
-                        <div className="p-6">
-                            <div className="flex items-center mb-4">
-                                <div className="w-9 h-9 bg-gradient-to-br from-orange-50 to-orange-100 rounded-lg flex items-center justify-center mr-3">
-                                    <List size={20} className="text-orange-600" />
-                                </div>
-                                <h5 className="text-lg font-bold text-orange-600 mb-0">Available Solar Project Leads</h5>
-                            </div>
-
-                            <div>
-                                {renderAvailableLeadsGrid()}
-                            </div>
-                        </div>
-                    </div>
                 </>
             )}
 
@@ -620,24 +710,79 @@ const FranchiseProjectManagementAssignLead = () => {
             {selectedTab === 'history' && (
                 <div className="bg-white rounded-lg shadow-sm mb-4 border-0">
                     <div className="p-6">
+                        {/* Summary Cards */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div className="bg-gradient-to-br from-green-50 to-emerald-50 p-4 rounded-lg border border-green-100 flex justify-between items-center shadow-sm">
+                                <div>
+                                    <h6 className="text-green-800 font-bold mb-1 text-lg">Dealer</h6>
+                                    <p className="text-green-600 text-sm mb-0">Total assigned leads</p>
+                                </div>
+                                <div className="bg-white text-green-600 w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold shadow-sm border border-green-200">
+                                    {assignmentHistory.filter(h => h.assignedToType === 'Dealer').length}
+                                </div>
+                            </div>
+                            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 p-4 rounded-lg border border-blue-100 flex justify-between items-center shadow-sm">
+                                <div>
+                                    <h6 className="text-blue-800 font-bold mb-1 text-lg">District Manager</h6>
+                                    <p className="text-blue-600 text-sm mb-0">Total assigned leads</p>
+                                </div>
+                                <div className="bg-white text-blue-600 w-14 h-14 rounded-full flex items-center justify-center text-2xl font-bold shadow-sm border border-blue-200">
+                                    {assignmentHistory.filter(h => h.assignedToType === 'District Manager').length}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Filters */}
+                        <div className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-100">
+                            <h6 className="text-blue-600 font-semibold mb-3 flex items-center">
+                                <Bolt size={16} className="mr-2" />
+                                Filter History
+                            </h6>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Category</label>
+                                    <select className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={historyProjectCategory} onChange={(e) => setHistoryProjectCategory(e.target.value)}>
+                                        <option value="">All Categories</option>
+                                        <option value="Residential">Residential</option>
+                                        <option value="Commercial">Commercial</option>
+                                        <option value="Industrial">Industrial</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Sub Category</label>
+                                    <select className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={historyProjectSubCategory} onChange={(e) => setHistoryProjectSubCategory(e.target.value)}>
+                                        <option value="">All Sub Categories</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
+                                    <select className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={historyProjectType} onChange={(e) => setHistoryProjectType(e.target.value)}>
+                                        <option value="">All Types</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Sub Project Type</label>
+                                    <select className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={historySubProjectType} onChange={(e) => setHistorySubProjectType(e.target.value)}>
+                                        <option value="">All Sub Types</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Assignment Type</label>
+                                    <select className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" value={historyFilter} onChange={(e) => setHistoryFilter(e.target.value)}>
+                                        <option value="all">All Assignments</option>
+                                        <option value="dealer">Dealer Only</option>
+                                        <option value="district_manager">District Manager Only</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
                         <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4">
                             <div className="flex items-center mb-3 md:mb-0">
                                 <div className="w-9 h-9 bg-gradient-to-br from-blue-50 to-blue-100 rounded-lg flex items-center justify-center mr-3">
                                     <History size={20} className="text-blue-600" />
                                 </div>
                                 <h5 className="text-lg font-bold text-blue-600 mb-0">Lead Assignment History</h5>
-                            </div>
-
-                            <div className="w-full md:w-64">
-                                <select
-                                    className="w-full px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                    value={historyFilter}
-                                    onChange={(e) => setHistoryFilter(e.target.value)}
-                                >
-                                    <option value="all">All Assignments</option>
-                                    <option value="dealer">Dealer Only</option>
-                                    <option value="sales_manager">Sales Manager Only</option>
-                                </select>
                             </div>
                         </div>
 

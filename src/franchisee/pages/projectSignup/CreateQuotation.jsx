@@ -19,8 +19,142 @@ import {
     Minus,
     Check
 } from 'lucide-react';
+import { getSolarKits, getAssignments, getAMCServices } from '../../../services/combokit/combokitApi';
+import { productApi } from '../../../api/productApi';
+import { masterApi } from '../../../api/masterApi';
+import { createProject } from '../../../services/project/projectService';
+import toast from 'react-hot-toast';
 
 const FranchiseQuotes = () => {
+    // Admin Quote Config
+    const [adminQuoteConfig, setAdminQuoteConfig] = useState(null);
+    const [comboKits, setComboKits] = useState([]);
+    const [dbAmcServices, setDbAmcServices] = useState([]);
+    
+    // Dynamic Dropdown options from SKUs/Products
+    const [dynamicOptions, setDynamicOptions] = useState({
+        technologies: [],
+        wattages: [],
+        panelBrands: [],
+        inverterBrands: [],
+        projectTypes: []
+    });
+    
+    // Dynamic Custom Kit options
+    const [customPanels, setCustomPanels] = useState([]);
+    const [customInverters, setCustomInverters] = useState([]);
+    const [customBosKits, setCustomBosKits] = useState([]);
+    const [allProducts, setAllProducts] = useState([]); // Store all products for ID lookup
+
+    // Fetch dynamic options from SKUs on mount
+    useEffect(() => {
+        const fetchDynamicOptions = async () => {
+            try {
+                const response = await productApi.getSkus();
+                const responseData = response?.data || response;
+                const skus = responseData?.data || responseData || [];
+                
+                // Ensure skus is an array
+                const skuArray = Array.isArray(skus) ? skus : [];
+                setAllProducts(skuArray);
+
+                const rawTechnologies = skuArray.flatMap(s => {
+                    if (Array.isArray(s.technology)) return s.technology;
+                    if (typeof s.technology === 'string') return s.technology.split(',').map(t => t.trim());
+                    return [];
+                }).filter(Boolean);
+
+                const techMap = new Map();
+                rawTechnologies.forEach(tech => {
+                    let normalized = tech.toLowerCase().trim();
+                    if (normalized.includes('mono') && normalized.includes('perc')) {
+                        normalized = 'mono perc';
+                    } else if (normalized === 'mono' || normalized === 'monocrystalline') {
+                        normalized = 'mono';
+                    } else if (normalized.includes('bifacial') || normalized.includes('bificial') || normalized.includes('bi-facial')) {
+                        normalized = 'bi facial';
+                    } else if (normalized.includes('topcon')) {
+                        normalized = 'topcon';
+                    } else {
+                        normalized = normalized.replace(/\s+/g, ' ');
+                    }
+                    
+                    if (!techMap.has(normalized)) {
+                        const displayTech = normalized.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                        techMap.set(normalized, displayTech);
+                    }
+                });
+                const uniqueTechnologies = Array.from(techMap.values());
+
+                // Extract dynamic options from SKUs
+                const uniqueWattages = [...new Set(skuArray.map(s => {
+                    // Skip inverter capacities that use kW or kVA
+                    if (s.capacity && typeof s.capacity === 'string' && (s.capacity.toLowerCase().includes('kw') || s.capacity.toLowerCase().includes('kva'))) {
+                        return null;
+                    }
+                    
+                    const wattageVal = s.wattage || (s.capacity ? parseFloat(s.capacity) : null);
+                    if (wattageVal) {
+                        return wattageVal.toString().toUpperCase().endsWith('W')
+                            ? wattageVal.toString().toUpperCase()
+                            : `${wattageVal}W`;
+                    } else if (s.capacity && typeof s.capacity === 'string') {
+                        const match = s.capacity.match(/(\d+(\.\d+)?)/);
+                        if (match) {
+                            return `${match[1]}W`;
+                        }
+                    }
+                    return null;
+                }).filter(Boolean))];
+                
+                const allBrands = [...new Set(skuArray.map(s => s.brand || s.companyName || s.manufacturer || (s.productId && s.productId.brand)).filter(Boolean))];
+                const uniquePanelBrands = allBrands;
+                const uniqueInverterBrands = allBrands;
+
+                // Fetch Project Types from Mappings to match Admin's Project Type List
+                let projectTypesList = [];
+                try {
+                    const ptResponse = await productApi.getProjectCategoryMappings();
+                    const ptData = ptResponse?.data?.data || ptResponse?.data || [];
+                    const typesMap = new Set();
+                    if (Array.isArray(ptData)) {
+                        ptData.forEach(m => {
+                            if (m.projectTypeFrom !== undefined && m.projectTypeTo !== undefined) {
+                                typesMap.add(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`);
+                            }
+                        });
+                    }
+                    projectTypesList = Array.from(typesMap);
+                } catch (err) {
+                    console.error("Failed to fetch Project Category Mappings", err);
+                }
+
+                setDynamicOptions({
+                    technologies: uniqueTechnologies,
+                    wattages: uniqueWattages,
+                    panelBrands: uniquePanelBrands,
+                    inverterBrands: uniqueInverterBrands,
+                    projectTypes: projectTypesList
+                });
+            } catch (err) {
+                console.error("Failed to fetch SKUs for dynamic options", err);
+            }
+        };
+
+        fetchDynamicOptions();
+    }, []);
+
+    useEffect(() => {
+        const savedConfig = localStorage.getItem('activeQuoteSetup');
+        if (savedConfig) {
+            try {
+                setAdminQuoteConfig(JSON.parse(savedConfig));
+            } catch (e) {
+                console.error("Failed to parse quote settings from localStorage", e);
+            }
+        }
+    }, []);
+
     // State for system configuration
     const [systemConfig, setSystemConfig] = useState({
         technology: '',
@@ -28,8 +162,59 @@ const FranchiseQuotes = () => {
         numberOfPanels: '',
         systemCapacity: '',
         location: '',
+        countryId: '',
+        stateId: '',
+        districtId: '',
+        clusterId: '',
         kitType: ''
     });
+
+    // Locations Dropdown State
+    const [locationOptions, setLocationOptions] = useState({
+        countries: [],
+        states: [],
+        districts: [],
+        clusters: []
+    });
+
+    useEffect(() => {
+        const fetchCountries = async () => {
+            try {
+                const res = await masterApi.getCountries();
+                setLocationOptions(prev => ({ ...prev, countries: res?.data?.data || res?.data || res || [] }));
+            } catch (err) {
+                console.error("Failed to fetch countries", err);
+            }
+        };
+        fetchCountries();
+    }, []);
+
+    useEffect(() => {
+        if (systemConfig.countryId) {
+            masterApi.getStates({ countryId: systemConfig.countryId }).then(res => {
+                setLocationOptions(prev => ({ ...prev, states: res?.data?.data || res?.data || res || [], districts: [], clusters: [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, states: [], districts: [], clusters: [] }));
+        }
+    }, [systemConfig.countryId]);
+
+    useEffect(() => {
+        if (systemConfig.stateId) {
+            // Clear existing ones first
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+            
+            masterApi.getDistricts({ stateId: systemConfig.stateId }).then(res => {
+                setLocationOptions(prev => ({ ...prev, districts: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+            
+            masterApi.getClusters({ stateId: systemConfig.stateId }).then(res => {
+                setLocationOptions(prev => ({ ...prev, clusters: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+        }
+    }, [systemConfig.stateId]);
 
     // State for pricing details
     const [pricing, setPricing] = useState({
@@ -53,6 +238,11 @@ const FranchiseQuotes = () => {
         panelWatt: '570',
         numberOfPanels: '8',
         kilowatt: '4.56 KW - (570 Wp / 8 Panel / TOPCON)',
+        projectType: '',
+        countryId: '',
+        stateId: '',
+        districtId: '',
+        clusterId: '',
         solarPanel: '',
         inverter: '',
         bosKit: ''
@@ -60,8 +250,18 @@ const FranchiseQuotes = () => {
 
     // State for showing result section
     const [showResult, setShowResult] = useState(false);
+    
+    // State for customer details
+    const [customerDetails, setCustomerDetails] = useState({
+        name: '',
+        mobile: '',
+        email: ''
+    });
 
-    // State for advanced options
+    // State for advanced options accordion
+    const [isAdvancedOptionsOpen, setIsAdvancedOptionsOpen] = useState(false);
+
+    // State for advanced options selections
     const [advancedOptions, setAdvancedOptions] = useState({
         cleaningKit: {
             selected: null,
@@ -83,53 +283,87 @@ const FranchiseQuotes = () => {
     const [selectedProductDetail, setSelectedProductDetail] = useState(null);
 
     // Combo kit products
-    const comboKits = [
-        {
-            id: 'combo-101',
-            name: 'Starter Combo Kit',
-            price: 60000,
-            oldPrice: 75000,
-            rating: 4.5,
-            image: '../../assets/vendors/images/solarpanel.png',
-            description: 'Perfect for small residential installations',
-            specifications: {
-                type: 'combo',
-                warranty: '10 years',
-                efficiency: '90%'
-            }
-        },
-        {
-            id: 'combo-102',
-            name: 'Professional Combo Kit',
-            price: 85000,
-            oldPrice: 100000,
-            rating: 4.8,
-            image: '../../assets/vendors/images/solarpanel.png',
-            description: 'Ideal for medium-sized commercial projects',
-            specifications: {
-                type: 'combo',
-                warranty: '12 years',
-                efficiency: '92%'
-            }
-        },
-        {
-            id: 'combo-103',
-            name: 'Enterprise Combo Kit',
-            price: 120000,
-            oldPrice: 140000,
-            rating: 4.9,
-            image: '../../assets/vendors/images/solarpanel.png',
-            description: 'Complete solution for large-scale installations',
-            specifications: {
-                type: 'combo',
-                warranty: '15 years',
-                efficiency: '95%'
-            }
-        }
-    ];
+    useEffect(() => {
+        const fetchDynamicKits = async () => {
+            try {
+                // 1. Fetch Combo Kits
+                const res = await getSolarKits();
+                const allKits = res?.data || res || [];
+                
+                let kitsToShow = allKits;
+                if (adminQuoteConfig && adminQuoteConfig.selectedKitIds && adminQuoteConfig.selectedKitIds.length > 0) {
+                    const validIds = adminQuoteConfig.selectedKitIds;
+                    kitsToShow = allKits.filter(k => validIds.includes(k._id));
+                }
+                
+                const mappedKits = kitsToShow.map((k, index) => ({
+                    id: k._id,
+                    name: k.name || `Combo Kit ${index + 1}`,
+                    price: k.price || 0,
+                    oldPrice: (k.price || 0) * 1.2,
+                    rating: 4.8,
+                    image: '../../assets/vendors/images/solarpanel.png',
+                    description: k.description || `${k.category || ''} > ${k.subCategory || ''}`,
+                    specifications: {
+                        type: 'combo',
+                        warranty: '10 years',
+                        efficiency: 'Standard'
+                    },
+                    bom: k.bom || []
+                }));
 
-    // Cleaning kit options
-    const cleaningKits = [
+                setComboKits(mappedKits);
+
+                // 2. Fetch Customized Kits assignments
+                try {
+                    const resAssign = await getAssignments();
+                    const assignments = resAssign?.data || (Array.isArray(resAssign) ? resAssign : []);
+                    
+                    let allPanels = new Set();
+                    let allInverters = new Set();
+                    let allBosKits = new Set();
+
+                    const validIds = adminQuoteConfig?.selectedKitIds || [];
+                    
+                    assignments.forEach(a => {
+                        // If admin selected specific kits, only include their customized components.
+                        // Otherwise include all components.
+                        if (validIds.length === 0 || validIds.includes(a._id)) {
+                            if (a.panels) a.panels.forEach(p => allPanels.add(p));
+                            if (a.inverters) a.inverters.forEach(i => allInverters.add(i));
+                            if (a.boskits) a.boskits.forEach(b => allBosKits.add(b));
+                        }
+                    });
+
+                    setCustomPanels(Array.from(allPanels));
+                    setCustomInverters(Array.from(allInverters));
+                    setCustomBosKits(Array.from(allBosKits));
+                } catch (assignErr) {
+                    console.error("Failed to fetch customized kits", assignErr);
+                }
+
+            } catch (err) {
+                console.error("Failed to fetch dynamic kits", err);
+            }
+        };
+
+        const fetchAmcServices = async () => {
+            try {
+                const data = await getAMCServices();
+                if (data && Array.isArray(data)) {
+                    setDbAmcServices(data);
+                }
+            } catch (err) {
+                console.error("Failed to fetch AMC services", err);
+            }
+        };
+
+        fetchDynamicKits();
+        fetchAmcServices();
+    }, [adminQuoteConfig]);
+
+    // Default fallback options if not configured by admin
+    const defaultCleaningKits = [
         {
             id: 'clean-1',
             name: 'Cleaning Brush',
@@ -153,8 +387,7 @@ const FranchiseQuotes = () => {
         }
     ];
 
-    // Insurance options
-    const insuranceOptions = [
+    const defaultInsuranceOptions = [
         {
             id: 'ins-1',
             name: 'Basic Panel Protection',
@@ -171,8 +404,14 @@ const FranchiseQuotes = () => {
         }
     ];
 
-    // AMC options
-    const amcOptions = [
+    // Fetch from database if available, otherwise fallback
+    const defaultAmcOptions = dbAmcServices.length > 0 ? dbAmcServices.map((service, idx) => ({
+        id: `amc-db-${service._id || idx}`,
+        name: service.serviceName,
+        price: service.basePrice || 0,
+        features: [service.description || '', service.serviceType ? `Type: ${service.serviceType}` : ''],
+        image: '../../assets/vendors/images/amc-1.jpg'
+    })) : [
         {
             id: 'amc-1',
             name: 'Basic AMC Plan',
@@ -195,6 +434,46 @@ const FranchiseQuotes = () => {
             image: '../../assets/vendors/images/amc-3.jpg'
         }
     ];
+
+    // Build lists dynamically from admin configurations if available
+    let cleaningKits = [...defaultCleaningKits];
+    let insuranceOptions = [...defaultInsuranceOptions];
+    let amcOptions = [...defaultAmcOptions];
+
+    if (adminQuoteConfig?.advancedOptions) {
+        const adminCleaning = adminQuoteConfig.advancedOptions.filter(opt => opt.key === 'cleaningKit' && opt.enabled);
+        if (adminCleaning.length > 0) {
+            cleaningKits = adminCleaning.map((opt, idx) => ({
+                id: `clean-admin-${idx}`,
+                name: opt.type || 'Cleaning Kit',
+                price: opt.price || 0,
+                image: '../../assets/vendors/images/cleaning.jpg',
+                description: opt.description || 'Professional cleaning kit'
+            }));
+        }
+
+        const adminInsurance = adminQuoteConfig.advancedOptions.filter(opt => opt.key === 'insurance' && opt.enabled);
+        if (adminInsurance.length > 0) {
+            insuranceOptions = adminInsurance.map((opt, idx) => ({
+                id: `ins-admin-${idx}`,
+                name: opt.type || 'Insurance Plan',
+                price: opt.price || 0,
+                image: '../../assets/vendors/images/insurance-1.jpg',
+                features: opt.description ? [opt.description] : ['Comprehensive coverage']
+            }));
+        }
+
+        const adminAmc = adminQuoteConfig.advancedOptions.filter(opt => opt.key === 'amc' && opt.enabled);
+        if (adminAmc.length > 0) {
+            amcOptions = adminAmc.map((opt, idx) => ({
+                id: `amc-admin-${idx}`,
+                name: opt.type || 'AMC Plan',
+                price: opt.price || 0,
+                image: '../../assets/vendors/images/amc-1.jpg',
+                features: opt.description ? [opt.description] : ['System maintenance and inspection']
+            }));
+        }
+    }
 
     // Handle input changes
     const handleInputChange = (e) => {
@@ -447,8 +726,47 @@ const FranchiseQuotes = () => {
                 </div>
 
                 <div className="container mx-auto py-3">
-                    <div className="bg-white rounded-lg shadow-md">
+                    <div id="quotation-pdf-content" className="bg-white rounded-lg shadow-md">
                         <div className="p-6">
+                            {/* Customer Details Section */}
+                            <div className="mb-8">
+                                <h3 className="text-blue-600 text-lg font-semibold mb-4">Customer Details</h3>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Customer Name *</label>
+                                        <input
+                                            type="text"
+                                            value={customerDetails.name}
+                                            onChange={(e) => setCustomerDetails({...customerDetails, name: e.target.value})}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter full name"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Mobile Number *</label>
+                                        <input
+                                            type="tel"
+                                            value={customerDetails.mobile}
+                                            onChange={(e) => setCustomerDetails({...customerDetails, mobile: e.target.value})}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter mobile number"
+                                            required
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email ID</label>
+                                        <input
+                                            type="email"
+                                            value={customerDetails.email}
+                                            onChange={(e) => setCustomerDetails({...customerDetails, email: e.target.value})}
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter email address"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
                             {/* System Configuration */}
                             <h3 className="text-blue-600 text-lg font-semibold mb-4">System Configuration</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -461,9 +779,17 @@ const FranchiseQuotes = () => {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="" disabled>Select Technology</option>
-                                        <option value="Mono PERC">Mono PERC</option>
-                                        <option value="Poly">Poly</option>
-                                        <option value="Thin Film">Thin Film</option>
+                                        {dynamicOptions.technologies.length > 0 ? (
+                                            dynamicOptions.technologies.map((tech, idx) => (
+                                                <option key={idx} value={tech}>{tech}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="Mono Perc">Mono Perc</option>
+                                                <option value="Bi Facial">Bi Facial</option>
+                                                <option value="Topcon">Topcon</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
                                 <div>
@@ -475,9 +801,17 @@ const FranchiseQuotes = () => {
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
                                         <option value="" disabled>Select Panel Wattage</option>
-                                        <option value="250W">250W</option>
-                                        <option value="300W">300W</option>
-                                        <option value="400W">400W</option>
+                                        {dynamicOptions.wattages.length > 0 ? (
+                                            dynamicOptions.wattages.map((watt, idx) => (
+                                                <option key={idx} value={watt}>{watt}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="250W">250W</option>
+                                                <option value="300W">300W</option>
+                                                <option value="400W">400W</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
                                 <div>
@@ -492,30 +826,87 @@ const FranchiseQuotes = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">System Capacity</label>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
                                     <select
                                         id="systemCapacity"
                                         value={systemConfig.systemCapacity}
                                         onChange={handleInputChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
                                     >
-                                        <option value="" disabled>Select System Capacity</option>
-                                        <option value="1 KW">1 KW</option>
-                                        <option value="2 KW">2 KW</option>
-                                        <option value="5 KW">5 KW</option>
-                                        <option value="10 KW">10 KW</option>
+                                        <option value="" disabled className="text-gray-400">Select Project Type</option>
+                                        {dynamicOptions.projectTypes.length > 0 ? (
+                                            dynamicOptions.projectTypes.map((pt, idx) => (
+                                                <option key={idx} value={pt}>{pt}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="1 KW">1 KW</option>
+                                                <option value="2 KW">2 KW</option>
+                                                <option value="5 KW">5 KW</option>
+                                                <option value="10 KW">10 KW</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
                                 <div className="md:col-span-2">
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Location</label>
-                                    <input
-                                        type="text"
-                                        id="location"
-                                        value={systemConfig.location}
-                                        onChange={handleInputChange}
-                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        placeholder="Enter Pincode"
-                                    />
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Location Setup</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <select
+                                                id="countryId"
+                                                value={systemConfig.countryId}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select Country</option>
+                                                {locationOptions.countries.map(c => (
+                                                    <option key={c._id} value={c._id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="stateId"
+                                                value={systemConfig.stateId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.countryId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select State</option>
+                                                {locationOptions.states.map(s => (
+                                                    <option key={s._id} value={s._id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="districtId"
+                                                value={systemConfig.districtId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.stateId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select District</option>
+                                                {locationOptions.districts.map(d => (
+                                                    <option key={d._id} value={d._id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="clusterId"
+                                                value={systemConfig.clusterId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.stateId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select Cluster</option>
+                                                {locationOptions.clusters.map(c => (
+                                                    <option key={c._id} value={c._id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
 
@@ -523,34 +914,38 @@ const FranchiseQuotes = () => {
                             <div className="mt-6">
                                 <label className="block text-sm font-medium text-gray-700 mb-2">Select Kit Type</label>
                                 <div className="flex space-x-4">
-                                    <label className="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            name="kitType"
-                                            value="combo"
-                                            checked={systemConfig.kitType === 'combo'}
-                                            onChange={() => {
-                                                setSystemConfig(prev => ({ ...prev, kitType: 'combo' }));
-                                                setShowComboKitModal(true);
-                                            }}
-                                            className="form-radio h-4 w-4 text-blue-600"
-                                        />
-                                        <span className="ml-2 text-sm text-gray-700">Combo Kits</span>
-                                    </label>
-                                    <label className="inline-flex items-center">
-                                        <input
-                                            type="radio"
-                                            name="kitType"
-                                            value="custom"
-                                            checked={systemConfig.kitType === 'custom'}
-                                            onChange={() => {
-                                                setSystemConfig(prev => ({ ...prev, kitType: 'custom' }));
-                                                setShowCustomKitModal(true);
-                                            }}
-                                            className="form-radio h-4 w-4 text-blue-600"
-                                        />
-                                        <span className="ml-2 text-sm text-gray-700">Customized Kits</span>
-                                    </label>
+                                    {(!adminQuoteConfig || adminQuoteConfig.kitTypesSelected?.includes('Combo Kit')) && (
+                                        <label className="inline-flex items-center">
+                                            <input
+                                                type="radio"
+                                                name="kitType"
+                                                value="combo"
+                                                checked={systemConfig.kitType === 'combo'}
+                                                onChange={() => {
+                                                    setSystemConfig(prev => ({ ...prev, kitType: 'combo' }));
+                                                    setShowComboKitModal(true);
+                                                }}
+                                                className="form-radio h-4 w-4 text-blue-600"
+                                            />
+                                            <span className="ml-2 text-sm text-gray-700">Combo Kits</span>
+                                        </label>
+                                    )}
+                                    {(!adminQuoteConfig || adminQuoteConfig.kitTypesSelected?.includes('Customised Kit')) && (
+                                        <label className="inline-flex items-center">
+                                            <input
+                                                type="radio"
+                                                name="kitType"
+                                                value="custom"
+                                                checked={systemConfig.kitType === 'custom'}
+                                                onChange={() => {
+                                                    setSystemConfig(prev => ({ ...prev, kitType: 'custom' }));
+                                                    setShowCustomKitModal(true);
+                                                }}
+                                                className="form-radio h-4 w-4 text-blue-600"
+                                            />
+                                            <span className="ml-2 text-sm text-gray-700">Customized Kits</span>
+                                        </label>
+                                    )}
                                 </div>
 
                                 {/* Selected Products Display */}
@@ -640,11 +1035,20 @@ const FranchiseQuotes = () => {
 
                             {/* Advanced Options Section */}
                             <div className="mt-8">
-                                <h3 className="text-blue-600 text-lg font-semibold mb-4">Advanced Options</h3>
+                                <div 
+                                    className="flex items-center cursor-pointer select-none mb-4"
+                                    onClick={() => setIsAdvancedOptionsOpen(!isAdvancedOptionsOpen)}
+                                >
+                                    <h3 className="text-blue-600 text-lg font-semibold">Advanced Options</h3>
+                                    <ChevronDown className={`ml-2 text-blue-600 transition-transform duration-200 ${isAdvancedOptionsOpen ? 'transform rotate-180' : ''}`} />
+                                </div>
 
-                                {/* Cleaning Kit */}
-                                <div className="mb-6">
-                                    <h5 className="text-md font-semibold mb-3">Cleaning Kit</h5>
+                                {isAdvancedOptionsOpen && (
+                                    <div className="animate-in slide-in-from-top-2 duration-200">
+                                        {/* Cleaning Kit */}
+                                        {(!adminQuoteConfig || adminQuoteConfig.advancedOptions?.find(opt => opt.key === 'cleaningKit')?.enabled) && (
+                                        <div className="mb-6">
+                                            <h5 className="text-md font-semibold mb-3">Cleaning Kit</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {cleaningKits.map((kit) => (
                                             <div
@@ -727,8 +1131,10 @@ const FranchiseQuotes = () => {
                                         ))}
                                     </div>
                                 </div>
+                                )}
 
                                 {/* Insurance */}
+                                {(!adminQuoteConfig || adminQuoteConfig.advancedOptions?.find(opt => opt.key === 'insurance')?.enabled) && (
                                 <div className="mb-6">
                                     <h5 className="text-md font-semibold mb-3">Insurance</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -766,8 +1172,10 @@ const FranchiseQuotes = () => {
                                         ))}
                                     </div>
                                 </div>
+                                )}
 
                                 {/* AMC */}
+                                {(!adminQuoteConfig || adminQuoteConfig.advancedOptions?.find(opt => opt.key === 'amc')?.enabled) && (
                                 <div className="mb-6">
                                     <h5 className="text-md font-semibold mb-3">Annual Maintenance Contract (AMC)</h5>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -805,14 +1213,70 @@ const FranchiseQuotes = () => {
                                         ))}
                                     </div>
                                 </div>
+                                )}
+                                    </div>
+                                )}
                             </div>
 
                             {/* Generate Quote Button */}
-                            <div className="flex justify-end mt-6">
+                            <div className="flex justify-end mt-6 space-x-4">
                                 <button
                                     onClick={() => {
-                                        // In a real app, this would generate a PDF or navigate to quote page
-                                        alert(`Total Quote Amount: ₹${calculateTotal().toLocaleString()}`);
+                                        import('html2pdf.js').then((html2pdf) => {
+                                            const element = document.getElementById('quotation-pdf-content');
+                                            if (!element) return;
+                                            const opt = {
+                                                margin: [10, 10, 10, 10],
+                                                filename: `Quotation_${customerDetails.name || 'New'}.pdf`,
+                                                image: { type: 'jpeg', quality: 0.98 },
+                                                html2canvas: { scale: 2, useCORS: true },
+                                                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                                            };
+                                            html2pdf.default().set(opt).from(element).save();
+                                        }).catch(err => {
+                                            console.error("Failed to load html2pdf", err);
+                                        });
+                                    }}
+                                    className="px-6 py-2 border border-blue-600 text-blue-600 rounded-md hover:bg-blue-50 transition-colors flex items-center gap-2"
+                                >
+                                    Download PDF
+                                </button>
+                                <button
+                                    onClick={async () => {
+                                        if (!customerDetails.name || !customerDetails.mobile || !systemConfig.stateId) {
+                                            toast.error("Please fill required fields (Customer Name, Mobile, State)");
+                                            return;
+                                        }
+                                        
+                                        try {
+                                            const randomNum = Math.floor(1000 + Math.random() * 9000);
+                                            const projectId = `SOL-QT-${randomNum}`;
+
+                                            const payload = {
+                                                projectId,
+                                                projectName: customerDetails.name,
+                                                category: 'Residential', 
+                                                projectType: 'On-Grid', 
+                                                totalKW: parseFloat(systemConfig.systemCapacity) || 0,
+                                                status: 'Project Signed',
+                                                statusStage: 'consumer',
+                                                dueDate: new Date(new Date().setDate(new Date().getDate() + 30)),
+                                                state: systemConfig.stateId,
+                                                district: systemConfig.districtId || null,
+                                                cluster: systemConfig.clusterId || null,
+                                                cp: 'Direct',
+                                                mobile: customerDetails.mobile,
+                                                email: customerDetails.email,
+                                                numberOfPanels: parseInt(systemConfig.numberOfPanels) || 0
+                                            };
+
+                                            await createProject(payload);
+                                            toast.success("Project Signed Up Successfully!");
+                                            // In a real app, this would generate a PDF or navigate to quote page
+                                        } catch (err) {
+                                            toast.error("Failed to create project signup");
+                                            console.error(err);
+                                        }
                                     }}
                                     className="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
                                 >
@@ -913,8 +1377,17 @@ const FranchiseQuotes = () => {
                                         onChange={handleCustomKitChange}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="TOPCON">TOPCON</option>
-                                        <option value="Bifacial">Bifacial</option>
+                                        {dynamicOptions.technologies.length > 0 ? (
+                                            dynamicOptions.technologies.map((tech, idx) => (
+                                                <option key={idx} value={tech}>{tech}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="Mono Perc">Mono Perc</option>
+                                                <option value="Bi Facial">Bi Facial</option>
+                                                <option value="Topcon">Topcon</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
 
@@ -927,9 +1400,17 @@ const FranchiseQuotes = () => {
                                         onChange={handleCustomKitChange}
                                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                     >
-                                        <option value="570">570</option>
-                                        <option value="540">540</option>
-                                        <option value="500">500</option>
+                                        {dynamicOptions.wattages.length > 0 ? (
+                                            dynamicOptions.wattages.map((watt, idx) => (
+                                                <option key={idx} value={watt}>{watt}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="570">570</option>
+                                                <option value="540">540</option>
+                                                <option value="500">500</option>
+                                            </>
+                                        )}
                                     </select>
                                 </div>
 
@@ -961,8 +1442,95 @@ const FranchiseQuotes = () => {
                                     </select>
                                 </div>
 
-                                {/* Customize Options */}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+                                {/* Project Type */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
+                                    <select
+                                        id="systemCapacity"
+                                        value={systemConfig.systemCapacity}
+                                        onChange={handleInputChange}
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+                                    >
+                                        <option value="" disabled className="text-gray-400">Select Project Type</option>
+                                        {dynamicOptions.projectTypes.length > 0 ? (
+                                            dynamicOptions.projectTypes.map((pt, idx) => (
+                                                <option key={idx} value={pt}>{pt}</option>
+                                            ))
+                                        ) : (
+                                            <>
+                                                <option value="1 KW">1 KW</option>
+                                                <option value="2 KW">2 KW</option>
+                                                <option value="5 KW">5 KW</option>
+                                                <option value="10 KW">10 KW</option>
+                                            </>
+                                        )}
+                                    </select>
+                                </div>
+
+                                {/* Location Setup */}
+                                <div className="mb-4">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">Location Setup</label>
+                                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                        <div>
+                                            <select
+                                                id="countryId"
+                                                value={systemConfig.countryId}
+                                                onChange={handleInputChange}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select Country</option>
+                                                {locationOptions.countries.map(c => (
+                                                    <option key={c._id} value={c._id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="stateId"
+                                                value={systemConfig.stateId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.countryId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select State</option>
+                                                {locationOptions.states.map(s => (
+                                                    <option key={s._id} value={s._id}>{s.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="districtId"
+                                                value={systemConfig.districtId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.stateId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select District</option>
+                                                {locationOptions.districts.map(d => (
+                                                    <option key={d._id} value={d._id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <select
+                                                id="clusterId"
+                                                value={systemConfig.clusterId}
+                                                onChange={handleInputChange}
+                                                disabled={!systemConfig.stateId}
+                                                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white text-gray-700 disabled:bg-gray-100 disabled:cursor-not-allowed"
+                                            >
+                                                <option value="" disabled className="text-gray-400">Select Cluster</option>
+                                                {locationOptions.clusters.map(c => (
+                                                    <option key={c._id} value={c._id}>{c.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Customize Options - Commented out for now
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                                     <div>
                                         <label className="block text-sm font-medium text-gray-700 mb-1">Solar Panel</label>
                                         <select
@@ -972,9 +1540,21 @@ const FranchiseQuotes = () => {
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
                                             <option value="">Select Panel</option>
-                                            <option value="Adani">Adani</option>
-                                            <option value="Waaree">Waaree</option>
-                                            <option value="Tata">Tata</option>
+                                            {customPanels.length > 0 ? (
+                                                customPanels.map((p, i) => {
+                                                    const product = allProducts.find(prod => prod._id === p);
+                                                    const displayName = product ? (product.description || product.skuCode || p) : p;
+                                                    return <option key={i} value={p}>{displayName}</option>;
+                                                })
+                                            ) : dynamicOptions.panelBrands.length > 0 ? (
+                                                dynamicOptions.panelBrands.map((p, i) => <option key={i} value={p}>{p}</option>)
+                                            ) : (
+                                                <>
+                                                    <option value="Adani">Adani</option>
+                                                    <option value="Waaree">Waaree</option>
+                                                    <option value="Tata">Tata</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                     <div>
@@ -986,26 +1566,24 @@ const FranchiseQuotes = () => {
                                             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                         >
                                             <option value="">Select Inverter</option>
-                                            <option value="Vsole">Vsole</option>
-                                            <option value="Ksolar">Ksolar</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">BOS KIT</label>
-                                        <select
-                                            id="bosKit"
-                                            value={customKit.bosKit}
-                                            onChange={handleCustomKitChange}
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                        >
-                                            <option value="">Select BOSkit</option>
-                                            <option value="3-4 Kw BosKit">3-4 Kw BosKit</option>
-                                            <option value="3-5 Kw BosKit">3-5 Kw BosKit</option>
+                                            {customInverters.length > 0 ? (
+                                                customInverters.map((inv, i) => {
+                                                    const product = allProducts.find(prod => prod._id === inv);
+                                                    const displayName = product ? (product.description || product.skuCode || inv) : inv;
+                                                    return <option key={i} value={inv}>{displayName}</option>;
+                                                })
+                                            ) : dynamicOptions.inverterBrands.length > 0 ? (
+                                                dynamicOptions.inverterBrands.map((inv, i) => <option key={i} value={inv}>{inv}</option>)
+                                            ) : (
+                                                <>
+                                                    <option value="Vsole">Vsole</option>
+                                                    <option value="Ksolar">Ksolar</option>
+                                                </>
+                                            )}
                                         </select>
                                     </div>
                                 </div>
 
-                                {/* Calculate Button */}
                                 <div className="flex justify-end mb-4">
                                     <button
                                         type="button"
@@ -1015,6 +1593,7 @@ const FranchiseQuotes = () => {
                                         Calculate
                                     </button>
                                 </div>
+                                */}
                             </form>
 
                             {/* Results Section */}

@@ -30,6 +30,8 @@ import {
     Camera,
     Image as ImageIcon
 } from 'lucide-react';
+import { getProjects } from '../../../services/project/projectService';
+import { masterApi } from '../../../api/masterApi';
 
 const FranchiseProjectSignup = () => {
     // State for active wizard tab
@@ -38,8 +40,62 @@ const FranchiseProjectSignup = () => {
     // State for selected project
     const [selectedProject, setSelectedProject] = useState(null);
 
-    // State for search term
+    // Search and filter state
     const [searchTerm, setSearchTerm] = useState('');
+    // Store selected option objects: { id, name }
+    const [selectedCountry, setSelectedCountry] = useState(null);
+    const [selectedState, setSelectedState] = useState(null);
+    const [selectedCluster, setSelectedCluster] = useState(null);
+    const [selectedDistrict, setSelectedDistrict] = useState(null);
+
+    // Dynamic location options from masterApi
+    const [locationOptions, setLocationOptions] = useState({
+        countries: [],
+        states: [],
+        clusters: [],
+        districts: []
+    });
+
+    // Fetch countries on mount
+    useEffect(() => {
+        const fetchCountries = async () => {
+            try {
+                const res = await masterApi.getCountries();
+                setLocationOptions(prev => ({ ...prev, countries: res?.data?.data || res?.data || res || [] }));
+            } catch (err) {
+                console.error("Failed to fetch countries", err);
+            }
+        };
+        fetchCountries();
+    }, []);
+
+    // Fetch states when country changes
+    useEffect(() => {
+        if (selectedCountry?.id) {
+            masterApi.getStates({ countryId: selectedCountry.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, states: res?.data?.data || res?.data || res || [], districts: [], clusters: [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, states: [], districts: [], clusters: [] }));
+        }
+    }, [selectedCountry]);
+
+    // Fetch districts and clusters when state changes
+    useEffect(() => {
+        if (selectedState?.id) {
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+            
+            masterApi.getDistricts({ stateId: selectedState.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, districts: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+            
+            masterApi.getClusters({ stateId: selectedState.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, clusters: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+        }
+    }, [selectedState]);
 
     // State for account details visibility
     const [showAccountDetails, setShowAccountDetails] = useState(false);
@@ -51,17 +107,25 @@ const FranchiseProjectSignup = () => {
     const [locationSearch, setLocationSearch] = useState('');
 
     // State for summary address
-    const [summaryAddress, setSummaryAddress] = useState('Narayan Nagar, Mavdi main road rajkot');
+    const [summaryAddress, setSummaryAddress] = useState('');
 
     // State for form data
     const [formData, setFormData] = useState({
-        aadharNumber: '123456789012',
-        lightBillNumber: '1234567890',
-        nameAsPerAadhar: 'Sushil Piprotar',
-        nameAsPerBill: 'Sushil Piprotar',
+        aadharNumber: '',
+        lightBillNumber: '',
+        nameAsPerAadhar: '',
+        nameAsPerBill: '',
         bankAccount: '',
         ifscCode: '',
-        accountHolderName: ''
+        accountHolderName: '',
+        houseNo: '',
+        street: '',
+        landmark: '',
+        pincode: '',
+        district: '',
+        subDistrict: '',
+        village: '',
+        post: ''
     });
 
     // State for uploaded files
@@ -73,46 +137,99 @@ const FranchiseProjectSignup = () => {
     });
 
     // Projects data
-    const projects = [
-        {
-            id: 1,
-            name: 'Pardeep Singh',
-            phone: '+91 9814812345',
-            project: 'PRJ-001',
-            consumer: 'CN-001',
-            panel: '6 Panel (2.7 KW)',
-            image: '../../assets/vendors/images/profile.png'
-        },
-        {
-            id: 2,
-            name: 'Rahul Sharma',
-            phone: '+91 9876543210',
-            project: 'PRJ-002',
-            consumer: 'CN-002',
-            panel: '8 Panel (3.6 KW)',
-            image: '../../assets/vendors/images/profile.png'
-        },
-        {
-            id: 3,
-            name: 'Priya Patel',
-            phone: '+91 8765432109',
-            project: 'PRJ-003',
-            consumer: 'CN-003',
-            panel: '10 Panel (4.5 KW)',
-            image: '../../assets/vendors/images/profile.png'
-        }
-    ];
+    const [projects, setProjects] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
 
-    // Set default selected project
+    // Fetch projects on mount
     useEffect(() => {
-        setSelectedProject(projects[0]);
+        const fetchProjects = async () => {
+            try {
+                setIsLoading(true);
+                const response = await getProjects();
+                const fetchedProjects = Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : []);
+                
+                const mappedProjects = fetchedProjects.map(p => ({
+                    id: p._id,
+                    name: p.projectName || 'Unknown',
+                    phone: p.mobile || '+91 0000000000',
+                    project: p.projectId || 'N/A',
+                    consumer: p.consumerNumber || 'N/A',
+                    panel: p.numberOfPanels ? `${p.numberOfPanels} Panel (${p.totalKW} KW)` : (p.totalKW ? `${Math.ceil(p.totalKW / 0.5)} Panel (${p.totalKW} KW)` : 'N/A'),
+                    country: 'India',
+                    state: p.state?.name || 'Unknown State',
+                    cluster: p.cluster?.name || 'Unknown Cluster',
+                    district: p.district?.name || 'Unknown District',
+                    image: p.image || '../../assets/vendors/images/profile.png'
+                }));
+                
+                setProjects(mappedProjects);
+                if (mappedProjects.length > 0) {
+                    setSelectedProject(mappedProjects[0]);
+                }
+            } catch (error) {
+                console.error("Error fetching projects:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchProjects();
     }, []);
 
-    // Filter projects based on search term
-    const filteredProjects = projects.filter(project =>
-        project.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        project.project.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Filter projects based on search term and location hierarchy
+    const filteredProjects = projects.filter(project => {
+        const matchSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            project.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            project.phone.includes(searchTerm);
+        const matchCountry = !selectedCountry || project.country === selectedCountry.name;
+        const matchState = !selectedState || project.state === selectedState.name;
+        const matchCluster = !selectedCluster || project.cluster === selectedCluster.name;
+        const matchDistrict = !selectedDistrict || project.district === selectedDistrict.name;
+        
+        return matchSearch && matchCountry && matchState && matchCluster && matchDistrict;
+    });
+
+    const getCount = (key, value, projectList) => projectList.filter(p => p[key] === value).length;
+
+    const FilterRow = ({ label, options, selected, onSelect, projectList, filterKey }) => {
+        if (!options || options.length === 0) return null;
+        return (
+            <div className="mb-4">
+                <div className="text-sm font-semibold text-gray-700 flex items-center mb-2">
+                    <span className="text-blue-600 mr-2 flex items-center justify-center w-5 h-5 rounded-full border border-blue-600">
+                        <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                    </span> 
+                    {label}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    {options.map(opt => {
+                        const count = getCount(filterKey, opt.name, projectList);
+                        const isSelected = selected?.id === opt._id;
+                        return (
+                            <button
+                                key={opt._id}
+                                onClick={() => onSelect(isSelected ? null : { id: opt._id, name: opt.name })}
+                                className={`relative px-6 py-4 border rounded-xl transition-colors flex flex-col items-center justify-center min-w-[160px] shadow-sm ${
+                                    isSelected
+                                        ? 'border-blue-500 bg-white ring-1 ring-blue-500'
+                                        : 'border-gray-200 bg-white hover:border-blue-300'
+                                }`}
+                            >
+                                <div className={`text-base font-bold truncate ${isSelected ? 'text-blue-600' : 'text-gray-800'}`} title={opt.name}>
+                                    {opt.name}
+                                </div>
+                                <div className={`text-xs uppercase tracking-wide truncate mt-1 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`}>
+                                    {opt.code || opt.name.substring(0, 3)}
+                                </div>
+                                <div className="absolute -top-3 -right-3 bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-md">
+                                    {count}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     // Handle project selection
     const handleProjectSelect = (project) => {
@@ -217,9 +334,45 @@ const FranchiseProjectSignup = () => {
                 </nav>
             </div>
 
-            <div className="flex flex-col lg:flex-row">
+            {/* Location Hierarchy Filters */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6">
+                <FilterRow 
+                    label="Select Country" 
+                    options={locationOptions.countries} 
+                    selected={selectedCountry} 
+                    onSelect={(val) => { setSelectedCountry(val); setSelectedState(null); setSelectedCluster(null); setSelectedDistrict(null); }} 
+                    projectList={projects} 
+                    filterKey="country" 
+                />
+                <FilterRow 
+                    label="Select State" 
+                    options={locationOptions.states} 
+                    selected={selectedState} 
+                    onSelect={(val) => { setSelectedState(val); setSelectedCluster(null); setSelectedDistrict(null); }} 
+                    projectList={projects.filter(p => !selectedCountry || p.country === selectedCountry.name)} 
+                    filterKey="state" 
+                />
+                <FilterRow 
+                    label="Select District" 
+                    options={locationOptions.districts} 
+                    selected={selectedDistrict} 
+                    onSelect={(val) => { setSelectedDistrict(val); setSelectedCluster(null); }} 
+                    projectList={projects.filter(p => (!selectedCountry || p.country === selectedCountry.name) && (!selectedState || p.state === selectedState.name))} 
+                    filterKey="district" 
+                />
+                <FilterRow 
+                    label="Select Cluster" 
+                    options={locationOptions.clusters} 
+                    selected={selectedCluster} 
+                    onSelect={setSelectedCluster} 
+                    projectList={projects.filter(p => (!selectedCountry || p.country === selectedCountry.name) && (!selectedState || p.state === selectedState.name) && (!selectedDistrict || p.district === selectedDistrict.name))} 
+                    filterKey="cluster" 
+                />
+            </div>
+
+            <div className="flex flex-col lg:flex-row gap-6">
                 {/* Left Sidebar */}
-                <div className="lg:w-1/4 p-4">
+                <div className="lg:w-1/4">
                     <div className="bg-white rounded-lg shadow-sm p-4 sticky top-4">
                         <h3 className="text-lg font-bold mb-2">Project Signup</h3>
                         <p className="text-sm text-gray-500 mb-4">Complete the signup process for your solar project</p>
@@ -230,7 +383,7 @@ const FranchiseProjectSignup = () => {
                                 <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" size={18} />
                                 <input
                                     type="text"
-                                    placeholder="Search projects..."
+                                    placeholder="name or number search..."
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                     className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -240,35 +393,42 @@ const FranchiseProjectSignup = () => {
 
                         {/* Project List */}
                         <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                            {filteredProjects.map((project) => (
-                                <button
-                                    key={project.id}
-                                    onClick={() => handleProjectSelect(project)}
-                                    className={`w-full flex items-center p-3 rounded-lg transition-colors ${selectedProject?.id === project.id
-                                        ? 'bg-blue-50 border border-blue-300'
-                                        : 'hover:bg-gray-50 border border-transparent'
-                                        }`}
-                                >
-                                    <img
-                                        src={project.image}
-                                        alt={project.name}
-                                        className="w-10 h-10 rounded-full object-cover"
-                                    />
-                                    <div className="flex-1 text-left ml-3">
-                                        <div className="font-semibold text-sm">{project.name}</div>
-                                        <div className="text-xs text-gray-500">Project: {project.project}</div>
-                                    </div>
-                                    <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full">
-                                        {project.panel.split(' ')[0]} {project.panel.split(' ')[1]}
-                                    </span>
-                                </button>
-                            ))}
+                            {isLoading ? (
+                                <div className="text-center py-4 text-gray-500">Loading projects...</div>
+                            ) : filteredProjects.length === 0 ? (
+                                <div className="text-center py-4 text-gray-500">No projects found.</div>
+                            ) : (
+                                filteredProjects.map((project) => (
+                                    <button
+                                        key={project.id}
+                                        onClick={() => handleProjectSelect(project)}
+                                        className={`w-full flex items-center p-3 rounded-lg transition-colors ${selectedProject?.id === project.id
+                                            ? 'bg-blue-50 border border-blue-300'
+                                            : 'hover:bg-gray-50 border border-transparent'
+                                            }`}
+                                    >
+                                        <img
+                                            src={project.image}
+                                            alt={project.name}
+                                            className="w-10 h-10 rounded-full object-cover"
+                                        />
+                                        <div className="flex-1 text-left ml-3">
+                                            <div className="font-semibold text-sm">{project.name}</div>
+                                            <div className="text-xs text-gray-500">Project: {project.project}</div>
+                                        </div>
+                                        <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full whitespace-nowrap">
+                                            {project.panel}
+                                        </span>
+                                    </button>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>
 
                 {/* Right Content */}
-                <div className="lg:w-3/4 p-4">
+                <div className="lg:w-3/4">
+
                     <div className="bg-white rounded-lg shadow-sm">
                         {/* Wizard Tabs */}
                         <div className="flex border-b">
@@ -343,18 +503,40 @@ const FranchiseProjectSignup = () => {
                                         <label className="block text-sm font-medium text-gray-700 mb-1">
                                             Address per Aadhar
                                         </label>
-                                        <div className="border border-gray-300 rounded-md overflow-hidden">
-                                            <div className="p-3 border-b border-gray-300">
-                                                <div className="text-sm">House No : 12 jkshdbdmnabadh</div>
-                                                <div className="text-sm">Street : Narayan nagar street no 8</div>
-                                                <div className="text-sm">Landmark : Narayan nagar main road Near kkv chowk</div>
-                                                <div className="text-sm">Pincode : 360004</div>
-                                            </div>
-                                            <div className="p-3">
-                                                <div className="text-sm">District : Rajkot</div>
-                                                <div className="text-sm">Sub-District : Rajkot City</div>
-                                                <div className="text-sm">Village : Mavdi</div>
-                                                <div className="text-sm">Post : Mavdi</div>
+                                        <div className="border border-gray-300 rounded-md overflow-hidden bg-gray-50 p-3 space-y-3">
+                                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="text-xs text-gray-500">House No</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.houseNo} onChange={(e) => setFormData({...formData, houseNo: e.target.value})} placeholder="House No" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Street</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.street} onChange={(e) => setFormData({...formData, street: e.target.value})} placeholder="Street" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Landmark</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.landmark} onChange={(e) => setFormData({...formData, landmark: e.target.value})} placeholder="Landmark" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Pincode</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.pincode} onChange={(e) => setFormData({...formData, pincode: e.target.value})} placeholder="Pincode" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">District</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.district} onChange={(e) => setFormData({...formData, district: e.target.value})} placeholder="District" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Sub-District</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.subDistrict} onChange={(e) => setFormData({...formData, subDistrict: e.target.value})} placeholder="Sub-District" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Village</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.village} onChange={(e) => setFormData({...formData, village: e.target.value})} placeholder="Village" />
+                                                </div>
+                                                <div>
+                                                    <label className="text-xs text-gray-500">Post</label>
+                                                    <input type="text" className="w-full px-2 py-1 border border-gray-300 rounded-md text-sm" value={formData.post} onChange={(e) => setFormData({...formData, post: e.target.value})} placeholder="Post" />
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -395,9 +577,10 @@ const FranchiseProjectSignup = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter Name as Per Aadhar"
                                             value={formData.nameAsPerAadhar}
-                                            readOnly
+                                            onChange={(e) => setFormData({...formData, nameAsPerAadhar: e.target.value})}
                                         />
                                     </div>
 
@@ -408,9 +591,10 @@ const FranchiseProjectSignup = () => {
                                         </label>
                                         <input
                                             type="text"
-                                            className="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-100"
+                                            className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                                            placeholder="Enter Name as Per Electricity Bill"
                                             value={formData.nameAsPerBill}
-                                            readOnly
+                                            onChange={(e) => setFormData({...formData, nameAsPerBill: e.target.value})}
                                         />
                                     </div>
 

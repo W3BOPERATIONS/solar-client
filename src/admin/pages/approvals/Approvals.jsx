@@ -22,6 +22,8 @@ const tableHeaders = {
   dealer: ['ID', 'Dealer Name', 'Business Name', 'Mobile', 'Email', 'Address', 'GST No', 'Requested By', 'Date', 'Action'],
   installer: ['ID', 'Installer Name', 'Business Name', 'Mobile', 'Email', 'Address', 'Certification', 'Experience', 'Requested By', 'Date', 'Action'],
   franchisee: ['ID', 'Franchisee Name', 'Business Name', 'Mobile', 'Email', 'Address', 'Investment', 'Requested By', 'Date', 'Action'],
+  districtManager: ['ID', 'Manager Name', 'Phone', 'Email', 'District', 'Project Category', 'Aadhaar', 'Requested By', 'Date', 'Action'],
+  dealerManager: ['ID', 'Manager Name', 'Phone', 'Email', 'District', 'Project Category', 'Requested By', 'Date', 'Action'],
   combokit: ['ID', 'ComboKit Name', 'Solar Panel Brand', 'SKU', 'Inverter', 'Inverter SKU', 'BOS Kit Brand', 'BOS Kit SKU', 'CP Type', 'District', 'Date', 'Action'],
   inventory: ['ID', 'Product Type', 'Product Name', 'Brand', 'SKU', 'Model No.', 'Quantity', 'Requested By', 'Date', 'Action'],
   ticket: ['ID', 'Issue Type', 'Ticket Name', 'Priority', 'Customer Name', 'Customer Phone', 'Assigned To', 'Est. Resolution', 'Modules', 'Timeline', 'Requested By', 'Date', 'Action'],
@@ -38,6 +40,8 @@ const fieldMappings = {
   dealer: ['id', 'dealerName', 'businessName', 'mobile', 'email', 'address', 'gstNo', 'requestedBy', 'date'],
   installer: ['id', 'installerName', 'businessName', 'mobile', 'email', 'address', 'certification', 'experience', 'requestedBy', 'date'],
   franchisee: ['id', 'franchiseeName', 'businessName', 'mobile', 'email', 'address', 'investment', 'requestedBy', 'date'],
+  districtManager: ['id', 'name', 'phone', 'email', 'district', 'category', 'aadhaarCard', 'requestedBy', 'date'],
+  dealerManager: ['id', 'name', 'phone', 'email', 'district', 'category', 'requestedBy', 'date'],
   combokit: ['id', 'name', 'solarpanelbrand', 'panelsku', 'inverter', 'invertorsku', 'boskitbrand', 'boskitsku', 'cptype', 'district', 'date'],
   inventory: ['id', 'productType', 'name', 'brand', 'sku', 'modelNo', 'quantity', 'requestedBy', 'date'],
   ticket: ['id', 'issueType', 'name', 'priority', 'customerName', 'customerPhone', 'assignedTo', 'estimatedResolution', 'modules', 'timeline', 'requestedBy', 'date'],
@@ -63,6 +67,8 @@ const getTypeDisplayName = (type) => {
     'dealer': 'Dealer Onboarding',
     'installer': 'Installer Onboarding',
     'franchisee': 'Franchisee Onboarding',
+    'districtManager': 'District Manager Approvals',
+    'dealerManager': 'Dealer Manager Approvals',
     'combokit': 'ComboKit',
     'inventory': 'Inventory',
     'ticket': 'Ticket',
@@ -162,7 +168,7 @@ export default function AdminApproval() {
   const [showSelectedCardApproved, setShowSelectedCardApproved] = useState(true);
 
   const [data, setData] = useState({
-    recruitment: [], driver: [], dealer: [], installer: [], franchisee: [],
+    recruitment: [], driver: [], dealer: [], installer: [], franchisee: [], districtManager: [], dealerManager: [],
     combokit: [], inventory: [], ticket: [], standard: [], customize: [],
     leave: [], resignation: []
   });
@@ -228,7 +234,7 @@ export default function AdminApproval() {
 
         // Organize data by type
         const newData = {
-          recruitment: [], driver: [], dealer: [], installer: [], franchisee: [],
+          recruitment: [], driver: [], dealer: [], installer: [], franchisee: [], districtManager: [], dealerManager: [],
           combokit: [], inventory: [], ticket: [], standard: [], customize: [],
           leave: [], resignation: []
         };
@@ -318,10 +324,10 @@ export default function AdminApproval() {
   const totalPending = Object.values(data).reduce((sum, items) => sum + items.length, 0);
   const totalOverdue = Object.keys(data).reduce((sum, type) => sum + getOverdueCount(type), 0);
 
-  const onboardingPending = ['driver', 'dealer', 'installer', 'franchisee'].reduce(
+  const onboardingPending = ['driver', 'dealer', 'installer', 'franchisee', 'districtManager', 'dealerManager'].reduce(
     (sum, type) => sum + (data[type]?.length || 0), 0
   );
-  const onboardingOverdue = ['driver', 'dealer', 'installer', 'franchisee'].reduce(
+  const onboardingOverdue = ['driver', 'dealer', 'installer', 'franchisee', 'districtManager', 'dealerManager'].reduce(
     (sum, type) => sum + getOverdueCount(type), 0
   );
 
@@ -333,7 +339,7 @@ export default function AdminApproval() {
   );
 
   const onboardingApproved = approvedItems.filter(
-    item => ['driver', 'dealer', 'installer', 'franchisee'].includes(item.type)
+    item => ['driver', 'dealer', 'installer', 'franchisee', 'districtManager', 'dealerManager'].includes(item.type)
   ).length;
 
   const companyApproved = approvedItems.filter(
@@ -351,6 +357,8 @@ export default function AdminApproval() {
     driver: data.driver?.length || 0,
     dealer: data.dealer?.length || 0,
     franchisee: data.franchisee?.length || 0,
+    districtManager: data.districtManager?.length || 0,
+    dealerManager: data.dealerManager?.length || 0,
     recruitment: data.recruitment?.length || 0,
     combokit: data.combokit?.length || 0,
     inventory: data.inventory?.length || 0,
@@ -366,6 +374,8 @@ export default function AdminApproval() {
     driver: getOverdueCount('driver'),
     dealer: getOverdueCount('dealer'),
     franchisee: getOverdueCount('franchisee'),
+    districtManager: getOverdueCount('districtManager'),
+    dealerManager: getOverdueCount('dealerManager'),
     recruitment: getOverdueCount('recruitment'),
     combokit: getOverdueCount('combokit') + getOverdueCount('standard') + getOverdueCount('customize'),
     inventory: getOverdueCount('inventory'),
@@ -984,12 +994,14 @@ export default function AdminApproval() {
 
           {/* Onboarding Approval Cards */}
           {currentApprovalType === 'onboarding' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-6 gap-4">
               {[
                 { type: 'installer', color: 'bg-cyan-600', icon: HardHat, count: counts.installer, overdue: overdueCounts.installer, label: 'Installer Onboarding' },
                 { type: 'driver', color: 'bg-yellow-600', icon: Truck, count: counts.driver, overdue: overdueCounts.driver, label: 'Driver Onboarding' },
                 { type: 'dealer', color: 'bg-gray-600', icon: Store, count: counts.dealer, overdue: overdueCounts.dealer, label: 'Dealer Onboarding' },
-                { type: 'franchisee', color: 'bg-gray-800', icon: Home, count: counts.franchisee, overdue: overdueCounts.franchisee, label: 'Franchisee Onboarding' }
+                { type: 'franchisee', color: 'bg-gray-800', icon: Home, count: counts.franchisee, overdue: overdueCounts.franchisee, label: 'Franchisee Onboarding' },
+                { type: 'districtManager', color: 'bg-indigo-600', icon: Building, count: counts.districtManager, overdue: overdueCounts.districtManager, label: 'District Manager' },
+                { type: 'dealerManager', color: 'bg-teal-600', icon: Store, count: counts.dealerManager, overdue: overdueCounts.dealerManager, label: 'Dealer Manager' }
               ].map((card) => (
                 <div
                   key={card.type}

@@ -12,6 +12,7 @@ import {
     ArrowRight
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { getCategories, getSubCategories, getProjectTypes, getSubProjectTypes } from '../../../services/core/masterApi';
 
 const ProjectManagement = () => {
     const navigate = useNavigate();
@@ -26,26 +27,36 @@ const ProjectManagement = () => {
     // State for selected customer type
     const [selectedCustomerType, setSelectedCustomerType] = useState(null);
 
-    // Filter options
-    const filterOptions = {
-        categories: [
-            { value: 'Rooftop Solar', label: 'Rooftop Solar' },
-            { value: 'Solar Pump', label: 'Solar Pump' }
-        ],
-        subCategories: [
-            { value: 'Residential', label: 'Residential' },
-            { value: 'Commercial', label: 'Commercial' }
-        ],
-        projectTypes: [
-            { value: '1 to 10 kW', label: '1 to 10 kW' },
-            { value: '11 to 20 kW', label: '11 to 20 kW' }
-        ],
-        subProjectTypes: [
-            { value: 'On-Grid', label: 'On-Grid' },
-            { value: 'Off-Grid', label: 'Off-Grid' },
-            { value: 'Hybrid', label: 'Hybrid' }
-        ]
-    };
+    // Dynamic Filter options
+    const [dynamicOptions, setDynamicOptions] = useState({
+        categories: [],
+        subCategories: [],
+        projectTypes: [],
+        subProjectTypes: []
+    });
+
+    React.useEffect(() => {
+        const fetchOptions = async () => {
+            try {
+                const [catRes, subCatRes, ptRes, sptRes] = await Promise.all([
+                    getCategories(),
+                    getSubCategories(),
+                    getProjectTypes(),
+                    getSubProjectTypes()
+                ]);
+
+                setDynamicOptions({
+                    categories: Array.isArray(catRes?.data) ? catRes.data : Array.isArray(catRes) ? catRes : [],
+                    subCategories: Array.isArray(subCatRes?.data) ? subCatRes.data : Array.isArray(subCatRes) ? subCatRes : [],
+                    projectTypes: Array.isArray(ptRes?.data) ? ptRes.data : Array.isArray(ptRes) ? ptRes : [],
+                    subProjectTypes: Array.isArray(sptRes?.data) ? sptRes.data : Array.isArray(sptRes) ? sptRes : []
+                });
+            } catch (error) {
+                console.error("Error fetching project management options:", error);
+            }
+        };
+        fetchOptions();
+    }, []);
 
     // Handle filter changes
     const handleFilterChange = (e) => {
@@ -56,11 +67,10 @@ const ProjectManagement = () => {
         }));
 
         // Auto-hide cards based on sub-category selection
+        // Auto-hide cards based on sub-category selection
         if (name === 'subCategory') {
-            if (value === 'Residential') {
-                setSelectedCustomerType('Residential');
-            } else if (value === 'Commercial') {
-                setSelectedCustomerType('Commercial');
+            if (value) {
+                setSelectedCustomerType(value);
             } else {
                 setSelectedCustomerType(null);
             }
@@ -86,11 +96,9 @@ const ProjectManagement = () => {
     // Handle continue button click
     const handleContinue = () => {
         if (selectedCustomerType) {
-            if (selectedCustomerType === 'Residential') {
-                navigate('/franchisee/residential-project');
-            } else if (selectedCustomerType === 'Commercial') {
-                navigate('/franchisee/commercial-project');
-            }
+            // Convert 'Residential' to 'residential-project', etc.
+            const routeType = selectedCustomerType.toLowerCase().replace(/\s+/g, '-');
+            navigate(`/franchisee/${routeType}-project`);
         }
     };
 
@@ -120,9 +128,9 @@ const ProjectManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Filter by Category</option>
-                                    {filterOptions.categories.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
+                                    {dynamicOptions.categories.map(option => (
+                                        <option key={option._id || option.name} value={option.name}>
+                                            {option.name}
                                         </option>
                                     ))}
                                 </select>
@@ -137,9 +145,9 @@ const ProjectManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Filter by Sub-Category</option>
-                                    {filterOptions.subCategories.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
+                                    {dynamicOptions.subCategories.map(option => (
+                                        <option key={option._id || option.name} value={option.name}>
+                                            {option.name}
                                         </option>
                                     ))}
                                 </select>
@@ -154,9 +162,9 @@ const ProjectManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Filter by Project Type</option>
-                                    {filterOptions.projectTypes.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
+                                    {dynamicOptions.projectTypes.map(option => (
+                                        <option key={option._id || option.name} value={option.name}>
+                                            {option.name}
                                         </option>
                                     ))}
                                 </select>
@@ -171,9 +179,9 @@ const ProjectManagement = () => {
                                     className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                                 >
                                     <option value="">Filter by Sub Project Type</option>
-                                    {filterOptions.subProjectTypes.map(option => (
-                                        <option key={option.value} value={option.value}>
-                                            {option.label}
+                                    {dynamicOptions.subProjectTypes.map(option => (
+                                        <option key={option._id || option.name} value={option.name}>
+                                            {option.name}
                                         </option>
                                     ))}
                                 </select>
@@ -199,49 +207,40 @@ const ProjectManagement = () => {
                     <p className="text-gray-500 mb-6">Choose one to continue</p>
 
                     <div className="flex flex-col md:flex-row justify-center gap-6 max-w-3xl mx-auto">
-                        {/* Residential Card */}
-                        <div
-                            onClick={() => handleCustomerTypeSelect('Residential')}
-                            className={`flex-1 cursor-pointer transition-all ${filters.subCategory === 'Commercial' ? 'hidden' : 'block'
-                                }`}
-                        >
-                            <div
-                                className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Residential'
-                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
-                                    }`}
-                            >
-                                <Home
-                                    size={56}
-                                    className={`mx-auto mb-3 ${selectedCustomerType === 'Residential' ? 'text-blue-500' : 'text-blue-400'
-                                        }`}
-                                />
-                                <h4 className="font-bold text-xl mb-2">Residential</h4>
-                                <p className="text-gray-500 text-sm">For personal, non-commercial use</p>
-                            </div>
-                        </div>
-
-                        {/* Commercial Card */}
-                        <div
-                            onClick={() => handleCustomerTypeSelect('Commercial')}
-                            className={`flex-1 cursor-pointer transition-all ${filters.subCategory === 'Residential' ? 'hidden' : 'block'
-                                }`}
-                        >
-                            <div
-                                className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${selectedCustomerType === 'Commercial'
-                                    ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
-                                    : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
-                                    }`}
-                            >
-                                <Building2
-                                    size={56}
-                                    className={`mx-auto mb-3 ${selectedCustomerType === 'Commercial' ? 'text-blue-500' : 'text-blue-400'
-                                        }`}
-                                />
-                                <h4 className="font-bold text-xl mb-2">Commercial</h4>
-                                <p className="text-gray-500 text-sm">For business and commercial purposes</p>
-                            </div>
-                        </div>
+                        {dynamicOptions.subCategories.map((subCat) => {
+                            const name = subCat.name;
+                            if (!name) return null;
+                            const isSelected = selectedCustomerType === name;
+                            const isHidden = filters.subCategory && filters.subCategory !== name;
+                            
+                            // Choose icon based on name
+                            let Icon = Building2;
+                            if (name.toLowerCase().includes('residential')) Icon = Home;
+                            else if (name.toLowerCase().includes('industrial') || name.toLowerCase().includes('factory')) Icon = Factory;
+                            else if (name.toLowerCase().includes('solar')) Icon = Sun;
+                            
+                            return (
+                                <div
+                                    key={subCat._id || name}
+                                    onClick={() => handleCustomerTypeSelect(name)}
+                                    className={`flex-1 min-w-[250px] cursor-pointer transition-all ${isHidden ? 'hidden' : 'block'}`}
+                                >
+                                    <div
+                                        className={`bg-white rounded-lg shadow-md p-8 text-center border-2 transition-all ${isSelected
+                                            ? 'border-blue-500 shadow-lg ring-2 ring-blue-200'
+                                            : 'border-gray-200 hover:shadow-lg hover:border-blue-300'
+                                            }`}
+                                    >
+                                        <Icon
+                                            size={56}
+                                            className={`mx-auto mb-3 ${isSelected ? 'text-blue-500' : 'text-blue-400'}`}
+                                        />
+                                        <h4 className="font-bold text-xl mb-2">{name}</h4>
+                                        <p className="text-gray-500 text-sm">For {name.toLowerCase()} purposes</p>
+                                    </div>
+                                </div>
+                            );
+                        })}
                     </div>
 
                     {/* Continue Button */}

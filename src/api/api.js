@@ -9,6 +9,7 @@ export const authAPI = {
 export const userAPI = {
   getAllUsers: () => api.get('/users'),
   getAll: (params) => api.get('/users', { params }),
+  getUsersByRole: (role) => api.get('/users', { params: { role } }),
   getById: (id) => api.get(`/users/${id}`),
   create: (data) => api.post('/users', data),
   updateUser: (id, data) => api.put(`/users/${id}`, data),
@@ -188,6 +189,7 @@ export const leadAPI = {
   getAllLeads: (params) => api.get('/leads', { params }),
   getLeadById: (id) => api.get(`/leads/${id}`),
   updateLead: (id, data) => api.put(`/leads/${id}`, data),
+  assignLeadToPartner: (id, data) => api.put(`/leads/${id}/assign`, data),
   deleteLead: (id) => api.delete(`/leads/${id}`),
 };
 

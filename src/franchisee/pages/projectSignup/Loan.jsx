@@ -42,6 +42,8 @@ import {
     PiggyBank,
     Landmark
 } from 'lucide-react';
+import { getProjects } from '../../../services/project/projectService';
+import { masterApi } from '../../../api/masterApi';
 
 const FranchiseeLoans = () => {
     // State for selected customer
@@ -101,64 +103,100 @@ const FranchiseeLoans = () => {
     // State for payment method
     const [paymentMethod, setPaymentMethod] = useState('online');
 
-    // Customers data
-    const customers = [
-        {
-            id: 1,
-            name: 'Pardeep Singh',
-            phone: '+91 9814812345',
-            project: 'PRJ-001',
-            consumer: 'CN-001',
-            panel: '6 Panel (2.7 KW)',
-            image: '../../assets/vendors/images/profile.png',
-            projectPrice: 145000,
-            comboPrice: 100000
-        },
-        {
-            id: 2,
-            name: 'Rahul Sharma',
-            phone: '+91 9876543210',
-            project: 'PRJ-002',
-            consumer: 'CN-002',
-            panel: '8 Panel (3.6 KW)',
-            image: '../../assets/vendors/images/profile.png',
-            projectPrice: 165000,
-            comboPrice: 120000
-        },
-        {
-            id: 3,
-            name: 'Priya Patel',
-            phone: '+91 8765432109',
-            project: 'PRJ-003',
-            consumer: 'CN-003',
-            panel: '10 Panel (4.5 KW)',
-            image: '../../assets/vendors/images/profile.png',
-            projectPrice: 185000,
-            comboPrice: 140000
-        },
-        {
-            id: 4,
-            name: 'Amit Kumar',
-            phone: '+91 9876543211',
-            project: 'PRJ-004',
-            consumer: 'CN-004',
-            panel: '6 Panel (2.7 KW)',
-            image: '../../assets/vendors/images/profile.png',
-            projectPrice: 145000,
-            comboPrice: 100000
-        },
-        {
-            id: 5,
-            name: 'Neha Gupta',
-            phone: '+91 9876543212',
-            project: 'PRJ-005',
-            consumer: 'CN-005',
-            panel: '8 Panel (3.6 KW)',
-            image: '../../assets/vendors/images/profile.png',
-            projectPrice: 165000,
-            comboPrice: 120000
+    // Store selected option objects: { id, name }
+    const [selectedCountry, setSelectedCountry] = useState(null);
+    const [selectedState, setSelectedState] = useState(null);
+    const [selectedCluster, setSelectedCluster] = useState(null);
+    const [selectedDistrict, setSelectedDistrict] = useState(null);
+
+    // Dynamic location options from masterApi
+    const [locationOptions, setLocationOptions] = useState({
+        countries: [],
+        states: [],
+        clusters: [],
+        districts: []
+    });
+
+    const [projects, setProjects] = useState([]);
+    const [isLoading, setIsLoading] = useState(true);
+
+    // Fetch countries on mount
+    useEffect(() => {
+        const fetchCountries = async () => {
+            try {
+                const res = await masterApi.getCountries();
+                setLocationOptions(prev => ({ ...prev, countries: res?.data?.data || res?.data || res || [] }));
+            } catch (err) {
+                console.error("Failed to fetch countries", err);
+            }
+        };
+        fetchCountries();
+    }, []);
+
+    // Fetch states when country changes
+    useEffect(() => {
+        if (selectedCountry?.id) {
+            masterApi.getStates({ countryId: selectedCountry.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, states: res?.data?.data || res?.data || res || [], districts: [], clusters: [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, states: [], districts: [], clusters: [] }));
         }
-    ];
+    }, [selectedCountry]);
+
+    // Fetch districts and clusters when state changes
+    useEffect(() => {
+        if (selectedState?.id) {
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+            
+            masterApi.getDistricts({ stateId: selectedState.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, districts: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+            
+            masterApi.getClusters({ stateId: selectedState.id }).then(res => {
+                setLocationOptions(prev => ({ ...prev, clusters: res?.data?.data || res?.data || res || [] }));
+            }).catch(console.error);
+        } else {
+            setLocationOptions(prev => ({ ...prev, districts: [], clusters: [] }));
+        }
+    }, [selectedState]);
+
+    // Fetch projects on mount
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                setIsLoading(true);
+                const response = await getProjects();
+                const fetchedProjects = Array.isArray(response.data) ? response.data : (Array.isArray(response) ? response : []);
+                
+                const mappedProjects = fetchedProjects.map(p => ({
+                    id: p._id,
+                    name: p.projectName || 'Unknown',
+                    phone: p.mobile || '+91 0000000000',
+                    project: p.projectId || 'N/A',
+                    consumer: p.consumerNumber || 'N/A',
+                    panel: p.numberOfPanels ? `${p.numberOfPanels} Panel (${p.totalKW} KW)` : (p.totalKW ? `${Math.ceil(p.totalKW / 0.5)} Panel (${p.totalKW} KW)` : 'N/A'),
+                    country: 'India',
+                    state: p.state?.name || 'Unknown State',
+                    cluster: p.cluster?.name || 'Unknown Cluster',
+                    district: p.district?.name || 'Unknown District',
+                    image: p.image || '../../assets/vendors/images/profile.png',
+                    projectPrice: p.totalAmount || 145000,
+                    comboPrice: (p.totalAmount || 145000) * 0.7
+                }));
+                
+                setProjects(mappedProjects);
+                if (mappedProjects.length > 0) {
+                    setSelectedCustomer(mappedProjects[0]);
+                }
+            } catch (error) {
+                console.error("Error fetching projects:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        fetchProjects();
+    }, []);
 
     // Loan offers data
     const loanOffers = [
@@ -204,17 +242,61 @@ const FranchiseeLoans = () => {
         'Get Loan'
     ];
 
-    // Set default selected customer
-    useEffect(() => {
-        setSelectedCustomer(customers[0]);
-    }, []);
+    // Filter projects based on search term and location hierarchy
+    const filteredCustomers = projects.filter(project => {
+        const matchSearch = project.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                            project.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                            project.phone.includes(searchTerm);
+        const matchCountry = !selectedCountry || project.country === selectedCountry.name;
+        const matchState = !selectedState || project.state === selectedState.name;
+        const matchCluster = !selectedCluster || project.cluster === selectedCluster.name;
+        const matchDistrict = !selectedDistrict || project.district === selectedDistrict.name;
+        
+        return matchSearch && matchCountry && matchState && matchCluster && matchDistrict;
+    });
 
-    // Filter customers based on search term
-    const filteredCustomers = customers.filter(customer =>
-        customer.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.project.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        customer.phone.includes(searchTerm)
-    );
+    const getCount = (key, value, projectList) => projectList.filter(p => p[key] === value).length;
+
+    const FilterRow = ({ label, options, selected, onSelect, projectList, filterKey }) => {
+        if (!options || options.length === 0) return null;
+        return (
+            <div className="mb-4">
+                <div className="text-sm font-semibold text-gray-700 flex items-center mb-2">
+                    <span className="text-blue-600 mr-2 flex items-center justify-center w-5 h-5 rounded-full border border-blue-600">
+                        <span className="w-2 h-2 bg-blue-600 rounded-full"></span>
+                    </span> 
+                    {label}
+                </div>
+                <div className="flex flex-wrap gap-3">
+                    {options.map(opt => {
+                        const count = getCount(filterKey, opt.name, projectList);
+                        const isSelected = selected?.id === opt._id;
+                        return (
+                            <button
+                                key={opt._id}
+                                onClick={() => onSelect(isSelected ? null : { id: opt._id, name: opt.name })}
+                                className={`relative px-6 py-4 border rounded-xl transition-colors flex flex-col items-center justify-center min-w-[160px] shadow-sm ${
+                                    isSelected
+                                        ? 'border-blue-500 bg-white ring-1 ring-blue-500'
+                                        : 'border-gray-200 bg-white hover:border-blue-300'
+                                }`}
+                            >
+                                <div className={`text-base font-bold truncate ${isSelected ? 'text-blue-600' : 'text-gray-800'}`} title={opt.name}>
+                                    {opt.name}
+                                </div>
+                                <div className={`text-xs uppercase tracking-wide truncate mt-1 ${isSelected ? 'text-blue-400' : 'text-gray-400'}`}>
+                                    {opt.code || opt.name.substring(0, 3)}
+                                </div>
+                                <div className="absolute -top-3 -right-3 bg-blue-600 text-white text-xs font-bold rounded-full w-6 h-6 flex items-center justify-center shadow-md">
+                                    {count}
+                                </div>
+                            </button>
+                        );
+                    })}
+                </div>
+            </div>
+        );
+    };
 
     // Handle customer selection
     const handleCustomerSelect = (customer) => {
@@ -318,6 +400,41 @@ const FranchiseeLoans = () => {
                     </ol>
                 </nav>
             </div>
+            {/* Location Hierarchy Filters */}
+            <div className="bg-white rounded-lg shadow-sm p-6 mb-6 mx-4">
+                <FilterRow 
+                    label="Select Country" 
+                    options={locationOptions.countries} 
+                    selected={selectedCountry} 
+                    onSelect={(val) => { setSelectedCountry(val); setSelectedState(null); setSelectedCluster(null); setSelectedDistrict(null); }} 
+                    projectList={projects} 
+                    filterKey="country" 
+                />
+                <FilterRow 
+                    label="Select State" 
+                    options={locationOptions.states} 
+                    selected={selectedState} 
+                    onSelect={(val) => { setSelectedState(val); setSelectedCluster(null); setSelectedDistrict(null); }} 
+                    projectList={projects.filter(p => !selectedCountry || p.country === selectedCountry.name)} 
+                    filterKey="state" 
+                />
+                <FilterRow 
+                    label="Select District" 
+                    options={locationOptions.districts} 
+                    selected={selectedDistrict} 
+                    onSelect={(val) => { setSelectedDistrict(val); setSelectedCluster(null); }} 
+                    projectList={projects.filter(p => (!selectedCountry || p.country === selectedCountry.name) && (!selectedState || p.state === selectedState.name))} 
+                    filterKey="district" 
+                />
+                <FilterRow 
+                    label="Select Cluster" 
+                    options={locationOptions.clusters} 
+                    selected={selectedCluster} 
+                    onSelect={setSelectedCluster} 
+                    projectList={projects.filter(p => (!selectedCountry || p.country === selectedCountry.name) && (!selectedState || p.state === selectedState.name) && (!selectedDistrict || p.district === selectedDistrict.name))} 
+                    filterKey="cluster" 
+                />
+            </div>
 
             <div className="flex flex-col lg:flex-row px-4">
                 {/* Left Sidebar */}
@@ -340,8 +457,8 @@ const FranchiseeLoans = () => {
                         </div>
 
                         {/* Customer List */}
-                        <div className="space-y-2 max-h-[500px] overflow-y-auto">
-                            {filteredCustomers.map((customer) => (
+                        <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+                            {filteredCustomers.map((customer, index) => (
                                 <button
                                     key={customer.id}
                                     onClick={() => handleCustomerSelect(customer)}
@@ -350,6 +467,9 @@ const FranchiseeLoans = () => {
                                             : 'hover:bg-gray-50 border border-transparent'
                                         }`}
                                 >
+                                    <div className="flex-shrink-0 w-6 font-bold text-gray-400 text-sm">
+                                        {index + 1}.
+                                    </div>
                                     <img
                                         src={customer.image}
                                         alt={customer.name}
@@ -359,11 +479,16 @@ const FranchiseeLoans = () => {
                                         <div className="font-semibold text-sm">{customer.name}</div>
                                         <div className="text-xs text-gray-500">Project: {customer.project}</div>
                                     </div>
-                                    <span className="bg-gray-200 text-gray-700 text-xs px-2 py-1 rounded-full">
+                                    <span className="bg-gray-200 text-gray-700 text-[10px] px-2 py-1 rounded-full whitespace-nowrap">
                                         {customer.panel.split(' ')[0]} {customer.panel.split(' ')[1]}
                                     </span>
                                 </button>
                             ))}
+                            {filteredCustomers.length === 0 && (
+                                <div className="text-center p-4 text-gray-500">
+                                    No customers found
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
