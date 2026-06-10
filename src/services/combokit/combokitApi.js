@@ -174,3 +174,13 @@ export const getAllCustomizedCombokits = async () => {
     const response = await api.get('/combokit/all-customized-combokits');
     return response.data;
 };
+
+export const getBrands = async () => {
+    const response = await api.get('/brand/manufacturer');
+    return response.data.data;
+};
+
+export const getAllSKUs = async (params) => {
+    const response = await api.get('/masters/skus', { params });
+    return response.data.data;
+};

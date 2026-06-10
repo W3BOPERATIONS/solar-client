@@ -194,26 +194,46 @@ const FranchiseLeads = () => {
     useEffect(() => {
         const fetchCitiesForForm = async () => {
             if (formData.district) {
-                const districtObj = formDistricts.find(d => d._id === formData.district);
-                if (districtObj) {
-                    try {
-                        const response = await locationAPI.getAllClusters({ districtId: districtObj._id, isActive: true });
-                        if (response.data && response.data.data) {
-                            setFormCities(response.data.data);
-                        } else {
-                            setFormCities([]);
-                        }
-                    } catch (error) {
-                        console.error("Error fetching clusters:", error);
+                try {
+                    const response = await locationAPI.getAllClusters({ districtId: formData.district, isActive: true });
+                    if (response.data && response.data.data) {
+                        setFormCities(response.data.data);
+                    } else {
                         setFormCities([]);
                     }
+                } catch (error) {
+                    console.error("Error fetching clusters:", error);
+                    setFormCities([]);
                 }
             } else {
                 setFormCities([]);
             }
         };
         fetchCitiesForForm();
-    }, [formData.district, formDistricts]);
+    }, [formData.district]);
+
+    // Auto-select active district and cluster when modal opens
+    useEffect(() => {
+        if (showModal) {
+            setFormData(prev => ({
+                ...prev,
+                district: activeDistrict && activeDistrict._id !== 'ALL' ? activeDistrict._id : prev.district,
+                city: activeCluster && activeCluster._id !== 'ALL' ? activeCluster._id : prev.city
+            }));
+        }
+    }, [showModal, activeDistrict, activeCluster]);
+
+    // Compute available districts for the form based on background selection
+    const availableFormDistricts = (activeDistrict && activeDistrict._id !== 'ALL') 
+        ? [activeDistrict] 
+        : (activeState && activeState._id !== 'ALL' && districts.length > 0)
+            ? districts
+            : formDistricts;
+
+    // Compute available cities for the form
+    const availableFormCities = (activeCluster && activeCluster._id !== 'ALL')
+        ? [activeCluster]
+        : formCities;
 
     const handleInputChange = (e) => {
         const { id, value, type } = e.target;
@@ -510,7 +530,7 @@ const FranchiseLeads = () => {
                                         <label htmlFor="district" className="block text-sm font-medium text-gray-700 mb-1">District</label>
                                         <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="district" value={formData.district} onChange={handleInputChange} required>
                                             <option value="">Select District</option>
-                                            {formDistricts.map(district => (
+                                            {availableFormDistricts.map(district => (
                                                 <option key={district._id} value={district._id}>{district.name}</option>
                                             ))}
                                         </select>
@@ -519,7 +539,7 @@ const FranchiseLeads = () => {
                                         <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">City/Cluster</label>
                                         <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="city" value={formData.city} onChange={handleInputChange} required disabled={!formData.district}>
                                             <option value="">Select City/Cluster</option>
-                                            {formCities.map(city => (
+                                            {availableFormCities.map(city => (
                                                 <option key={city._id} value={city._id}>{city.name}</option>
                                             ))}
                                         </select>

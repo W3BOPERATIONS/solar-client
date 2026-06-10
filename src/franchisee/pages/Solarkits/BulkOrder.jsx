@@ -1,5 +1,7 @@
-// FranchiseBulkBuy.jsx
 import React, { useState, useEffect } from 'react';
+import { getActiveBulkBuyOffers } from '../../../services/bulkBuyOfferApi';
+import { masterAPI, projectAPI } from '../../../api/api.js';
+import { productApi } from '../../../api/productApi.js';
 import {
     Zap,
     Funnel,
@@ -52,27 +54,95 @@ const FranchiseBulkBuy = () => {
         transactionRef: '',
         receiptFile: null
     });
+    const [offers, setOffers] = useState([]);
+    const [userSelectedOfferId, setUserSelectedOfferId] = useState(null);
 
-    const customers = [
-        { id: 1, name: "Pardeep Singh", phone: "+91 9814812345", category: "Rooftop Solar", subCategory: "Residential", subType: "Ongrid", projectType: "1KW to 5KW", kw: 3, price: 150000 },
-        { id: 2, name: "Rajesh Kumar", phone: "+91 9876543210", category: "Rooftop Solar", subCategory: "Commercial", subType: "Hybrid", projectType: "5KW to 10KW", kw: 7, price: 350000 },
-        { id: 3, name: "Sunita Sharma", phone: "+91 8765432109", category: "Solar Pump", subCategory: "Residential", subType: "Offgrid", projectType: "11KW to 15KW", kw: 12, price: 600000 },
-        { id: 4, name: "Amit Verma", phone: "+91 7654321098", category: "Rooftop Solar", subCategory: "Commercial", subType: "Hybrid", projectType: "5KW to 10KW", kw: 8, price: 400000 },
-        { id: 5, name: "Priya Patel", phone: "+91 6543210987", category: "Rooftop Solar", subCategory: "Residential", subType: "Ongrid", projectType: "1KW to 5KW", kw: 4, price: 200000 },
-        { id: 6, name: "Rahul Mehta", phone: "+91 5432109876", category: "Solar Pump", subCategory: "Commercial", subType: "Offgrid", projectType: "11KW to 15KW", kw: 14, price: 700000 }
-    ];
+    const [categories, setCategories] = useState([]);
+    const [subCategories, setSubCategories] = useState([]);
+    const [subProjectTypes, setSubProjectTypes] = useState([]);
+    const [projectTypes, setProjectTypes] = useState([]);
+
+    useEffect(() => {
+        const fetchFilters = async () => {
+            try {
+                const [cats, subCats, subProjects, mappingsRes] = await Promise.all([
+                    masterAPI.getAllCategories(),
+                    masterAPI.getAllSubCategories(),
+                    masterAPI.getAllSubProjectTypes(),
+                    productApi.getProjectCategoryMappings()
+                ]);
+                setCategories(cats.data?.data || cats.data || []);
+                setSubCategories(subCats.data?.data || subCats.data || []);
+                setSubProjectTypes(subProjects.data?.data || subProjects.data || []);
+                
+                // Extract unique project type ranges from mappings
+                const mappings = mappingsRes.data?.data || mappingsRes.data || [];
+                const uniqueRanges = new Set();
+                mappings.forEach(m => {
+                    if (m.projectTypeFrom !== undefined && m.projectTypeTo !== undefined) {
+                        uniqueRanges.add(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`);
+                    }
+                });
+                const projectTypeStrings = Array.from(uniqueRanges).map(range => ({ _id: range, name: range }));
+                setProjectTypes(projectTypeStrings);
+            } catch (error) {
+                console.error("Error fetching master config:", error);
+            }
+        };
+        fetchFilters();
+    }, []);
+
+    useEffect(() => {
+        const fetchOffers = async () => {
+            try {
+                const data = await getActiveBulkBuyOffers();
+                // Ensure sorted by minOrders
+                data.sort((a, b) => a.minOrders - b.minOrders);
+                setOffers(data);
+            } catch (err) {
+                console.error("Failed to fetch bulk buy offers:", err);
+            }
+        };
+        fetchOffers();
+    }, []);
+
+    const [customers, setCustomers] = useState([]);
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            try {
+                const res = await projectAPI.getAll();
+                const data = res.data?.data || res.data || [];
+                const mappedCustomers = data.map((p, index) => ({
+                    id: p._id || index,
+                    name: p.projectName || p.customerName || `Customer ${index+1}`,
+                    phone: p.mobile || p.phone || '+91 0000000000',
+                    category: p.category || "Rooftop Solar",
+                    subCategory: p.subCategory || "Residential",
+                    subType: p.subType || "Ongrid",
+                    projectType: p.projectType || "1KW to 5KW",
+                    kw: p.capacity || p.kw || parseFloat(p.kw) || 3,
+                    price: p.totalAmount || p.price || 150000,
+                    leadNo: p.leadId?.leadNumber || p.leadNumber || `led/24-25/${String(index).padStart(3, "0")}`,
+                    projectNo: p.projectId || `PRJT/24-25/${String(index + 30).padStart(3, "0")}`,
+                    date: p.createdAt ? new Date(p.createdAt).toLocaleString("en-IN") : new Date().toLocaleString("en-IN"),
+                    creator: p.createdBy?.name || 'Demo user'
+                }));
+                setCustomers(mappedCustomers);
+            } catch (error) {
+                console.error("Failed to fetch projects:", error);
+            }
+        };
+        fetchProjects();
+    }, []);
 
     const generateProjectInfo = (id) => {
-        const lead = `led/24-25/${String(id).padStart(3, "0")}`;
-        const project = `PRJT/24-25/${String(id + 30).padStart(3, "0")}`;
-        const date = new Date().toLocaleString("en-IN", {
-            day: "2-digit",
-            month: "2-digit",
-            year: "numeric",
-            hour: "2-digit",
-            minute: "2-digit"
-        });
-        return { lead, project, date };
+        // Now mostly handled during mapping, but keep for fallback
+        return {
+            lead: `led/24-25/${String(id).substring(0, 3)}`,
+            project: `PRJT/24-25/${String(id).substring(0, 3)}`,
+            date: new Date().toLocaleString("en-IN")
+        };
     };
 
     const handleFilterChange = (filterName, value) => {
@@ -121,28 +191,22 @@ const FranchiseBulkBuy = () => {
 
     const getDiscountInfo = (totalOrders, totalKW) => {
         let discountPerKW = 0;
-        let info = "No discount applied yet.";
-        let activeOffer = null;
+        let info = "No offer selected.";
+        let activeOffer = userSelectedOfferId;
 
-        if (totalOrders >= 5 && totalOrders < 10) {
-            discountPerKW = 1000;
-            info = "₹1000/KW discount (5–9 Orders)";
-            activeOffer = "offer-5";
+        if (!userSelectedOfferId) {
+            info = "Please select a Bulk Buy Offer card above.";
+            return { discountPerKW, info, activeOffer: null };
         }
-        else if (totalOrders >= 10 && totalOrders < 15) {
-            discountPerKW = 1200;
-            info = "₹1200/KW discount (10–14 Orders)";
-            activeOffer = "offer-10";
-        }
-        else if (totalOrders >= 15 && totalOrders < 20) {
-            discountPerKW = 1500;
-            info = "₹1500/KW discount (15–19 Orders)";
-            activeOffer = "offer-15";
-        }
-        else if (totalOrders >= 20) {
-            discountPerKW = 2000;
-            info = "₹2000/KW discount (20+ Orders)";
-            activeOffer = "offer-20";
+
+        const selectedOffer = offers.find(o => o._id === userSelectedOfferId);
+        if (selectedOffer) {
+            if (totalOrders >= selectedOffer.minOrders) {
+                discountPerKW = selectedOffer.discountValue;
+                info = `₹${selectedOffer.discountValue} ${selectedOffer.discountUnit} discount applied`;
+            } else {
+                info = `Select ${selectedOffer.minOrders - totalOrders} more customer(s) to unlock discount`;
+            }
         }
 
         return { discountPerKW, info, activeOffer };
@@ -161,8 +225,13 @@ const FranchiseBulkBuy = () => {
     };
 
     const handleProceedToCheckout = () => {
-        if (selectedCustomers.length === 0) {
-            alert("Please select at least one customer to proceed.");
+        if (!userSelectedOfferId) {
+            alert("Please select a Bulk Buy Offer card first.");
+            return;
+        }
+        const selectedOffer = offers.find(o => o._id === userSelectedOfferId);
+        if (selectedCustomers.length < selectedOffer.minOrders) {
+            alert(`You must select at least ${selectedOffer.minOrders} customer(s) for the selected offer.`);
             return;
         }
         setCurrentStep('checkout');
@@ -206,13 +275,6 @@ const FranchiseBulkBuy = () => {
 
     const summary = calculateOrderSummary();
 
-    const offers = [
-        { id: 'offer-5', minOrders: 5, discount: 1000, label: 'Min 5 Orders' },
-        { id: 'offer-10', minOrders: 10, discount: 1200, label: 'Min 10 Orders' },
-        { id: 'offer-15', minOrders: 15, discount: 1500, label: 'Min 15 Orders' },
-        { id: 'offer-20', minOrders: 20, discount: 2000, label: 'Min 20 Orders' }
-    ];
-
     return (
         <div className="container mx-auto px-4 py-4 max-w-7xl">
             {/* Title */}
@@ -237,9 +299,9 @@ const FranchiseBulkBuy = () => {
                                 onChange={(e) => handleFilterChange('category', e.target.value)}
                             >
                                 <option value="">All Categories</option>
-                                <option value="Rooftop Solar">Rooftop Solar</option>
-                                <option value="Solar Pump">Solar Pump</option>
-                                <option value="Solar Light">Solar Light</option>
+                                {categories.map((c) => (
+                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                         <div>
@@ -250,8 +312,9 @@ const FranchiseBulkBuy = () => {
                                 onChange={(e) => handleFilterChange('subCategory', e.target.value)}
                             >
                                 <option value="">All Sub Categories</option>
-                                <option value="Residential">Residential</option>
-                                <option value="Commercial">Commercial</option>
+                                {subCategories.map((c) => (
+                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                         <div>
@@ -262,9 +325,9 @@ const FranchiseBulkBuy = () => {
                                 onChange={(e) => handleFilterChange('subProjectType', e.target.value)}
                             >
                                 <option value="">All Sub Project Types</option>
-                                <option value="Hybrid">Hybrid</option>
-                                <option value="Ongrid">Ongrid</option>
-                                <option value="Offgrid">Offgrid</option>
+                                {subProjectTypes.map((c) => (
+                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                         <div>
@@ -275,9 +338,9 @@ const FranchiseBulkBuy = () => {
                                 onChange={(e) => handleFilterChange('projectType', e.target.value)}
                             >
                                 <option value="">All Project Types</option>
-                                <option value="1KW to 5KW">1KW to 5KW</option>
-                                <option value="5KW to 10KW">5KW to 10KW</option>
-                                <option value="11KW to 15KW">11KW to 15KW</option>
+                                {projectTypes.map((c) => (
+                                    <option key={c._id} value={c.name}>{c.name}</option>
+                                ))}
                             </select>
                         </div>
                     </div>
@@ -311,14 +374,19 @@ const FranchiseBulkBuy = () => {
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                         {offers.map((offer) => (
                             <div
-                                key={offer.id}
-                                className={`border rounded-lg p-3 text-center cursor-pointer transition-all duration-300 ${summary.activeOffer === offer.id
+                                key={offer._id}
+                                onClick={() => setUserSelectedOfferId(offer._id)}
+                                className={`border rounded-lg p-3 text-center cursor-pointer transition-all duration-300 ${summary.activeOffer === offer._id
                                         ? 'border-2 border-blue-500 bg-blue-50 shadow-md'
                                         : 'bg-gray-50 hover:shadow-md hover:bg-gray-100'
                                     }`}
                             >
-                                <h6 className="font-bold text-green-600 mb-1">{offer.label}</h6>
-                                <div className="text-sm text-gray-600">₹{offer.discount} / KW Discount</div>
+                                <h6 className="font-bold text-green-600 mb-1">{offer.title || `Min ${offer.minOrders} Orders`}</h6>
+                                <div className="text-sm text-gray-600">
+                                    {offer.discountUnit === 'Fixed' ? `₹${offer.discountValue} Flat Discount` : 
+                                    offer.discountUnit === '%' ? `${offer.discountValue}% Discount` :
+                                    `₹${offer.discountValue} ${offer.discountUnit} Discount`}
+                                </div>
                             </div>
                         ))}
                     </div>
@@ -480,8 +548,13 @@ const FranchiseBulkBuy = () => {
 
                                 <div className="flex justify-end mt-4">
                                     <button
-                                        className="px-4 py-2 bg-green-600 text-white rounded-md font-medium flex items-center hover:bg-green-700 transition-colors"
+                                        className={`px-4 py-2 text-white rounded-md font-medium flex items-center transition-colors ${
+                                            userSelectedOfferId && offers.find(o => o._id === userSelectedOfferId) && selectedCustomers.length >= offers.find(o => o._id === userSelectedOfferId).minOrders
+                                                ? 'bg-green-600 hover:bg-green-700'
+                                                : 'bg-gray-400 cursor-not-allowed opacity-70'
+                                        }`}
                                         onClick={handleProceedToCheckout}
+                                        disabled={!(userSelectedOfferId && offers.find(o => o._id === userSelectedOfferId) && selectedCustomers.length >= offers.find(o => o._id === userSelectedOfferId).minOrders)}
                                     >
                                         <CheckCircle size={16} className="mr-2" />
                                         Proceed to Checkout
