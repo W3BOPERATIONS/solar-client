@@ -60,7 +60,7 @@ export default function FranchiseeSidebar() {
             icon: Gauge,
             href: '/franchisee/dashboard',
             children: [
-                { name: 'Franchise Dashboard', href: '/franchisee/dashboard', icon: LayoutDashboard },
+                { name: 'Partner Dashboard', href: '/franchisee/dashboard', icon: LayoutDashboard },
                 { name: 'District Manager', href: '/franchisee/district-manager', icon: Building2 },
                 { name: 'Lead Assign Dashboard', href: '/franchisee/dashboard/lead-assign', icon: ClipboardList }
             ]
@@ -186,7 +186,7 @@ export default function FranchiseeSidebar() {
                         </div>
                         <div>
                             <h1 className="text-xl font-bold">SOLARKITS</h1>
-                            <p className="text-xs text-gray-400">Franchisee Portal</p>
+                            <p className="text-xs text-gray-400">Partner Portal</p>
                         </div>
                     </div>
                 </div>

@@ -29,6 +29,8 @@ export default function Login() {
       // Temporary bypass to support the new partner manager email without database migration
       if (email.toLowerCase() === 'partnermanager@example.com') {
         loginEmail = 'franchisemanager@example.com';
+      } else if (email.toLowerCase() === 'partner@solarkits.com') {
+        loginEmail = 'franchise@solarkits.com';
       }
       const response = await authAPI.login({ email: loginEmail, password });
       setToken(response.data.token);
@@ -217,7 +219,6 @@ export default function Login() {
                   </div>
                   <div className="text-left">
                     <p className="font-medium text-slate-800 group-hover:text-emerald-700">Partner</p>
-                    <p className="text-[10px] text-slate-400 mb-0.5">(e.g., Franchise, Dealer)</p>
                     <p className="text-xs text-slate-500">Click to choose role</p>
                   </div>
                 </div>
@@ -235,7 +236,6 @@ export default function Login() {
                   </div>
                   <div className="text-left">
                     <p className="font-medium text-slate-800 group-hover:text-blue-700">Partner Manager</p>
-                    <p className="text-[10px] text-slate-400 mb-0.5">(e.g., Franchise Mgr, Dealer Mgr)</p>
                     <p className="text-xs text-slate-500">Click to choose role</p>
                   </div>
                 </div>
@@ -319,7 +319,7 @@ export default function Login() {
             <div className="text-xs text-slate-500 bg-slate-50 p-4 rounded-xl border border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-2">
               <div><strong className="text-slate-700">Admin:</strong> admin@solarkits.com</div>
               <div><strong className="text-slate-700">Dealer:</strong> dealer@solarkits.com</div>
-              <div><strong className="text-slate-700">Franchise:</strong> franchise@solarkits.com</div>
+              <div><strong className="text-slate-700">Partner:</strong> partner@solarkits.com</div>
               <div><strong className="text-slate-700">Dealer Mgr:</strong> dealermanager@solarkits.com</div>
               <div><strong className="text-slate-700">Partner Mgr:</strong> partnermanager@example.com</div>
               <div><strong className="text-slate-700">Account Mgr:</strong> accountmanager@solarkits.com</div>
@@ -355,7 +355,7 @@ export default function Login() {
             <div className="space-y-3">
               <button
                 onClick={() => {
-                  handleDemoLogin('franchise@solarkits.com', '123456');
+                  handleDemoLogin('partner@solarkits.com', '123456');
                   setShowPartnerSelect(false);
                 }}
                 className="w-full flex items-center justify-between p-4 bg-blue-50 hover:bg-blue-100 rounded-xl border border-blue-100 transition-all group"
@@ -365,13 +365,14 @@ export default function Login() {
                     <Building2 size={20} />
                   </div>
                   <div className="text-left">
-                    <p className="font-semibold text-blue-800">Franchise Login</p>
-                    <p className="text-xs text-blue-600/70">franchise@solarkits.com</p>
+                    <p className="font-semibold text-blue-800">Partner Login</p>
+                    <p className="text-xs text-blue-600/70">partner@solarkits.com</p>
                   </div>
                 </div>
                 <span className="text-xs font-medium text-blue-700 bg-white px-2 py-1 rounded">Select</span>
               </button>
 
+              {/*
               <button
                 onClick={() => {
                   handleDemoLogin('dealer@solarkits.com', '123456');
@@ -390,6 +391,7 @@ export default function Login() {
                 </div>
                 <span className="text-xs font-medium text-emerald-700 bg-white px-2 py-1 rounded">Select</span>
               </button>
+              */}
             </div>
           </div>
         </div>

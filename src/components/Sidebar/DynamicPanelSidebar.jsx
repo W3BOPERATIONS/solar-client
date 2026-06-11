@@ -125,7 +125,7 @@ const DynamicPanelSidebar = ({ panelTitle = "SOLARKITS", panelSubtitle = "A SOLA
             icon: 'Gauge',
             hasDropdown: true,
             subItems: [
-              { name: 'Franchise Dashboard', route: '/franchisee/dashboard', icon: 'LayoutDashboard' },
+              { name: 'Partner Dashboard', route: '/franchisee/dashboard', icon: 'LayoutDashboard' },
               { name: 'District Manager', route: '/franchisee/district-manager', icon: 'Building2' },
               { name: 'Lead Assign Dashboard', route: '/franchisee/dashboard/lead-assign', icon: 'ClipboardList' }
             ]

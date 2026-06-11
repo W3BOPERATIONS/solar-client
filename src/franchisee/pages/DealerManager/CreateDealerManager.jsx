@@ -10,6 +10,7 @@ import {
     Briefcase
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import Select from 'react-select';
 import { locationAPI, masterAPI } from '../../../api/api';
 import { productApi } from '../../../api/productApi';
 import { createApproval } from '../../../services/approvals/approvalsApi';
@@ -26,10 +27,10 @@ const CreateDealerManager = () => {
         email: '',
         role: 'Dealer Manager',
         district: '',
-        category: '',
-        subCategory: '',
-        projectType: '',
-        subProjectType: '',
+        category: [],
+        subCategory: [],
+        projectType: [],
+        subProjectType: [],
     });
 
     const [categories, setCategories] = useState([]);
@@ -67,12 +68,18 @@ const CreateDealerManager = () => {
 
     useEffect(() => {
         const fetchSubCategories = async () => {
-            if (!formData.category) return setSubCategories([]);
+            if (!formData.category || formData.category.length === 0) return setSubCategories([]);
             try {
-                const response = await masterAPI.getAllSubCategories({ categoryId: formData.category });
-                if (response.data && response.data.data) {
-                    setSubCategories(response.data.data);
-                }
+                const promises = formData.category.map(cat => masterAPI.getAllSubCategories({ categoryId: cat.value }));
+                const responses = await Promise.all(promises);
+                let allSubCats = [];
+                responses.forEach(res => {
+                    if (res.data && res.data.data) {
+                        allSubCats = [...allSubCats, ...res.data.data];
+                    }
+                });
+                const uniqueSubCats = Array.from(new Map(allSubCats.map(item => [item._id, item])).values());
+                setSubCategories(uniqueSubCats);
             } catch (error) {
                 console.error("Error fetching sub categories:", error);
             }
@@ -82,23 +89,24 @@ const CreateDealerManager = () => {
 
     useEffect(() => {
         const fetchProjectTypes = async () => {
-            if (!formData.category) return setProjectTypes([]);
+            if (!formData.category || formData.category.length === 0) return setProjectTypes([]);
             try {
-                const response = await productApi.getProjectCategoryMappings({ categoryId: formData.category });
-                if (response.data && response.data.data) {
-                    const mappings = response.data.data;
-                    
-                    const uniqueRanges = [];
-                    const map = new Map();
-                    mappings.forEach(m => {
-                        const label = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
-                        if(!map.has(label)) {
-                            map.set(label, true);
-                            uniqueRanges.push({ _id: label, name: label, original: m });
-                        }
-                    });
-                    setProjectTypes(uniqueRanges);
-                }
+                const promises = formData.category.map(cat => productApi.getProjectCategoryMappings({ categoryId: cat.value }));
+                const responses = await Promise.all(promises);
+                const uniqueRanges = [];
+                const map = new Map();
+                responses.forEach(response => {
+                    if (response.data && response.data.data) {
+                        response.data.data.forEach(m => {
+                            const label = `${m.projectTypeFrom} to ${m.projectTypeTo} kW`;
+                            if(!map.has(label)) {
+                                map.set(label, true);
+                                uniqueRanges.push({ _id: label, name: label, original: m });
+                            }
+                        });
+                    }
+                });
+                setProjectTypes(uniqueRanges);
             } catch (error) {
                 console.error("Error fetching project types:", error);
             }
@@ -108,34 +116,41 @@ const CreateDealerManager = () => {
 
     useEffect(() => {
         const fetchSubProjectTypes = async () => {
-            if (!formData.projectType || !formData.category) return setSubProjectTypes([]);
+            if (!formData.projectType || formData.projectType.length === 0 || !formData.category || formData.category.length === 0) return setSubProjectTypes([]);
             try {
-                const response = await productApi.getProjectCategoryMappings({ categoryId: formData.category });
-                if (response.data && response.data.data) {
-                    const mappings = response.data.data.filter(m => 
-                        `${m.projectTypeFrom} to ${m.projectTypeTo} kW` === formData.projectType
-                    );
-                    
-                    const uniqueSubTypes = [];
-                    const map = new Map();
-                    mappings.forEach(m => {
-                        const subTypeId = m.subProjectTypeId?._id || m.subProjectTypeId;
-                        const subTypeName = m.subProjectTypeId?.name || 'On-Grid';
-                        if (subTypeId && !map.has(subTypeId)) {
-                            map.set(subTypeId, true);
-                            uniqueSubTypes.push({ _id: subTypeId, name: subTypeName });
-                        }
-                    });
-                    if (uniqueSubTypes.length === 0) {
-                        const fallbackResponse = await masterAPI.getAllSubProjectTypes();
-                        if (fallbackResponse.data && fallbackResponse.data.data) {
-                             setSubProjectTypes(fallbackResponse.data.data);
-                        } else {
-                             setSubProjectTypes([{ _id: 'default', name: 'On-Grid' }]);
-                        }
-                    } else {
-                        setSubProjectTypes(uniqueSubTypes);
+                const promises = formData.category.map(cat => productApi.getProjectCategoryMappings({ categoryId: cat.value }));
+                const responses = await Promise.all(promises);
+                
+                let uniqueSubTypes = [];
+                const map = new Map();
+                const selectedProjectTypes = formData.projectType.map(pt => pt.value);
+                
+                responses.forEach(response => {
+                    if (response.data && response.data.data) {
+                        const mappings = response.data.data.filter(m => 
+                            selectedProjectTypes.includes(`${m.projectTypeFrom} to ${m.projectTypeTo} kW`)
+                        );
+                        
+                        mappings.forEach(m => {
+                            const subTypeId = m.subProjectTypeId?._id || m.subProjectTypeId;
+                            const subTypeName = m.subProjectTypeId?.name || 'On-Grid';
+                            if (subTypeId && !map.has(subTypeId)) {
+                                map.set(subTypeId, true);
+                                uniqueSubTypes.push({ _id: subTypeId, name: subTypeName });
+                            }
+                        });
                     }
+                });
+
+                if (uniqueSubTypes.length === 0) {
+                    const fallbackResponse = await masterAPI.getAllSubProjectTypes();
+                    if (fallbackResponse.data && fallbackResponse.data.data) {
+                         setSubProjectTypes(fallbackResponse.data.data);
+                    } else {
+                         setSubProjectTypes([{ _id: 'default', name: 'On-Grid' }]);
+                    }
+                } else {
+                    setSubProjectTypes(uniqueSubTypes);
                 }
             } catch (error) {
                 console.error("Error fetching sub project types:", error);
@@ -143,6 +158,13 @@ const CreateDealerManager = () => {
         };
         fetchSubProjectTypes();
     }, [formData.projectType, formData.category]);
+
+    const handleSelectChange = (name, selectedOptions) => {
+        setFormData(prev => ({
+            ...prev,
+            [name]: selectedOptions || []
+        }));
+    };
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -156,12 +178,19 @@ const CreateDealerManager = () => {
         e.preventDefault();
         setLoading(true);
 
-        // Find the string names for the dropdowns
         const districtName = districts.find(d => d._id === formData.district)?.name || formData.district;
-        const categoryName = categories.find(c => c._id === formData.category)?.name || formData.category;
-        const subCategoryName = subCategories.find(s => s._id === formData.subCategory)?.name || formData.subCategory;
-        const projectTypeName = projectTypes.find(p => p._id === formData.projectType)?.name || formData.projectType;
-        const subProjectTypeName = subProjectTypes.find(s => s._id === formData.subProjectType)?.name || formData.subProjectType;
+        
+        const categoryIds = formData.category.map(c => c.value);
+        const categoryNames = formData.category.map(c => c.label).join(', ');
+        
+        const subCategoryIds = formData.subCategory.map(c => c.value);
+        const subCategoryNames = formData.subCategory.map(c => c.label).join(', ');
+        
+        const projectTypeIds = formData.projectType.map(c => c.value);
+        const projectTypeNames = formData.projectType.map(c => c.label).join(', ');
+        
+        const subProjectTypeIds = formData.subProjectType.map(c => c.value);
+        const subProjectTypeNames = formData.subProjectType.map(c => c.label).join(', ');
 
         try {
             await createApproval({
@@ -173,14 +202,14 @@ const CreateDealerManager = () => {
                     role: 'dealerManager',
                     districtId: formData.district, // ObjectId for User creation
                     district: districtName, // String for display in Approvals table
-                    categoryId: formData.category,
-                    category: categoryName,
-                    subCategoryId: formData.subCategory,
-                    subCategory: subCategoryName,
-                    projectTypeId: formData.projectType,
-                    projectType: projectTypeName,
-                    subProjectTypeId: formData.subProjectType,
-                    subProjectType: subProjectTypeName
+                    categoryId: categoryIds.length === 1 ? categoryIds[0] : categoryIds,
+                    category: categoryNames,
+                    subCategoryId: subCategoryIds.length === 1 ? subCategoryIds[0] : subCategoryIds,
+                    subCategory: subCategoryNames,
+                    projectTypeId: projectTypeIds.length === 1 ? projectTypeIds[0] : projectTypeIds,
+                    projectType: projectTypeNames,
+                    subProjectTypeId: subProjectTypeIds.length === 1 ? subProjectTypeIds[0] : subProjectTypeIds,
+                    subProjectType: subProjectTypeNames
                 },
                 location: {
                     state: 'Gujarat', // Placeholder state
@@ -320,69 +349,54 @@ const CreateDealerManager = () => {
                             {/* Project Options */}
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Category</label>
-                                <select
+                                <Select
+                                    isMulti
                                     name="category"
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                                    placeholder="Select Category"
+                                    options={categories.map(c => ({ value: c._id, label: c.name }))}
+                                    className="text-sm"
                                     value={formData.category}
-                                    onChange={handleChange}
-                                >
-                                    <option value="">Select Category</option>
-                                    {categories.map(c => (
-                                        <option key={c._id} value={c._id}>{c.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => handleSelectChange('category', val)}
+                                />
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Sub Category</label>
-                                <select
+                                <Select
+                                    isMulti
                                     name="subCategory"
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                                    placeholder="Select Sub Category"
+                                    options={subCategories.map(sc => ({ value: sc._id, label: sc.name }))}
+                                    className="text-sm"
                                     value={formData.subCategory}
-                                    onChange={handleChange}
-                                    disabled={!formData.category}
-                                >
-                                    <option value="">Select Sub Category</option>
-                                    {subCategories.map(s => (
-                                        <option key={s._id} value={s._id}>{s.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => handleSelectChange('subCategory', val)}
+                                />
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Project Type</label>
-                                <select
+                                <Select
+                                    isMulti
                                     name="projectType"
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                                    placeholder="Select Project Type"
+                                    options={projectTypes.map(pt => ({ value: pt._id, label: pt.name }))}
+                                    className="text-sm"
                                     value={formData.projectType}
-                                    onChange={handleChange}
-                                    disabled={!formData.subCategory}
-                                >
-                                    <option value="">Select Project Type</option>
-                                    {projectTypes.map(p => (
-                                        <option key={p._id} value={p._id}>{p.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => handleSelectChange('projectType', val)}
+                                />
                             </div>
 
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 mb-1">Sub Project Type</label>
-                                <select
+                                <Select
+                                    isMulti
                                     name="subProjectType"
-                                    required
-                                    className="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-1 focus:ring-blue-500 focus:border-blue-500 outline-none text-sm"
+                                    placeholder="Select Sub Project Type"
+                                    options={subProjectTypes.map(spt => ({ value: spt._id, label: spt.name }))}
+                                    className="text-sm"
                                     value={formData.subProjectType}
-                                    onChange={handleChange}
-                                    disabled={!formData.projectType}
-                                >
-                                    <option value="">Select Sub Project Type</option>
-                                    {subProjectTypes.map(s => (
-                                        <option key={s._id} value={s._id}>{s.name}</option>
-                                    ))}
-                                </select>
+                                    onChange={(val) => handleSelectChange('subProjectType', val)}
+                                />
                             </div>
                         </div>
                     </div>

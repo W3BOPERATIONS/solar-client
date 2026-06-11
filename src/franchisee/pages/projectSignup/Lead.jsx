@@ -49,6 +49,7 @@ const FranchiseLeads = () => {
         whatsapp: '',
         email: '',
         district: '',
+        cluster: '',
         city: '',
         projectType: '',
         projectCategory: '',
@@ -58,6 +59,7 @@ const FranchiseLeads = () => {
 
     // Form Dropdown options
     const [formDistricts, setFormDistricts] = useState([]);
+    const [formClusters, setFormClusters] = useState([]);
     const [formCities, setFormCities] = useState([]);
     const [allLeads, setAllLeads] = useState([]); // Store all leads for counting
 
@@ -190,19 +192,41 @@ const FranchiseLeads = () => {
         }
     };
 
-    // Update cities (clusters) in Modal when form district changes
+    // Update clusters in Modal when form district changes
     useEffect(() => {
-        const fetchCitiesForForm = async () => {
+        const fetchClustersForForm = async () => {
             if (formData.district) {
                 try {
                     const response = await locationAPI.getAllClusters({ districtId: formData.district, isActive: true });
+                    if (response.data && response.data.data) {
+                        setFormClusters(response.data.data);
+                    } else {
+                        setFormClusters([]);
+                    }
+                } catch (error) {
+                    console.error("Error fetching clusters:", error);
+                    setFormClusters([]);
+                }
+            } else {
+                setFormClusters([]);
+            }
+        };
+        fetchClustersForForm();
+    }, [formData.district]);
+
+    // Update cities in Modal when form cluster changes
+    useEffect(() => {
+        const fetchCitiesForForm = async () => {
+            if (formData.cluster) {
+                try {
+                    const response = await locationAPI.getAllCities({ clusterId: formData.cluster, isActive: true });
                     if (response.data && response.data.data) {
                         setFormCities(response.data.data);
                     } else {
                         setFormCities([]);
                     }
                 } catch (error) {
-                    console.error("Error fetching clusters:", error);
+                    console.error("Error fetching cities:", error);
                     setFormCities([]);
                 }
             } else {
@@ -210,7 +234,7 @@ const FranchiseLeads = () => {
             }
         };
         fetchCitiesForForm();
-    }, [formData.district]);
+    }, [formData.cluster]);
 
     // Auto-select active district and cluster when modal opens
     useEffect(() => {
@@ -218,7 +242,7 @@ const FranchiseLeads = () => {
             setFormData(prev => ({
                 ...prev,
                 district: activeDistrict && activeDistrict._id !== 'ALL' ? activeDistrict._id : prev.district,
-                city: activeCluster && activeCluster._id !== 'ALL' ? activeCluster._id : prev.city
+                cluster: activeCluster && activeCluster._id !== 'ALL' ? activeCluster._id : prev.cluster
             }));
         }
     }, [showModal, activeDistrict, activeCluster]);
@@ -230,10 +254,10 @@ const FranchiseLeads = () => {
             ? districts
             : formDistricts;
 
-    // Compute available cities for the form
-    const availableFormCities = (activeCluster && activeCluster._id !== 'ALL')
+    // Compute available clusters for the form
+    const availableFormClusters = (activeCluster && activeCluster._id !== 'ALL')
         ? [activeCluster]
-        : formCities;
+        : formClusters;
 
     const handleInputChange = (e) => {
         const { id, value, type } = e.target;
@@ -260,7 +284,8 @@ const FranchiseLeads = () => {
                 whatsapp: formData.whatsapp,
                 email: formData.email,
                 district: formData.district,
-                cluster: formData.city,
+                cluster: formData.cluster,
+                city: formData.city,
                 solarType: formData.projectCategory || 'N/A',
                 subType: formData.projectSubCategory || 'N/A',
                 kw: formData.projectType || 'N/A',
@@ -270,7 +295,7 @@ const FranchiseLeads = () => {
 
             // Reset form
             setFormData({
-                name: '', mobile: '', whatsapp: '', email: '', district: '', city: '',
+                name: '', mobile: '', whatsapp: '', email: '', district: '', cluster: '', city: '',
                 projectType: '', projectCategory: '', projectSubCategory: '', billRange: 0
             });
             setShowModal(false);
@@ -524,8 +549,8 @@ const FranchiseLeads = () => {
                                     <input type="email" className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="email" placeholder="Email" value={formData.email} onChange={handleInputChange} />
                                 </div>
 
-                                {/* District and City */}
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                {/* District, Cluster, and City */}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                                     <div>
                                         <label htmlFor="district" className="block text-sm font-medium text-gray-700 mb-1">District</label>
                                         <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="district" value={formData.district} onChange={handleInputChange} required>
@@ -536,10 +561,19 @@ const FranchiseLeads = () => {
                                         </select>
                                     </div>
                                     <div>
-                                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">City/Cluster</label>
-                                        <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="city" value={formData.city} onChange={handleInputChange} required disabled={!formData.district}>
-                                            <option value="">Select City/Cluster</option>
-                                            {availableFormCities.map(city => (
+                                        <label htmlFor="cluster" className="block text-sm font-medium text-gray-700 mb-1">Cluster</label>
+                                        <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="cluster" value={formData.cluster} onChange={handleInputChange} required disabled={!formData.district}>
+                                            <option value="">Select Cluster</option>
+                                            {availableFormClusters.map(cluster => (
+                                                <option key={cluster._id} value={cluster._id}>{cluster.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label htmlFor="city" className="block text-sm font-medium text-gray-700 mb-1">City</label>
+                                        <select className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500" id="city" value={formData.city} onChange={handleInputChange} required disabled={!formData.cluster}>
+                                            <option value="">Select City</option>
+                                            {formCities.map(city => (
                                                 <option key={city._id} value={city._id}>{city.name}</option>
                                             ))}
                                         </select>

@@ -17,7 +17,7 @@ export default function FranchiseeHeader() {
     return (
         <header className="bg-white border-b border-gray-200 px-6 py-4 flex items-center justify-between shadow-sm">
             <div className="flex-1">
-                <h2 className="text-2xl font-bold text-gray-800">Franchisee Dashboard</h2>
+                <h2 className="text-2xl font-bold text-gray-800">Partner Dashboard</h2>
             </div>
             <div className="flex items-center space-x-6">
                 <button className="p-2 hover:bg-gray-100 rounded-lg transition">
@@ -31,8 +31,8 @@ export default function FranchiseeHeader() {
                         <User size={20} className="text-emerald-600" />
                     </div>
                     <div className="text-sm">
-                        <p className="font-medium text-gray-800">{user?.name || 'Franchisee'}</p>
-                        <p className="text-gray-500 text-xs uppercase">{user?.role || 'Partner'}</p>
+                        <p className="font-medium text-gray-800">{user?.name ? user.name.replace(/Franchisee/ig, 'Partner') : 'Partner'}</p>
+                        <p className="text-gray-500 text-xs uppercase">{user?.role === 'franchisee' ? 'Partner' : (user?.role || 'Partner')}</p>
                     </div>
                     <button
                         onClick={handleLogout}
