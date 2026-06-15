@@ -31,7 +31,7 @@ export default function AccountManagerSidebar() {
 
   const bottomMenuItems = [
     { icon: Settings, label: 'Solar Panel Bundle Plan', path: '/account-manager/solar-panel-bundle-plan' },
-    { icon: FileText, label: 'Procurement Plan', path: '/account-manager/procurement-plan' },
+    // { icon: FileText, label: 'Procurement Plan', path: '/account-manager/procurement-plan' },
     { icon: ClipboardList, label: 'Report', path: '/account-manager/report' },
   ];
 
@@ -40,17 +40,7 @@ export default function AccountManagerSidebar() {
       icon: Truck, 
       label: 'Order Journey', 
       path: '/account-manager/my-task/order-journey', 
-      hasDropdown: true,
-      subItems: [
-        { label: 'Create Order', path: '/account-manager/my-task/order-journey/create-order' },
-        { label: 'Loan Orders', path: '/account-manager/my-task/order-journey/loan-orders' },
-        { label: 'Delivery Plan', path: '/account-manager/my-task/order-journey/delivery-plan' },
-        { label: 'Vendor Pay', path: '/account-manager/my-task/order-journey/vendor-pay' },
-        { label: 'Channel Partner Pay', path: '/account-manager/my-task/order-journey/channel-partner-pay' },
-        { label: 'Driver Pay', path: '/account-manager/my-task/order-journey/driver-pay' },
-        { label: 'At Warehouse', path: '/account-manager/my-task/order-journey/at-warehouse' },
-        { label: 'Delivery Management', path: '/account-manager/my-task/order-journey/delivery-management' },
-      ]
+      hasDropdown: false
     },
     { 
       icon: RefreshCw, 

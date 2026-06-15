@@ -348,7 +348,7 @@ const DynamicPanelSidebar = ({ panelTitle = "SOLARKITS", panelSubtitle = "A SOLA
             ]
           },
           { name: 'Solar Panel Bundle Plan', route: '/account-manager/solar-panel-bundle-plan', icon: 'Settings' },
-          { name: 'Procurement Plan', route: '/account-manager/procurement-plan', icon: 'FileText' },
+          // { name: 'Procurement Plan', route: '/account-manager/procurement-plan', icon: 'FileText' },
           { name: 'Report', route: '/account-manager/report', icon: 'ClipboardList' }
         ];
       default:

@@ -1,7 +1,9 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, Home, Building2, Zap, Settings } from 'lucide-react';
+import api from '../../../../api/axios';
 
 export default function DeliveryPlan() {
+  const [dashboardData, setDashboardData] = useState({});
   const tableData = [
     { id: 'ORD12345', customer: 'Rahul Sharma', kw: 5, amount: '1,20,000', location: 'North Zone', areaType: 'Urban', deliveryType: 'Regular' },
     { id: 'ORD12346', customer: 'Anita Patel', kw: 10, amount: '2,50,000', location: 'South Zone', areaType: 'Rural', deliveryType: 'Express' },
@@ -9,6 +11,20 @@ export default function DeliveryPlan() {
     { id: 'ORD12348', customer: 'Priya Singh', kw: 3, amount: '80,000', location: 'West Zone', areaType: 'Rural', deliveryType: 'Regular' },
     { id: 'ORD12349', customer: 'Sanjay Gupta', kw: 8, amount: '2,00,000', location: 'North Zone', areaType: 'Urban', deliveryType: 'Prime' },
   ];
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const res = await api.get('/dashboard/account-manager/create-order-data');
+        if (res.data && res.data.success) {
+          setDashboardData(res.data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error);
+      }
+    };
+    fetchDashboardData();
+  }, []);
 
   return (
     <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-6">
@@ -25,10 +41,18 @@ export default function DeliveryPlan() {
       {/* Filters Row */}
       <div className="flex flex-wrap gap-4 items-center justify-between">
         <div className="flex flex-wrap gap-3">
-          {['Select Category', 'Select Sub Categ', 'Project Type', 'Select Sub type', 'Select Cluster', 'Select Delivery'].map((placeholder, idx) => (
+          {[
+            { label: 'Select Category', options: dashboardData.dynamicDropdowns?.categories || [] },
+            { label: 'Select Sub Categ', options: dashboardData.dynamicDropdowns?.subCategories || [] },
+            { label: 'Project Type', options: dashboardData.dynamicDropdowns?.projectTypes ? [...dashboardData.dynamicDropdowns.projectTypes, 'Customize', 'ComboKit'] : ['Customize', 'ComboKit'] },
+            { label: 'Select Sub type', options: dashboardData.dynamicDropdowns?.subProjectTypes || [] },
+            { label: 'Select Cluster', options: dashboardData.dynamicDropdowns?.clusters || [] },
+            { label: 'Select Delivery', options: dashboardData.dynamicDropdowns?.deliveryZones || [] },
+          ].map((filter, idx) => (
             <div key={idx} className="relative">
               <select className="appearance-none bg-white border border-gray-300 text-gray-700 py-1.5 px-3 pr-8 rounded text-sm w-36 focus:outline-none">
-                <option value="">{placeholder}</option>
+                <option value="">{filter.label}</option>
+                {filter.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
               </select>
               <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
                 <ChevronDown size={14} />
@@ -42,14 +66,14 @@ export default function DeliveryPlan() {
          <div className="relative">
             <select className="appearance-none bg-white border border-gray-300 text-gray-700 py-1.5 px-3 pr-8 rounded text-sm w-36 focus:outline-none">
               <option value="">Select Area Type</option>
+              {(dashboardData.dynamicDropdowns?.areaTypes || []).map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-gray-500">
               <ChevronDown size={14} />
             </div>
          </div>
          <div className="flex space-x-2 w-full md:w-auto justify-center md:justify-start">
-           <button className="bg-[#0b74ba] hover:bg-blue-700 text-white text-xs font-semibold px-4 py-1.5 rounded shadow flex items-center space-x-1 transition"><Settings size={14}/><span>Customize</span></button>
-           <button className="bg-[#2cb25d] hover:bg-green-600 text-white text-xs font-semibold px-4 py-1.5 rounded shadow flex items-center space-x-1 transition"><Zap size={14}/><span>ComboKit</span></button>
+           {/* Client requested removing the standalone buttons and putting them in the Project Type filter instead */}
          </div>
       </div>
 

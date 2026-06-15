@@ -229,13 +229,22 @@ export default function FranchiseeManagerHeader() {
                                 <DollarSign size={16} className="mr-3 text-gray-400" />
                                 MY GOALS
                             </Link>
-                            <a 
-                                href="#" 
+                            <Link 
+                                to="/employee-login" 
                                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                                onClick={() => setIsDropdownOpen(false)}
+                            >
+                                <User size={16} className="mr-3 text-gray-400" />
+                                Employee Login
+                            </Link>
+                            <Link 
+                                to="/franchisee-manager/training-videos" 
+                                className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"
+                                onClick={() => setIsDropdownOpen(false)}
                             >
                                 <Video size={16} className="mr-3 text-gray-400" />
                                 My Training Videos
-                            </a>
+                            </Link>
                             <a 
                                 href="#" 
                                 className="flex items-center px-4 py-2 text-sm text-gray-700 hover:bg-slate-50 hover:text-blue-600 transition-colors"

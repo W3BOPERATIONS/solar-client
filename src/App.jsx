@@ -306,6 +306,7 @@ import WarehouseVendorPay from './accountManager/pages/my-task/WarehouseVendorPa
 import VendorContractPay from './accountManager/pages/my-task/VendorContractPay';
 import TrackCPPayments from './accountManager/pages/my-task/TrackCPPayments';
 import Service from './accountManager/pages/my-task/Service';
+import TrainingVideos from './accountManager/pages/TrainingVideos';
 
 // Delivery Manager Imports
 import DeliveryManagerLayout from './deliveryManager/layouts/DeliveryManagerLayout';
@@ -540,6 +541,7 @@ function App() {
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/employee-login" element={<EmployeeLogin />} />
 
             {/* Candidate Portal Routes */}
             <Route path="/candidate-login" element={<CandidateLogin />} />
@@ -781,6 +783,7 @@ function App() {
 
               <Route path="find-resources" element={<FranchiseeManagerFindResources />} />
               <Route path="report" element={<FranchiseeManagerReport />} />
+              <Route path="training-videos" element={<TrainingVideos />} />
 
               <Route path="" element={<Navigate to="dashboard" />} />
               
@@ -833,6 +836,7 @@ function App() {
               <Route path="my-task/vendor-contract-pay" element={<VendorContractPay />} />
               <Route path="my-task/track-cp-payments" element={<TrackCPPayments />} />
               <Route path="my-task/service" element={<Service />} />
+              <Route path="training-videos" element={<TrainingVideos />} />
               
               {sharedAdminRoutes}
               <Route path="" element={<Navigate to="dashboard" />} />
