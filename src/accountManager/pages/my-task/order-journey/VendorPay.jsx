@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { ChevronDown, Zap, Settings } from 'lucide-react';
+import api from '../../../../api/axios';
 
-export default function VendorPay() {
+export default function VendorPay({ onNext }) {
   const tableData = [
     {
       vendorName: 'Rajesh Solar Distributors', brand: 'Adani', product: 'Solar Panel', technology: 'Bifacial', projectType: 'Residential', wattPeak: '550W', totalKW: '55 KW', totalPanels: '100', totalPrice: '95,000', deadline: '2025-07-05'
@@ -19,6 +20,41 @@ export default function VendorPay() {
       vendorName: 'Solar Tech India', brand: 'Adani', product: 'Inverter', technology: 'Hybrid', projectType: 'Residential', wattPeak: '700W', totalKW: '35 KW', totalPanels: '50', totalPrice: '92,500', deadline: '2025-07-15'
     }
   ];
+
+  const [dashboardData, setDashboardData] = useState({});
+  const [selectedRows, setSelectedRows] = useState([]);
+
+  const filteredData = tableData.filter(row => row.product === 'Solar Panel');
+
+  const handleSelectAll = (e) => {
+    if (e.target.checked) {
+      setSelectedRows(filteredData.map((_, idx) => idx));
+    } else {
+      setSelectedRows([]);
+    }
+  };
+
+  const handleSelectRow = (idx) => {
+    if (selectedRows.includes(idx)) {
+      setSelectedRows(selectedRows.filter(i => i !== idx));
+    } else {
+      setSelectedRows([...selectedRows, idx]);
+    }
+  };
+
+  useEffect(() => {
+    const fetchDashboardData = async () => {
+      try {
+        const res = await api.get('/dashboard/account-manager/create-order-data');
+        if (res.data && res.data.success) {
+          setDashboardData(res.data.data);
+        }
+      } catch (error) {
+        console.error("Failed to fetch dashboard data", error);
+      }
+    };
+    fetchDashboardData();
+  }, []);
 
   return (
     <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-6">
@@ -43,17 +79,75 @@ export default function VendorPay() {
       </div>
 
       {/* Filters Row */}
-      <div className="flex flex-wrap gap-4 items-center justify-between mt-4">
-        {['All Products', 'Select Category', 'Select Sub Category', 'Project Type', 'Select Sub type'].map((placeholder, idx) => (
-          <div key={idx} className="relative flex-1 min-w-[150px]">
-            <select className="appearance-none bg-white border border-gray-300 text-gray-700 py-2 px-3 pr-8 rounded text-sm w-full focus:outline-none focus:border-blue-400">
-              <option value="">{placeholder}</option>
+      <div className="flex flex-wrap items-center gap-4 mt-4">
+        <div>
+          <label className="block text-gray-700 font-medium text-[12px] mb-1">Order Type</label>
+          <div className="relative w-40">
+            <select className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white">
+              <option>All</option>
+              <option>Cash</option>
+              <option>Loan</option>
+              <option>EMI</option>
             </select>
             <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
               <ChevronDown size={14} />
             </div>
           </div>
-        ))}
+        </div>
+
+        <div>
+          <label className="block text-gray-700 font-medium text-[12px] mb-1">Order Since</label>
+          <div className="relative w-40">
+            <select className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white">
+              <option>All</option>
+              <option>Today</option>
+              <option>Last 3 Days</option>
+              <option>Last 7 Days</option>
+              <option>Last 15 Days</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+              <ChevronDown size={14} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-gray-700 font-medium text-[12px] mb-1">Kit Type</label>
+          <div className="relative w-40">
+            <select className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white">
+              <option>All</option>
+              <option>Combokit</option>
+              <option>Customised Kit</option>
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+              <ChevronDown size={14} />
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-gray-700 font-medium text-[12px] mb-1">Solar Panel Brand</label>
+          <div className="relative w-40">
+            <select className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white">
+              <option value="">All</option>
+              {dashboardData.panelBrands && dashboardData.panelBrands.length > 0 ? (
+                dashboardData.panelBrands.map((brand, idx) => (
+                  <option key={idx} value={brand}>{brand}</option>
+                ))
+              ) : (
+                <>
+                  <option>WAAREE</option>
+                  <option>Adani</option>
+                  <option>Tata Power</option>
+                  <option>Vikram Solar</option>
+                </>
+              )}
+            </select>
+            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+              <ChevronDown size={14} />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Data Table */}
@@ -61,6 +155,14 @@ export default function VendorPay() {
         <table className="w-full text-xs text-left min-w-[1100px]">
           <thead className="bg-[#7fb4eb] text-white">
             <tr>
+              <th className="px-4 py-3 font-medium border-r border-blue-300 w-12 text-center">
+                <input 
+                  type="checkbox" 
+                  className="w-4 h-4 rounded cursor-pointer"
+                  onChange={handleSelectAll}
+                  checked={selectedRows.length === filteredData.length && filteredData.length > 0}
+                />
+              </th>
               <th className="px-4 py-3 font-medium border-r border-blue-300 w-[120px]">Vendor Name</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Brand</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Product</th>
@@ -70,15 +172,19 @@ export default function VendorPay() {
               <th className="px-3 py-3 font-medium border-r border-blue-300">Total KW</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Total Panels</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Total Price</th>
-              <th className="px-3 py-3 font-medium border-r border-blue-300 text-center">Booking (%)</th>
-              <th className="px-3 py-3 font-medium border-r border-blue-300 text-center">Booking Amount</th>
-              <th className="px-3 py-3 font-medium border-r border-blue-300 text-center">Rest Payment</th>
-              <th className="px-3 py-3 font-medium text-center">Deadline</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {tableData.map((row, idx) => (
+            {filteredData.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
+                <td className="px-4 py-4 border-r border-gray-100 text-center">
+                  <input 
+                    type="checkbox" 
+                    className="w-4 h-4 rounded cursor-pointer text-blue-600"
+                    onChange={() => handleSelectRow(idx)}
+                    checked={selectedRows.includes(idx)}
+                  />
+                </td>
                 <td className="px-4 py-4 border-r border-gray-100 text-gray-700 font-medium break-words leading-tight">
                   {row.vendorName}
                 </td>
@@ -90,37 +196,20 @@ export default function VendorPay() {
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.totalKW}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.totalPanels}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-medium">₹{row.totalPrice}</td>
-                <td className="px-3 py-4 border-r border-gray-100 text-center">
-                   <div className="relative inline-block w-20">
-                    <select className="appearance-none bg-white border border-gray-300 text-gray-700 py-1 pl-2 pr-6 rounded text-[11px] focus:outline-none focus:border-blue-400 w-full">
-                      <option>Select %</option>
-                      <option>10%</option>
-                      <option>20%</option>
-                    </select>
-                    <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-1 text-gray-500">
-                      <ChevronDown size={12} />
-                    </div>
-                  </div>
-                </td>
-                <td className="px-3 py-4 border-r border-gray-100 text-center text-gray-500">
-                  <div className="flex items-center justify-center space-x-2">
-                     <span>--</span>
-                     <span className="bg-[#2cb25d] text-white px-2 py-0.5 rounded text-[10px] font-bold">Paid</span>
-                  </div>
-                </td>
-                <td className="px-3 py-4 border-r border-gray-100 text-center text-gray-500">
-                  <div className="flex items-center justify-center space-x-2">
-                     <span>--</span>
-                     <span className="bg-[#ffc107] text-gray-800 px-2 py-0.5 rounded text-[10px] font-bold">Pending</span>
-                  </div>
-                </td>
-                <td className="px-3 py-4 text-gray-700 text-center">
-                  {row.deadline}
-                </td>
               </tr>
             ))}
           </tbody>
         </table>
+      </div>
+      
+      {/* Footer Actions */}
+      <div className="flex justify-end mt-6 pb-6">
+        <button 
+          onClick={onNext}
+          className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded text-[14px] font-bold shadow-md transition"
+        >
+          Next
+        </button>
       </div>
     </div>
   );

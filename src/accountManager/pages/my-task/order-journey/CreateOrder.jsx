@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, Home, Building2, Zap, X, Upload, Check } from 'lucide-react';
 import api from '../../../../api/axios';
 
-export default function CreateOrder() {
+export default function CreateOrder({ onNext }) {
   const [dashboardData, setDashboardData] = useState({
     headerCounters: { todayTasks: 0, pendingTasks: 0, overdueTasks: 0 },
     locationCounters: [],
@@ -21,8 +21,8 @@ export default function CreateOrder() {
 
   const availableCountries = Object.keys(locationHierarchy);
   const availableStates = (selectedCountry && selectedCountry !== 'All' && locationHierarchy[selectedCountry]) ? Object.keys(locationHierarchy[selectedCountry]) : [];
-  const availableDistricts = (selectedState && selectedState !== 'All' && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]) ? Object.keys(locationHierarchy[selectedCountry][selectedState]) : [];
-  const availableClusters = (selectedDistrict && selectedDistrict !== 'All' && selectedState && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]?.[selectedDistrict]) ? locationHierarchy[selectedCountry][selectedState][selectedDistrict] : [];
+  const availableClusters = (selectedState && selectedState !== 'All' && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]) ? Object.keys(locationHierarchy[selectedCountry][selectedState]) : [];
+  const availableDistricts = (selectedCluster && selectedCluster !== 'All' && selectedState && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]?.[selectedCluster]) ? locationHierarchy[selectedCountry][selectedState][selectedCluster] : [];
 
   const IconMap = {
     'Home': <Home size={24} />,
@@ -205,37 +205,8 @@ export default function CreateOrder() {
           </div>
         )}
 
-        {/* District */}
-        {selectedState && availableDistricts.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-gray-800 text-[15px]">Select District</h3>
-              <button className="text-blue-500 text-xs hover:underline">Select All</button>
-            </div>
-            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
-              <div 
-                onClick={() => setSelectedDistrict('All')}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">All Districts</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
-              </div>
-              {availableDistricts.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={() => setSelectedDistrict(item)}
-                  className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-                >
-                  <p className="font-bold text-sm text-gray-800">{item}</p>
-                  <p className="text-[10px] text-gray-400 uppercase mt-1">DIST</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* Cluster */}
-        {selectedDistrict && availableClusters.length > 0 && (
+        {selectedState && availableClusters.length > 0 && (
           <div>
             <div className="flex justify-between items-center mb-3">
               <h3 className="font-bold text-gray-800 text-[15px]">Select Cluster</h3>
@@ -262,6 +233,35 @@ export default function CreateOrder() {
             </div>
           </div>
         )}
+
+        {/* District */}
+        {selectedCluster && availableDistricts.length > 0 && (
+          <div>
+            <div className="flex justify-between items-center mb-3">
+              <h3 className="font-bold text-gray-800 text-[15px]">Select District</h3>
+              <button className="text-blue-500 text-xs hover:underline">Select All</button>
+            </div>
+            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
+              <div 
+                onClick={() => setSelectedDistrict('All')}
+                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
+              >
+                <p className="font-bold text-sm text-gray-800">All Districts</p>
+                <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
+              </div>
+              {availableDistricts.map((item, idx) => (
+                <div 
+                  key={idx} 
+                  onClick={() => setSelectedDistrict(item)}
+                  className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
+                >
+                  <p className="font-bold text-sm text-gray-800">{item}</p>
+                  <p className="text-[10px] text-gray-400 uppercase mt-1">DIST</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Tabs / Buttons */}
@@ -277,9 +277,6 @@ export default function CreateOrder() {
            className={`${activeTab === 'CustomizeKit' ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-[#0b74ba]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-blue-800 transition`}
          >
            Customize Kit
-         </button>
-         <button className="bg-purple-600 text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-purple-700 transition">
-           Bulk Buy
          </button>
       </div>
 
@@ -345,9 +342,7 @@ export default function CreateOrder() {
                   <th className="px-3 py-3 font-medium">Solar Panel</th>
                   <th className="px-3 py-3 font-medium">Inverter</th>
                   <th className="px-3 py-3 font-medium">BOS Kit</th>
-                  <th className="px-3 py-3 font-medium text-center">Generate Payment Receipt</th>
-                  <th className="px-3 py-3 font-medium text-center">Status</th>
-                  <th className="px-3 py-3 font-medium text-center">Order No.</th>
+                  <th className="px-3 py-3 font-medium text-center">Generate PO</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -368,7 +363,6 @@ export default function CreateOrder() {
                     <td className="px-3 py-4 space-y-1 text-gray-800">
                       <p className="font-bold">KW: <span className="font-normal">{row.kw}</span></p>
                       <p className="font-bold">₹: <span className="font-normal">{row.price}</span></p>
-                      <p className="font-bold">Payment: <span className="font-normal">{row.payment}</span></p>
                     </td>
                     <td className="px-3 py-4">
                       <div className="flex flex-col space-y-1.5">
@@ -400,7 +394,8 @@ export default function CreateOrder() {
                       <button 
                         onClick={() => {
                           if ((row.solarPanelInventory || 0) > 0) {
-                            handleConfirmClick(idx);
+                            setSelectedRowIndex(idx);
+                            setIsVendorModalOpen(true);
                           } else {
                             setToast({ message: 'Insufficient Solar Panel Inventory!', type: 'error' });
                             setTimeout(() => setToast(null), 3000);
@@ -411,16 +406,6 @@ export default function CreateOrder() {
                       >
                         Generate
                       </button>
-                    </td>
-                    <td className="px-3 py-4 text-center">
-                      {row.status === 'Confirmed' ? (
-                        <span className="bg-[#2cb25d] text-white px-2 py-1 text-[10px] rounded font-semibold">{row.status}</span>
-                      ) : (
-                        <span className="bg-yellow-400 text-white px-2 py-1 text-[10px] rounded font-semibold">{row.status}</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-4 text-center text-gray-800 font-medium">
-                      {row.status === 'Confirmed' ? row.orderNo : '--'}
                     </td>
                   </tr>
                 ))}
@@ -638,10 +623,19 @@ export default function CreateOrder() {
               </button>
               <button 
                 onClick={() => {
-                  if(selectedSupplyVendor) {
-                    setToast({ message: 'Vendor successfully assigned for supply!', type: 'success' });
-                    setTimeout(() => setToast(null), 3000);
+                  if(selectedSupplyVendor && selectedRowIndex !== null) {
+                    const updatedData = tableData.filter((_, idx) => idx !== selectedRowIndex);
+                    setTableData(updatedData);
+                    setToast({ message: 'Order has been moved to Procurement Stage!', type: 'success' });
+                    setTimeout(() => setToast(null), 4000);
                     setIsVendorModalOpen(false);
+                    setSelectedRowIndex(null);
+                    setSelectedSupplyVendor(null);
+                    if (onNext) {
+                      setTimeout(() => {
+                        onNext();
+                      }, 1000);
+                    }
                   }
                 }}
                 className={`px-5 py-2 text-sm font-semibold text-white rounded shadow-sm transition ${selectedSupplyVendor ? 'bg-[#0b74ba] hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}

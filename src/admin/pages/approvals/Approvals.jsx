@@ -556,7 +556,7 @@ export default function AdminApproval() {
                       </td>
                     ))}
                     <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <div className="flex gap-2">
+                      <div className="flex gap-2 items-center">
                         <button
                           onClick={() => approveItem(item._mongoId, type)}
                           className="px-3 py-1 bg-green-600 text-white rounded hover:bg-green-700 text-sm font-medium"
@@ -569,6 +569,15 @@ export default function AdminApproval() {
                         >
                           Reject
                         </button>
+                        {['installer', 'driver', 'dealer', 'franchisee', 'districtManager', 'dealerManager'].includes(type) && (
+                          <button
+                            onClick={() => alert('View KYC Status Details')}
+                            className="p-1 text-gray-500 hover:text-blue-600 border border-gray-300 rounded hover:bg-blue-50 transition-colors"
+                            title="View KYC Status"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

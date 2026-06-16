@@ -2,14 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { ChevronDown, Home, Building2, Zap, Settings } from 'lucide-react';
 import api from '../../../../api/axios';
 
-export default function DeliveryPlan() {
+export default function DeliveryPlan({ onNext }) {
   const [dashboardData, setDashboardData] = useState({});
   const tableData = [
-    { id: 'ORD12345', customer: 'Rahul Sharma', kw: 5, amount: '1,20,000', location: 'North Zone', areaType: 'Urban', deliveryType: 'Regular' },
-    { id: 'ORD12346', customer: 'Anita Patel', kw: 10, amount: '2,50,000', location: 'South Zone', areaType: 'Rural', deliveryType: 'Express' },
-    { id: 'ORD12347', customer: 'Vikram Mehta', kw: 7.5, amount: '1,80,000', location: 'East Zone', areaType: 'Urban', deliveryType: 'Prime' },
-    { id: 'ORD12348', customer: 'Priya Singh', kw: 3, amount: '80,000', location: 'West Zone', areaType: 'Rural', deliveryType: 'Regular' },
-    { id: 'ORD12349', customer: 'Sanjay Gupta', kw: 8, amount: '2,00,000', location: 'North Zone', areaType: 'Urban', deliveryType: 'Prime' },
+    { id: 'ORD12345', groupNo: '6', kw: 5, panels: 15, location: 'North Zone', areaType: 'Urban', deliveryType: 'Regular' },
+    { id: 'ORD12346', groupNo: '7', kw: 10, panels: 30, location: 'South Zone', areaType: 'Rural', deliveryType: 'Express' },
+    { id: 'ORD12347', groupNo: '4', kw: 7.5, panels: 22, location: 'East Zone', areaType: 'Urban', deliveryType: 'Prime' },
+    { id: 'ORD12348', groupNo: '2', kw: 3, panels: 9, location: 'West Zone', areaType: 'Rural', deliveryType: 'Regular' },
+    { id: 'ORD12349', groupNo: '8', kw: 8, panels: 24, location: 'North Zone', areaType: 'Urban', deliveryType: 'Prime' },
   ];
 
   useEffect(() => {
@@ -203,8 +203,8 @@ export default function DeliveryPlan() {
                     <th className="px-3 py-3 font-medium border-r border-blue-300 w-10 text-center">
                       <input type="checkbox" className="h-3 w-3 rounded" />
                     </th>
-                    <th className="px-3 py-3 font-medium border-r border-blue-300">Order No.</th>
-                    <th className="px-3 py-3 font-medium border-r border-blue-300">Customer</th>
+                    <th className="px-3 py-3 font-medium border-r border-blue-300">delivery no.</th>
+                    <th className="px-3 py-3 font-medium border-r border-blue-300">group no.</th>
                     <th className="px-3 py-3 font-medium border-r border-blue-300">Details</th>
                     <th className="px-3 py-3 font-medium border-r border-blue-300">Location</th>
                     <th className="px-3 py-3 font-medium border-r border-blue-300 text-center">Area Type</th>
@@ -218,12 +218,12 @@ export default function DeliveryPlan() {
                         <input type="checkbox" className="h-3 w-3 rounded" />
                       </td>
                       <td className="px-3 py-4 border-r border-gray-100 font-medium text-gray-700">{row.id}</td>
-                      <td className="px-3 py-4 border-r border-gray-100 text-gray-700">
-                         {row.customer.split(' ')[0]}<br/>{row.customer.split(' ')[1]}
+                      <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-bold text-center">
+                         {row.groupNo}
                       </td>
                       <td className="px-3 py-4 border-r border-gray-100 text-gray-700 leading-tight">
-                         <span className="font-bold">KW:</span> {row.kw}<br/>
-                         <span className="font-bold">Amount:</span><br/>₹{row.amount}
+                         <span className="font-bold text-red-600">total Kw -</span> {row.kw}<br/>
+                         <span className="font-bold text-red-600">Total solar panel no. -</span> {row.panels}
                       </td>
                       <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.location}</td>
                       <td className="px-3 py-4 border-r border-gray-100 text-center">
@@ -269,12 +269,18 @@ export default function DeliveryPlan() {
                   <label className="block text-[11px] font-semibold text-gray-600 mb-1">Delivery Type</label>
                   <select className="w-full bg-white border border-gray-300 text-gray-700 py-2 px-3 rounded text-sm focus:outline-none focus:border-blue-400">
                     <option>Select Type</option>
+                    {(dashboardData.dynamicDropdowns?.deliveryTypes || []).map((opt, i) => (
+                      <option key={i} value={opt}>{opt}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-gray-600 mb-1">Vehicle Type</label>
                   <select className="w-full bg-white border border-gray-300 text-gray-700 py-2 px-3 rounded text-sm focus:outline-none focus:border-blue-400">
                     <option>Select Vehicle</option>
+                    {(dashboardData.dynamicDropdowns?.vehicleTypes || []).map((opt, i) => (
+                      <option key={i} value={opt}>{opt}</option>
+                    ))}
                   </select>
                 </div>
                 <div>
@@ -309,8 +315,16 @@ export default function DeliveryPlan() {
                   <p className="text-xs text-gray-500 mt-1">None selected</p>
                 </div>
                 
-                <div className="pt-3">
-                   <button className="bg-[#0b74ba] hover:bg-blue-700 text-white font-bold text-[12px] px-5 py-2.5 rounded w-max shadow-sm transition">Confirm Delivery Plan</button>
+                <div className="pt-3 flex space-x-3">
+                   <button 
+                     onClick={() => {
+                       alert("Delivery Plan Confirmed!");
+                       if (onNext) onNext();
+                     }}
+                     className="bg-[#0b74ba] hover:bg-blue-700 text-white font-bold text-[12px] px-5 py-2.5 rounded w-max shadow-sm transition"
+                   >
+                     Confirm Delivery Plan & Next
+                   </button>
                 </div>
              </div>
           </div>

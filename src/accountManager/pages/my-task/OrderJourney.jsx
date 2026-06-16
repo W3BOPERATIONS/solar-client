@@ -10,13 +10,25 @@ import ProcurementPlan from '../ProcurementPlan';
 import { Check, ChevronRight } from 'lucide-react';
 
 const componentRegistry = {
-  'CreateOrder': <CreateOrder />,
-  'VendorPay': <VendorPay />,
-  'DeliveryPlan': <DeliveryPlan />,
-  'DeliveryManagement': <DeliveryManagement />,
-  'LoanOrders': <LoanOrders />,
-  'ChannelPartnerPay': <ChannelPartnerPay />,
-  'ProcurementPlaceholder': <ProcurementPlan />
+  'CreateOrder': CreateOrder,
+  'VendorPay': VendorPay,
+  'DeliveryPlan': DeliveryPlan,
+  'DeliveryManagement': DeliveryManagement,
+  'LoanOrders': LoanOrders,
+  'ChannelPartnerPay': ChannelPartnerPay,
+  'ProcurementPlaceholder': ProcurementPlan,
+  'AtWarehouse': ({ onNext }) => (
+    <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
+      <h2 className="text-xl font-bold text-[#0b74ba]">At Warehouse Stage</h2>
+      <p className="text-gray-500 mt-2 font-medium mb-6">This module is under development by Solarkits.</p>
+      <button 
+        onClick={onNext}
+        className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition"
+      >
+        Next Step
+      </button>
+    </div>
+  )
 };
 
 export default function OrderJourney() {
@@ -51,7 +63,13 @@ export default function OrderJourney() {
 
   const activeFlow = dynamicFlows[orderType];
   const activeStepConfig = activeFlow?.steps[currentStep];
-  const activeStepContent = activeStepConfig ? componentRegistry[activeStepConfig.componentId] : null;
+  const ActiveComponent = activeStepConfig ? componentRegistry[activeStepConfig.componentId] : null;
+
+  const handleNextStep = () => {
+    if (currentStep < activeFlow.steps.length - 1) {
+      setCurrentStep(prev => prev + 1);
+    }
+  };
 
   const handleFlowChange = (e) => {
     setOrderType(e.target.value);
@@ -131,7 +149,7 @@ export default function OrderJourney() {
       <div className="flex-1 relative min-h-[500px]">
         {/* We wrap the component in a container that handles overflow if needed, or let the component dictate it */}
         <div className="w-full h-full animate-fade-in">
-           {activeStepContent}
+           {ActiveComponent && <ActiveComponent onNext={handleNextStep} />}
         </div>
       </div>
       

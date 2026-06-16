@@ -2,8 +2,8 @@ import React from 'react';
 
 export default function DeliveryManagement() {
   const tableData = [
-    { no: 'DEL-2023-1001', location: 'Rajkot', kit: '6 Kit', kw: '25 KW', type: 'Express', vehicle: 'Bollero', driver: 'Rajesh Kumar' },
-    { no: 'DEL-2023-1002', location: 'Ahmedabad', kit: '8 Kit', kw: '27 KW', type: 'Regular', vehicle: 'Bollero', driver: 'Mohan Singh' },
+    { no: 'DEL-2023-1001', location: 'Rajkot', kit: '6 Kit', kw: '25 KW', panels: 60, type: 'Express', vehicle: 'Bollero', driver: 'Rajesh Kumar' },
+    { no: 'DEL-2023-1002', location: 'Ahmedabad', kit: '8 Kit', kw: '27 KW', panels: 72, type: 'Regular', vehicle: 'Bollero', driver: 'Mohan Singh' },
   ];
 
   return (
@@ -45,6 +45,7 @@ export default function DeliveryManagement() {
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Location</th>
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Total Kit</th>
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Total KW</th>
+                <th className="px-3 py-3 font-medium border-r border-blue-300">Total Solar Panel No.</th>
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Delivery Type</th>
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Vehicle Type</th>
                 <th className="px-3 py-3 font-medium border-r border-blue-300">Driver</th>
@@ -61,6 +62,7 @@ export default function DeliveryManagement() {
                   <td className="px-3 py-5 border-r border-gray-100">{row.location}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.kit}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.kw}</td>
+                  <td className="px-3 py-5 border-r border-gray-100">{row.panels}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.type}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.vehicle}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.driver}</td>
