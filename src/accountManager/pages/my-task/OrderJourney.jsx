@@ -17,6 +17,34 @@ const componentRegistry = {
   'LoanOrders': LoanOrders,
   'ChannelPartnerPay': ChannelPartnerPay,
   'ProcurementPlaceholder': ProcurementPlan,
+  'GenerateOrderNumberPlaceholder': ({ onNext }) => (
+    <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
+      <h2 className="text-xl font-bold text-[#0b74ba]">Generate Order Number</h2>
+      <p className="text-gray-500 mt-2 font-medium mb-6">Order number is generated.</p>
+      <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition">Next Step</button>
+    </div>
+  ),
+  'CustomerPaymentPlaceholder': ({ onNext }) => (
+    <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
+      <h2 className="text-xl font-bold text-[#0b74ba]">Customer Payment</h2>
+      <p className="text-gray-500 mt-2 font-medium mb-6">Process customer payment via App/CRM or Manual UTR.</p>
+      <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition">Next Step</button>
+    </div>
+  ),
+  'AccountsVerificationPlaceholder': ({ onNext }) => (
+    <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
+      <h2 className="text-xl font-bold text-[#0b74ba]">Accounts Verification</h2>
+      <p className="text-gray-500 mt-2 font-medium mb-6">Accounts verifies the payment. Status becomes Paid.</p>
+      <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition">Next Step</button>
+    </div>
+  ),
+  'GenerateProcurementNumberPlaceholder': ({ onNext }) => (
+    <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
+      <h2 className="text-xl font-bold text-[#0b74ba]">Generate Procurement Number</h2>
+      <p className="text-gray-500 mt-2 font-medium mb-6">Procurement number is generated for vendor payment.</p>
+      <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition">Next Step</button>
+    </div>
+  ),
   'AtWarehouse': ({ onNext }) => (
     <div className="p-10 bg-white rounded-xl shadow-sm text-center border border-gray-200 mt-6">
       <h2 className="text-xl font-bold text-[#0b74ba]">At Warehouse Stage</h2>
@@ -99,49 +127,50 @@ export default function OrderJourney() {
       </div>
 
       {/* Horizontal Stepper */}
-      <div className="bg-white p-4 md:p-6 pb-8 md:pb-8 rounded-xl border border-gray-100 shadow-sm overflow-visible">
-        <div className="flex items-start justify-between w-full pt-2">
-          {activeFlow.steps.map((step, index) => {
-            const isCompleted = index < currentStep;
-            const isActive = index === currentStep;
-            const isPending = index > currentStep;
+      <div className="bg-white p-4 md:p-6 rounded-xl border border-gray-100 shadow-sm mb-6">
+        <div className="w-full overflow-x-auto pb-6 custom-scrollbar">
+          <div className="flex items-start justify-between min-w-max pt-2 px-4">
+            {activeFlow.steps.map((step, index) => {
+              const isCompleted = index < currentStep;
+              const isActive = index === currentStep;
 
-            return (
-              <React.Fragment key={index}>
-                <div 
-                  className="flex flex-col items-center cursor-pointer group w-24 md:w-32 flex-shrink-0"
-                  onClick={() => setCurrentStep(index)}
-                >
+              return (
+                <React.Fragment key={index}>
                   <div 
-                    className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 shadow-sm ${
-                      isCompleted ? 'bg-[#2cb25d] border-[#2cb25d] text-white' : 
-                      isActive ? 'bg-blue-600 border-blue-600 text-white ring-4 ring-blue-100' : 
-                      'bg-white border-gray-300 text-gray-400 group-hover:border-blue-400'
-                    }`}
+                    className="flex flex-col items-center cursor-pointer group w-28 md:w-32 flex-shrink-0"
+                    onClick={() => setCurrentStep(index)}
                   >
-                    {isCompleted ? <Check size={20} /> : <span className="font-bold">{index + 1}</span>}
+                    <div 
+                      className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-all duration-300 shadow-sm ${
+                        isCompleted ? 'bg-[#2cb25d] border-[#2cb25d] text-white' : 
+                        isActive ? 'bg-blue-600 border-blue-600 text-white ring-4 ring-blue-100' : 
+                        'bg-white border-gray-300 text-gray-400 group-hover:border-blue-400'
+                      }`}
+                    >
+                      {isCompleted ? <Check size={20} /> : <span className="font-bold">{index + 1}</span>}
+                    </div>
+                    <span className={`mt-3 text-[11px] md:text-[13px] font-bold tracking-wide text-center leading-tight transition-colors ${
+                      isCompleted ? 'text-[#2cb25d]' : 
+                      isActive ? 'text-blue-600' : 
+                      'text-gray-400 group-hover:text-gray-600'
+                    }`}>
+                      {step.label}
+                    </span>
                   </div>
-                  <span className={`mt-3 text-[11px] md:text-[13px] font-bold tracking-wide text-center leading-tight transition-colors ${
-                    isCompleted ? 'text-[#2cb25d]' : 
-                    isActive ? 'text-blue-600' : 
-                    'text-gray-400 group-hover:text-gray-600'
-                  }`}>
-                    {step.label}
-                  </span>
-                </div>
-                
-                {/* Connecting Line */}
-                {index < activeFlow.steps.length - 1 && (
-                  <div className="flex-1 mx-2 flex items-center mt-5 min-w-[20px]">
-                    <div className={`h-1 w-full rounded-full transition-all duration-300 ${
-                      isCompleted ? 'bg-[#2cb25d]' : 'bg-gray-200'
-                    }`}></div>
-                    <ChevronRight size={16} className={`ml-1 hidden md:block flex-shrink-0 ${isCompleted ? 'text-[#2cb25d]' : 'text-gray-300'}`} />
-                  </div>
-                )}
-              </React.Fragment>
-            );
-          })}
+                  
+                  {/* Connecting Line */}
+                  {index < activeFlow.steps.length - 1 && (
+                    <div className="flex-1 mx-2 flex items-center mt-5 min-w-[50px] md:min-w-[80px]">
+                      <div className={`h-1 w-full rounded-full transition-all duration-300 ${
+                        isCompleted ? 'bg-[#2cb25d]' : 'bg-gray-200'
+                      }`}></div>
+                      <ChevronRight size={16} className={`ml-1 hidden md:block flex-shrink-0 ${isCompleted ? 'text-[#2cb25d]' : 'text-gray-300'}`} />
+                    </div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </div>
         </div>
       </div>
 
