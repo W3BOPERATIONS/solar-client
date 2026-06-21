@@ -290,6 +290,7 @@ export default function OrderJourney() {
   const [dynamicFlows, setDynamicFlows] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sharedOrderData, setSharedOrderData] = useState([]);
+  const [dashboardData, setDashboardData] = useState(null);
 
   const [selectedCountry, setSelectedCountry] = useState(null);
   const [selectedState, setSelectedState] = useState(null);
@@ -313,6 +314,7 @@ export default function OrderJourney() {
         }
         if (locationData.data?.success) {
           setLocationHierarchy(locationData.data.data.locationHierarchy || {});
+          setDashboardData(locationData.data.data);
         }
       } catch (error) {
         console.error("Failed to fetch Order Journey flows", error);
@@ -350,6 +352,27 @@ export default function OrderJourney() {
   return (
     <div className="flex flex-col h-full bg-[#f8f9fa] p-6 space-y-6">
       
+      {/* Order Management Dashboard Banner */}
+      {dashboardData && (
+        <div className="bg-[#145a80] text-white p-4 rounded-lg flex justify-between items-center shadow-md">
+          <h1 className="text-2xl font-bold tracking-wide">Order Management</h1>
+          <div className="flex space-x-8">
+            <div className="flex flex-col items-end">
+              <span className="text-gray-200 text-xs uppercase tracking-wider font-semibold">Today's Task</span>
+              <span className="text-white text-xl font-bold">{dashboardData.headerCounters?.todayTasks || 0}</span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-yellow-300 text-xs uppercase tracking-wider font-semibold">Pending Task</span>
+              <span className="text-yellow-400 text-xl font-bold">{dashboardData.headerCounters?.pendingTasks || 0}</span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-red-300 text-xs uppercase tracking-wider font-semibold">Overdue Task</span>
+              <span className="text-red-400 text-xl font-bold">{dashboardData.headerCounters?.overdueTasks || 0}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Location Card Selection UI */}
       <div className="space-y-6">
         {/* Country */}
@@ -543,6 +566,7 @@ export default function OrderJourney() {
               onNext={handleNextStep} 
               sharedOrderData={sharedOrderData} 
               setSharedOrderData={setSharedOrderData} 
+              dashboardData={dashboardData}
            />}
         </div>
       </div>

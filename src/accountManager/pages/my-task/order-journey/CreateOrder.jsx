@@ -1,9 +1,46 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Home, Building2, Zap, X, Upload, Check } from 'lucide-react';
+import { ChevronDown, Home, Building2, Zap, X, Upload, Check, FileText } from 'lucide-react';
 import api from '../../../../api/axios';
 import { getAllManufacturers } from '../../../../services/brand/brandApi';
 
-export default function CreateOrder({ onNext, setSharedOrderData }) {
+const IconMap = {
+  'Home': <Home size={24} />,
+  'Building2': <Building2 size={24} />,
+  'Zap': <Zap size={24} />
+};
+
+const inventoryVendors = [
+  {
+    id: 1,
+    name: 'Rajesh Solar Distributors',
+    panels: { total: '150 Panels', breakDown: ['Adani: 80', 'Waaree: 40', 'Vikram: 30'] },
+    inverters: { total: '35 Units', breakDown: ['Adani: 20', 'Tata: 15'] },
+    bosKits: { total: '45 Kits', breakDown: ['Generic: 25', 'Premium: 20'] }
+  },
+  {
+    id: 2,
+    name: 'Mayank Solar Distributors',
+    panels: { total: '120 Panels', breakDown: ['Waaree: 60', 'Adani: 30', 'Tata: 30'] },
+    inverters: { total: '25 Units', breakDown: ['Waaree: 15', 'Generic: 10'] },
+    bosKits: { total: '30 Kits', breakDown: ['Standard: 18', 'Economy: 12'] }
+  },
+  {
+    id: 3,
+    name: 'Sun Solar Distributors',
+    panels: { total: '100 Panels', breakDown: ['Vikram: 50', 'Waaree: 25', 'Tata: 25'] },
+    inverters: { total: '20 Units', breakDown: ['Vikram: 10', 'Adani: 10'] },
+    bosKits: { total: '22 Kits', breakDown: ['Essential: 12', 'Pro: 10'] }
+  },
+  {
+    id: 4,
+    name: 'Vijay Solar Distributors',
+    panels: { total: '90 Panels', breakDown: ['Tata: 70', 'Adani: 20'] },
+    inverters: { total: '18 Units', breakDown: ['Tata: 10', 'Waaree: 8'] },
+    bosKits: { total: '20 Kits', breakDown: ['Tata: 12', 'Universal: 8'] }
+  }
+];
+
+export default function CreateOrder({ onNext, setSharedOrderData, dashboardData: initialDashboardData }) {
   const [dashboardData, setDashboardData] = useState({
     headerCounters: { todayTasks: 0, pendingTasks: 0, overdueTasks: 0 },
     locationCounters: [],
@@ -20,11 +57,7 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
   
   const [selectedRows, setSelectedRows] = useState([]);
 
-  const IconMap = {
-    'Home': <Home size={24} />,
-    'Building2': <Building2 size={24} />,
-    'Zap': <Zap size={24} />
-  };
+
 
   const [tableData, setTableData] = useState([]);
   const [manufacturers, setManufacturers] = useState([]);
@@ -76,15 +109,16 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const [response, manufacturersData] = await Promise.all([
-          api.get('/dashboard/account-manager/create-order-data'),
-          getAllManufacturers()
-        ]);
-        if (response.data?.success) {
-          setDashboardData(response.data.data);
-          setTableData(response.data.data.tableData);
-        }
+        const manufacturersData = await getAllManufacturers();
         setManufacturers(manufacturersData || []);
+        
+        if (!initialDashboardData) {
+          const response = await api.get('/dashboard/account-manager/create-order-data');
+          if (response.data?.success) {
+            setDashboardData(response.data.data);
+            setTableData(response.data.data.tableData || []);
+          }
+        }
       } catch (error) {
         console.error("Failed to fetch Create Order data", error);
       } finally {
@@ -92,7 +126,14 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
       }
     };
     fetchDashboardData();
-  }, []);
+  }, [initialDashboardData]);
+
+  useEffect(() => {
+    if (initialDashboardData) {
+      setDashboardData(initialDashboardData);
+      setTableData(initialDashboardData.tableData || []);
+    }
+  }, [initialDashboardData]);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedRowIndex, setSelectedRowIndex] = useState(null);
@@ -101,37 +142,12 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
   // Vendor Inventory Modal State
   const [isVendorModalOpen, setIsVendorModalOpen] = useState(false);
   const [selectedSupplyVendor, setSelectedSupplyVendor] = useState(null);
+  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const [enteredPrice, setEnteredPrice] = useState('');
+  const [tentativeDays, setTentativeDays] = useState('');
+  const [gstPercent, setGstPercent] = useState('');
 
-  const inventoryVendors = [
-    {
-      id: 1,
-      name: 'Rajesh Solar Distributors',
-      panels: { total: '150 Panels', breakDown: ['Adani: 80', 'Waaree: 40', 'Vikram: 30'] },
-      inverters: { total: '35 Units', breakDown: ['Adani: 20', 'Tata: 15'] },
-      bosKits: { total: '45 Kits', breakDown: ['Generic: 25', 'Premium: 20'] }
-    },
-    {
-      id: 2,
-      name: 'Mayank Solar Distributors',
-      panels: { total: '120 Panels', breakDown: ['Waaree: 60', 'Adani: 30', 'Tata: 30'] },
-      inverters: { total: '25 Units', breakDown: ['Waaree: 15', 'Generic: 10'] },
-      bosKits: { total: '30 Kits', breakDown: ['Standard: 18', 'Economy: 12'] }
-    },
-    {
-      id: 3,
-      name: 'Sun Solar Distributors',
-      panels: { total: '100 Panels', breakDown: ['Vikram: 50', 'Waaree: 25', 'Tata: 25'] },
-      inverters: { total: '20 Units', breakDown: ['Vikram: 10', 'Adani: 10'] },
-      bosKits: { total: '22 Kits', breakDown: ['Essential: 12', 'Pro: 10'] }
-    },
-    {
-      id: 4,
-      name: 'Vijay Solar Distributors',
-      panels: { total: '90 Panels', breakDown: ['Tata: 70', 'Adani: 20'] },
-      inverters: { total: '18 Units', breakDown: ['Tata: 10', 'Waaree: 8'] },
-      bosKits: { total: '20 Kits', breakDown: ['Tata: 12', 'Universal: 8'] }
-    }
-  ];
+
 
   const inventoryStats = React.useMemo(() => {
     let available = 0;
@@ -211,24 +227,7 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
         </div>
       )}
 
-      {/* Header */}
-      <div className="bg-[#145a80] text-white p-4 rounded-lg flex justify-between items-center shadow-md">
-        <h1 className="text-2xl font-bold tracking-wide">Order Management</h1>
-        <div className="flex space-x-8">
-          <div className="flex flex-col items-end">
-            <span className="text-gray-200 text-xs uppercase tracking-wider font-semibold">Today's Task</span>
-            <span className="text-white text-xl font-bold">{dashboardData.headerCounters.todayTasks}</span>
-          </div>
-          <div className="flex flex-col items-end">
-            <span className="text-yellow-300 text-xs uppercase tracking-wider font-semibold">Pending Task</span>
-            <span className="text-yellow-400 text-xl font-bold">{dashboardData.headerCounters.pendingTasks}</span>
-          </div>
-          <div className="flex flex-col items-end">
-            <span className="text-red-300 text-xs uppercase tracking-wider font-semibold">Overdue Task</span>
-            <span className="text-red-400 text-xl font-bold">{dashboardData.headerCounters.overdueTasks}</span>
-          </div>
-        </div>
-      </div>
+
 
 
       {/* Tabs / Buttons */}
@@ -346,8 +345,8 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
             <span className="text-[10px] font-bold text-[#145a80] mb-1 uppercase tracking-wider">Inventory</span>
             <div className="min-w-[5rem] px-2 h-8 border border-blue-300 rounded flex items-center justify-center text-sm font-bold bg-white shadow-sm text-gray-700 relative overflow-hidden">
               <div className="absolute inset-y-0 left-1/2 w-[1px] bg-blue-300 transform -translate-x-1/2 skew-x-[-15deg]"></div>
-              <span className="flex-1 text-center pr-2 z-10 text-green-600">{inventoryStats.available}</span>
-              <span className="flex-1 text-center pl-2 z-10 text-gray-500">{inventoryStats.required}</span>
+              <span className="flex-1 text-center pr-2 z-10 text-green-600">{inventoryStats.required}</span>
+              <span className="flex-1 text-center pl-2 z-10 text-gray-500">{inventoryStats.available}</span>
             </div>
           </div>
           <button 
@@ -396,7 +395,7 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
                         <div className="min-w-[4rem] px-2 h-12 border-2 border-blue-300 rounded-lg flex items-center justify-center text-xl font-bold bg-white shadow-inner text-[#145a80]">
                           {totalSummary.kw}
                         </div>
-                        <span className="font-bold text-gray-800 text-base lg:text-lg">KW</span>
+                        <span className="font-bold text-gray-800 text-base lg:text-lg">W</span>
                       </div>
 
                       <div className="pl-6 lg:pl-12 flex items-center">
@@ -471,7 +470,7 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
                         <button className="bg-[#0b74ba] text-white text-[10px] font-medium px-2 py-1 rounded">Customize</button>
                       </td>
                       <td className="px-3 py-4 space-y-1 text-gray-800">
-                        <p className="font-bold">KW: <span className="font-normal">{row.kw}</span></p>
+                        <p className="font-bold">W: <span className="font-normal">{row.kw}</span></p>
                         <p className="font-bold">₹: <span className="font-normal">{row.price}</span></p>
                       </td>
                       <td className="px-3 py-4">
@@ -525,8 +524,8 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
                         <p className="font-bold text-lg text-gray-800">{vendor.orders}</p>
                       </div>
                       <div>
-                        <p className="text-[10px] text-gray-500">Total KW</p>
-                        <p className="font-bold text-lg text-[#0b74ba]">{vendor.kw} KW</p>
+                        <p className="text-[10px] text-gray-500">Total W</p>
+                        <p className="font-bold text-lg text-[#0b74ba]">{vendor.kw} W</p>
                       </div>
                     </div>
                     <div className="text-center mb-4">
@@ -701,9 +700,259 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
               </button>
               <button
                 onClick={() => {
-                  if (selectedSupplyVendor) {
-                    const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
+                  setIsVendorModalOpen(false);
+                  setIsPreviewModalOpen(true);
+                }}
+                className={`px-5 py-2 text-sm font-semibold text-white rounded shadow-sm transition ${selectedSupplyVendor ? 'bg-[#0b74ba] hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
+                disabled={!selectedSupplyVendor}
+              >
+                Generate PO
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
+      {/* PO Preview Modal */}
+      {isPreviewModalOpen && selectedSupplyVendor && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black bg-opacity-50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl overflow-hidden animate-fade-in border border-gray-100 flex flex-col max-h-[90vh]">
+            {/* Header */}
+            <div className="flex justify-between items-center p-5 border-b border-gray-200 bg-[#f8f9fa]">
+              <h2 className="text-xl font-bold text-[#145a80] flex items-center">
+                <FileText size={24} className="mr-2" /> Purchase Order Preview
+              </h2>
+              <button
+                onClick={() => setIsPreviewModalOpen(false)}
+                className="text-gray-500 hover:text-gray-800 bg-gray-100 hover:bg-gray-200 rounded-full p-1.5 focus:outline-none transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Body */}
+            <div className="p-6 md:p-8 overflow-y-auto flex-1">
+              {(() => {
+                const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
+                const selectedData = selectedRows.map(idx => filteredTableData[idx]);
+
+                // Calculate detailed breakdown
+                const requiredBreakdown = {};
+                const techs = new Set();
+                const watts = new Set();
+                let totalCalculatedWattage = 0;
+                
+                if (selectedRows.length > 0) {
+                  selectedRows.forEach(idx => {
+                    const row = filteredTableData[idx];
+                    if (!row) return;
+                    const originalIdx = tableData.indexOf(row);
+                    const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+                    const mockTech = originalIdx === 0 ? 'Monocrystalline' : originalIdx === 1 ? 'Polycrystalline' : 'Bifacial';
+                    const mockWatt = originalIdx === 0 ? '540W' : originalIdx === 1 ? '500W' : '550W';
+                    
+                    techs.add(mockTech);
+                    watts.add(mockWatt);
+                    
+                    let panelsForThisRow = 0;
+                    if (panelBrandFilter !== 'All') {
+                      const brandIndex = mockBrand.indexOf(panelBrandFilter);
+                      if (brandIndex === 0) {
+                        panelsForThisRow = 3;
+                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 3;
+                      } else if (brandIndex === 1) {
+                        panelsForThisRow = 2;
+                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 2;
+                      } else if (brandIndex > 1) {
+                        panelsForThisRow = 1;
+                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 1;
+                      }
+                    } else {
+                       panelsForThisRow = 5;
+                       if (mockBrand[0]) requiredBreakdown[mockBrand[0]] = (requiredBreakdown[mockBrand[0]] || 0) + 3;
+                       if (mockBrand[1]) requiredBreakdown[mockBrand[1]] = (requiredBreakdown[mockBrand[1]] || 0) + 2;
+                    }
+                    totalCalculatedWattage += panelsForThisRow * (parseInt(mockWatt) || 0);
+                  });
+                } else {
+                   requiredBreakdown['Mixed Brands'] = totalSummary.panels;
+                }
+                
+                const techString = technologyFilter !== 'All' ? technologyFilter : Array.from(techs).join(', ') || 'Mixed Technology';
+                const wattString = wattageFilter !== 'All' ? wattageFilter : Array.from(watts).join(', ') || 'Mixed Wattage';
+                
+                return (
+                  <div className="space-y-6">
+                    <div className="flex justify-between border-b border-gray-100 pb-5">
+                      <div>
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">Supplier</p>
+                        <h3 className="font-bold text-[#0b74ba] text-lg">{vendor.name}</h3>
+                        <p className="text-sm text-gray-600 mt-1">Authorized Distributor</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">PO Details</p>
+                        <p className="font-bold text-gray-800 text-sm">Date: {new Date().toLocaleDateString()}</p>
+                        <p className="text-sm font-mono text-gray-600 mt-1">PO-{Math.floor(100000 + Math.random() * 900000)}</p>
+                      </div>
+                    </div>
+
+                    <div>
+                      <h4 className="font-bold text-gray-800 mb-3 text-sm">Order Summary</h4>
+                      <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+                        <table className="w-full text-left text-sm">
+                          <thead className="bg-[#f0f2f5] text-gray-700">
+                            <tr>
+                              <th className="px-5 py-3 font-semibold">Item Description</th>
+                              <th className="px-5 py-3 font-semibold text-center w-32">Solar Panel Qty</th>
+                              <th className="px-5 py-3 font-semibold text-center w-32">Rs per W</th>
+                              <th className="px-5 py-3 font-semibold text-center w-32">Benchmark Price</th>
+                              <th className="px-5 py-3 font-semibold w-24 text-center">Tentative Days</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            <tr className="hover:bg-gray-50 transition-colors">
+                              <td className="px-5 py-4 text-gray-800">
+                                <p className="font-bold text-base text-gray-900 mb-2">Solar Panels</p>
+                                <div className="text-sm text-gray-600 space-y-2.5">
+                                  <div className="flex items-center">
+                                    <span className="w-24 font-semibold text-gray-700">Technology:</span> 
+                                    <span className="bg-gray-100 px-2 py-0.5 rounded font-medium text-gray-800">{techString}</span>
+                                  </div>
+                                  <div className="flex items-center">
+                                    <span className="w-24 font-semibold text-gray-700">Wattage:</span> 
+                                    <span className="bg-gray-100 px-2 py-0.5 rounded font-medium text-gray-800">{wattString}</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700 block mb-1.5">Brand Breakdown:</span>
+                                    <div className="flex flex-wrap gap-2">
+                                      {Object.entries(requiredBreakdown).map(([brand, count]) => (
+                                        <div key={brand} className="flex items-center bg-blue-50 border border-blue-200 rounded px-2.5 py-1 text-xs">
+                                          <span className="font-bold text-blue-800 mr-1.5">{brand}:</span>
+                                          <span className="text-blue-900 font-medium">{count} Panels</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                  <p className="mt-3 pt-2 border-t border-gray-100 text-xs text-gray-500">Procurement for {selectedData.length} customer projects</p>
+                                </div>
+                              </td>
+                              <td className="px-5 py-4 text-center font-bold text-[#145a80] text-lg align-top">{inventoryStats.required}</td>
+                              <td className="px-5 py-4 text-center align-top">
+                                <input 
+                                  type="number" 
+                                  value={enteredPrice}
+                                  onChange={(e) => setEnteredPrice(e.target.value)}
+                                  placeholder="Enter Price" 
+                                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-[#145a80] focus:ring-1 focus:ring-[#145a80]" 
+                                />
+                              </td>
+                              <td className="px-5 py-4 text-center align-top">
+                                <div className="font-bold text-gray-700">₹ 45</div>
+                                <div className="text-[10px] text-gray-500">Per W</div>
+                              </td>
+                              <td className="px-5 py-4 align-top">
+                                <input 
+                                  type="number" 
+                                  value={tentativeDays}
+                                  onChange={(e) => setTentativeDays(e.target.value)}
+                                  placeholder="Days" 
+                                  className="w-full border border-gray-300 rounded px-2 py-1.5 text-sm focus:outline-none focus:border-[#145a80] focus:ring-1 focus:ring-[#145a80]" 
+                                />
+                              </td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Total Amount Section */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 flex justify-between items-center shadow-sm">
+                      <div className="text-gray-600">
+                        <p className="text-sm">Total Capacity: <span className="font-bold text-gray-800">{totalCalculatedWattage} W</span></p>
+                        <p className="text-xs text-gray-500 mt-1">Calculated as: Total W × Rs per W</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-xs text-gray-500 uppercase font-bold tracking-wider mb-1">Estimated Amount</p>
+                        <p className="text-2xl font-bold text-[#145a80]">
+                          {enteredPrice && !isNaN(enteredPrice) && parseFloat(enteredPrice) > 0 
+                            ? `₹ ${(parseFloat(totalCalculatedWattage) * parseFloat(enteredPrice)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}` 
+                            : '₹ 0'}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* GST Section */}
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-5 shadow-sm space-y-4">
+                      <div className="flex justify-between items-center">
+                        <div className="text-gray-600">
+                          <p className="text-sm font-bold text-gray-800">GST (%)</p>
+                          <p className="text-xs text-gray-500 mt-1">Manually add applicable GST</p>
+                        </div>
+                        <div className="w-32">
+                          <input 
+                            type="number" 
+                            value={gstPercent}
+                            onChange={(e) => setGstPercent(e.target.value)}
+                            placeholder="Enter %" 
+                            className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-[#145a80] focus:ring-1 focus:ring-[#145a80] text-right" 
+                          />
+                        </div>
+                      </div>
+                      
+                      <div className="flex justify-between items-center pt-4 border-t border-gray-200">
+                        <div className="text-gray-600">
+                          <p className="text-sm font-bold text-gray-800">Total Estimated Price</p>
+                          <p className="text-xs text-gray-500 mt-1">Including GST</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-bold text-[#2cb25d]">
+                            {(() => {
+                              const baseAmount = enteredPrice && !isNaN(enteredPrice) && parseFloat(enteredPrice) > 0 
+                                ? parseFloat(totalCalculatedWattage) * parseFloat(enteredPrice) 
+                                : 0;
+                              const gst = gstPercent && !isNaN(gstPercent) ? parseFloat(gstPercent) : 0;
+                              const totalWithGst = baseAmount + (baseAmount * gst / 100);
+                              return `₹ ${totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`;
+                            })()}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-[#e8f4fc] p-4 rounded-lg border border-[#bae0f5] flex items-start space-x-3">
+                      <div className="text-[#0b74ba] mt-0.5 flex-shrink-0">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="16" x2="12" y2="12"></line><line x1="12" y1="8" x2="12.01" y2="8"></line></svg>
+                      </div>
+                      <p className="text-sm text-[#0b74ba] leading-relaxed">
+                        This Purchase Order will be generated and sent to <b>{vendor.name}</b>. Once accepted by the vendor, the materials will be procured for the selected <b>{selectedData.length}</b> orders and moved to the next stage.
+                      </p>
+                    </div>
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-between items-center px-6 py-4 border-t border-gray-200 bg-gray-50">
+              <button
+                onClick={() => {
+                  setIsPreviewModalOpen(false);
+                  setIsVendorModalOpen(true);
+                }}
+                className="px-5 py-2.5 text-sm font-bold text-gray-600 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-100 hover:text-gray-800 transition"
+              >
+                &larr; Back to Vendors
+              </button>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setIsPreviewModalOpen(false)}
+                  className="px-5 py-2.5 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
                     const selectedData = selectedRows.map(idx => filteredTableData[idx]);
 
                     if (setSharedOrderData && selectedData.length > 0) {
@@ -715,7 +964,7 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
                         status: 'Pending',
                         vendorName: vendor.name,
                         equipment: {
-                          panels: vendor.panels.total
+                          panels: `${row.panels || Math.floor(inventoryStats.required / selectedData.length)} Panels`
                         }
                       }));
                       setSharedOrderData(prev => [...prev, ...newOrders]);
@@ -723,8 +972,8 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
 
                     const updatedData = tableData.filter(row => !selectedData.includes(row));
                     setTableData(updatedData);
-                    setToast({ message: `${selectedData.length} Order(s) have been moved to Procurement Stage!`, type: 'success' });
-                    setIsVendorModalOpen(false);
+                    setToast({ message: `PO Generated! ${selectedData.length} Order(s) moved to Procurement.`, type: 'success' });
+                    setIsPreviewModalOpen(false);
                     setSelectedRowIndex(null);
                     setSelectedRows([]);
                     setSelectedSupplyVendor(null);
@@ -733,13 +982,13 @@ export default function CreateOrder({ onNext, setSharedOrderData }) {
                         onNext();
                       }, 1000);
                     }
-                  }
-                }}
-                className={`px-5 py-2 text-sm font-semibold text-white rounded shadow-sm transition ${selectedSupplyVendor ? 'bg-[#0b74ba] hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
-                disabled={!selectedSupplyVendor}
-              >
-                Generate PO
-              </button>
+                  }}
+                  className="px-6 py-2.5 text-sm font-bold text-white bg-[#2cb25d] hover:bg-green-700 rounded shadow-md transition flex items-center"
+                >
+                  <Check size={18} className="mr-2" />
+                  Confirm & Send PO
+                </button>
+              </div>
             </div>
           </div>
         </div>
