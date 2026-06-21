@@ -21,14 +21,33 @@ export default function VendorPay({ onNext }) {
     }
   ];
 
+  const comboData = [
+    {
+      vendorName: 'Rajesh Solar Distributors', brand: 'Mixed', product: '5KW On-Grid Combo Kit', technology: 'Bifacial', projectType: 'Residential', wattPeak: '-', totalKW: '5 KW', totalPanels: '10', totalPrice: '2,50,000', deadline: '2025-07-05'
+    },
+    {
+      vendorName: 'Green Energy Solutions', brand: 'Tata', product: '10KW Hybrid Combo Kit', technology: 'Monocrystalline', projectType: 'Commercial', wattPeak: '-', totalKW: '10 KW', totalPanels: '18', totalPrice: '5,00,000', deadline: '2025-07-12'
+    }
+  ];
+
   const [dashboardData, setDashboardData] = useState({});
   const [selectedRows, setSelectedRows] = useState([]);
+  const [kitMode, setKitMode] = useState('ComboKit');
+  const [componentFilter, setComponentFilter] = useState('All');
 
-  const filteredData = tableData.filter(row => row.product === 'Solar Panel');
+  let displayData = [];
+  if (kitMode === 'ComboKit') {
+    displayData = comboData;
+  } else {
+    displayData = tableData;
+    if (componentFilter !== 'All') {
+      displayData = displayData.filter(row => row.product === componentFilter);
+    }
+  }
 
   const handleSelectAll = (e) => {
     if (e.target.checked) {
-      setSelectedRows(filteredData.map((_, idx) => idx));
+      setSelectedRows(displayData.map((_, idx) => idx));
     } else {
       setSelectedRows([]);
     }
@@ -57,23 +76,30 @@ export default function VendorPay({ onNext }) {
   }, []);
 
   return (
-    <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-6">
+    <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-6 animate-fade-in">
       {/* Header */}
-      <div className="bg-[#2c4b75] text-white p-4 rounded flex justify-between items-center shadow">
-        <h1 className="text-xl font-bold">Vendor Payment</h1>
-        <div className="flex space-x-4 text-xs font-semibold">
-          <span>Today's Task</span>
-          <span className="text-yellow-400">Pending Task</span>
-          <span className="text-red-400">Overdue Task</span>
+      <div className="bg-[#145a80] p-4 text-white flex justify-between items-center shadow rounded-lg">
+        <h1 className="text-lg font-bold">Procurement Number</h1>
+        <div className="flex space-x-4 items-center">
+          <span className="bg-yellow-500 px-3 py-1 text-[11px] font-bold rounded-full border border-yellow-400 text-white shadow-sm">Status: Procurement Pending</span>
         </div>
+      </div>
+
+      <div className="flex space-x-4">
+         <button className="bg-blue-50 text-blue-600 border border-blue-200 px-4 py-2 rounded text-xs font-bold hover:bg-blue-100 transition shadow-sm">Pending Days Filter</button>
+         <button className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded text-xs font-bold hover:bg-red-100 transition shadow-sm">Overdue Days Filter</button>
       </div>
 
       {/* Action Buttons */}
       <div className="flex justify-center space-x-4">
-        <button className="bg-[#0b74ba] hover:bg-blue-700 text-white text-xs font-semibold px-4 py-2 rounded shadow flex items-center space-x-1 transition">
+        <button 
+          onClick={() => { setKitMode('ComboKit'); setSelectedRows([]); }}
+          className={`${kitMode === 'ComboKit' ? 'bg-[#0b74ba] text-white' : 'bg-transparent text-[#0b74ba] border border-[#0b74ba] hover:bg-blue-50'} text-xs font-semibold px-4 py-2 rounded shadow flex items-center space-x-1 transition`}>
           <Zap size={14}/><span>ComboKit</span>
         </button>
-        <button className="bg-transparent text-[#0b74ba] border border-[#0b74ba] hover:bg-blue-50 text-xs font-semibold px-4 py-2 rounded shadow flex items-center space-x-1 transition">
+        <button 
+          onClick={() => { setKitMode('CustomizeKit'); setSelectedRows([]); }}
+          className={`${kitMode === 'CustomizeKit' ? 'bg-[#0b74ba] text-white' : 'bg-transparent text-[#0b74ba] border border-[#0b74ba] hover:bg-blue-50'} text-xs font-semibold px-4 py-2 rounded shadow flex items-center space-x-1 transition`}>
           <Settings size={14}/><span>Customize Kit</span>
         </button>
       </div>
@@ -111,19 +137,26 @@ export default function VendorPay({ onNext }) {
           </div>
         </div>
 
-        <div>
-          <label className="block text-gray-700 font-medium text-[12px] mb-1">Kit Type</label>
-          <div className="relative w-40">
-            <select className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white">
-              <option>All</option>
-              <option>Combokit</option>
-              <option>Customised Kit</option>
-            </select>
-            <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
-              <ChevronDown size={14} />
+        {kitMode === 'CustomizeKit' && (
+          <div>
+            <label className="block text-gray-700 font-medium text-[12px] mb-1">Component Type</label>
+            <div className="relative w-40">
+              <select 
+                value={componentFilter}
+                onChange={(e) => setComponentFilter(e.target.value)}
+                className="appearance-none w-full border border-gray-300 rounded px-3 py-1.5 text-[13px] text-gray-700 focus:outline-none focus:border-blue-400 bg-white"
+              >
+                <option value="All">All Components</option>
+                <option value="Solar Panel">Solar Panel</option>
+                <option value="Inverter">Inverter</option>
+                <option value="BOS Kit">BOS Kit</option>
+              </select>
+              <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                <ChevronDown size={14} />
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         <div>
           <label className="block text-gray-700 font-medium text-[12px] mb-1">Solar Panel Brand</label>
@@ -160,7 +193,7 @@ export default function VendorPay({ onNext }) {
                   type="checkbox" 
                   className="w-4 h-4 rounded cursor-pointer"
                   onChange={handleSelectAll}
-                  checked={selectedRows.length === filteredData.length && filteredData.length > 0}
+                  checked={selectedRows.length === displayData.length && displayData.length > 0}
                 />
               </th>
               <th className="px-4 py-3 font-medium border-r border-blue-300 w-[120px]">Vendor Name</th>
@@ -175,7 +208,7 @@ export default function VendorPay({ onNext }) {
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {filteredData.map((row, idx) => (
+            {displayData.map((row, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
                 <td className="px-4 py-4 border-r border-gray-100 text-center">
                   <input 
@@ -189,7 +222,7 @@ export default function VendorPay({ onNext }) {
                   {row.vendorName}
                 </td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.brand}</td>
-                <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.product}</td>
+                <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-bold">{row.product}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.technology}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.projectType}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.wattPeak}</td>
@@ -203,12 +236,18 @@ export default function VendorPay({ onNext }) {
       </div>
       
       {/* Footer Actions */}
-      <div className="flex justify-end mt-6 pb-6">
+      <div className="flex justify-end mt-6 pb-6 space-x-4">
+        <button 
+          onClick={() => alert("Payment Made to Vendor!")}
+          className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition"
+        >
+          Make Payment to Vendor
+        </button>
         <button 
           onClick={onNext}
-          className="bg-green-600 hover:bg-green-700 text-white px-8 py-2.5 rounded text-[14px] font-bold shadow-md transition"
+          className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition flex items-center"
         >
-          Next
+          Generate Procurement Number <ChevronDown size={16} className="ml-1 -rotate-90"/>
         </button>
       </div>
     </div>

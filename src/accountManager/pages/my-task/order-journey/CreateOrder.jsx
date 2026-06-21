@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { ChevronDown, Home, Building2, Zap, X, Upload, Check } from 'lucide-react';
 import api from '../../../../api/axios';
+import { getAllManufacturers } from '../../../../services/brand/brandApi';
 
-export default function CreateOrder({ onNext }) {
+export default function CreateOrder({ onNext, setSharedOrderData }) {
   const [dashboardData, setDashboardData] = useState({
     headerCounters: { todayTasks: 0, pendingTasks: 0, overdueTasks: 0 },
     locationCounters: [],
@@ -11,18 +12,13 @@ export default function CreateOrder({ onNext }) {
     vendors: []
   });
 
-  const [selectedCountry, setSelectedCountry] = useState(null);
-  const [selectedState, setSelectedState] = useState(null);
-  const [selectedCluster, setSelectedCluster] = useState(null);
-  const [selectedDistrict, setSelectedDistrict] = useState(null);
   const [activeTab, setActiveTab] = useState('ComboKit');
 
-  const locationHierarchy = dashboardData?.locationHierarchy || {};
-
-  const availableCountries = Object.keys(locationHierarchy);
-  const availableStates = (selectedCountry && selectedCountry !== 'All' && locationHierarchy[selectedCountry]) ? Object.keys(locationHierarchy[selectedCountry]) : [];
-  const availableClusters = (selectedState && selectedState !== 'All' && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]) ? Object.keys(locationHierarchy[selectedCountry][selectedState]) : [];
-  const availableDistricts = (selectedCluster && selectedCluster !== 'All' && selectedState && selectedCountry && locationHierarchy[selectedCountry]?.[selectedState]?.[selectedCluster]) ? locationHierarchy[selectedCountry][selectedState][selectedCluster] : [];
+  const [panelBrandFilter, setPanelBrandFilter] = useState('All');
+  const [technologyFilter, setTechnologyFilter] = useState('All');
+  const [wattageFilter, setWattageFilter] = useState('All');
+  
+  const [selectedRows, setSelectedRows] = useState([]);
 
   const IconMap = {
     'Home': <Home size={24} />,
@@ -31,17 +27,64 @@ export default function CreateOrder({ onNext }) {
   };
 
   const [tableData, setTableData] = useState([]);
+  const [manufacturers, setManufacturers] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [toast, setToast] = useState(null);
+
+  const filteredTableData = React.useMemo(() => {
+    return tableData.filter((row, idx) => {
+      const mockBrand = idx === 0 ? ['Waaree', 'Adani'] : idx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+      const mockTech = idx === 0 ? 'Monocrystalline' : idx === 1 ? 'Polycrystalline' : 'Bifacial';
+      const mockWatt = idx === 0 ? '540W' : idx === 1 ? '500W' : '550W';
+
+      if (panelBrandFilter !== 'All' && !mockBrand.includes(panelBrandFilter)) return false;
+      if (technologyFilter !== 'All' && technologyFilter !== mockTech) return false;
+      if (wattageFilter !== 'All' && wattageFilter !== mockWatt) return false;
+
+      return true;
+    });
+  }, [tableData, panelBrandFilter, technologyFilter, wattageFilter]);
+
+  const totalSummary = React.useMemo(() => {
+    let panels = 0;
+    let kw = 0;
+
+    filteredTableData.forEach((row) => {
+      if (row.kw) {
+        kw += parseFloat(row.kw) || 0;
+      }
+
+      const originalIdx = tableData.indexOf(row);
+      const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+
+      if (panelBrandFilter !== 'All') {
+        const brandIndex = mockBrand.indexOf(panelBrandFilter);
+        if (brandIndex === 0) panels += 3;
+        else if (brandIndex === 1) panels += 2;
+        else if (brandIndex > 1) panels += 1;
+      } else {
+        panels += 5;
+      }
+    });
+
+    return {
+      panels,
+      kw: kw.toFixed(1).replace(/\.0$/, '') // Remove trailing .0 if integer
+    };
+  }, [filteredTableData, tableData, panelBrandFilter]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
       try {
-        const response = await api.get('/dashboard/account-manager/create-order-data');
+        const [response, manufacturersData] = await Promise.all([
+          api.get('/dashboard/account-manager/create-order-data'),
+          getAllManufacturers()
+        ]);
         if (response.data?.success) {
           setDashboardData(response.data.data);
           setTableData(response.data.data.tableData);
         }
+        setManufacturers(manufacturersData || []);
       } catch (error) {
         console.error("Failed to fetch Create Order data", error);
       } finally {
@@ -90,6 +133,47 @@ export default function CreateOrder({ onNext }) {
     }
   ];
 
+  const inventoryStats = React.useMemo(() => {
+    let available = 0;
+    
+    inventoryVendors.forEach(vendor => {
+      vendor.panels.breakDown.forEach(line => {
+        const [brand, countStr] = line.split(':');
+        const count = parseInt(countStr.trim(), 10) || 0;
+        
+        if (panelBrandFilter === 'All' || brand.trim() === panelBrandFilter) {
+          available += count;
+        }
+      });
+    });
+
+    let required = 0;
+    if (selectedRows.length > 0) {
+      selectedRows.forEach(idx => {
+        const row = filteredTableData[idx];
+        if (!row) return;
+        const originalIdx = tableData.indexOf(row);
+        const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+        
+        if (panelBrandFilter !== 'All') {
+          const brandIndex = mockBrand.indexOf(panelBrandFilter);
+          if (brandIndex === 0) required += 3;
+          else if (brandIndex === 1) required += 2;
+          else if (brandIndex > 1) required += 1;
+        } else {
+          required += 5;
+        }
+      });
+    } else {
+      required = totalSummary.panels;
+    }
+
+    return {
+      available,
+      required
+    };
+  }, [panelBrandFilter, selectedRows, filteredTableData, tableData, totalSummary.panels]);
+
   const handleConfirmClick = (index) => {
     setSelectedRowIndex(index);
     setSelectedFile(null);
@@ -118,7 +202,7 @@ export default function CreateOrder({ onNext }) {
 
   return (
     <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-8 relative">
-      
+
       {/* Toast Notification */}
       {toast && (
         <div className={`fixed top-4 right-4 z-50 text-white px-6 py-3 rounded shadow-lg animate-fade-in flex items-center space-x-2 ${toast.type === 'error' ? 'bg-red-500' : 'bg-green-500'}`}>
@@ -147,137 +231,20 @@ export default function CreateOrder({ onNext }) {
       </div>
 
 
-      {/* Location Card Selection UI */}
-      <div className="space-y-6">
-        {/* Country */}
-        <div>
-          <div className="flex justify-between items-center mb-3">
-            <h3 className="font-bold text-gray-800 text-[15px]">Select Country</h3>
-            <button className="text-blue-500 text-xs hover:underline">Select All</button>
-          </div>
-          <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
-            <div 
-              onClick={() => setSelectedCountry('All')}
-              className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedCountry === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-            >
-              <p className="font-bold text-sm text-gray-800">All Countries</p>
-              <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
-            </div>
-            {availableCountries.map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={() => setSelectedCountry(item)}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedCountry === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">{item}</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">{item.substring(0, 2)}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* State */}
-        {selectedCountry && (
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-gray-800 text-[15px]">Select State</h3>
-              <button className="text-blue-500 text-xs hover:underline">Select All</button>
-            </div>
-            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
-              <div 
-                onClick={() => setSelectedState('All')}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedState === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">All States</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
-              </div>
-              {availableStates.map((item, idx) => (
-              <div 
-                key={idx} 
-                onClick={() => setSelectedState(item)}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedState === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">{item}</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">{item.substring(0, 2)}</p>
-              </div>
-            ))}
-          </div>
-          </div>
-        )}
-
-        {/* Cluster */}
-        {selectedState && availableClusters.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-gray-800 text-[15px]">Select Cluster</h3>
-              <button className="text-blue-500 text-xs hover:underline">Select All</button>
-            </div>
-            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
-              <div 
-                onClick={() => setSelectedCluster('All')}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedCluster === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">All Clusters</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
-              </div>
-              {availableClusters.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={() => setSelectedCluster(item)}
-                  className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedCluster === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-                >
-                  <p className="font-bold text-sm text-gray-800">{item}</p>
-                  <p className="text-[10px] text-gray-400 uppercase mt-1">CLST</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* District */}
-        {selectedCluster && availableDistricts.length > 0 && (
-          <div>
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="font-bold text-gray-800 text-[15px]">Select District</h3>
-              <button className="text-blue-500 text-xs hover:underline">Select All</button>
-            </div>
-            <div className="flex space-x-4 overflow-x-auto pb-2 scrollbar-hide">
-              <div 
-                onClick={() => setSelectedDistrict('All')}
-                className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === 'All' ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-              >
-                <p className="font-bold text-sm text-gray-800">All Districts</p>
-                <p className="text-[10px] text-gray-400 uppercase mt-1">ALL</p>
-              </div>
-              {availableDistricts.map((item, idx) => (
-                <div 
-                  key={idx} 
-                  onClick={() => setSelectedDistrict(item)}
-                  className={`flex-shrink-0 cursor-pointer w-48 p-4 rounded-lg border text-center transition-all ${selectedDistrict === item ? 'bg-[#ebf5ff] border-blue-400' : 'bg-white border-gray-200'}`}
-                >
-                  <p className="font-bold text-sm text-gray-800">{item}</p>
-                  <p className="text-[10px] text-gray-400 uppercase mt-1">DIST</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </div>
-
       {/* Tabs / Buttons */}
       <div className="flex space-x-2 mt-6 lg:mt-0 justify-end">
-         <button 
-           onClick={() => setActiveTab('ComboKit')}
-           className={`${activeTab === 'ComboKit' ? 'bg-green-600 ring-2 ring-green-300' : 'bg-[#2cb25d]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-green-700 transition`}
-         >
-           Combo kit
-         </button>
-         <button 
-           onClick={() => setActiveTab('CustomizeKit')}
-           className={`${activeTab === 'CustomizeKit' ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-[#0b74ba]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-blue-800 transition`}
-         >
-           Customize Kit
-         </button>
+        <button
+          onClick={() => setActiveTab('ComboKit')}
+          className={`${activeTab === 'ComboKit' ? 'bg-green-600 ring-2 ring-green-300' : 'bg-[#2cb25d]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-green-700 transition`}
+        >
+          Combo kit
+        </button>
+        <button
+          onClick={() => setActiveTab('CustomizeKit')}
+          className={`${activeTab === 'CustomizeKit' ? 'bg-blue-700 ring-2 ring-blue-300' : 'bg-[#0b74ba]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-blue-800 transition`}
+        >
+          Customize Kit
+        </button>
       </div>
 
       {/* Category Cards */}
@@ -290,12 +257,12 @@ export default function CreateOrder({ onNext }) {
             </div>
             <div className="flex justify-between mt-2">
               <div className="text-center">
-                 <p className="text-xs text-gray-500">Total Order</p>
-                 <p className="text-lg font-bold text-gray-800">{category.total}</p>
+                <p className="text-xs text-gray-500">Total Order</p>
+                <p className="text-lg font-bold text-gray-800">{category.total}</p>
               </div>
               <div className="text-center">
-                 <p className="text-xs text-gray-500">Overdue Order</p>
-                 <p className="text-lg font-bold text-yellow-500">{category.overdue}</p>
+                <p className="text-xs text-gray-500">Overdue Order</p>
+                <p className="text-lg font-bold text-yellow-500">{category.overdue}</p>
               </div>
             </div>
           </div>
@@ -303,16 +270,63 @@ export default function CreateOrder({ onNext }) {
       </div>
 
       {/* Global Filters */}
-      <div className="mt-6 flex space-x-2 mb-4 items-center">
+      <div className="mt-6 flex flex-wrap space-x-2 gap-y-3 mb-4 items-center">
         <div className="flex flex-col">
           <label className="text-[10px] text-gray-500 font-semibold mb-1">Select solar panel brand</label>
-          <select className="border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
-            <option>All Brands</option>
+          <select
+            value={panelBrandFilter}
+            onChange={(e) => {
+              setPanelBrandFilter(e.target.value);
+              setTechnologyFilter('All');
+              setWattageFilter('All');
+            }}
+            className="border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+            <option value="All">All Brands</option>
             {dashboardData?.panelBrands?.map((brand, idx) => (
               <option key={idx} value={brand}>{brand}</option>
-            ))}
+            )) || (
+                <>
+                  <option value="Waaree">Waaree</option>
+                  <option value="Adani">Adani</option>
+                  <option value="Tata">Tata</option>
+                  <option value="Vikram">Vikram</option>
+                </>
+              )}
           </select>
         </div>
+
+        {panelBrandFilter !== 'All' && (
+          <>
+            <div className="flex flex-col animate-fade-in">
+              <label className="text-[10px] text-gray-500 font-semibold mb-1">Solar Panel Technology</label>
+              <select
+                value={technologyFilter}
+                onChange={(e) => setTechnologyFilter(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="All">All Technologies</option>
+                <option value="Monocrystalline">Monocrystalline</option>
+                <option value="Polycrystalline">Polycrystalline</option>
+                <option value="Bifacial">Bifacial</option>
+                <option value="Half-Cut">Half-Cut</option>
+              </select>
+            </div>
+            <div className="flex flex-col animate-fade-in">
+              <label className="text-[10px] text-gray-500 font-semibold mb-1">Wattage</label>
+              <select
+                value={wattageFilter}
+                onChange={(e) => setWattageFilter(e.target.value)}
+                className="border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-700 bg-white shadow-sm focus:outline-none focus:ring-1 focus:ring-blue-400">
+                <option value="All">All Wattages</option>
+                <option value="500W">500W</option>
+                <option value="540W">540W</option>
+                <option value="550W">550W</option>
+                <option value="600W">600W</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {/*
         <div className="flex flex-col">
           <label className="text-[10px] text-gray-500 font-semibold mb-1">Order Status</label>
           <select className="border border-gray-300 rounded px-3 py-1.5 text-xs text-gray-700 bg-white">
@@ -325,6 +339,25 @@ export default function CreateOrder({ onNext }) {
             <option>All Supply Type</option>
           </select>
         </div>
+        */}
+
+        <div className="ml-auto flex items-end space-x-4 pl-4 border-l border-gray-200">
+          <div className="flex flex-col items-center justify-center">
+            <span className="text-[10px] font-bold text-[#145a80] mb-1 uppercase tracking-wider">Inventory</span>
+            <div className="min-w-[5rem] px-2 h-8 border border-blue-300 rounded flex items-center justify-center text-sm font-bold bg-white shadow-sm text-gray-700 relative overflow-hidden">
+              <div className="absolute inset-y-0 left-1/2 w-[1px] bg-blue-300 transform -translate-x-1/2 skew-x-[-15deg]"></div>
+              <span className="flex-1 text-center pr-2 z-10 text-green-600">{inventoryStats.available}</span>
+              <span className="flex-1 text-center pl-2 z-10 text-gray-500">{inventoryStats.required}</span>
+            </div>
+          </div>
+          <button 
+            onClick={() => setIsVendorModalOpen(true)}
+            disabled={selectedRows.length === 0 || inventoryStats.available < inventoryStats.required}
+            className={`border-2 border-[#145a80] font-bold px-6 h-8 rounded transition-all shadow-sm text-[12px] uppercase tracking-wide flex items-center justify-center ${(selectedRows.length === 0 || inventoryStats.available < inventoryStats.required) ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'text-white bg-[#145a80] hover:bg-[#0f4461]'}`}
+          >
+            Procure Inventory
+          </button>
+        </div>
       </div>
 
       {/* Conditional Rendering based on Tabs */}
@@ -332,8 +365,69 @@ export default function CreateOrder({ onNext }) {
         <>
           <div className="mt-6 bg-white border border-gray-200 shadow-sm overflow-x-auto relative rounded-lg">
             <table className="w-full text-xs text-left min-w-[1000px]">
+              <thead className="bg-[#ebf5ff]">
+                {/* Client Requested Procurement Summary Row */}
+                <tr className="border-b-2 border-blue-300">
+                  <td colSpan="9" className="p-0">
+                    <div className="flex flex-wrap items-center justify-between p-4">
+                      <div className="flex items-center space-x-4 border-r border-blue-200 pr-6 lg:pr-12">
+                        <div className="flex flex-col items-center">
+                          <span className="text-sm font-bold text-[#145a80] mb-2 uppercase tracking-wider">{panelBrandFilter !== 'All' ? panelBrandFilter : 'Brand'}</span>
+                          <div className="w-16 h-16 rounded-full border-2 border-blue-300 flex items-center justify-center bg-white shadow-inner overflow-hidden">
+                            {(() => {
+                              const selectedManufacturer = manufacturers.find(m => m.brand?.toLowerCase() === panelBrandFilter?.toLowerCase());
+                              if (selectedManufacturer && selectedManufacturer.brandLogo) {
+                                return <img src={selectedManufacturer.brandLogo} alt={panelBrandFilter} className="w-full h-full object-contain p-2" />;
+                              }
+                              return <span className="text-gray-500 font-bold text-xs">Logo</span>;
+                            })()}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-4 border-r border-blue-200 px-6 lg:px-12 flex-1 justify-center">
+                        <span className="font-bold text-gray-800 text-base lg:text-lg">Total No. solar panel</span>
+                        <div className="min-w-[4rem] px-2 h-12 border-2 border-blue-300 rounded-lg flex items-center justify-center text-xl font-bold bg-white shadow-inner text-[#145a80]">
+                          {totalSummary.panels}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center space-x-4 border-r border-blue-200 px-6 lg:px-12 justify-center">
+                        <div className="min-w-[4rem] px-2 h-12 border-2 border-blue-300 rounded-lg flex items-center justify-center text-xl font-bold bg-white shadow-inner text-[#145a80]">
+                          {totalSummary.kw}
+                        </div>
+                        <span className="font-bold text-gray-800 text-base lg:text-lg">KW</span>
+                      </div>
+
+                      <div className="pl-6 lg:pl-12 flex items-center">
+                        <button 
+                          onClick={() => setIsVendorModalOpen(true)}
+                          disabled={selectedRows.length === 0 || inventoryStats.available < inventoryStats.required}
+                          className={`border-2 border-[#145a80] font-bold px-8 py-2.5 rounded-lg transition-all shadow-md text-base uppercase tracking-wide ${(selectedRows.length === 0 || inventoryStats.available < inventoryStats.required) ? 'bg-gray-200 text-gray-500 border-gray-300 cursor-not-allowed' : 'text-[#145a80] hover:bg-[#145a80] hover:text-white'}`}
+                        >
+                          Procure
+                        </button>
+                      </div>
+                    </div>
+                  </td>
+                </tr>
+              </thead>
               <thead className="bg-[#7fb4eb] text-white">
                 <tr>
+                  <th className="px-3 py-3 font-medium text-center">
+                    <input 
+                      type="checkbox" 
+                      className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4"
+                      checked={filteredTableData.length > 0 && selectedRows.length === filteredTableData.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedRows(filteredTableData.map((_, idx) => idx));
+                        } else {
+                          setSelectedRows([]);
+                        }
+                      }}
+                    />
+                  </th>
                   <th className="px-3 py-3 font-medium">Partner Name</th>
                   <th className="px-3 py-3 font-medium text-center">Partner Logo</th>
                   <th className="px-3 py-3 font-medium">Customer</th>
@@ -342,73 +436,71 @@ export default function CreateOrder({ onNext }) {
                   <th className="px-3 py-3 font-medium">Solar Panel</th>
                   <th className="px-3 py-3 font-medium">Inverter</th>
                   <th className="px-3 py-3 font-medium">BOS Kit</th>
-                  <th className="px-3 py-3 font-medium text-center">Generate PO</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {tableData.map((row, idx) => (
-                  <tr key={idx} className="hover:bg-gray-50">
-                    <td className="px-3 py-4 text-gray-800">{row.cpName}</td>
-                    <td className="px-3 py-4">
-                      <div className="flex justify-center">
-                        <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[7px] font-bold text-blue-700 border border-blue-200 shadow-sm overflow-hidden">
-                           CP
+                {filteredTableData.map((row, idx) => {
+                  const originalIdx = tableData.indexOf(row);
+                  const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+                  return (
+                    <tr key={idx} className="hover:bg-gray-50">
+                      <td className="px-3 py-4 text-center">
+                        <input 
+                          type="checkbox" 
+                          className="rounded text-blue-600 focus:ring-blue-500 w-4 h-4 cursor-pointer"
+                          checked={selectedRows.includes(idx)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedRows(prev => [...prev, idx]);
+                            } else {
+                              setSelectedRows(prev => prev.filter(i => i !== idx));
+                            }
+                          }}
+                        />
+                      </td>
+                      <td className="px-3 py-4 text-gray-800">{row.cpName}</td>
+                      <td className="px-3 py-4">
+                        <div className="flex justify-center">
+                          <div className="w-5 h-5 rounded-full bg-blue-100 flex items-center justify-center text-[7px] font-bold text-blue-700 border border-blue-200 shadow-sm overflow-hidden">
+                            CP
+                          </div>
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4 text-gray-800">{row.customer}</td>
-                    <td className="px-3 py-4 text-center">
-                      <button className="bg-[#0b74ba] text-white text-[10px] font-medium px-2 py-1 rounded">Customize</button>
-                    </td>
-                    <td className="px-3 py-4 space-y-1 text-gray-800">
-                      <p className="font-bold">KW: <span className="font-normal">{row.kw}</span></p>
-                      <p className="font-bold">₹: <span className="font-normal">{row.price}</span></p>
-                    </td>
-                    <td className="px-3 py-4">
-                      <div className="flex flex-col space-y-1.5">
+                      </td>
+                      <td className="px-3 py-4 text-gray-800">{row.customer}</td>
+                      <td className="px-3 py-4 text-center">
+                        <button className="bg-[#0b74ba] text-white text-[10px] font-medium px-2 py-1 rounded">Customize</button>
+                      </td>
+                      <td className="px-3 py-4 space-y-1 text-gray-800">
+                        <p className="font-bold">KW: <span className="font-normal">{row.kw}</span></p>
+                        <p className="font-bold">₹: <span className="font-normal">{row.price}</span></p>
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-col space-y-1.5">
+                          {mockBrand.slice(0, 2).map((b, i) => (
+                            <div key={i} className="flex items-center space-x-1.5">
+                              <span className={`bg-${i === 0 ? 'green' : 'blue'}-100 border border-${i === 0 ? 'green' : 'blue'}-300 text-[8px] text-${i === 0 ? 'green' : 'blue'}-700 px-1 py-0.5 rounded font-bold w-12 text-center`}>{b}</span>
+                              <span className="text-[10px] font-medium text-gray-600">{i === 0 ? '3' : '2'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-3 py-4">
+                        <div className="flex flex-col space-y-1.5">
+                          <div className="flex items-center space-x-1.5">
+                            <span className="bg-purple-100 border border-purple-300 text-[8px] text-purple-700 px-1 py-0.5 rounded font-bold w-12 text-center">Waaree</span>
+                            <span className="text-[10px] font-medium text-gray-600">1</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-4">
                         <div className="flex items-center space-x-1.5">
-                           <span className="bg-green-100 border border-green-300 text-[8px] text-green-700 px-1 py-0.5 rounded font-bold w-12 text-center">Waaree</span>
-                           <span className="text-[10px] font-medium text-gray-600">3</span>
-                        </div>
-                        <div className="flex items-center space-x-1.5">
-                           <span className="bg-blue-100 border border-blue-300 text-[8px] text-blue-700 px-1 py-0.5 rounded font-bold w-12 text-center">Adani</span>
-                           <span className="text-[10px] font-medium text-gray-600">2</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4">
-                      <div className="flex flex-col space-y-1.5">
-                        <div className="flex items-center space-x-1.5">
-                           <span className="bg-purple-100 border border-purple-300 text-[8px] text-purple-700 px-1 py-0.5 rounded font-bold w-12 text-center">Waaree</span>
-                           <span className="text-[10px] font-medium text-gray-600">1</span>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-4">
-                       <div className="flex items-center space-x-1.5">
                           <span className="bg-blue-100 border border-blue-300 text-[8px] text-blue-700 px-1 py-0.5 rounded font-bold w-12 text-center">Adani</span>
                           <span className="text-[10px] font-medium text-gray-600">1</span>
-                       </div>
-                    </td>
-                    <td className="px-3 py-4 text-center">
-                      <button 
-                        onClick={() => {
-                          if ((row.solarPanelInventory || 0) > 0) {
-                            setSelectedRowIndex(idx);
-                            setIsVendorModalOpen(true);
-                          } else {
-                            setToast({ message: 'Insufficient Solar Panel Inventory!', type: 'error' });
-                            setTimeout(() => setToast(null), 3000);
-                          }
-                        }}
-                        disabled={(row.solarPanelInventory || 0) === 0}
-                        className={`${(row.solarPanelInventory || 0) === 0 ? 'bg-gray-400 cursor-not-allowed opacity-50' : 'bg-[#2cb25d] hover:bg-green-600'} text-white font-bold text-[10px] px-3 py-1.5 rounded transition-colors`}
-                      >
-                        Generate
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -420,11 +512,11 @@ export default function CreateOrder({ onNext }) {
             <div className="flex justify-between items-center mb-4">
               <h2 className="text-gray-800 font-bold text-[15px]">Select Vendor Section</h2>
             </div>
-            
+
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
               {dashboardData.vendors?.map((vendor, idx) => (
                 <div key={idx} className="bg-white rounded-lg border-2 shadow-sm p-4 relative flex flex-col justify-between" style={{ borderColor: idx === 0 ? '#ef4444' : idx === 1 ? '#0ea5e9' : idx === 2 ? '#eab308' : '#22c55e' }}>
-                  
+
                   <div className="mb-4">
                     <h3 className="font-bold text-gray-800 mb-4">{vendor.name}</h3>
                     <div className="flex justify-between text-center mb-3">
@@ -438,8 +530,8 @@ export default function CreateOrder({ onNext }) {
                       </div>
                     </div>
                     <div className="text-center mb-4">
-                       <p className="text-[10px] text-gray-500">Total Panels</p>
-                       <p className="font-bold text-md text-[#0b74ba]">{vendor.panels} Panels</p>
+                      <p className="text-[10px] text-gray-500">Total Panels</p>
+                      <p className="font-bold text-md text-[#0b74ba]">{vendor.panels} Panels</p>
                     </div>
                     <div className="flex justify-between text-center border-t border-gray-100 pt-3">
                       <div>
@@ -455,7 +547,7 @@ export default function CreateOrder({ onNext }) {
 
                   <div>
                     <div className="flex justify-between mb-4">
-                      <button 
+                      <button
                         onClick={() => setIsVendorModalOpen(true)}
                         className="bg-[#0b74ba] hover:bg-blue-700 transition text-white text-[9px] font-bold px-2 py-1 rounded shadow-sm"
                       >
@@ -464,19 +556,19 @@ export default function CreateOrder({ onNext }) {
                       <button className="bg-[#2cb25d] text-white text-[9px] font-bold px-2 py-1 rounded">Download P.O</button>
                     </div>
                     <div className="bg-gray-50 p-2 rounded border text-[10px]">
-                       <p className="text-gray-500 mb-1">Vendors & Payment Status</p>
-                       <div className="flex justify-between items-center mb-1">
-                          <span className="font-semibold text-gray-700">Accept Order?</span>
-                          {vendor.accepted ? (
-                            <span className="bg-green-500 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">Accepted</span>
-                          ) : (
-                            <span className="bg-yellow-400 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">Pending</span>
-                          )}
-                       </div>
-                       <div className="flex justify-between items-center">
-                          <span className="font-bold text-gray-800">{vendor.supplier}</span>
-                          <span className="bg-yellow-400 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">{vendor.paymentStatus}</span>
-                       </div>
+                      <p className="text-gray-500 mb-1">Vendors & Payment Status</p>
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="font-semibold text-gray-700">Accept Order?</span>
+                        {vendor.accepted ? (
+                          <span className="bg-green-500 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">Accepted</span>
+                        ) : (
+                          <span className="bg-yellow-400 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">Pending</span>
+                        )}
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="font-bold text-gray-800">{vendor.supplier}</span>
+                        <span className="bg-yellow-400 text-white px-2 py-0.5 rounded-sm font-bold text-[8px]">{vendor.paymentStatus}</span>
+                      </div>
                     </div>
                   </div>
 
@@ -499,20 +591,20 @@ export default function CreateOrder({ onNext }) {
             </div>
             <div className="p-5">
               <p className="text-sm text-gray-600 mb-4">Please enter the received payment amount and upload the receipt to confirm the order.</p>
-              
+
               <div className="mb-4">
                 <label className="block text-sm font-semibold text-gray-700 mb-1">Payment Received Amount (₹)</label>
-                <input 
-                  type="number" 
-                  placeholder="Enter partial or full amount" 
+                <input
+                  type="number"
+                  placeholder="Enter partial or full amount"
                   className="w-full border border-gray-300 rounded-lg p-2.5 focus:outline-none focus:border-blue-500"
                 />
               </div>
 
               <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 flex flex-col items-center justify-center bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer relative">
-                <input 
-                  type="file" 
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" 
+                <input
+                  type="file"
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
                   onChange={(e) => setSelectedFile(e.target.files[0])}
                   accept="image/*,.pdf"
                 />
@@ -529,8 +621,8 @@ export default function CreateOrder({ onNext }) {
             </div>
             <div className="bg-gray-50 px-4 py-3 border-t flex justify-end space-x-2">
               <button onClick={() => setIsModalOpen(false)} className="px-4 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded">Cancel</button>
-              <button 
-                onClick={handleUploadSubmit} 
+              <button
+                onClick={handleUploadSubmit}
                 disabled={!selectedFile}
                 className={`px-4 py-1.5 text-sm font-bold text-white rounded transition-colors ${selectedFile ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
               >
@@ -548,7 +640,7 @@ export default function CreateOrder({ onNext }) {
             {/* Header */}
             <div className="flex justify-between items-center p-5 border-b border-gray-200">
               <h2 className="text-xl font-bold text-[#1a1a2e]">Select Vendors & View Inventory</h2>
-              <button 
+              <button
                 onClick={() => setIsVendorModalOpen(false)}
                 className="text-gray-500 hover:text-gray-800 focus:outline-none transition-colors"
               >
@@ -565,20 +657,18 @@ export default function CreateOrder({ onNext }) {
                       <th className="px-4 py-3 font-semibold w-12 text-center"></th>
                       <th className="px-4 py-3 font-semibold">Vendor</th>
                       <th className="px-4 py-3 font-semibold">Solar Panels</th>
-                      <th className="px-4 py-3 font-semibold">Inverters</th>
-                      <th className="px-4 py-3 font-semibold">BOS Kits</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
                     {inventoryVendors.map((vendor) => (
-                      <tr 
-                        key={vendor.id} 
+                      <tr
+                        key={vendor.id}
                         className={`hover:bg-blue-50 transition-colors cursor-pointer ${selectedSupplyVendor === vendor.id ? 'bg-blue-50' : ''}`}
                         onClick={() => setSelectedSupplyVendor(vendor.id)}
                       >
                         <td className="px-4 py-4 text-center">
-                          <input 
-                            type="radio" 
+                          <input
+                            type="radio"
                             name="vendor_select"
                             className="w-4 h-4 text-blue-600 border-gray-300 focus:ring-blue-500"
                             checked={selectedSupplyVendor === vendor.id}
@@ -594,18 +684,6 @@ export default function CreateOrder({ onNext }) {
                             {vendor.panels.breakDown.map((line, i) => <p key={i}>{line}</p>)}
                           </div>
                         </td>
-                        <td className="px-4 py-4">
-                          <p className="font-bold text-[13px] text-gray-800 mb-1">{vendor.inverters.total}</p>
-                          <div className="text-[10px] text-gray-500 space-y-0.5">
-                            {vendor.inverters.breakDown.map((line, i) => <p key={i}>{line}</p>)}
-                          </div>
-                        </td>
-                        <td className="px-4 py-4">
-                          <p className="font-bold text-[13px] text-gray-800 mb-1">{vendor.bosKits.total}</p>
-                          <div className="text-[10px] text-gray-500 space-y-0.5">
-                            {vendor.bosKits.breakDown.map((line, i) => <p key={i}>{line}</p>)}
-                          </div>
-                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -615,21 +693,40 @@ export default function CreateOrder({ onNext }) {
 
             {/* Footer */}
             <div className="flex justify-end space-x-3 p-5 border-t border-gray-200 bg-gray-50">
-              <button 
+              <button
                 onClick={() => setIsVendorModalOpen(false)}
                 className="px-5 py-2 text-sm font-semibold text-white bg-gray-500 rounded shadow-sm hover:bg-gray-600 transition"
               >
                 Close
               </button>
-              <button 
+              <button
                 onClick={() => {
-                  if(selectedSupplyVendor && selectedRowIndex !== null) {
-                    const updatedData = tableData.filter((_, idx) => idx !== selectedRowIndex);
+                  if (selectedSupplyVendor) {
+                    const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
+
+                    const selectedData = selectedRows.map(idx => filteredTableData[idx]);
+
+                    if (setSharedOrderData && selectedData.length > 0) {
+                      const newOrders = selectedData.map(row => ({
+                        id: `ORD${Math.floor(1000 + Math.random() * 9000)}`,
+                        customer: row.customer || 'Customer',
+                        paymentMode: 'Bank Transfer',
+                        utr: 'Pending',
+                        status: 'Pending',
+                        vendorName: vendor.name,
+                        equipment: {
+                          panels: vendor.panels.total
+                        }
+                      }));
+                      setSharedOrderData(prev => [...prev, ...newOrders]);
+                    }
+
+                    const updatedData = tableData.filter(row => !selectedData.includes(row));
                     setTableData(updatedData);
-                    setToast({ message: 'Order has been moved to Procurement Stage!', type: 'success' });
-                    setTimeout(() => setToast(null), 4000);
+                    setToast({ message: `${selectedData.length} Order(s) have been moved to Procurement Stage!`, type: 'success' });
                     setIsVendorModalOpen(false);
                     setSelectedRowIndex(null);
+                    setSelectedRows([]);
                     setSelectedSupplyVendor(null);
                     if (onNext) {
                       setTimeout(() => {
@@ -641,7 +738,7 @@ export default function CreateOrder({ onNext }) {
                 className={`px-5 py-2 text-sm font-semibold text-white rounded shadow-sm transition ${selectedSupplyVendor ? 'bg-[#0b74ba] hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
                 disabled={!selectedSupplyVendor}
               >
-                Proceed with Selected
+                Generate PO
               </button>
             </div>
           </div>
