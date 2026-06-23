@@ -7,7 +7,7 @@ import VendorPay from './order-journey/VendorPay';
 import ChannelPartnerPay from './order-journey/ChannelPartnerPay';
 import DeliveryManagement from './order-journey/DeliveryManagement';
 import ProcurementPlan from '../ProcurementPlan';
-import { Check, ChevronRight, Smartphone, FileText, Package, Truck } from 'lucide-react';
+import { Check, ChevronRight, Smartphone, FileText, Package, Truck, Eye, X } from 'lucide-react';
 
 const componentRegistry = {
   'CreateOrder': CreateOrder,
@@ -17,10 +17,11 @@ const componentRegistry = {
   'LoanOrders': LoanOrders,
   'ChannelPartnerPay': ChannelPartnerPay,
   'ProcurementPlaceholder': ProcurementPlan,
-  'GenerateOrderNumberPlaceholder': function GenerateOrderNumber({ onNext, sharedOrderData, setSharedOrderData }) {
+  'GenerateOrderNumberPlaceholder': function GenerateOrderNumber({ onNext, sharedOrderData, setSharedOrderData, dashboardData, setDashboardData }) {
     const [orders, setOrders] = React.useState([]);
     const [overdueFilter, setOverdueFilter] = React.useState('');
     const [pendingFilter, setPendingFilter] = React.useState('');
+    const [selectedOrderForSummary, setSelectedOrderForSummary] = React.useState(null);
 
     useEffect(() => {
       if (sharedOrderData && sharedOrderData.length > 0) {
@@ -29,14 +30,18 @@ const componentRegistry = {
          setOrders([
            { 
              id: 'ORD001', 
-             customer: 'Green Energy Setup', 
+             customer: 'Group of 2 Projects', 
              vendorName: 'Mayank Solar Distributors',
              equipment: { panels: '120 Panels', inverters: '25 Units', bos: '30 Kits' },
              paymentMode: 'Bank Transfer', 
-             utr: 'UTR123', 
+             utr: 'Pending', 
              status: 'Pending',
              pendingDays: 12,
-             overdueDays: 5
+             overdueDays: 5,
+             subCustomers: [
+               { name: 'Green Energy Setup', partner: 'Super Admin', pendingDays: 12 },
+               { name: 'EcoPower Industrial', partner: 'Super Admin', pendingDays: 10 }
+             ]
            },
            { 
              id: 'ORD002', 
@@ -45,9 +50,12 @@ const componentRegistry = {
              equipment: { panels: '50 Panels', inverters: '10 Units', bos: '10 Kits' },
              paymentMode: 'Credit', 
              utr: 'UTR456', 
-             status: 'Pending',
+             status: 'Paid',
              pendingDays: 3,
-             overdueDays: 0
+             overdueDays: 0,
+             subCustomers: [
+               { name: 'Solar Tech Solutions', partner: 'N/A', pendingDays: 3 }
+             ]
            },
            { 
              id: 'ORD003', 
@@ -55,10 +63,13 @@ const componentRegistry = {
              vendorName: 'Mayank Solar Distributors',
              equipment: { panels: '200 Panels', inverters: '40 Units', bos: '50 Kits' },
              paymentMode: 'Bank Transfer', 
-             utr: 'UTR789', 
+             utr: 'Pending', 
              status: 'Pending',
              pendingDays: 20,
-             overdueDays: 15
+             overdueDays: 15,
+             subCustomers: [
+               { name: 'Eco Power Co', partner: 'N/A', pendingDays: 20 }
+             ]
            }
          ]);
       }
@@ -154,7 +165,13 @@ const componentRegistry = {
             <tbody className="divide-y divide-gray-100">
               {filteredOrders.map((order) => (
                 <tr key={order.id} className="hover:bg-gray-50 transition">
-                  <td className="px-4 py-4 font-bold text-gray-800">{order.id}</td>
+                  <td className="px-4 py-4">
+                    {order.status === 'Pending' ? (
+                      <span className="text-yellow-600 font-bold italic text-xs bg-yellow-50 px-2.5 py-1 rounded border border-yellow-200 shadow-sm">Pending</span>
+                    ) : (
+                      <span className="font-bold text-gray-800">{order.id}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-4">
                      <p className="text-gray-800 font-medium mb-1">{order.customer}</p>
                      <p className="text-[10px] text-gray-500 font-bold bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded inline-block shadow-sm">
@@ -184,24 +201,25 @@ const componentRegistry = {
                     }`}>
                       {order.status}
                     </span>
-                    {(order.pendingDays > 0 || order.overdueDays > 0) && (
-                      <div className="mt-2 space-y-1">
-                        {order.pendingDays > 0 && <p className="text-[10px] text-orange-600 font-semibold">Pending: {order.pendingDays} days</p>}
-                        {order.overdueDays > 0 && <p className="text-[10px] text-red-600 font-semibold">Overdue: {order.overdueDays} days</p>}
-                      </div>
-                    )}
                   </td>
                   <td className="px-4 py-4">
-                    {order.status === 'Pending' ? (
-                      <div className="flex justify-center space-x-2">
-                        <button onClick={() => handleApprove(order.id)} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded text-[11px] font-bold transition shadow-sm uppercase tracking-wider">Approve</button>
-                        <button onClick={() => handleReject(order.id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded text-[11px] font-bold transition shadow-sm uppercase tracking-wider">Reject</button>
-                      </div>
-                    ) : (
-                      <div className="flex justify-center">
-                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider">Processed</span>
-                      </div>
-                    )}
+                    <div className="flex justify-center items-center space-x-2">
+                      <button 
+                        onClick={() => setSelectedOrderForSummary(order)}
+                        className="p-1.5 text-[#0b74ba] hover:bg-blue-100 rounded transition border border-[#0b74ba]"
+                        title="View PO Summary"
+                      >
+                        <Eye size={16} />
+                      </button>
+                      {order.status === 'Pending' ? (
+                        <>
+                          <button onClick={() => handleApprove(order.id)} className="bg-green-500 hover:bg-green-600 text-white px-3 py-1.5 rounded text-[11px] font-bold transition shadow-sm uppercase tracking-wider">Approve</button>
+                          <button onClick={() => handleReject(order.id)} className="bg-red-500 hover:bg-red-600 text-white px-3 py-1.5 rounded text-[11px] font-bold transition shadow-sm uppercase tracking-wider">Reject</button>
+                        </>
+                      ) : (
+                        <span className="text-gray-400 text-xs font-bold uppercase tracking-wider ml-2">Processed</span>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -214,6 +232,306 @@ const componentRegistry = {
              Proceed to Procurement <ChevronRight size={16} className="ml-1"/>
            </button>
         </div>
+
+        {/* PO Summary Modal */}
+        {selectedOrderForSummary && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl overflow-hidden animate-fade-in border border-gray-100 flex flex-col max-h-[90vh]">
+              <div className="flex justify-between items-center p-5 border-b border-gray-200 bg-blue-50">
+                <div className="flex items-center space-x-3">
+                  <h2 className="text-xl font-bold text-[#145a80] flex items-center">
+                    <FileText size={24} className="mr-2" /> PO Summary - {selectedOrderForSummary.status === 'Pending' ? 'Pending' : selectedOrderForSummary.id}
+                  </h2>
+                  <span className={`px-3 py-1 rounded-full text-xs font-bold shadow-sm border ${
+                    selectedOrderForSummary.status === 'Paid' ? 'bg-green-100 text-green-700 border-green-300' :
+                    selectedOrderForSummary.status === 'Rejected' ? 'bg-red-100 text-red-700 border-red-300' :
+                    'bg-yellow-100 text-yellow-700 border-yellow-300'
+                  }`}>
+                    {selectedOrderForSummary.status === 'Paid' ? 'Success' : selectedOrderForSummary.status}
+                  </span>
+                </div>
+                <button
+                  onClick={() => setSelectedOrderForSummary(null)}
+                  className="text-gray-500 hover:text-red-500 transition-colors"
+                >
+                  <X size={24} />
+                </button>
+              </div>
+              <div className="p-6 space-y-4 text-sm overflow-y-auto flex-1 custom-scrollbar">
+                <div className="grid grid-cols-1 gap-4 items-start">
+                  <div className="bg-gray-50 p-3 rounded border border-gray-100 shadow-sm">
+                    <p className="text-xs text-gray-500 font-bold mb-1">Customer</p>
+                    <p className="font-semibold text-gray-800">{selectedOrderForSummary.customer}</p>
+                    {selectedOrderForSummary.subCustomers && selectedOrderForSummary.subCustomers.length > 1 && (
+                      <div className="mt-2 pt-2 border-t border-gray-200">
+                        <p className="text-[10px] text-gray-500 font-semibold mb-2">Included Projects & Payment Status:</p>
+                        <div className="border border-gray-200 rounded overflow-hidden">
+                          <table className="w-full text-left text-[11px] text-gray-700">
+                            <thead className="bg-gray-100">
+                              <tr>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600">Customer Name</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600">Partner Name</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600 text-center">Capacity</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600">Total Amount</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600">Paid Amount</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600 text-right">Status</th>
+                                <th className="px-2 py-1.5 font-semibold text-gray-600 text-center">Action</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100 bg-white">
+                              {selectedOrderForSummary.subCustomers.map((c, i) => {
+                                const custName = typeof c === 'string' ? c : c.name;
+                                const partnerName = typeof c === 'string' ? 'N/A' : (c.partner || 'N/A');
+                                const pendingDays = typeof c === 'object' && c.pendingDays !== undefined ? c.pendingDays : selectedOrderForSummary.pendingDays;
+                                const isSuccess = selectedOrderForSummary.status === 'Paid';
+                                const totalKw = selectedOrderForSummary.subCustomers.reduce((acc, sub) => acc + (parseFloat(sub.kw) || 0), 0);
+                                const hasPoAmount = selectedOrderForSummary.amount && selectedOrderForSummary.amount.base > 0;
+                                const poBase = hasPoAmount ? selectedOrderForSummary.amount.base : 0;
+                                const poGst = hasPoAmount ? (selectedOrderForSummary.amount.gst || 0) : 0;
+                                const poTotal = poBase + (poBase * poGst / 100);
+                                const poAmountForCustomer = hasPoAmount
+                                  ? (parseFloat(c.kw || 0) / totalKw) * poTotal
+                                  : (parseFloat(String(c.price || '0').replace(/[^0-9.]/g, '')) || 0);
+                                const totalAmount = poAmountForCustomer;
+                                const isSubCustomerPaid = c.isPaid !== undefined ? c.isPaid : isSuccess;
+                                const paidAmount = isSubCustomerPaid ? totalAmount : 0;
+                                
+                                return (
+                                  <tr key={i} className="hover:bg-gray-50 transition-colors">
+                                    <td className="px-2 py-1.5 font-medium">{custName}</td>
+                                    <td className="px-2 py-1.5 text-gray-500">{partnerName}</td>
+                                    <td className="px-2 py-1.5 text-gray-600 text-center font-medium bg-gray-50 border-x border-white">{c.kw || '0'} kW</td>
+                                    <td className="px-2 py-1.5 font-semibold text-gray-800">
+                                      ₹ {totalAmount.toLocaleString('en-IN')}
+                                    </td>
+                                    <td className="px-2 py-1.5 font-semibold text-green-600">
+                                      <div className="flex items-center space-x-2">
+                                        <span>₹ {paidAmount.toLocaleString('en-IN')}</span>
+                                        <select
+                                          className="text-[10px] border border-gray-300 rounded px-1 py-0.5 bg-white text-gray-700 font-normal focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                          value={isSubCustomerPaid ? 'Paid' : 'Unpaid'}
+                                          onChange={(e) => {
+                                            const val = e.target.value === 'Paid';
+                                            const updatedSubCustomers = [...selectedOrderForSummary.subCustomers];
+                                            updatedSubCustomers[i] = { ...c, isPaid: val, paidAmount: val ? totalAmount : 0 };
+                                            const updatedOrder = { ...selectedOrderForSummary, subCustomers: updatedSubCustomers };
+                                            setSelectedOrderForSummary(updatedOrder);
+                                            const updatedOrders = orders.map(o => o.id === selectedOrderForSummary.id ? updatedOrder : o);
+                                            setOrders(updatedOrders);
+                                            if (setSharedOrderData) setSharedOrderData(updatedOrders);
+                                          }}
+                                        >
+                                          <option value="Unpaid">Unpaid</option>
+                                          <option value="Paid">Paid</option>
+                                        </select>
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-right">
+                                      <div className="flex flex-col items-end">
+                                        <span className={`px-2 py-0.5 rounded text-[9px] font-bold border ${
+                                          isSuccess ? 'bg-green-50 text-green-700 border-green-200' : 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                        }`}>
+                                          {isSuccess ? 'Success' : 'Pending'}
+                                        </span>
+                                        {!isSuccess && (
+                                          <>
+                                            {pendingDays > 0 && (
+                                              <span className="text-[9px] text-orange-600 font-bold mt-0.5">Pending: {pendingDays} Days</span>
+                                            )}
+                                          </>
+                                        )}
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-1.5 text-center">
+                                      <button 
+                                        onClick={() => {
+                                          const cancelledSubCustomer = c;
+                                          const updatedSubCustomers = [...selectedOrderForSummary.subCustomers];
+                                          updatedSubCustomers.splice(i, 1);
+                                          const updatedOrder = { ...selectedOrderForSummary, subCustomers: updatedSubCustomers };
+                                          setSelectedOrderForSummary(updatedOrder);
+                                          
+                                          const updatedOrders = orders.map(o => o.id === selectedOrderForSummary.id ? updatedOrder : o);
+                                          setOrders(updatedOrders);
+                                          if (setSharedOrderData) setSharedOrderData(updatedOrders);
+
+                                          // Add back to CreateOrder tableData
+                                          if (setDashboardData && cancelledSubCustomer) {
+                                            const restoredRow = {
+                                              ...cancelledSubCustomer,
+                                              status: 'Pending'
+                                            };
+                                            setDashboardData(prev => ({ 
+                                              ...prev, 
+                                              tableData: [...(prev?.tableData || []), restoredRow] 
+                                            }));
+                                          }
+                                        }}
+                                        className="text-red-500 hover:bg-red-50 p-1 rounded transition mx-auto flex items-center justify-center"
+                                        title="Cancel Project"
+                                      >
+                                        <X size={14} />
+                                      </button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                            <tfoot className="bg-gray-50 font-bold border-t border-gray-200">
+                              {(() => {
+                                const totalKw = selectedOrderForSummary.subCustomers.reduce((acc, sub) => acc + (parseFloat(sub.kw) || 0), 0);
+                                const hasPoAmount = selectedOrderForSummary.amount && selectedOrderForSummary.amount.base > 0;
+                                const poBase = hasPoAmount ? selectedOrderForSummary.amount.base : 0;
+                                const poGst = hasPoAmount ? (selectedOrderForSummary.amount.gst || 0) : 0;
+                                const poTotal = poBase + (poBase * poGst / 100);
+
+                                const calculatedPoTotal = selectedOrderForSummary.subCustomers.reduce((acc, c) => {
+                                  const poAmountForCustomer = hasPoAmount
+                                    ? (parseFloat(c.kw || 0) / totalKw) * poTotal
+                                    : (parseFloat(String(c.price || '0').replace(/[^0-9.]/g, '')) || 0);
+                                  return acc + poAmountForCustomer;
+                                }, 0);
+
+                                const calculatedPaidTotal = selectedOrderForSummary.subCustomers.reduce((acc, c) => {
+                                  const poAmountForCustomer = hasPoAmount
+                                    ? (parseFloat(c.kw || 0) / totalKw) * poTotal
+                                    : (parseFloat(String(c.price || '0').replace(/[^0-9.]/g, '')) || 0);
+                                  const cPaid = c.isPaid !== undefined ? c.isPaid : (selectedOrderForSummary.status === 'Paid');
+                                  return acc + (cPaid ? poAmountForCustomer : 0);
+                                }, 0);
+
+                                const paidPercentage = calculatedPoTotal > 0 ? ((calculatedPaidTotal / calculatedPoTotal) * 100).toFixed(1) : 0;
+                                const pendingPercentage = calculatedPoTotal > 0 ? (100 - paidPercentage).toFixed(1) : 0;
+
+                                return (
+                                  <tr>
+                                    <td colSpan="3" className="px-2 py-3 text-right text-gray-400 uppercase tracking-wider text-[10px]">Summary:</td>
+                                    <td className="px-2 py-3 text-blue-700 text-[12px]">
+                                      <div className="flex items-center space-x-1.5">
+                                        <span className="text-[9px] text-gray-500 uppercase tracking-wider">PO Total:</span>
+                                        <span>₹ {calculatedPoTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-2 py-3 text-green-700 text-[12px]">
+                                      <div className="flex items-center space-x-1.5">
+                                        <span className="text-[9px] text-gray-500 uppercase tracking-wider">Customer Paid:</span>
+                                        <span>₹ {calculatedPaidTotal.toLocaleString('en-IN', { maximumFractionDigits: 0 })}</span>
+                                      </div>
+                                    </td>
+                                    <td colSpan="2" className="px-2 py-3 text-right">
+                                      <div className="flex justify-end items-center space-x-2 text-[10px]">
+                                        <span className="bg-green-100 text-green-800 px-2 py-1 rounded shadow-sm border border-green-200">
+                                          {parseFloat(paidPercentage)}% Paid
+                                        </span>
+                                        <span className="bg-orange-100 text-orange-800 px-2 py-1 rounded shadow-sm border border-orange-200">
+                                          {parseFloat(pendingPercentage)}% Pending
+                                        </span>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                );
+                              })()}
+                            </tfoot>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* <div className="bg-gray-50 p-3 rounded border border-gray-100 shadow-sm">
+                    <p className="text-xs text-gray-500 font-bold mb-1">Vendor</p>
+                    <p className="font-semibold text-gray-800">{selectedOrderForSummary.vendorName || 'N/A'}</p>
+                  </div> */}
+                  {/* <div className="bg-gray-50 p-3 rounded border border-gray-100 shadow-sm">
+                    <p className="text-xs text-gray-500 font-bold mb-1">Payment Details</p>
+                    <p className="font-semibold text-gray-800">{selectedOrderForSummary.paymentMode}</p>
+                    {selectedOrderForSummary.utr && <p className="text-[10px] text-gray-500 font-mono mt-0.5 font-bold">UTR: {selectedOrderForSummary.utr}</p>}
+                  </div> */}
+                </div>
+                
+                {/* <h3 className="font-bold text-gray-800 mt-6 border-b pb-2">Equipment Procurement</h3>
+                {selectedOrderForSummary.equipment ? (
+                  <div className="space-y-4">
+                    <div className="bg-blue-50 border border-blue-100 p-5 rounded-lg grid grid-cols-3 gap-4 text-center">
+                      <div className="bg-white p-3 rounded shadow-sm border border-blue-50">
+                        <p className="text-xs text-blue-500 font-bold mb-1 uppercase tracking-wider">Panels</p>
+                        <p className="font-bold text-blue-900 text-lg">{selectedOrderForSummary.equipment.panels || 'N/A'}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded shadow-sm border border-blue-50">
+                        <p className="text-xs text-blue-500 font-bold mb-1 uppercase tracking-wider">Inverters</p>
+                        <p className="font-bold text-blue-900 text-lg">{selectedOrderForSummary.equipment.inverters || 'N/A'}</p>
+                      </div>
+                      <div className="bg-white p-3 rounded shadow-sm border border-blue-50">
+                        <p className="text-xs text-blue-500 font-bold mb-1 uppercase tracking-wider">BOS Kit</p>
+                        <p className="font-bold text-blue-900 text-lg">{selectedOrderForSummary.equipment.bos || 'N/A'}</p>
+                      </div>
+                    </div>
+                    
+                    {selectedOrderForSummary.panelDetails && (
+                      <div className="bg-gray-50 border border-gray-200 p-4 rounded-lg">
+                        <h4 className="text-xs font-bold text-gray-700 mb-3 uppercase tracking-wider">Panel Specifications</h4>
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase">Technology</p>
+                            <p className="font-semibold text-gray-800">{selectedOrderForSummary.panelDetails.technology}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase">Wattage</p>
+                            <p className="font-semibold text-gray-800">{selectedOrderForSummary.panelDetails.wattage}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] text-gray-500 uppercase">Total Capacity</p>
+                            <p className="font-semibold text-gray-800">{selectedOrderForSummary.panelDetails.totalCapacity} W</p>
+                          </div>
+                          {selectedOrderForSummary.amount && (
+                            <div>
+                              <p className="text-[10px] text-gray-500 uppercase">Estimated Amount</p>
+                              <p className="font-bold text-green-600">
+                                ₹ {(selectedOrderForSummary.amount.base + (selectedOrderForSummary.amount.base * selectedOrderForSummary.amount.gst / 100)).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-[10px] text-gray-500 uppercase mb-1">Brand Breakdown</p>
+                          <div className="flex flex-wrap gap-2">
+                            {Object.entries(selectedOrderForSummary.panelDetails.brands || {}).map(([brand, count]) => (
+                              <span key={brand} className="bg-white border border-gray-200 px-2 py-0.5 rounded text-xs shadow-sm">
+                                <span className="font-bold text-gray-700">{brand}:</span> <span className="text-blue-700 font-bold">{count}</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-gray-500 italic">No equipment details available.</p>
+                )} */}
+              </div>
+              <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end space-x-3">
+                {(() => {
+                  const isFullyPaid = selectedOrderForSummary.subCustomers && 
+                                      selectedOrderForSummary.subCustomers.length > 0 && 
+                                      selectedOrderForSummary.subCustomers.every(c => c.isPaid || (c.isPaid === undefined && selectedOrderForSummary.status === 'Paid'));
+                  return isFullyPaid ? (
+                    <button
+                      onClick={() => alert('PI Generated Successfully!')}
+                      className="px-5 py-2 text-sm font-bold text-white bg-green-600 rounded shadow-sm hover:bg-green-700 transition flex items-center"
+                    >
+                      Generate PI
+                    </button>
+                  ) : null;
+                })()}
+                <button
+                  onClick={() => setSelectedOrderForSummary(null)}
+                  className="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded shadow-sm hover:bg-blue-700 transition"
+                >
+                  Close Summary
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )},
@@ -567,6 +885,7 @@ export default function OrderJourney() {
               sharedOrderData={sharedOrderData} 
               setSharedOrderData={setSharedOrderData} 
               dashboardData={dashboardData}
+              setDashboardData={setDashboardData}
            />}
         </div>
       </div>

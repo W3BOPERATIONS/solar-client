@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { ChevronDown, Home, Building2, Zap, X, Upload, Check, FileText } from 'lucide-react';
+import { ChevronDown, Home, Building2, Zap, X, Upload, Check, FileText, AlertTriangle } from 'lucide-react';
 import api from '../../../../api/axios';
 import { getAllManufacturers } from '../../../../services/brand/brandApi';
 
@@ -40,7 +40,7 @@ const inventoryVendors = [
   }
 ];
 
-export default function CreateOrder({ onNext, setSharedOrderData, dashboardData: initialDashboardData }) {
+export default function CreateOrder({ onNext, setSharedOrderData, dashboardData: initialDashboardData, setDashboardData: setGlobalDashboardData }) {
   const [dashboardData, setDashboardData] = useState({
     headerCounters: { todayTasks: 0, pendingTasks: 0, overdueTasks: 0 },
     locationCounters: [],
@@ -146,6 +146,8 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
   const [enteredPrice, setEnteredPrice] = useState('');
   const [tentativeDays, setTentativeDays] = useState('');
   const [gstPercent, setGstPercent] = useState('');
+  const [isDoubleConfirmOpen, setIsDoubleConfirmOpen] = useState(false);
+  const [vendorEmail, setVendorEmail] = useState('');
 
 
 
@@ -190,6 +192,58 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
     };
   }, [panelBrandFilter, selectedRows, filteredTableData, tableData, totalSummary.panels]);
 
+  const selectedOrderDetails = React.useMemo(() => {
+    const requiredBreakdown = {};
+    const techs = new Set();
+    const watts = new Set();
+    let totalCalculatedWattage = 0;
+    
+    if (selectedRows.length > 0) {
+      selectedRows.forEach(idx => {
+        const row = filteredTableData[idx];
+        if (!row) return;
+        const originalIdx = tableData.indexOf(row);
+        const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
+        const mockTech = originalIdx === 0 ? 'Monocrystalline' : originalIdx === 1 ? 'Polycrystalline' : 'Bifacial';
+        const mockWatt = originalIdx === 0 ? '540W' : originalIdx === 1 ? '500W' : '550W';
+        
+        techs.add(mockTech);
+        watts.add(mockWatt);
+        
+        let panelsForThisRow = 0;
+        if (panelBrandFilter !== 'All') {
+          const brandIndex = mockBrand.indexOf(panelBrandFilter);
+          if (brandIndex === 0) {
+            panelsForThisRow = 3;
+            requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 3;
+          } else if (brandIndex === 1) {
+            panelsForThisRow = 2;
+            requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 2;
+          } else if (brandIndex > 1) {
+            panelsForThisRow = 1;
+            requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 1;
+          }
+        } else {
+           panelsForThisRow = 5;
+           if (mockBrand[0]) requiredBreakdown[mockBrand[0]] = (requiredBreakdown[mockBrand[0]] || 0) + 5;
+        }
+        totalCalculatedWattage += panelsForThisRow * (parseInt(mockWatt) || 0);
+      });
+    } else {
+       requiredBreakdown['Mixed Brands'] = totalSummary.panels;
+    }
+    
+    const techString = technologyFilter !== 'All' ? technologyFilter : Array.from(techs).join(', ') || 'Mixed Technology';
+    const wattString = wattageFilter !== 'All' ? wattageFilter : Array.from(watts).join(', ') || 'Mixed Wattage';
+
+    return {
+      requiredBreakdown,
+      techString,
+      wattString,
+      totalCalculatedWattage
+    };
+  }, [selectedRows, filteredTableData, tableData, panelBrandFilter, technologyFilter, wattageFilter, totalSummary.panels]);
+
   const handleConfirmClick = (index) => {
     setSelectedRowIndex(index);
     setSelectedFile(null);
@@ -204,6 +258,64 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
       setTimeout(() => setToast(null), 4000);
     }
     setIsModalOpen(false);
+  };
+
+  const handleFinalConfirm = () => {
+    const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
+    const selectedData = selectedRows.map(idx => filteredTableData[idx]);
+
+    if (setSharedOrderData && selectedData.length > 0) {
+      const groupedOrder = {
+        id: `PO${Math.floor(100000 + Math.random() * 900000)}`,
+        customer: selectedData.length > 1 ? `Group of ${selectedData.length} Projects` : (selectedData[0].customer || 'Customer'),
+        subCustomers: selectedData.map(row => ({ ...row, name: row.customer, partner: row.cpName || 'N/A' })),
+        paymentMode: 'Bank Transfer',
+        utr: 'Pending',
+        status: 'Pending',
+        vendorName: vendor.name,
+        pendingDays: Math.floor(Math.random() * 8) + 2, // Mock 2-9 days pending
+        overdueDays: Math.random() > 0.5 ? Math.floor(Math.random() * 5) + 1 : 0, // 50% chance of 1-5 days overdue
+        equipment: {
+          panels: `${inventoryStats.required} Panels`,
+          inverters: `${selectedData.length} Units`,
+          bos: `${selectedData.length} Kits`
+        },
+        panelDetails: {
+          brands: selectedOrderDetails.requiredBreakdown,
+          technology: selectedOrderDetails.techString,
+          wattage: selectedOrderDetails.wattString,
+          totalCapacity: selectedOrderDetails.totalCalculatedWattage
+        },
+        amount: {
+          base: enteredPrice ? (selectedOrderDetails.totalCalculatedWattage * parseFloat(enteredPrice)) : 0,
+          gst: gstPercent ? parseFloat(gstPercent) : 0
+        }
+      };
+      
+      setSharedOrderData(prev => [...prev, groupedOrder]);
+    }
+
+    const updatedData = tableData.filter(row => !selectedData.includes(row));
+    setTableData(updatedData);
+    if (setGlobalDashboardData) {
+      setGlobalDashboardData(prev => ({ ...prev, tableData: updatedData }));
+    }
+    setToast({ 
+      message: vendorEmail 
+        ? `PO Generated and emailed to ${vendorEmail}! ${selectedData.length} Order(s) moved to Procurement.` 
+        : `PO Generated! ${selectedData.length} Order(s) moved to Procurement.`, 
+      type: 'success' 
+    });
+    setIsDoubleConfirmOpen(false);
+    setIsPreviewModalOpen(false);
+    setSelectedRowIndex(null);
+    setSelectedRows([]);
+    setSelectedSupplyVendor(null);
+    if (onNext) {
+      setTimeout(() => {
+        onNext();
+      }, 1000);
+    }
   };
 
   const handleGeneratePI = (index) => {
@@ -735,51 +847,7 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
               {(() => {
                 const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
                 const selectedData = selectedRows.map(idx => filteredTableData[idx]);
-
-                // Calculate detailed breakdown
-                const requiredBreakdown = {};
-                const techs = new Set();
-                const watts = new Set();
-                let totalCalculatedWattage = 0;
-                
-                if (selectedRows.length > 0) {
-                  selectedRows.forEach(idx => {
-                    const row = filteredTableData[idx];
-                    if (!row) return;
-                    const originalIdx = tableData.indexOf(row);
-                    const mockBrand = originalIdx === 0 ? ['Waaree', 'Adani'] : originalIdx === 1 ? ['Tata', 'Waaree'] : ['Vikram', 'Adani', 'Waaree', 'Tata'];
-                    const mockTech = originalIdx === 0 ? 'Monocrystalline' : originalIdx === 1 ? 'Polycrystalline' : 'Bifacial';
-                    const mockWatt = originalIdx === 0 ? '540W' : originalIdx === 1 ? '500W' : '550W';
-                    
-                    techs.add(mockTech);
-                    watts.add(mockWatt);
-                    
-                    let panelsForThisRow = 0;
-                    if (panelBrandFilter !== 'All') {
-                      const brandIndex = mockBrand.indexOf(panelBrandFilter);
-                      if (brandIndex === 0) {
-                        panelsForThisRow = 3;
-                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 3;
-                      } else if (brandIndex === 1) {
-                        panelsForThisRow = 2;
-                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 2;
-                      } else if (brandIndex > 1) {
-                        panelsForThisRow = 1;
-                        requiredBreakdown[panelBrandFilter] = (requiredBreakdown[panelBrandFilter] || 0) + 1;
-                      }
-                    } else {
-                       panelsForThisRow = 5;
-                       if (mockBrand[0]) requiredBreakdown[mockBrand[0]] = (requiredBreakdown[mockBrand[0]] || 0) + 3;
-                       if (mockBrand[1]) requiredBreakdown[mockBrand[1]] = (requiredBreakdown[mockBrand[1]] || 0) + 2;
-                    }
-                    totalCalculatedWattage += panelsForThisRow * (parseInt(mockWatt) || 0);
-                  });
-                } else {
-                   requiredBreakdown['Mixed Brands'] = totalSummary.panels;
-                }
-                
-                const techString = technologyFilter !== 'All' ? technologyFilter : Array.from(techs).join(', ') || 'Mixed Technology';
-                const wattString = wattageFilter !== 'All' ? wattageFilter : Array.from(watts).join(', ') || 'Mixed Wattage';
+                const { requiredBreakdown, techString, wattString, totalCalculatedWattage } = selectedOrderDetails;
                 
                 return (
                   <div className="space-y-6">
@@ -951,44 +1019,136 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
                   Cancel
                 </button>
                 <button
-                  onClick={() => {
-                    const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
-                    const selectedData = selectedRows.map(idx => filteredTableData[idx]);
-
-                    if (setSharedOrderData && selectedData.length > 0) {
-                      const newOrders = selectedData.map(row => ({
-                        id: `ORD${Math.floor(1000 + Math.random() * 9000)}`,
-                        customer: row.customer || 'Customer',
-                        paymentMode: 'Bank Transfer',
-                        utr: 'Pending',
-                        status: 'Pending',
-                        vendorName: vendor.name,
-                        equipment: {
-                          panels: `${row.panels || Math.floor(inventoryStats.required / selectedData.length)} Panels`
-                        }
-                      }));
-                      setSharedOrderData(prev => [...prev, ...newOrders]);
-                    }
-
-                    const updatedData = tableData.filter(row => !selectedData.includes(row));
-                    setTableData(updatedData);
-                    setToast({ message: `PO Generated! ${selectedData.length} Order(s) moved to Procurement.`, type: 'success' });
-                    setIsPreviewModalOpen(false);
-                    setSelectedRowIndex(null);
-                    setSelectedRows([]);
-                    setSelectedSupplyVendor(null);
-                    if (onNext) {
-                      setTimeout(() => {
-                        onNext();
-                      }, 1000);
-                    }
-                  }}
+                  onClick={() => setIsDoubleConfirmOpen(true)}
                   className="px-6 py-2.5 text-sm font-bold text-white bg-[#2cb25d] hover:bg-green-700 rounded shadow-md transition flex items-center"
                 >
                   <Check size={18} className="mr-2" />
                   Confirm & Send PO
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Double Confirmation Modal */}
+      {isDoubleConfirmOpen && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black bg-opacity-65 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden border border-gray-100 transform scale-100 transition-all duration-300">
+            {/* Header with warning icon */}
+            <div className="flex items-center space-x-3 p-5 bg-amber-50 border-b border-amber-100">
+              <div className="p-2 bg-amber-100 text-amber-700 rounded-full">
+                <AlertTriangle size={24} />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-gray-900">Double Confirmation</h3>
+                <p className="text-xs text-amber-800">Please verify the details before sending the PO</p>
+              </div>
+            </div>
+
+            {/* Content Details */}
+            <div className="p-6 space-y-4">
+              <p className="text-sm text-gray-600 leading-relaxed">
+                Are you sure you want to generate and send this Purchase Order?
+              </p>
+              
+              {(() => {
+                const vendor = inventoryVendors.find(v => v.id === selectedSupplyVendor);
+                const baseAmount = enteredPrice && !isNaN(enteredPrice) && parseFloat(enteredPrice) > 0 
+                  ? parseFloat(selectedOrderDetails.totalCalculatedWattage) * parseFloat(enteredPrice) 
+                  : 0;
+                const gst = gstPercent && !isNaN(gstPercent) ? parseFloat(gstPercent) : 0;
+                const totalWithGst = baseAmount + (baseAmount * gst / 100);
+
+                return (
+                  <div className="bg-gray-50 rounded-xl p-4 border border-gray-200 text-xs space-y-3">
+                    <div className="flex justify-between items-center pb-2 border-b border-gray-200">
+                      <span className="text-gray-500 font-medium">Vendor Name:</span>
+                      <span className="font-bold text-gray-800 text-sm">{vendor?.name || 'N/A'}</span>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 gap-3 py-1">
+                      <div>
+                        <span className="text-gray-500 font-medium block mb-0.5">Total Panels:</span>
+                        <span className="font-bold text-gray-800">{inventoryStats.required} Panels</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-medium block mb-0.5">Total Capacity:</span>
+                        <span className="font-bold text-gray-800">{selectedOrderDetails.totalCalculatedWattage} W</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-medium block mb-0.5">Technology:</span>
+                        <span className="font-bold text-gray-800">{selectedOrderDetails.techString}</span>
+                      </div>
+                      <div>
+                        <span className="text-gray-500 font-medium block mb-0.5">Wattage:</span>
+                        <span className="font-bold text-gray-800">{selectedOrderDetails.wattString}</span>
+                      </div>
+                    </div>
+
+                    <div className="pt-1">
+                      <span className="text-gray-500 font-medium block mb-1.5">Brand Breakdown:</span>
+                      <div className="flex flex-wrap gap-1.5">
+                        {Object.entries(selectedOrderDetails.requiredBreakdown).map(([brand, count]) => {
+                          const manufacturer = manufacturers.find(m => m.brand?.toLowerCase() === brand?.toLowerCase());
+                          return (
+                            <div key={brand} className="flex items-center bg-white border border-gray-200 shadow-sm rounded px-2 py-1 text-[10px]">
+                              {manufacturer && manufacturer.brandLogo ? (
+                                <img src={manufacturer.brandLogo} alt={brand} className="w-4 h-4 object-contain mr-1.5 bg-white rounded-full p-0.5 border border-gray-100" />
+                              ) : (
+                                <div className="w-4 h-4 rounded-full bg-gray-100 flex items-center justify-center mr-1.5 border border-gray-200 text-[6px] font-bold text-gray-500">
+                                  {brand.substring(0, 1)}
+                                </div>
+                              )}
+                              <span className="font-bold text-gray-700 mr-1">{brand}:</span>
+                              <span className="text-blue-700 font-bold">{count}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    <div className="flex justify-between items-center pt-3 border-t border-gray-200">
+                      <span className="text-gray-500 font-medium">Total Estimated Price:</span>
+                      <span className="font-bold text-green-600 text-base">
+                        ₹ {totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+              
+              <div className="mt-4 bg-white border border-gray-200 rounded-lg p-3">
+                <label className="block text-xs font-bold text-gray-700 mb-1.5">Vendor Email Address</label>
+                <input 
+                  type="email" 
+                  value={vendorEmail}
+                  onChange={(e) => setVendorEmail(e.target.value)}
+                  placeholder="e.g. orders@vendor.com" 
+                  className="w-full border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500" 
+                />
+              </div>
+
+              <p className="text-xs text-gray-400 italic mt-3">
+                * Once confirmed, this action cannot be undone and the order details will be forwarded to the vendor.
+              </p>
+            </div>
+
+            {/* Action buttons */}
+            <div className="bg-gray-50 px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+              <button
+                onClick={() => setIsDoubleConfirmOpen(false)}
+                className="px-5 py-2 text-sm font-bold text-gray-600 hover:bg-gray-200 rounded-lg transition"
+              >
+                Go Back
+              </button>
+              <button
+                onClick={handleFinalConfirm}
+                className="px-6 py-2 text-sm font-bold text-white bg-green-600 hover:bg-green-700 rounded-lg shadow-md hover:shadow-lg transition-all flex items-center"
+              >
+                <Check size={16} className="mr-1.5" />
+                Yes, Send PO
+              </button>
             </div>
           </div>
         </div>
