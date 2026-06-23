@@ -265,8 +265,13 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
     const selectedData = selectedRows.map(idx => filteredTableData[idx]);
 
     if (setSharedOrderData && selectedData.length > 0) {
+      let currentOrderCount = parseInt(localStorage.getItem('orderCounter') || '0', 10);
+      currentOrderCount += 1;
+      localStorage.setItem('orderCounter', currentOrderCount.toString());
+      const newOrderId = `ORD${String(currentOrderCount).padStart(4, '0')}`;
+
       const groupedOrder = {
-        id: `PO${Math.floor(100000 + Math.random() * 900000)}`,
+        id: newOrderId,
         customer: selectedData.length > 1 ? `Group of ${selectedData.length} Projects` : (selectedData[0].customer || 'Customer'),
         subCustomers: selectedData.map(row => ({ ...row, name: row.customer, partner: row.cpName || 'N/A' })),
         paymentMode: 'Bank Transfer',
