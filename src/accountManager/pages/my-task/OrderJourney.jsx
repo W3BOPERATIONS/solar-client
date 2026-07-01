@@ -814,50 +814,204 @@ const componentRegistry = {
       <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2 rounded text-[13px] font-bold shadow-sm transition">Next Step</button>
     </div>
   ),
-  'AtWarehouse': ({ onNext }) => (
+  'AtWarehouse': function AtWarehouse({ onNext, sharedOrderData, setSharedOrderData }) {
+    const [orders, setOrders] = React.useState([]);
+    const [selectedOrderForView, setSelectedOrderForView] = React.useState(null);
+
+    useEffect(() => {
+      let sourceOrders = sharedOrderData && sharedOrderData.length > 0 
+                         ? sharedOrderData 
+                         : JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
+                         
+      const completedPayments = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
+      const completedOrderIds = completedPayments.map(p => p.orderId);
+
+      const paidOrders = sourceOrders.filter(o => completedOrderIds.includes(o.id));
+      setOrders(paidOrders);
+    }, [sharedOrderData]);
+
+    const handleAction = (id, actionType) => {
+      const updatedOrders = orders.map(o => {
+        if (o.id === id) {
+          return { ...o, warehouseStatus: actionType };
+        }
+        return o;
+      });
+      setOrders(updatedOrders);
+
+      if (setSharedOrderData) {
+        // If sharedOrderData is present, update the specific order in it
+        if (sharedOrderData && sharedOrderData.length > 0) {
+           const updatedShared = sharedOrderData.map(o => o.id === id ? { ...o, warehouseStatus: actionType } : o);
+           setSharedOrderData(updatedShared);
+        } else {
+           // Fallback if sharedOrderData is empty but we still want to persist state locally
+           try {
+             const generated = JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
+             const updatedGen = generated.map(o => o.id === id ? { ...o, warehouseStatus: actionType } : o);
+             localStorage.setItem('generatedVendorPayments', JSON.stringify(updatedGen));
+           } catch(e) {}
+        }
+      }
+      
+      alert(`Action '${actionType}' completed for Order ${id}`);
+    };
+
+    return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 mt-6 overflow-hidden animate-fade-in">
       <div className="bg-[#145a80] p-4 text-white flex justify-between items-center shadow">
         <h2 className="text-lg font-bold">At Warehouse</h2>
         <span className="bg-yellow-500 px-3 py-1 text-[11px] font-bold rounded-full border border-yellow-400 text-white shadow-sm">Status: Warehouse Pending / Processing</span>
       </div>
       <div className="p-6 space-y-6">
-        <div className="flex space-x-4 border-b border-gray-100 pb-4">
-           <button className="bg-blue-50 text-blue-600 border border-blue-200 px-4 py-2 rounded text-xs font-bold hover:bg-blue-100 transition shadow-sm">Pending Days Filter</button>
-           <button className="bg-red-50 text-red-600 border border-red-200 px-4 py-2 rounded text-xs font-bold hover:bg-red-100 transition shadow-sm">Overdue Days Filter</button>
+        <div className="overflow-x-auto border border-gray-200 rounded-lg shadow-sm">
+          <table className="w-full text-sm text-left">
+            <thead className="bg-[#f4f7f9] text-gray-700 font-semibold border-b border-gray-200">
+              <tr>
+                <th className="px-4 py-3">Order No</th>
+                <th className="px-4 py-3">Customer & Vendor</th>
+                <th className="px-4 py-3">Order Details</th>
+                <th className="px-4 py-3 text-center">Warehouse Status</th>
+                <th className="px-4 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100">
+              {orders.length === 0 ? (
+                <tr>
+                  <td colSpan="5" className="px-4 py-8 text-center text-gray-500 italic">No orders available for warehouse processing</td>
+                </tr>
+              ) : orders.map((order) => (
+                <tr key={order.id} className="hover:bg-gray-50 transition">
+                  <td className="px-4 py-4 font-bold text-gray-800">{order.id}</td>
+                  <td className="px-4 py-4">
+                     <p className="text-gray-800 font-medium mb-1">{order.customer}</p>
+                     <p className="text-[11px] text-gray-500 font-bold">{order.vendorName || 'No Vendor Selected'}</p>
+                  </td>
+                  <td className="px-4 py-4">
+                     {order.equipment ? (
+                        <div className="text-[11px] text-gray-600 space-y-0.5">
+                          <p><span className="font-semibold text-gray-800">Panels:</span> {order.equipment.panels}</p>
+                          <p><span className="font-semibold text-gray-800">Inv:</span> {order.equipment.inverters}</p>
+                          <p><span className="font-semibold text-gray-800">BOS:</span> {order.equipment.bos}</p>
+                        </div>
+                     ) : (
+                        <span className="text-gray-400 text-xs">N/A</span>
+                     )}
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span className={`px-3 py-1.5 rounded text-[11px] font-bold shadow-sm ${
+                      order.warehouseStatus === 'Stock Reserved' ? 'bg-blue-100 text-blue-700 border border-blue-200' :
+                      order.warehouseStatus === 'Material Inwarded' ? 'bg-purple-100 text-purple-700 border border-purple-200' :
+                      'bg-yellow-100 text-yellow-700 border border-yellow-200'
+                    }`}>
+                      {order.warehouseStatus || 'Pending Processing'}
+                    </span>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <div className="flex flex-col items-center justify-center space-y-2">
+                      <button 
+                        onClick={() => handleAction(order.id, 'Stock Reserved')}
+                        className="w-full bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow-sm transition flex items-center justify-center"
+                      >
+                        <Package size={12} className="mr-1"/> Reserve Stock
+                      </button>
+                      <button 
+                        onClick={() => handleAction(order.id, 'Material Inwarded')}
+                        className="w-full bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow-sm transition flex items-center justify-center"
+                      >
+                        <Truck size={12} className="mr-1"/> Inward Material
+                      </button>
+                      <button 
+                        onClick={() => setSelectedOrderForView(order)}
+                        className="w-full bg-gray-600 hover:bg-gray-700 text-white px-3 py-1.5 rounded text-[10px] font-bold shadow-sm transition flex items-center justify-center"
+                        title="View Customer Details"
+                      >
+                        <Eye size={12} className="mr-1" /> View Details
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-           <div className="border border-gray-200 p-5 rounded-lg bg-gray-50 shadow-sm">
-             <h3 className="font-bold text-gray-800 mb-4 flex items-center text-sm"><span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center mr-2 text-xs shadow-sm">1</span> Warehouse Manager Login</h3>
-             <div className="space-y-4">
-                <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:border-blue-300 transition">
-                   <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">For Warehouse Inventory Orders:</h4>
-                   <button className="w-full flex justify-center items-center bg-blue-600 hover:bg-blue-700 text-white p-2.5 rounded text-sm font-semibold shadow-sm transition">
-                     <Package size={16} className="mr-2"/> Allocate / Reserve Available Stock
-                   </button>
-                </div>
-                <div className="bg-white border border-gray-200 p-4 rounded-lg shadow-sm hover:border-purple-300 transition">
-                   <h4 className="text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-3">For Vendor Inventory Orders:</h4>
-                   <button className="w-full flex justify-center items-center bg-purple-600 hover:bg-purple-700 text-white p-2.5 rounded text-sm font-semibold shadow-sm transition">
-                     <Truck size={16} className="mr-2"/> Inward Material against Procurement No.
-                   </button>
-                </div>
-             </div>
-           </div>
-           <div className="border border-gray-200 p-5 rounded-lg bg-[#f8fafc] shadow-sm flex flex-col justify-between">
-             <div>
-               <h3 className="font-bold text-gray-800 mb-4 flex items-center text-sm"><span className="w-6 h-6 rounded-full bg-gray-200 text-gray-700 flex items-center justify-center mr-2 text-xs shadow-sm">2</span> Processing Details</h3>
-               <p className="text-sm text-gray-600 mb-4 leading-relaxed">Once stock is reserved or inwarded, the order moves automatically to the <b className="text-gray-800">Delivery Plan</b> stage.</p>
-             </div>
-             <div className="flex justify-end pt-6">
-                <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition w-full flex justify-center items-center">
-                  Move to Delivery Plan <ChevronRight size={16} className="ml-1"/>
-                </button>
-             </div>
-           </div>
+        <div className="flex justify-end pt-2">
+           <button onClick={onNext} className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition flex items-center">
+             Proceed to Delivery Plan <ChevronRight size={16} className="ml-1"/>
+           </button>
         </div>
       </div>
+
+      {/* Customer Details Modal */}
+      {selectedOrderForView && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black bg-opacity-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-4xl overflow-hidden animate-fade-in border border-gray-100 flex flex-col max-h-[90vh]">
+            <div className="flex justify-between items-center p-5 border-b border-gray-200 bg-blue-50">
+              <h2 className="text-xl font-bold text-[#145a80] flex items-center">
+                <FileText size={24} className="mr-2" /> Customer Details - {selectedOrderForView.id}
+              </h2>
+              <button
+                onClick={() => setSelectedOrderForView(null)}
+                className="text-gray-500 hover:text-red-500 transition-colors"
+              >
+                <X size={24} />
+              </button>
+            </div>
+            <div className="p-6 space-y-4 text-sm overflow-y-auto flex-1 custom-scrollbar">
+              <div className="bg-gray-50 p-4 rounded border border-gray-100 shadow-sm">
+                <p className="text-xs text-gray-500 font-bold mb-1">Main Customer</p>
+                <p className="font-semibold text-gray-800 text-lg">{selectedOrderForView.customer}</p>
+                
+                {selectedOrderForView.subCustomers && selectedOrderForView.subCustomers.length > 0 ? (
+                  <div className="mt-4 pt-4 border-t border-gray-200">
+                    <p className="text-xs text-gray-500 font-bold mb-3">Included Customers & Projects</p>
+                    <div className="border border-gray-200 rounded-lg overflow-x-auto">
+                      <table className="w-full text-left text-sm whitespace-nowrap">
+                        <thead className="bg-gray-100 text-gray-700">
+                          <tr>
+                            <th className="px-4 py-2 font-semibold">Customer Name</th>
+                            <th className="px-4 py-2 font-semibold">Partner Name</th>
+                            <th className="px-4 py-2 font-semibold text-center">Capacity</th>
+                            <th className="px-4 py-2 font-semibold text-center">Panel</th>
+                            <th className="px-4 py-2 font-semibold text-center">BOS Kit</th>
+                            <th className="px-4 py-2 font-semibold text-center">Inverter</th>
+                            <th className="px-4 py-2 font-semibold text-center">Label Number</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100 bg-white">
+                          {selectedOrderForView.subCustomers.map((c, i) => (
+                            <tr key={i} className="hover:bg-gray-50 transition-colors">
+                              <td className="px-4 py-3 font-medium text-gray-800">{typeof c === 'string' ? c : c.name}</td>
+                              <td className="px-4 py-3 text-gray-600">{typeof c === 'string' ? 'N/A' : (c.partner || 'N/A')}</td>
+                              <td className="px-4 py-3 text-center font-medium bg-gray-50">{c.kw || '0'} kW</td>
+                              <td className="px-4 py-3 text-center text-gray-600">{c.panel || 'N/A'}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">{c.bosKit || 'N/A'}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">{c.inverter && c.inverter !== 'N/A' ? c.inverter : (c.kw > 10 ? 'Growatt 15kW' : 'GoodWe 5kW')}</td>
+                              <td className="px-4 py-3 text-center text-gray-600">{c.labelNumber || 'N/A'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-500 mt-2 italic text-sm">No sub-customer details available.</p>
+                )}
+              </div>
+            </div>
+            <div className="p-4 border-t border-gray-200 bg-gray-50 flex justify-end">
+              <button
+                onClick={() => setSelectedOrderForView(null)}
+                className="px-5 py-2 text-sm font-bold text-white bg-blue-600 rounded shadow-sm hover:bg-blue-700 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
-  )
+  )},
 };
 
 export default function OrderJourney() {

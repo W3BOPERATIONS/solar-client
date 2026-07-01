@@ -49,7 +49,8 @@ export default function WarehouseVendorPay() {
              date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
              warehouse: 'Mumbai',
              rate: 'Custom Combo Kit',
-             amount: `₹${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`
+             amount: `₹${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+             originalOrder: o
           };
       });
       
@@ -76,9 +77,41 @@ export default function WarehouseVendorPay() {
   const totalPendingAmountFormatted = `₹${calculateTotal(pendingPayments).toLocaleString('en-IN')}`;
   const totalPaidAmountFormatted = `₹${calculateTotal(paymentHistory).toLocaleString('en-IN')}`;
 
+  const pushToInwardAndGenerateProc = (row, procNum) => {
+    try {
+      const o = row.originalOrder;
+      const panelsStr = o?.equipment?.panels || '0';
+      const numPanels = parseInt(panelsStr.replace(/\D/g, '')) || 15;
+      
+      const newInwardData = {
+        orderNo: row.orderId || o?.id || 'ORD-UNKNOWN',
+        brand: o?.panelDetails?.brands ? (Object.keys(o.panelDetails.brands)[0] || 'Mixed') : 'Mixed',
+        product: 'Solar Kit Components',
+        technology: o?.panelDetails?.technology || 'Mixed',
+        projectType: 'Commercial',
+        wattPeak: o?.panelDetails?.wattage || '540W',
+        totalKw: o?.panelDetails?.totalCapacity ? `${o.panelDetails.totalCapacity / 1000} KW` : '8.0 KW',
+        totalUnits: `${numPanels}`,
+        sku: procNum, // Procurement number as SKU
+        status: 'Pending',
+        scanNo: '-',
+        receivedDate: '-',
+        downloadable: false,
+      };
+
+      let inwardStorage = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
+      if (!Array.isArray(inwardStorage)) inwardStorage = [];
+      inwardStorage.unshift(newInwardData);
+      localStorage.setItem('inwardOrdersData', JSON.stringify(inwardStorage));
+    } catch (e) {
+      console.error("Error pushing to inward management", e);
+    }
+  };
+
   const handlePaySuccess = () => {
     if (selectedPayRow) {
       setDynamicPayments(prev => prev.filter(p => p.vendor !== selectedPayRow.vendor));
+      const procNum = 'PROC-' + selectedPayRow.orderId + '-' + Math.floor(100 + Math.random() * 900);
       const newCompleted = {
         id: 'PAY-WH-' + Math.floor(1000 + Math.random() * 9000),
         vendor: selectedPayRow.vendor,
@@ -86,13 +119,15 @@ export default function WarehouseVendorPay() {
         warehouse: selectedPayRow.warehouse,
         amount: selectedPayRow.amount,
         method: 'Simulator',
-        orderId: selectedPayRow.orderId
+        orderId: selectedPayRow.orderId,
+        procurementNo: procNum
       };
       setCompletedPayments(prev => {
         const updated = [newCompleted, ...prev];
         localStorage.setItem('completedVendorPayments', JSON.stringify(updated));
         return updated;
       });
+      pushToInwardAndGenerateProc(selectedPayRow, procNum);
     }
     setShowPayModal(false);
     setSelectedPayRow(null);
@@ -102,6 +137,7 @@ export default function WarehouseVendorPay() {
   const handleUploadReceipt = (row, file) => {
     if (!file) return;
     setDynamicPayments(prev => prev.filter(p => p.vendor !== row.vendor));
+    const procNum = 'PROC-' + row.orderId + '-' + Math.floor(100 + Math.random() * 900);
     const newCompleted = {
       id: 'PAY-WH-' + Math.floor(1000 + Math.random() * 9000),
       vendor: row.vendor,
@@ -109,13 +145,16 @@ export default function WarehouseVendorPay() {
       warehouse: row.warehouse,
       amount: row.amount,
       method: 'Receipt Uploaded',
-      orderId: row.orderId
+      orderId: row.orderId,
+      procurementNo: procNum
     };
     setCompletedPayments(prev => {
       const updated = [newCompleted, ...prev];
       localStorage.setItem('completedVendorPayments', JSON.stringify(updated));
       return updated;
     });
+    pushToInwardAndGenerateProc(row, procNum);
+
     alert('Receipt Uploaded Successfully!');
   };
 
@@ -265,6 +304,13 @@ export default function WarehouseVendorPay() {
                       >
                         <ArrowRight size={18} strokeWidth={1.5} />
                         <span className="text-[10px] mt-0.5 font-medium">Procurement Step</span>
+                      </button>
+                      <button 
+                        onClick={() => navigate('/account-manager/my-task/order-journey', { state: { step: 3, flow: 'project_signup_vendor' } })}
+                        className="text-blue-600 hover:text-blue-700 transition flex flex-col items-center"
+                      >
+                        <ArrowRight size={18} strokeWidth={1.5} />
+                        <span className="text-[10px] mt-0.5 font-medium">At Warehouse</span>
                       </button>
                     </div>
                   </td>

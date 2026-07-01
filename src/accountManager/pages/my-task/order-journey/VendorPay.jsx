@@ -69,6 +69,7 @@ export default function VendorPay({ onNext, sharedOrderData }) {
     
     return {
       orderId: o.id,
+      procurementNo: c.procurementNo || '-',
       vendorName: o.vendorName || 'N/A',
       brand: 'Mixed',
       product: `Custom Combo Kit (${o.subCustomers?.length || 1} Projects)`,
@@ -78,7 +79,8 @@ export default function VendorPay({ onNext, sharedOrderData }) {
       totalKW: totalKw,
       totalPanels: numPanels.toString(),
       totalPrice: typeof c.amount === 'string' ? c.amount.replace('₹', '') : c.amount || '-',
-      deadline: 'Paid'
+      deadline: 'Paid',
+      originalOrder: o
     };
   });
 
@@ -247,6 +249,7 @@ export default function VendorPay({ onNext, sharedOrderData }) {
                 />
               </th>
               <th className="px-4 py-3 font-medium border-r border-blue-300 w-[100px]">Order Number</th>
+              <th className="px-4 py-3 font-medium border-r border-blue-300 w-[130px]">Procurement Number</th>
               <th className="px-4 py-3 font-medium border-r border-blue-300 w-[120px]">Vendor Name</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Brand</th>
               <th className="px-3 py-3 font-medium border-r border-blue-300">Product</th>
@@ -271,6 +274,9 @@ export default function VendorPay({ onNext, sharedOrderData }) {
                 </td>
                 <td className="px-4 py-4 border-r border-gray-100 text-gray-700 font-bold text-center">
                   {row.orderId || '-'}
+                </td>
+                <td className="px-4 py-4 border-r border-gray-100 text-blue-700 font-bold text-center">
+                  {row.procurementNo || '-'}
                 </td>
                 <td className="px-4 py-4 border-r border-gray-100 text-gray-700 font-medium break-words leading-tight">
                   {row.vendorName}
