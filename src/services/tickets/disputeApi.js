@@ -5,7 +5,7 @@ const API_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000';
 
 // API Configuration helper
 const getAuthConfig = () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     return {
         headers: {
             Authorization: `Bearer ${token}`

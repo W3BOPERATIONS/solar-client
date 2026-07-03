@@ -148,6 +148,7 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
   const [gstPercent, setGstPercent] = useState('');
   const [isDoubleConfirmOpen, setIsDoubleConfirmOpen] = useState(false);
   const [vendorEmail, setVendorEmail] = useState('');
+  const [currentPONumber, setCurrentPONumber] = useState('');
 
 
 
@@ -270,8 +271,11 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
       localStorage.setItem('orderCounter', currentOrderCount.toString());
       const newOrderId = `ORD${String(currentOrderCount).padStart(4, '0')}`;
 
+      const generatedPO = currentPONumber || `PO-${Math.floor(100000 + Math.random() * 900000)}`;
+
       const groupedOrder = {
         id: newOrderId,
+        poNumber: generatedPO,
         customer: selectedData.length > 1 ? `Group of ${selectedData.length} Projects` : (selectedData[0].customer || 'Customer'),
         subCustomers: selectedData.map(row => ({ ...row, name: row.customer, partner: row.cpName || 'N/A' })),
         paymentMode: 'Bank Transfer',
@@ -316,6 +320,7 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
     setSelectedRowIndex(null);
     setSelectedRows([]);
     setSelectedSupplyVendor(null);
+    setCurrentPONumber('');
     if (onNext) {
       setTimeout(() => {
         onNext();
@@ -818,6 +823,9 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
               <button
                 onClick={() => {
                   setIsVendorModalOpen(false);
+                  if (!currentPONumber) {
+                    setCurrentPONumber(`PO-${Math.floor(100000 + Math.random() * 900000)}`);
+                  }
                   setIsPreviewModalOpen(true);
                 }}
                 className={`px-5 py-2 text-sm font-semibold text-white rounded shadow-sm transition ${selectedSupplyVendor ? 'bg-[#0b74ba] hover:bg-blue-700' : 'bg-blue-300 cursor-not-allowed'}`}
@@ -865,7 +873,7 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
                       <div className="text-right">
                         <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">PO Details</p>
                         <p className="font-bold text-gray-800 text-sm">Date: {new Date().toLocaleDateString()}</p>
-                        <p className="text-sm font-mono text-gray-600 mt-1">PO-{Math.floor(100000 + Math.random() * 900000)}</p>
+                        <p className="text-sm font-mono text-gray-600 mt-1">{currentPONumber}</p>
                       </div>
                     </div>
 

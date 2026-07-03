@@ -4,7 +4,7 @@ const API_URL = `${import.meta.env.VITE_API_URL || 'http://localhost:5000/api'}/
 
 // Helper to get token (if auth is required)
 const getAuthHeaders = () => {
-    const token = localStorage.getItem('token');
+    const token = sessionStorage.getItem('token') || localStorage.getItem('token');
     return token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 };
 

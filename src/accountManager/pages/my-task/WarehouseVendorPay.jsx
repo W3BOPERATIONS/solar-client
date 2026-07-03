@@ -83,8 +83,15 @@ export default function WarehouseVendorPay() {
       const panelsStr = o?.equipment?.panels || '0';
       const numPanels = parseInt(panelsStr.replace(/\D/g, '')) || 15;
       
+      const baseAmount = o?.amount?.base || 0;
+      const gst = o?.amount?.gst || 0;
+      const totalWithGst = baseAmount + (baseAmount * gst / 100);
+
       const newInwardData = {
         orderNo: row.orderId || o?.id || 'ORD-UNKNOWN',
+        poNumber: o?.poNumber || row.poNumber || 'N/A',
+        vendorName: o?.vendorName || row.vendor || 'N/A',
+        poAmount: totalWithGst ? `₹${totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : (row.amount || '₹0'),
         brand: o?.panelDetails?.brands ? (Object.keys(o.panelDetails.brands)[0] || 'Mixed') : 'Mixed',
         product: 'Solar Kit Components',
         technology: o?.panelDetails?.technology || 'Mixed',
