@@ -9,7 +9,8 @@ export default function DeliveryManagerSidebar() {
   const { user } = authStore();
   const [isMyTaskOpen, setIsMyTaskOpen] = useState(true);
   const [openSubMenus, setOpenSubMenus] = useState({
-    'Replacement Order': true
+    'Replacement Order': true,
+    'At Warehouse': false
   });
   
   const location = useLocation();
@@ -45,14 +46,24 @@ export default function DeliveryManagerSidebar() {
 
   const myTaskItems = [
     { icon: Minus, label: 'InWard', path: '/delivery-manager/my-task/inward-management' },
-    { icon: Minus, label: 'At Warehouse', path: '/delivery-manager/my-task/at-warehouse' },
+    { 
+      icon: Minus, 
+      label: 'At Warehouse', 
+      path: '/delivery-manager/my-task/at-warehouse',
+      hasDropdown: true,
+      subItems: [
+        { icon: Minus, label: 'Warehouse Stock', path: '/delivery-manager/my-task/at-warehouse' },
+        { icon: Minus, label: 'Delivery Plan', path: '/delivery-manager/my-task/at-warehouse/delivery-plan' }
+      ]
+    },
   ];
 
   const existingRoutes = [
     ...topMenuItems.map(i => i.path),
     ...bottomMenuItems.map(i => i.path),
     ...bottomMenuItems.flatMap(i => i.subItems?.map(s => s.path) || []),
-    ...myTaskItems.map(i => i.path)
+    ...myTaskItems.map(i => i.path),
+    ...myTaskItems.flatMap(i => i.subItems?.map(s => s.path) || [])
   ].filter(Boolean);
 
   const renderNavLink = (item) => {
@@ -154,25 +165,73 @@ export default function DeliveryManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 mt-1">
-              {myTaskItems.map((subItem) => (
-                <div key={subItem.path}>
-                  <NavLink
-                    to={subItem.path}
-                    className={({ isActive }) =>
-                      `flex items-center justify-between px-8 py-3 transition-colors ${
-                        isActive
-                          ? 'text-[#142340] font-semibold' 
-                          : 'text-gray-600 hover:bg-[#dce4ee]'
-                      }`
-                    }
-                  >
-                    <div className="flex items-center space-x-4">
-                      <subItem.icon size={18} className={location.pathname === subItem.path ? 'text-blue-600' : 'text-[#142340]'} />
-                      <span className={`text-[14.5px] ${location.pathname === subItem.path ? 'text-blue-600' : 'text-[#142340]'}`}>{subItem.label}</span>
+              {myTaskItems.map((subItem) => {
+                if (subItem.hasDropdown) {
+                  const isAnySubItemActive = subItem.subItems?.some(s => location.pathname === s.path);
+                  const isOpen = openSubMenus[subItem.label] || isAnySubItemActive;
+                  return (
+                    <div key={subItem.path} className="mt-1">
+                      <button
+                        onClick={(e) => toggleSubMenu(subItem.label, e)}
+                        className={`w-[calc(100%-1rem)] mx-2 flex items-center justify-between px-6 py-2.5 transition-all duration-200 rounded ${
+                          isOpen
+                            ? 'bg-[#1d2d4a] text-white'
+                            : 'text-gray-700 hover:bg-[#dce4ee]'
+                        }`}
+                      >
+                        <div className="flex items-center space-x-4">
+                          <subItem.icon size={18} className={isOpen ? 'text-white' : 'text-[#142340]'} />
+                          <span className="font-semibold text-[14.5px]">{subItem.label}</span>
+                        </div>
+                        {isOpen ? <ChevronUp size={16} className={isOpen ? 'text-white' : 'text-[#142340]'} /> : <ChevronDown size={16} className={isOpen ? 'text-white' : 'text-[#142340]'} />}
+                      </button>
+                      
+                      {isOpen && subItem.subItems && (
+                        <div className="bg-[#dfebf7] py-1 flex flex-col space-y-1 mt-1 pl-4">
+                          {subItem.subItems.map((nested) => (
+                            <NavLink
+                              key={nested.path}
+                              to={nested.path}
+                              className={({ isActive }) =>
+                                `flex items-center justify-between px-6 py-2 transition-colors ${
+                                  isActive
+                                    ? 'bg-[#142340] text-white font-semibold mx-2 rounded' 
+                                    : 'text-gray-600 hover:bg-[#dce4ee]'
+                                }`
+                              }
+                            >
+                              <div className="flex items-center space-x-4">
+                                <nested.icon size={16} className={location.pathname === nested.path ? 'text-white' : 'text-[#142340]'} />
+                                <span className={`text-[13.5px] ${location.pathname === nested.path ? 'text-white' : 'text-[#142340]'}`}>{nested.label}</span>
+                              </div>
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  </NavLink>
-                </div>
-              ))}
+                  );
+                }
+
+                return (
+                  <div key={subItem.path}>
+                    <NavLink
+                      to={subItem.path}
+                      className={({ isActive }) =>
+                        `flex items-center justify-between px-8 py-3 transition-colors ${
+                          isActive
+                            ? 'text-[#142340] font-semibold' 
+                            : 'text-gray-600 hover:bg-[#dce4ee]'
+                        }`
+                      }
+                    >
+                      <div className="flex items-center space-x-4">
+                        <subItem.icon size={18} className={location.pathname === subItem.path ? 'text-blue-600' : 'text-[#142340]'} />
+                        <span className={`text-[14.5px] ${location.pathname === subItem.path ? 'text-blue-600' : 'text-[#142340]'}`}>{subItem.label}</span>
+                      </div>
+                    </NavLink>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

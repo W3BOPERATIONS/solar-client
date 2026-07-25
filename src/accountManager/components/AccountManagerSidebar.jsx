@@ -40,7 +40,11 @@ export default function AccountManagerSidebar() {
       icon: Truck, 
       label: 'Order Journey', 
       path: '/account-manager/my-task/order-journey', 
-      hasDropdown: false
+      hasDropdown: true,
+      subItems: [
+        { label: 'Order Lifecycle', path: '/account-manager/my-task/order-journey' },
+        { label: 'Delivery Plan', path: '/account-manager/my-task/order-journey/delivery-plan' }
+      ]
     },
     { 
       icon: RefreshCw, 
@@ -117,49 +121,52 @@ export default function AccountManagerSidebar() {
           
           {isMyTaskOpen && (
             <div className="bg-[#e9eef5] py-2 flex flex-col space-y-1 shadow-inner">
-              {myTaskItems.map((subItem) => (
-                <div key={subItem.path}>
-                  <NavLink
-                    to={subItem.hasDropdown ? '#' : subItem.path}
-                    onClick={subItem.hasDropdown ? (e) => toggleSubMenu(subItem.label, e) : undefined}
-                    className={({ isActive }) =>
-                      `flex items-center justify-between px-8 py-3 transition-colors ${
-                        (isActive && !subItem.hasDropdown) || openSubMenus[subItem.label]
-                          ? 'bg-[#142340] text-white font-semibold' 
-                          : 'text-[#142340] hover:bg-[#dce4ee]'
-                      }`
-                    }
-                  >
-                    <div className="flex items-center space-x-4">
-                      <subItem.icon size={18} className={openSubMenus[subItem.label] ? 'text-white' : 'text-[#142340]'} />
-                      <span className="text-[14.5px]">{subItem.label}</span>
-                    </div>
-                    {subItem.hasDropdown && (
-                      openSubMenus[subItem.label] ? <ChevronUp size={18} className="text-white" /> : <ChevronDown size={18} className="text-[#142340]" />
+              {myTaskItems.map((subItem) => {
+                const isOpen = openSubMenus[subItem.label] || subItem.subItems?.some(s => location.pathname === s.path);
+                return (
+                  <div key={subItem.path}>
+                    <NavLink
+                      to={subItem.hasDropdown ? '#' : subItem.path}
+                      onClick={subItem.hasDropdown ? (e) => toggleSubMenu(subItem.label, e) : undefined}
+                      className={({ isActive }) =>
+                        `flex items-center justify-between px-8 py-3 transition-colors ${
+                          (isActive && !subItem.hasDropdown) || isOpen
+                            ? 'bg-[#142340] text-white font-semibold' 
+                            : 'text-[#142340] hover:bg-[#dce4ee]'
+                        }`
+                      }
+                    >
+                      <div className="flex items-center space-x-4">
+                        <subItem.icon size={18} className={isOpen ? 'text-white' : 'text-[#142340]'} />
+                        <span className="text-[14.5px]">{subItem.label}</span>
+                      </div>
+                      {subItem.hasDropdown && (
+                        isOpen ? <ChevronUp size={18} className="text-white" /> : <ChevronDown size={18} className="text-[#142340]" />
+                      )}
+                    </NavLink>
+                    
+                    {/* Nested Sub-Menu items */}
+                    {subItem.hasDropdown && isOpen && subItem.subItems && (
+                      <div className="bg-[#e9eef5] py-1 flex flex-col">
+                        {subItem.subItems.map((nested) => (
+                          <NavLink
+                            key={nested.path}
+                            to={nested.path}
+                            className={({ isActive }) =>
+                              `flex items-center space-x-4 px-8 py-3 mx-4 my-1 rounded-xl transition-colors text-[14.5px] ${
+                                isActive ? 'bg-[#142340] text-white font-semibold' : 'text-[#142340] hover:bg-[#dce4ee]'
+                              }`
+                            }
+                          >
+                            <Minus size={18} className={location.pathname === nested.path ? 'text-white' : 'text-[#142340]'} />
+                            <span>{nested.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
                     )}
-                  </NavLink>
-                  
-                  {/* Nested Sub-Menu items */}
-                  {subItem.hasDropdown && openSubMenus[subItem.label] && subItem.subItems && (
-                    <div className="bg-[#e9eef5] py-1 flex flex-col">
-                      {subItem.subItems.map((nested) => (
-                        <NavLink
-                          key={nested.path}
-                          to={nested.path}
-                          className={({ isActive }) =>
-                            `flex items-center space-x-4 px-8 py-3 mx-4 my-1 rounded-xl transition-colors text-[14.5px] ${
-                              isActive ? 'bg-[#142340] text-white font-semibold' : 'text-[#142340] hover:bg-[#dce4ee]'
-                            }`
-                          }
-                        >
-                          <Minus size={18} className={location.pathname === nested.path ? 'text-white' : 'text-[#142340]'} />
-                          <span>{nested.label}</span>
-                        </NavLink>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ))}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>

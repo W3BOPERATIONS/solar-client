@@ -855,6 +855,7 @@ function App() {
               <Route path="delivery-management" element={<DMDeliveryManagement />} />
               <Route path="my-task/inward-management" element={<InwardManagement />} />
               <Route path="my-task/at-warehouse" element={<DMAtWarehouse />} />
+              <Route path="my-task/at-warehouse/delivery-plan" element={<DeliveryPlan />} />
               <Route path="replacement-order/return-products" element={<DMReturnProduct />} />
               <Route path="replacement-order/replace-product" element={<DMReplaceProduct />} />
               <Route path="replacement-order/service-ticket" element={<DMServiceTicket />} />

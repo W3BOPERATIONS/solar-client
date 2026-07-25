@@ -4,13 +4,7 @@ import api from '../../../../api/axios';
 
 export default function DeliveryPlan({ onNext }) {
   const [dashboardData, setDashboardData] = useState({});
-  const tableData = [
-    { id: 'ORD12345', groupNo: '6', kw: 5, panels: 15, location: 'North Zone', areaType: 'Urban', deliveryType: 'Regular' },
-    { id: 'ORD12346', groupNo: '7', kw: 10, panels: 30, location: 'South Zone', areaType: 'Rural', deliveryType: 'Express' },
-    { id: 'ORD12347', groupNo: '4', kw: 7.5, panels: 22, location: 'East Zone', areaType: 'Urban', deliveryType: 'Prime' },
-    { id: 'ORD12348', groupNo: '2', kw: 3, panels: 9, location: 'West Zone', areaType: 'Rural', deliveryType: 'Regular' },
-    { id: 'ORD12349', groupNo: '8', kw: 8, panels: 24, location: 'North Zone', areaType: 'Urban', deliveryType: 'Prime' },
-  ];
+  const [orders, setOrders] = useState([]);
 
   useEffect(() => {
     const fetchDashboardData = async () => {
@@ -24,6 +18,17 @@ export default function DeliveryPlan({ onNext }) {
       }
     };
     fetchDashboardData();
+
+    // Load dynamic ungrouped orders from localStorage
+    const localOrders = JSON.parse(localStorage.getItem('deliveryPlanOrders') || '[]');
+    if (localOrders.length > 0) {
+      setOrders(localOrders);
+    } else {
+      setOrders([
+        { id: 'ORD0003', groupNo: '3', kw: '3 KW', location: 'Rajkot', areaType: 'Urban', deliveryType: 'Regular', vendorName: 'Industrial Client', labelNumber: 'LBL-ORD0003-Ind', inverterLabelNumber: 'INV-ORD0003-Ind', bosLabelNumber: 'BOS-ORD0003-Ind' },
+        { id: 'ORD0003', groupNo: '3', kw: '9 KW', location: 'Vadodara', areaType: 'Rural', deliveryType: 'Express', vendorName: 'Commercial Client', labelNumber: 'LBL-ORD0003-Comm', inverterLabelNumber: 'INV-ORD0003-Comm', bosLabelNumber: 'BOS-ORD0003-Comm' },
+      ]);
+    }
   }, []);
 
   return (
@@ -77,63 +82,6 @@ export default function DeliveryPlan({ onNext }) {
          </div>
       </div>
 
-      {/* Category Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-4">
-        {/* Residential */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 border-t-[5px] border-t-blue-500 shadow-sm flex flex-col justify-between relative">
-          <input type="checkbox" className="absolute top-4 left-4 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded" />
-          <div className="flex items-center justify-center space-x-2 text-[#0b74ba] mb-4">
-            <Home size={24} />
-            <span className="text-xl font-bold">Residential</span>
-          </div>
-          <div className="flex justify-around mt-2">
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Total Order</p>
-               <p className="text-lg font-bold text-gray-800">12</p>
-            </div>
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Overdue Order</p>
-               <p className="text-lg font-bold text-yellow-500">5</p>
-            </div>
-          </div>
-        </div>
-        {/* Commercial */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 border-t-[5px] border-t-green-500 shadow-sm flex flex-col justify-between relative">
-          <input type="checkbox" className="absolute top-4 left-4 h-4 w-4 text-green-600 focus:ring-green-500 border-gray-300 rounded" />
-          <div className="flex items-center justify-center space-x-2 text-[#2cb25d] mb-4">
-            <Building2 size={24} />
-            <span className="text-xl font-bold">Commercial</span>
-          </div>
-          <div className="flex justify-around mt-2">
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Total Order</p>
-               <p className="text-lg font-bold text-gray-800">12</p>
-            </div>
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Overdue Order</p>
-               <p className="text-lg font-bold text-yellow-500">5</p>
-            </div>
-          </div>
-        </div>
-        {/* Solar Pump */}
-        <div className="bg-white p-5 rounded-lg border border-gray-200 border-t-[5px] border-t-yellow-500 shadow-sm flex flex-col justify-between relative">
-          <input type="checkbox" className="absolute top-4 left-4 h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded" />
-          <div className="flex items-center justify-center space-x-2 text-yellow-500 mb-4">
-            <Zap size={24} />
-            <span className="text-xl font-bold">Solar Pump</span>
-          </div>
-          <div className="flex justify-around mt-2">
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Total Order</p>
-               <p className="text-lg font-bold text-gray-800">12</p>
-            </div>
-            <div className="text-center">
-               <p className="text-xs text-gray-500">Overdue Order</p>
-               <p className="text-lg font-bold text-yellow-500">5</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* Zone Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mt-2">
@@ -212,18 +160,27 @@ export default function DeliveryPlan({ onNext }) {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {tableData.map((row, idx) => (
+                  {orders.map((row, idx) => (
                     <tr key={idx} className="hover:bg-gray-50">
                       <td className="px-3 py-4 border-r border-gray-100 text-center">
                         <input type="checkbox" className="h-3 w-3 rounded" />
                       </td>
-                      <td className="px-3 py-4 border-r border-gray-100 font-medium text-gray-700">{row.id}</td>
+                      <td className="px-3 py-4 border-r border-gray-100 font-medium text-gray-700">{row.no || row.id}</td>
                       <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-bold text-center">
-                         {row.groupNo}
+                         {row.groupNo || '1'}
                       </td>
-                      <td className="px-3 py-4 border-r border-gray-100 text-gray-700 leading-tight">
-                         <span className="font-bold text-red-600">total Kw -</span> {row.kw}<br/>
-                         <span className="font-bold text-red-600">Total solar panel no. -</span> {row.panels}
+                      <td className="px-3 py-4 border-r border-gray-100 text-gray-700 leading-tight space-y-1">
+                         <div><span className="font-bold text-gray-900 text-xs">{row.vendorName || 'N/A'}</span></div>
+                         <div><span className="font-bold text-red-600">Capacity:</span> <span className="font-medium">{row.kw}</span></div>
+                         {row.labelNumber && row.labelNumber !== '-' && (
+                           <div><span className="font-semibold text-gray-500">Main Label:</span> <code className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] text-gray-700 font-mono font-bold border border-gray-200">{row.labelNumber}</code></div>
+                         )}
+                         {row.inverterLabelNumber && row.inverterLabelNumber !== '-' && (
+                           <div><span className="font-semibold text-gray-500">Inverter Label:</span> <code className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] text-gray-700 font-mono font-bold border border-gray-200">{row.inverterLabelNumber}</code></div>
+                         )}
+                         {row.bosLabelNumber && row.bosLabelNumber !== '-' && (
+                           <div><span className="font-semibold text-gray-500">BOS Kit Label:</span> <code className="bg-gray-100 px-1.5 py-0.5 rounded text-[10px] text-gray-700 font-mono font-bold border border-gray-200">{row.bosLabelNumber}</code></div>
+                         )}
                       </td>
                       <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.location}</td>
                       <td className="px-3 py-4 border-r border-gray-100 text-center">
