@@ -20,46 +20,94 @@ export default function WarehouseVendorPay() {
     }
   };
 
+  const [returnedPayments, setReturnedPayments] = React.useState([]);
+
   React.useEffect(() => {
-    try {
-      const savedCompleted = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
-      setCompletedPayments(savedCompleted);
+    const loadWarehousePayData = () => {
+      try {
+        const savedCompleted = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
+        setCompletedPayments(savedCompleted);
 
-      const generated = JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
-      const uniqueGenerated = [];
-      const seenIds = new Set();
-      for (const o of generated.reverse()) {
-        if (!seenIds.has(o.id)) {
-          seenIds.add(o.id);
-          uniqueGenerated.push(o);
+        const generated = JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
+        const uniqueGenerated = [];
+        const seenIds = new Set();
+        for (const o of generated.reverse()) {
+          if (!seenIds.has(o.id)) {
+            seenIds.add(o.id);
+            uniqueGenerated.push(o);
+          }
         }
-      }
 
-      const formatted = uniqueGenerated.map(o => {
-          const panelsStr = o.equipment?.panels || '0';
-          const numPanels = parseInt(panelsStr.replace(/\D/g, '')) || 0;
-          const totalCapacity = o.panelDetails?.totalCapacity || (numPanels * 500);
-          const base = o.amount?.base || 0;
-          const gst = o.amount?.gst || 0;
-          const totalAmount = base + (base * gst / 100);
-          
-          return {
-             orderId: o.id,
-             vendor: `${o.vendorName || 'Vendor'} (${o.id} - ${o.subCustomers?.length || 1} Projects)`,
-             date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
-             warehouse: 'Mumbai',
-             rate: 'Custom Combo Kit',
-             amount: `₹${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
-             originalOrder: o
-          };
-      });
-      
-      const filteredPending = formatted.filter(f => !savedCompleted.some(c => c.vendor === f.vendor));
-      setDynamicPayments(filteredPending);
-    } catch(e) {}
+        const formatted = uniqueGenerated.map(o => {
+            const panelsStr = o.equipment?.panels || '0';
+            const numPanels = parseInt(panelsStr.replace(/\D/g, '')) || 0;
+            const base = o.amount?.base || 0;
+            const gst = o.amount?.gst || 0;
+            const totalAmount = base + (base * gst / 100);
+            
+            return {
+               orderId: o.id,
+               vendor: `${o.vendorName || 'Vendor'} (${o.id} - ${o.subCustomers?.length || 1} Projects)`,
+               date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+               warehouse: 'Main Warehouse',
+               rate: 'Custom Combo Kit',
+               amount: `₹${totalAmount.toLocaleString('en-IN', { maximumFractionDigits: 0 })}`,
+               originalOrder: o
+            };
+        });
+        
+        const filteredPending = formatted.filter(f => !savedCompleted.some(c => c.vendor === f.vendor));
+        setDynamicPayments(filteredPending);
+
+        // Load returned orders
+        const savedReturned = JSON.parse(localStorage.getItem('returnedToProcurementOrders') || '[]');
+        const storedInward = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
+        
+        const inwardReturned = storedInward
+          .filter(item => item.status === 'Returned to Procurement' || item.deliveryStatus === 'Returned to Procurement')
+          .map(item => ({
+            orderId: item.orderNo || 'ORD-RET',
+            vendor: `${item.vendorName || 'Vendor'} (Returned Project)`,
+            date: item.receivedDate || new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+            warehouse: 'Warehouse',
+            rate: 'Returned Item',
+            amount: typeof item.poAmount === 'string' && item.poAmount.startsWith('₹') ? item.poAmount : `₹${item.poAmount || '50,000'}`,
+            isReturned: true,
+            originalOrder: item
+          }));
+
+        const combined = savedReturned.map(r => ({
+          orderId: r.orderId,
+          vendor: `${r.vendorName} (Returned Project)`,
+          date: r.returnedAt || new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+          warehouse: 'Warehouse',
+          rate: 'Returned Item',
+          amount: typeof r.totalPrice === 'string' && r.totalPrice.startsWith('₹') ? r.totalPrice : `₹${r.totalPrice || '50,000'}`,
+          isReturned: true,
+          originalOrder: r
+        }));
+
+        inwardReturned.forEach(ir => {
+          if (!combined.some(c => c.vendor === ir.vendor)) {
+            combined.push(ir);
+          }
+        });
+
+        setReturnedPayments(combined);
+      } catch(e) {}
+    };
+
+    loadWarehousePayData();
+    window.addEventListener('storage', loadWarehousePayData);
+    window.addEventListener('focus', loadWarehousePayData);
+    return () => {
+      window.removeEventListener('storage', loadWarehousePayData);
+      window.removeEventListener('focus', loadWarehousePayData);
+    };
   }, []);
 
   const pendingPayments = [
+    ...returnedPayments,
     ...dynamicPayments
   ];
 

@@ -1,7 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
+
+function ScrollToTop() {
+  const { pathname } = useLocation();
+
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+
+  return null;
+}
 import { authAPI } from './api/api';
 import authStore from './store/authStore';
 import Login from './pages/Login';
@@ -539,6 +549,7 @@ function App() {
     return (
       <>
         <Router>
+          <ScrollToTop />
           <Routes>
             <Route path="/login" element={<Login />} />
             <Route path="/employee-login" element={<EmployeeLogin />} />
@@ -877,6 +888,7 @@ function App() {
   return (
     <>
       <Router>
+        <ScrollToTop />
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/candidate-login" element={<CandidateLogin />} />

@@ -68,7 +68,11 @@ export default function DeliveryManagerSidebar() {
 
   const renderNavLink = (item) => {
     if (item.hasDropdown) {
-        const isAnySubItemActive = item.subItems?.some(subItem => location.pathname.includes(subItem.path));
+        const isAnySubItemActive = item.subItems?.some(subItem => 
+          subItem.path === '/delivery-manager/my-task/at-warehouse' 
+            ? location.pathname === subItem.path 
+            : location.pathname.includes(subItem.path)
+        );
         const isOpen = openSubMenus[item.label] || isAnySubItemActive;
 
         return (
@@ -94,6 +98,7 @@ export default function DeliveryManagerSidebar() {
                     <div key={subItem.path}>
                       <NavLink
                         to={subItem.path}
+                        end={subItem.path === '/delivery-manager/my-task/at-warehouse'}
                         className={({ isActive }) =>
                           `flex items-center justify-between px-8 py-3 transition-colors ${
                             isActive
@@ -102,10 +107,12 @@ export default function DeliveryManagerSidebar() {
                           }`
                         }
                       >
-                        <div className="flex items-center space-x-4">
-                          <subItem.icon size={18} className={location.pathname === subItem.path ? 'text-white' : 'text-[#142340]'} />
-                          <span className={`text-[14.5px] ${location.pathname === subItem.path ? 'text-white' : 'text-[#142340]'}`}>{subItem.label}</span>
-                        </div>
+                        {({ isActive }) => (
+                          <div className="flex items-center space-x-4">
+                            <subItem.icon size={18} className={isActive ? 'text-white' : 'text-[#142340]'} />
+                            <span className={`text-[14.5px] ${isActive ? 'text-white' : 'text-[#142340]'}`}>{subItem.label}</span>
+                          </div>
+                        )}
                       </NavLink>
                     </div>
                   ))}
@@ -188,24 +195,28 @@ export default function DeliveryManagerSidebar() {
                       
                       {isOpen && subItem.subItems && (
                         <div className="bg-[#dfebf7] py-1 flex flex-col space-y-1 mt-1 pl-4">
-                          {subItem.subItems.map((nested) => (
-                            <NavLink
-                              key={nested.path}
-                              to={nested.path}
-                              className={({ isActive }) =>
-                                `flex items-center justify-between px-6 py-2 transition-colors ${
-                                  isActive
-                                    ? 'bg-[#142340] text-white font-semibold mx-2 rounded' 
-                                    : 'text-gray-600 hover:bg-[#dce4ee]'
-                                }`
-                              }
-                            >
-                              <div className="flex items-center space-x-4">
-                                <nested.icon size={16} className={location.pathname === nested.path ? 'text-white' : 'text-[#142340]'} />
-                                <span className={`text-[13.5px] ${location.pathname === nested.path ? 'text-white' : 'text-[#142340]'}`}>{nested.label}</span>
-                              </div>
-                            </NavLink>
-                          ))}
+                          {subItem.subItems.map((nested) => {
+                            const isSubActive = location.pathname === nested.path;
+                            return (
+                              <NavLink
+                                key={nested.path}
+                                to={nested.path}
+                                end={nested.path === '/delivery-manager/my-task/at-warehouse'}
+                                className={({ isActive }) =>
+                                  `flex items-center justify-between px-6 py-2 transition-colors ${
+                                    isActive
+                                      ? 'bg-[#142340] text-white font-semibold mx-2 rounded' 
+                                      : 'text-gray-600 hover:bg-[#dce4ee]'
+                                  }`
+                                }
+                              >
+                                <div className="flex items-center space-x-4">
+                                  <nested.icon size={16} className={isSubActive ? 'text-white' : 'text-[#142340]'} />
+                                  <span className={`text-[13.5px] ${isSubActive ? 'text-white' : 'text-[#142340]'}`}>{nested.label}</span>
+                                </div>
+                              </NavLink>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

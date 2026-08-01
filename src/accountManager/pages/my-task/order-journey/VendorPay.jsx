@@ -13,15 +13,57 @@ export default function VendorPay({ onNext, sharedOrderData }) {
   const [componentFilter, setComponentFilter] = useState('All');
   const [completedOrders, setCompletedOrders] = useState([]);
   const [generatedOrdersCache, setGeneratedOrdersCache] = useState([]);
+  const [returnedOrders, setReturnedOrders] = useState([]);
 
   useEffect(() => {
-    try {
-      const savedCompleted = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
-      setCompletedOrders(savedCompleted);
-      
-      const savedGenerated = JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
-      setGeneratedOrdersCache(savedGenerated);
-    } catch(e) {}
+    const loadVendorPayData = () => {
+      try {
+        const savedCompleted = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
+        setCompletedOrders(savedCompleted);
+        
+        const savedGenerated = JSON.parse(localStorage.getItem('generatedVendorPayments') || '[]');
+        setGeneratedOrdersCache(savedGenerated);
+
+        // Load returned orders
+        const savedReturned = JSON.parse(localStorage.getItem('returnedToProcurementOrders') || '[]');
+        const storedInward = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
+        
+        const inwardReturned = storedInward
+          .filter(item => item.status === 'Returned to Procurement' || item.deliveryStatus === 'Returned to Procurement')
+          .map(item => ({
+            orderId: item.orderNo || 'ORD-RET',
+            procurementNo: item.sku || `PROC-${item.orderNo || 'RET'}`,
+            vendorName: item.vendorName || 'Vendor',
+            brand: item.brand || 'Mixed',
+            product: `${item.vendorName || 'Customer'} (Returned Project)`,
+            technology: item.technology || 'Polycrystalline',
+            projectType: item.projectType || 'Commercial',
+            wattPeak: item.wattPeak || '-',
+            totalKW: item.totalKw || '-',
+            totalPanels: (item.totalUnits || 15).toString(),
+            totalPrice: typeof item.poAmount === 'string' ? item.poAmount.replace('₹', '') : (item.poAmount || '-'),
+            deadline: 'Returned to Procurement',
+            isReturned: true
+          }));
+
+        const combinedReturned = [...savedReturned];
+        inwardReturned.forEach(ir => {
+          if (!combinedReturned.some(sr => sr.vendorName === ir.vendorName && sr.orderId === ir.orderId)) {
+            combinedReturned.push(ir);
+          }
+        });
+
+        setReturnedOrders(combinedReturned);
+      } catch(e) {}
+    };
+
+    loadVendorPayData();
+    window.addEventListener('storage', loadVendorPayData);
+    window.addEventListener('focus', loadVendorPayData);
+    return () => {
+      window.removeEventListener('storage', loadVendorPayData);
+      window.removeEventListener('focus', loadVendorPayData);
+    };
   }, []);
 
   // Dynamically calculate combo data for generated orders
@@ -84,8 +126,8 @@ export default function VendorPay({ onNext, sharedOrderData }) {
     };
   });
 
-  // Only show data that has been successfully paid in Warehouse Vendor Pay
-  const comboData = [...completedComboData];
+  // Combine returned orders and completed orders
+  const comboData = [...returnedOrders, ...completedComboData];
 
   let displayData = [];
   if (kitMode === 'ComboKit') {
@@ -282,7 +324,14 @@ export default function VendorPay({ onNext, sharedOrderData }) {
                   {row.vendorName}
                 </td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.brand}</td>
-                <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-bold">{row.product}</td>
+                <td className="px-3 py-4 border-r border-gray-100 text-gray-700 font-bold">
+                  {row.product}
+                  {row.isReturned && (
+                    <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold ml-2 inline-block border border-amber-300">
+                      Returned to Procurement
+                    </span>
+                  )}
+                </td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.technology}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.projectType}</td>
                 <td className="px-3 py-4 border-r border-gray-100 text-gray-700">{row.wattPeak}</td>

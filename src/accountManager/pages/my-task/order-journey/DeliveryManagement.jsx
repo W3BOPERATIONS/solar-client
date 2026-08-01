@@ -1,10 +1,31 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 
 export default function DeliveryManagement() {
-  const tableData = [
-    { no: 'DEL-2023-1001', location: 'Rajkot', kit: '6 Kit', kw: '25 KW', panels: 60, type: 'Express', vehicle: 'Bollero', driver: 'Rajesh Kumar' },
-    { no: 'DEL-2023-1002', location: 'Ahmedabad', kit: '8 Kit', kw: '27 KW', panels: 72, type: 'Regular', vehicle: 'Bollero', driver: 'Mohan Singh' },
-  ];
+  const [tableData, setTableData] = useState([]);
+
+  const loadData = () => {
+    try {
+      const stored = JSON.parse(localStorage.getItem('confirmedDeliveryPlans') || '[]');
+      setTableData(stored);
+    } catch(e) {
+      setTableData([]);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+    const handleStorageChange = () => loadData();
+    window.addEventListener('storage', handleStorageChange);
+    window.addEventListener('focus', handleStorageChange);
+    return () => {
+      window.removeEventListener('storage', handleStorageChange);
+      window.removeEventListener('focus', handleStorageChange);
+    };
+  }, []);
+
+  const outForDeliveryCount = tableData.filter(d => (d.status || 'Out for Delivery') === 'Out for Delivery').length;
+  const inTransitCount = tableData.filter(d => d.status === 'In Transit').length;
+  const deliveredCount = tableData.filter(d => d.status === 'Delivered').length;
 
   return (
     <div className="p-6 bg-[#f0f4f8] min-h-screen space-y-6">
@@ -17,17 +38,17 @@ export default function DeliveryManagement() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-6">
         <div className="bg-white rounded border border-yellow-400 shadow-sm p-6 text-center">
            <h2 className="text-yellow-500 font-medium mb-2">Out for Delivery</h2>
-           <p className="text-5xl font-light text-gray-700 mb-2">15</p>
+           <p className="text-5xl font-light text-gray-700 mb-2">{outForDeliveryCount}</p>
            <p className="text-gray-400 text-xs">Orders ready for dispatch</p>
         </div>
         <div className="bg-white rounded border border-teal-400 shadow-sm p-6 text-center">
            <h2 className="text-teal-500 font-medium mb-2">In Transit</h2>
-           <p className="text-5xl font-light text-gray-700 mb-2">8</p>
+           <p className="text-5xl font-light text-gray-700 mb-2">{inTransitCount}</p>
            <p className="text-gray-400 text-xs">Orders currently being delivered</p>
         </div>
         <div className="bg-white rounded border border-green-500 shadow-sm p-6 text-center">
            <h2 className="text-green-500 font-medium mb-2">Delivered</h2>
-           <p className="text-5xl font-light text-gray-700 mb-2">23</p>
+           <p className="text-5xl font-light text-gray-700 mb-2">{deliveredCount}</p>
            <p className="text-gray-400 text-xs">Completed deliveries</p>
         </div>
       </div>
@@ -56,7 +77,14 @@ export default function DeliveryManagement() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
-              {tableData.map((row, idx) => (
+              {tableData.length === 0 ? (
+                <tr>
+                  <td colSpan={12} className="px-4 py-8 text-center text-slate-400 font-medium">
+                    No active delivery plans found. Confirm a delivery plan from "Delivery Plan" page to see orders here.
+                  </td>
+                </tr>
+              ) : (
+                tableData.map((row, idx) => (
                 <tr key={idx} className={`${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50'} text-gray-700`}>
                   <td className="px-3 py-5 border-r border-gray-100">{row.no}</td>
                   <td className="px-3 py-5 border-r border-gray-100">{row.location}</td>
@@ -99,7 +127,8 @@ export default function DeliveryManagement() {
                     </button>
                   </td>
                 </tr>
-              ))}
+              ))
+              )}
             </tbody>
           </table>
         </div>
