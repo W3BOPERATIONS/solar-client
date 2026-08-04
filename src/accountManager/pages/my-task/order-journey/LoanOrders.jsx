@@ -169,7 +169,7 @@ export default function LoanOrders() {
       </div>
 
       {/* Filters Row */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mt-8">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mt-8">
         {[
           { 
             label: 'Category', 
@@ -179,7 +179,7 @@ export default function LoanOrders() {
           { 
             label: 'Sub Category', 
             placeholder: 'Select Sub Category',
-            options: dashboardData.dynamicDropdowns?.categories || ['Sub Category 1', 'Sub Category 2']
+            options: dashboardData.dynamicDropdowns?.subCategories || ['Sub Category 1', 'Sub Category 2']
           },
           { 
             label: 'Project Type', 
@@ -190,6 +190,11 @@ export default function LoanOrders() {
             label: 'Sub Project Type', 
             placeholder: 'Select Sub Project Type',
             options: dashboardData.dynamicDropdowns?.subProjectTypes || ['Sub Project 1', 'Sub Project 2']
+          },
+          { 
+            label: 'Partner', 
+            placeholder: 'Select Partner',
+            options: dashboardData.dynamicDropdowns?.partners || ['Tata Solar', 'Waaree Solar', 'Adani Solar', 'Vikram Solar']
           },
         ].map((filter, idx) => (
           <div key={idx}>

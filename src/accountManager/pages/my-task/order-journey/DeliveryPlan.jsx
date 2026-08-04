@@ -38,6 +38,16 @@ export default function DeliveryPlan({ onNext }) {
   const [selectedOrderIds, setSelectedOrderIds] = useState([]);
   const [selectedLabelModalRow, setSelectedLabelModalRow] = useState(null);
 
+  // Dynamic Category & Project Filters States (including Partner)
+  const [selectedCategoryFilter, setSelectedCategoryFilter] = useState('');
+  const [selectedSubCategoryFilter, setSelectedSubCategoryFilter] = useState('');
+  const [selectedProjectTypeFilter, setSelectedProjectTypeFilter] = useState('');
+  const [selectedSubTypeFilter, setSelectedSubTypeFilter] = useState('');
+  const [selectedClusterFilter, setSelectedClusterFilter] = useState('');
+  const [selectedDeliveryZoneFilter, setSelectedDeliveryZoneFilter] = useState('');
+  const [selectedAreaTypeFilterDropdown, setSelectedAreaTypeFilterDropdown] = useState('');
+  const [selectedPartnerFilter, setSelectedPartnerFilter] = useState('');
+
   // Form states for creating delivery plan
   const [selectedDeliveryType, setSelectedDeliveryType] = useState('');
   const [selectedVehicleType, setSelectedVehicleType] = useState('');
@@ -223,10 +233,32 @@ export default function DeliveryPlan({ onNext }) {
     return loc.includes('west') || loc.includes('rajkot') || loc.includes('vadodara') || (!loc.includes('north') && !loc.includes('south') && !loc.includes('east'));
   });
 
-  // Filter orders by active Delivery Type, Area Type tabs, and Location Cards
+  // Calculate dynamic Partner dropdown options
+  const partnerOptions = Array.from(new Set([
+    ...(dashboardData.dynamicDropdowns?.partners || []),
+    ...(dashboardData.partners || []),
+    ...orders.map(o => o.partner || o.partnerName).filter(Boolean),
+    'Tata Solar',
+    'Waaree Solar',
+    'Adani Solar',
+    'Vikram Solar',
+    'SolarTech Commercial'
+  ]));
+
+  // Filter orders by active Delivery Type, Area Type tabs, Location Cards, and Category/Partner Filters
   const filteredOrders = locationFilteredOrders.filter(o => {
     if (deliveryTypeFilter !== 'All' && (o.deliveryType || 'Regular') !== deliveryTypeFilter) return false;
     if (areaTypeFilter !== 'All' && (o.areaType || 'Urban') !== areaTypeFilter) return false;
+
+    if (selectedCategoryFilter && o.category !== selectedCategoryFilter) return false;
+    if (selectedSubCategoryFilter && o.subCategory !== selectedSubCategoryFilter) return false;
+    if (selectedProjectTypeFilter && o.projectType !== selectedProjectTypeFilter) return false;
+    if (selectedSubTypeFilter && o.subType !== selectedSubTypeFilter) return false;
+    if (selectedClusterFilter && o.cluster !== selectedClusterFilter) return false;
+    if (selectedDeliveryZoneFilter && o.deliveryZone !== selectedDeliveryZoneFilter && o.zone !== selectedDeliveryZoneFilter) return false;
+    if (selectedAreaTypeFilterDropdown && (o.areaType || 'Urban') !== selectedAreaTypeFilterDropdown) return false;
+    if (selectedPartnerFilter && (o.partner || o.partnerName || 'Tata Solar') !== selectedPartnerFilter) return false;
+
     return true;
   });
 
@@ -586,23 +618,88 @@ export default function DeliveryPlan({ onNext }) {
 
       {/* Dynamic Filter Dropdowns Row */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-2xs space-y-3">
-        <div className="flex items-center space-x-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
-          <SlidersHorizontal size={14} className="text-blue-600" />
-          <span>Category & Project Filters</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-2 text-slate-700 font-bold text-xs uppercase tracking-wider">
+            <SlidersHorizontal size={14} className="text-blue-600" />
+            <span>Category & Project Filters</span>
+          </div>
+          {(selectedCategoryFilter || selectedSubCategoryFilter || selectedProjectTypeFilter || selectedSubTypeFilter || selectedClusterFilter || selectedDeliveryZoneFilter || selectedAreaTypeFilterDropdown || selectedPartnerFilter) ? (
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedCategoryFilter('');
+                setSelectedSubCategoryFilter('');
+                setSelectedProjectTypeFilter('');
+                setSelectedSubTypeFilter('');
+                setSelectedClusterFilter('');
+                setSelectedDeliveryZoneFilter('');
+                setSelectedAreaTypeFilterDropdown('');
+                setSelectedPartnerFilter('');
+              }}
+              className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 bg-rose-50 hover:bg-rose-100 px-2.5 py-1 rounded-lg border border-rose-200/80 transition-all cursor-pointer"
+            >
+              Clear Filters
+            </button>
+          ) : null}
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 lg:grid-cols-8 gap-3">
           {[
-            { label: 'Category', options: dashboardData.dynamicDropdowns?.categories || [] },
-            { label: 'Sub Category', options: dashboardData.dynamicDropdowns?.subCategories || [] },
-            { label: 'Project Type', options: dashboardData.dynamicDropdowns?.projectTypes ? [...dashboardData.dynamicDropdowns.projectTypes, 'Customize', 'ComboKit'] : ['Customize', 'ComboKit'] },
-            { label: 'Sub Type', options: dashboardData.dynamicDropdowns?.subProjectTypes || [] },
-            { label: 'Cluster', options: dashboardData.dynamicDropdowns?.clusters || [] },
-            { label: 'Delivery Zone', options: dashboardData.dynamicDropdowns?.deliveryZones || [] },
-            { label: 'Area Type', options: dashboardData.dynamicDropdowns?.areaTypes || ['Urban', 'Rural'] },
+            { 
+              label: 'Category', 
+              value: selectedCategoryFilter, 
+              onChange: (e) => setSelectedCategoryFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.categories || [] 
+            },
+            { 
+              label: 'Sub Category', 
+              value: selectedSubCategoryFilter, 
+              onChange: (e) => setSelectedSubCategoryFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.subCategories || [] 
+            },
+            { 
+              label: 'Project Type', 
+              value: selectedProjectTypeFilter, 
+              onChange: (e) => setSelectedProjectTypeFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.projectTypes ? [...dashboardData.dynamicDropdowns.projectTypes, 'Customize', 'ComboKit'] : ['Customize', 'ComboKit'] 
+            },
+            { 
+              label: 'Sub Type', 
+              value: selectedSubTypeFilter, 
+              onChange: (e) => setSelectedSubTypeFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.subProjectTypes || [] 
+            },
+            { 
+              label: 'Cluster', 
+              value: selectedClusterFilter, 
+              onChange: (e) => setSelectedClusterFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.clusters || [] 
+            },
+            { 
+              label: 'Delivery Zone', 
+              value: selectedDeliveryZoneFilter, 
+              onChange: (e) => setSelectedDeliveryZoneFilter(e.target.value),
+              options: dashboardData.dynamicDropdowns?.deliveryZones || [] 
+            },
+            { 
+              label: 'Area Type', 
+              value: selectedAreaTypeFilterDropdown, 
+              onChange: (e) => setSelectedAreaTypeFilterDropdown(e.target.value),
+              options: dashboardData.dynamicDropdowns?.areaTypes || ['Urban', 'Rural'] 
+            },
+            { 
+              label: 'Partner', 
+              value: selectedPartnerFilter, 
+              onChange: (e) => setSelectedPartnerFilter(e.target.value),
+              options: partnerOptions 
+            },
           ].map((filter, idx) => (
             <div key={idx} className="relative">
-              <select className="w-full appearance-none bg-slate-50 hover:bg-slate-100/80 border border-slate-200 text-slate-700 py-2 px-3 pr-7 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all">
+              <select 
+                value={filter.value}
+                onChange={filter.onChange}
+                className={`w-full appearance-none bg-slate-50 hover:bg-slate-100/80 border text-slate-700 py-2 px-3 pr-7 rounded-xl text-xs font-medium focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all cursor-pointer ${filter.value ? 'border-blue-500 bg-blue-50/30 text-blue-700 font-bold' : 'border-slate-200'}`}
+              >
                 <option value="">{filter.label}</option>
                 {filter.options.map((opt, i) => <option key={i} value={opt}>{opt}</option>)}
               </select>
