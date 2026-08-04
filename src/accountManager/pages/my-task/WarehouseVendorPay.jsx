@@ -56,7 +56,11 @@ export default function WarehouseVendorPay() {
             };
         });
         
-        const filteredPending = formatted.filter(f => !savedCompleted.some(c => c.vendor === f.vendor));
+        const filteredPending = formatted.filter(f => !savedCompleted.some(c => 
+          (c.orderId && f.orderId && c.orderId === f.orderId) ||
+          c.vendor === f.vendor ||
+          (f.vendor && c.vendor && f.vendor.startsWith(c.vendor))
+        ));
         setDynamicPayments(filteredPending);
 
         // Load returned orders
@@ -93,7 +97,13 @@ export default function WarehouseVendorPay() {
           }
         });
 
-        setReturnedPayments(combined);
+        const filteredReturned = combined.filter(r => !savedCompleted.some(c => 
+          (c.orderId && r.orderId && c.orderId === r.orderId) ||
+          c.vendor === r.vendor ||
+          (r.vendor && c.vendor && r.vendor.startsWith(c.vendor))
+        ));
+
+        setReturnedPayments(filteredReturned);
       } catch(e) {}
     };
 
@@ -135,17 +145,24 @@ export default function WarehouseVendorPay() {
       const gst = o?.amount?.gst || 0;
       const totalWithGst = baseAmount + (baseAmount * gst / 100);
 
+      let cleanVendor = o?.vendorName || row.vendor || 'N/A';
+      if (typeof cleanVendor === 'string' && cleanVendor.includes('(')) {
+        cleanVendor = cleanVendor.split('(')[0].trim();
+      }
+
+      const orderNo = row.orderId || o?.id || 'ORD-UNKNOWN';
+
       const newInwardData = {
-        orderNo: row.orderId || o?.id || 'ORD-UNKNOWN',
-        poNumber: o?.poNumber || row.poNumber || 'N/A',
-        vendorName: o?.vendorName || row.vendor || 'N/A',
+        orderNo: orderNo,
+        poNumber: o?.poNumber || row.poNumber || `PO-${Math.floor(10000 + Math.random() * 90000)}`,
+        vendorName: cleanVendor,
         poAmount: totalWithGst ? `₹${totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : (row.amount || '₹0'),
-        brand: o?.panelDetails?.brands ? (Object.keys(o.panelDetails.brands)[0] || 'Mixed') : 'Mixed',
+        brand: o?.panelDetails?.brand || (o?.panelDetails?.brands ? Object.keys(o.panelDetails.brands)[0] : null) || 'Waaree',
         product: 'Solar Kit Components',
-        technology: o?.panelDetails?.technology || 'Mixed',
+        technology: o?.panelDetails?.technology || 'Monocrystalline, Polycrystalline, Bifacial',
         projectType: 'Commercial',
         wattPeak: o?.panelDetails?.wattage || '540W',
-        totalKw: o?.panelDetails?.totalCapacity ? `${o.panelDetails.totalCapacity / 1000} KW` : '8.0 KW',
+        totalKw: o?.panelDetails?.totalCapacity ? `${o.panelDetails.totalCapacity / 1000} KW` : '7.95 KW',
         totalUnits: `${numPanels}`,
         sku: procNum, // Procurement number as SKU
         status: 'Pending',
@@ -156,8 +173,16 @@ export default function WarehouseVendorPay() {
 
       let inwardStorage = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
       if (!Array.isArray(inwardStorage)) inwardStorage = [];
-      inwardStorage.unshift(newInwardData);
+
+      const existingIndex = inwardStorage.findIndex(item => item.orderNo === orderNo || (procNum && item.sku === procNum));
+      if (existingIndex >= 0) {
+        inwardStorage[existingIndex] = { ...inwardStorage[existingIndex], ...newInwardData };
+      } else {
+        inwardStorage.unshift(newInwardData);
+      }
+
       localStorage.setItem('inwardOrdersData', JSON.stringify(inwardStorage));
+      window.dispatchEvent(new Event('storage'));
     } catch (e) {
       console.error("Error pushing to inward management", e);
     }
@@ -165,11 +190,18 @@ export default function WarehouseVendorPay() {
 
   const handlePaySuccess = () => {
     if (selectedPayRow) {
-      setDynamicPayments(prev => prev.filter(p => p.vendor !== selectedPayRow.vendor));
+      setDynamicPayments(prev => prev.filter(p => p.orderId !== selectedPayRow.orderId && p.vendor !== selectedPayRow.vendor));
+      setReturnedPayments(prev => prev.filter(p => p.orderId !== selectedPayRow.orderId && p.vendor !== selectedPayRow.vendor));
       const procNum = 'PROC-' + selectedPayRow.orderId + '-' + Math.floor(100 + Math.random() * 900);
+
+      let cleanVendor = selectedPayRow.vendor;
+      if (typeof cleanVendor === 'string' && cleanVendor.includes('(')) {
+        cleanVendor = cleanVendor.split('(')[0].trim();
+      }
+
       const newCompleted = {
         id: 'PAY-WH-' + Math.floor(1000 + Math.random() * 9000),
-        vendor: selectedPayRow.vendor,
+        vendor: cleanVendor,
         date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
         warehouse: selectedPayRow.warehouse,
         amount: selectedPayRow.amount,
@@ -183,19 +215,27 @@ export default function WarehouseVendorPay() {
         return updated;
       });
       pushToInwardAndGenerateProc(selectedPayRow, procNum);
+      window.dispatchEvent(new Event('storage'));
     }
     setShowPayModal(false);
     setSelectedPayRow(null);
-    alert('Payment Successful!');
+    alert('Payment Successful! Sent to Delivery Manager Inward Management.');
   };
 
   const handleUploadReceipt = (row, file) => {
     if (!file) return;
-    setDynamicPayments(prev => prev.filter(p => p.vendor !== row.vendor));
+    setDynamicPayments(prev => prev.filter(p => p.orderId !== row.orderId && p.vendor !== row.vendor));
+    setReturnedPayments(prev => prev.filter(p => p.orderId !== row.orderId && p.vendor !== row.vendor));
     const procNum = 'PROC-' + row.orderId + '-' + Math.floor(100 + Math.random() * 900);
+
+    let cleanVendor = row.vendor;
+    if (typeof cleanVendor === 'string' && cleanVendor.includes('(')) {
+      cleanVendor = cleanVendor.split('(')[0].trim();
+    }
+
     const newCompleted = {
       id: 'PAY-WH-' + Math.floor(1000 + Math.random() * 9000),
-      vendor: row.vendor,
+      vendor: cleanVendor,
       date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
       warehouse: row.warehouse,
       amount: row.amount,
@@ -209,8 +249,9 @@ export default function WarehouseVendorPay() {
       return updated;
     });
     pushToInwardAndGenerateProc(row, procNum);
+    window.dispatchEvent(new Event('storage'));
 
-    alert('Receipt Uploaded Successfully!');
+    alert('Receipt Uploaded Successfully! Sent to Delivery Manager Inward Management.');
   };
 
   return (

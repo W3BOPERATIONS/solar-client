@@ -29,13 +29,21 @@ export default function DeliveryManagement() {
   // Modals state
   const [showChallanModal, setShowChallanModal] = useState(false);
   const [activeChallanRow, setActiveChallanRow] = useState(null);
+  const [challanFromAddress, setChallanFromAddress] = useState('');
+  const [challanToAddress, setChallanToAddress] = useState('');
+  const [driverSignature, setDriverSignature] = useState(null);
+  const [clientSignature, setClientSignature] = useState(null);
 
   const [showDriverPlanModal, setShowDriverPlanModal] = useState(false);
   const [activeDriverRow, setActiveDriverRow] = useState(null);
+  const [driverNameInput, setDriverNameInput] = useState('');
+  const [driverPhoneInput, setDriverPhoneInput] = useState('');
+  const [vehicleTypeInput, setVehicleTypeInput] = useState('');
+  const [vehicleRegInput, setVehicleRegInput] = useState('');
 
   const [showVehiclePhotoModal, setShowVehiclePhotoModal] = useState(false);
   const [activePhotoRow, setActivePhotoRow] = useState(null);
-  const [tempPhotoUrl, setTempPhotoUrl] = useState(null);
+  const [tempPhotos, setTempPhotos] = useState([]);
 
   // Tracking state for generated files & photos
   const [generatedChallans, setGeneratedChallans] = useState(() => {
@@ -84,16 +92,52 @@ export default function DeliveryManagement() {
     localStorage.setItem('confirmedDeliveryPlans', JSON.stringify(updated));
   };
 
-  // Handlers for Challan
+  // Handlers for Challan Signature Upload & Opening
+  const handleSignatureUpload = (e, setSignature) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setSignature(event.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   const handleOpenChallan = (row) => {
     setActiveChallanRow(row);
+    const rowKey = row.no || row.id;
+    const existing = generatedChallans[rowKey];
+    
+    const defaultFrom = row.fromAddress || 'SOLARKITS Logistics Hub, Plot 42, GIDC Industrial Estate, Rajkot, Gujarat, India - 360001';
+    const defaultTo = row.toAddress || `${row.vendorName || row.name || 'Green Energy Setup'}\n${row.address || 'Industrial Area, Rajkot'}\nLocation: ${row.location || 'Rajkot'} | Pincode: ${row.pincode || '360001'}\nPartner: ${row.partner || 'Super Admin'}`;
+
+    if (typeof existing === 'object' && existing !== null) {
+      setChallanFromAddress(existing.fromAddress || defaultFrom);
+      setChallanToAddress(existing.toAddress || defaultTo);
+      setDriverSignature(existing.driverSignature || null);
+      setClientSignature(existing.clientSignature || null);
+    } else {
+      setChallanFromAddress(defaultFrom);
+      setChallanToAddress(defaultTo);
+      setDriverSignature(row.driverSignature || null);
+      setClientSignature(row.clientSignature || null);
+    }
     setShowChallanModal(true);
   };
 
   const handleConfirmChallan = () => {
     if (!activeChallanRow) return;
     const rowKey = activeChallanRow.no || activeChallanRow.id;
-    const updated = { ...generatedChallans, [rowKey]: true };
+    const challanDetails = {
+      verified: true,
+      fromAddress: challanFromAddress,
+      toAddress: challanToAddress,
+      driverSignature,
+      clientSignature,
+      generatedDate: new Date().toLocaleDateString('en-GB')
+    };
+    const updated = { ...generatedChallans, [rowKey]: challanDetails };
     setGeneratedChallans(updated);
     localStorage.setItem('generatedChallans', JSON.stringify(updated));
     showToast(`✅ Delivery Challan CHL-${rowKey} generated & verified!`);
@@ -103,48 +147,107 @@ export default function DeliveryManagement() {
   // Handlers for Driver Plan
   const handleOpenDriverPlan = (row) => {
     setActiveDriverRow(row);
+    const rowKey = row.no || row.id;
+    const existing = generatedDriverPlans[rowKey];
+
+    if (typeof existing === 'object' && existing !== null) {
+      setDriverNameInput(existing.driverName || row.driver || 'Suresh Patel');
+      setDriverPhoneInput(existing.driverPhone || row.driverPhone || '+91 98250 12345');
+      setVehicleTypeInput(existing.vehicleType || row.vehicleType || row.vehicle || 'Bolero max');
+      setVehicleRegInput(existing.vehicleReg || row.vehicleReg || 'GJ-03-AB-4829');
+    } else {
+      setDriverNameInput(row.driver || 'Suresh Patel');
+      setDriverPhoneInput(row.driverPhone || '+91 98250 12345');
+      setVehicleTypeInput(row.vehicleType || row.vehicle || 'Bolero max');
+      setVehicleRegInput(row.vehicleReg || 'GJ-03-AB-4829');
+    }
     setShowDriverPlanModal(true);
   };
 
   const handleConfirmDriverPlan = () => {
     if (!activeDriverRow) return;
     const rowKey = activeDriverRow.no || activeDriverRow.id;
-    const updated = { ...generatedDriverPlans, [rowKey]: true };
+    const planDetails = {
+      verified: true,
+      driverName: driverNameInput,
+      driverPhone: driverPhoneInput,
+      vehicleType: vehicleTypeInput,
+      vehicleReg: vehicleRegInput,
+      createdDate: new Date().toLocaleDateString('en-GB')
+    };
+    const updated = { ...generatedDriverPlans, [rowKey]: planDetails };
     setGeneratedDriverPlans(updated);
     localStorage.setItem('generatedDriverPlans', JSON.stringify(updated));
-    showToast(`✅ Driver Delivery Plan DRV-PLAN-${rowKey} created!`);
+
+    // Also update current active table data so changes reflect live
+    const updatedDeliveryData = deliveryData.map(item => {
+      if ((item.no || item.id) === rowKey) {
+        return {
+          ...item,
+          driver: driverNameInput,
+          driverPhone: driverPhoneInput,
+          vehicleType: vehicleTypeInput,
+          vehicle: vehicleTypeInput,
+          vehicleReg: vehicleRegInput
+        };
+      }
+      return item;
+    });
+    setDeliveryData(updatedDeliveryData);
+    localStorage.setItem('confirmedDeliveryPlans', JSON.stringify(updatedDeliveryData));
+
+    showToast(`✅ Driver Delivery Plan DRV-PLAN-${rowKey} created & details updated!`);
     setShowDriverPlanModal(false);
   };
 
-  // Handlers for Vehicle Photo
+  // Handlers for Vehicle Photos (Multiple photos supported)
   const handleOpenPhotoUpload = (row) => {
     setActivePhotoRow(row);
     const rowKey = row.no || row.id;
-    setTempPhotoUrl(uploadedVehiclePhotos[rowKey] || null);
+    const existing = uploadedVehiclePhotos[rowKey];
+    if (Array.isArray(existing)) {
+      setTempPhotos(existing);
+    } else if (typeof existing === 'string' && existing) {
+      setTempPhotos([existing]);
+    } else {
+      setTempPhotos([]);
+    }
     setShowVehiclePhotoModal(true);
   };
 
   const handleFileChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setTempPhotoUrl(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
+    const files = Array.from(e.target.files || []);
+    if (files.length === 0) return;
+
+    const filePromises = files.map(file => {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          resolve(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+    });
+
+    Promise.all(filePromises).then(newImages => {
+      setTempPhotos(prev => [...prev, ...newImages]);
+    });
+  };
+
+  const handleRemovePhoto = (indexToRemove) => {
+    setTempPhotos(prev => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   const handleSavePhoto = () => {
-    if (!activePhotoRow || !tempPhotoUrl) {
-      alert("⚠️ Please select an image file first!");
+    if (!activePhotoRow || tempPhotos.length === 0) {
+      alert("⚠️ Please select at least one vehicle photo!");
       return;
     }
     const rowKey = activePhotoRow.no || activePhotoRow.id;
-    const updated = { ...uploadedVehiclePhotos, [rowKey]: tempPhotoUrl };
+    const updated = { ...uploadedVehiclePhotos, [rowKey]: tempPhotos };
     setUploadedVehiclePhotos(updated);
     localStorage.setItem('uploadedVehiclePhotos', JSON.stringify(updated));
-    showToast(`📸 Vehicle Loading Photo uploaded for ${rowKey}!`);
+    showToast(`📸 ${tempPhotos.length} Vehicle Loading Photo(s) saved for ${rowKey}!`);
     setShowVehiclePhotoModal(false);
   };
 
@@ -306,11 +409,11 @@ export default function DeliveryManagement() {
                       </td>
 
                       {/* 1. Generate Delivery Challan Button */}
-                      <td className="px-4 py-5 border-r border-gray-100">
+                      <td className="px-4 py-4 border-r border-gray-100">
                         {isChallanDone ? (
                           <button 
                             onClick={() => handleOpenChallan(row)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center justify-center space-x-1 mx-auto transition shadow-2xs"
+                            className="inline-flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-2xs hover:shadow hover:scale-[1.02]"
                             title="Click to view or print Delivery Challan"
                           >
                             <CheckCircle2 size={13} />
@@ -319,19 +422,20 @@ export default function DeliveryManagement() {
                         ) : (
                           <button 
                             onClick={() => handleOpenChallan(row)}
-                            className="bg-[#2FA041] hover:bg-[#237d32] text-white px-3 py-1.5 rounded font-medium text-xs w-[90px] shadow-2xs hover:scale-105 transition-transform"
+                            className="inline-flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs hover:shadow transition-all hover:scale-[1.02]"
                           >
-                            Generate
+                            <FileText size={13} />
+                            <span>Generate</span>
                           </button>
                         )}
                       </td>
 
                       {/* 2. Driver Delivery Plan Button */}
-                      <td className="px-4 py-5 border-r border-gray-100">
+                      <td className="px-4 py-4 border-r border-gray-100">
                         {isDriverPlanDone ? (
                           <button 
                             onClick={() => handleOpenDriverPlan(row)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold text-xs flex items-center justify-center space-x-1 mx-auto transition shadow-2xs"
+                            className="inline-flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs transition-all shadow-2xs hover:shadow hover:scale-[1.02]"
                             title="Click to view or print Driver Route Plan"
                           >
                             <CheckCircle2 size={13} />
@@ -340,55 +444,76 @@ export default function DeliveryManagement() {
                         ) : (
                           <button 
                             onClick={() => handleOpenDriverPlan(row)}
-                            className="bg-[#2FA041] hover:bg-[#237d32] text-white px-3 py-1.5 rounded font-medium text-xs w-[90px] shadow-2xs hover:scale-105 transition-transform"
+                            className="inline-flex items-center justify-center space-x-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs hover:shadow transition-all hover:scale-[1.02]"
                           >
-                            Generate
+                            <Navigation size={13} />
+                            <span>Generate</span>
                           </button>
                         )}
                       </td>
 
                       {/* 3. Upload Vehicle Photo Button */}
-                      <td className="px-4 py-5 border-r border-gray-100">
-                        {photoUrl ? (
-                          <div className="flex items-center justify-center space-x-1">
-                            <img src={photoUrl} alt="Vehicle Loading" className="w-8 h-8 rounded border border-emerald-400 object-cover shadow-2xs" />
-                            <button 
-                              onClick={() => handleOpenPhotoUpload(row)}
-                              className="bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-300 px-2 py-1 rounded text-[11px] font-bold"
-                              title="Click to view or update uploaded vehicle photo"
-                            >
-                              Uploaded ✓
-                            </button>
-                          </div>
+                      <td className="px-4 py-4 border-r border-gray-100">
+                        {photoUrl && (Array.isArray(photoUrl) ? photoUrl.length > 0 : !!photoUrl) ? (
+                          <button 
+                            onClick={() => handleOpenPhotoUpload(row)}
+                            className="inline-flex items-center space-x-2 bg-amber-50 hover:bg-amber-100 border border-amber-300 text-amber-900 px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all shadow-2xs hover:shadow-xs group cursor-pointer"
+                            title="Click to view, add or re-upload vehicle loading photos"
+                          >
+                            <div className="relative flex-shrink-0">
+                              <img 
+                                src={Array.isArray(photoUrl) ? photoUrl[0] : photoUrl} 
+                                alt="Vehicle" 
+                                className="w-7 h-7 rounded object-cover border border-amber-400 shadow-2xs group-hover:scale-105 transition-transform" 
+                              />
+                              {Array.isArray(photoUrl) && photoUrl.length > 1 && (
+                                <span className="absolute -top-1.5 -right-1.5 bg-amber-600 text-white font-mono text-[9px] font-bold px-1 rounded-full border border-white">
+                                  +{photoUrl.length - 1}
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-left flex flex-col justify-center leading-tight">
+                              <span className="text-[11px] font-bold text-amber-950 flex items-center">
+                                <CheckCircle2 size={11} className="text-emerald-600 mr-1 flex-shrink-0" />
+                                Uploaded ({Array.isArray(photoUrl) ? photoUrl.length : 1})
+                              </span>
+                              <span className="text-[9px] font-bold text-blue-600 group-hover:underline flex items-center mt-0.5">
+                                <Upload size={9} className="mr-0.5 text-blue-600" /> + Add / Re-upload
+                              </span>
+                            </div>
+                          </button>
                         ) : (
                           <button 
                             onClick={() => handleOpenPhotoUpload(row)}
-                            className="bg-[#2FA041] hover:bg-[#237d32] text-white px-3 py-1.5 rounded font-medium text-xs w-[90px] shadow-2xs hover:scale-105 transition-transform"
+                            className="inline-flex items-center justify-center space-x-1.5 bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs hover:shadow transition-all hover:scale-[1.02]"
                           >
-                            Generate
+                            <Upload size={13} />
+                            <span>Upload Photo</span>
                           </button>
                         )}
                       </td>
 
                       {/* 4. Action Button */}
-                      <td className="px-4 py-5">
+                      <td className="px-4 py-4">
                         {row.status === 'In Transit' ? (
                           <button 
                             onClick={() => handleMarkDelivered(row)}
-                            className="bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded font-bold text-xs w-[95px] shadow-2xs transition"
+                            className="inline-flex items-center justify-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs hover:shadow transition-all hover:scale-[1.02]"
                           >
-                            Mark<br/>Delivered
+                            <CheckCircle2 size={13} />
+                            <span>Mark Delivered</span>
                           </button>
                         ) : row.status === 'Delivered' ? (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                            <CheckCircle2 size={12} className="mr-1" /> Delivered
+                          <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            <CheckCircle2 size={13} className="mr-1 text-emerald-600" /> Delivered
                           </span>
                         ) : (
                           <button 
                             onClick={() => handleStartDelivery(row)}
-                            className="bg-[#00BCD4] hover:bg-[#0097a7] text-white px-3 py-1.5 rounded font-bold text-xs w-[95px] shadow-2xs hover:scale-105 transition-transform"
+                            className="inline-flex items-center justify-center space-x-1 bg-cyan-600 hover:bg-cyan-700 text-white px-3.5 py-1.5 rounded-lg font-bold text-xs shadow-2xs hover:shadow transition-all hover:scale-[1.02]"
                           >
-                            Start<br/>Delivery
+                            <Truck size={13} />
+                            <span>Start Delivery</span>
                           </button>
                         )}
                       </td>
@@ -444,21 +569,54 @@ export default function DeliveryManagement() {
                 </div>
               </div>
 
-              {/* Order & Location Info */}
-              <div className="grid grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+              {/* Order & Location Info (From Address & To Address) */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                {/* FROM ADDRESS */}
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] text-blue-600 flex items-center">
+                    <MapPin size={13} className="mr-1 text-blue-600" /> From Address (Dispatch Warehouse)
+                  </h4>
+                  <textarea
+                    value={challanFromAddress}
+                    onChange={(e) => setChallanFromAddress(e.target.value)}
+                    rows={3}
+                    placeholder="Enter Sender / Dispatch Warehouse Address..."
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-medium text-slate-800 resize-none"
+                  />
+                </div>
+
+                {/* TO ADDRESS */}
+                <div className="space-y-1">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] text-blue-600 flex items-center">
+                    <MapPin size={13} className="mr-1 text-blue-600" /> To Address (Consignee & Delivery)
+                  </h4>
+                  <textarea
+                    value={challanToAddress}
+                    onChange={(e) => setChallanToAddress(e.target.value)}
+                    rows={3}
+                    placeholder="Enter Receiver / Delivery Address..."
+                    className="w-full text-xs p-2 border border-slate-300 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-500 bg-white font-medium text-slate-800 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* DISPATCH & VEHICLE DETAILS */}
+              <div className="bg-slate-50 p-3 rounded-xl border border-slate-200 text-xs grid grid-cols-2 sm:grid-cols-4 gap-2">
                 <div>
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] text-blue-600 mb-1">Consignee & Delivery Address</h4>
-                  <p className="font-bold text-slate-900 text-sm">{activeChallanRow.vendorName || activeChallanRow.name || 'SolarTech Commercial'}</p>
-                  <p className="text-slate-600 font-medium mt-0.5">{activeChallanRow.address || 'Industrial Area, Rajkot'}</p>
-                  <p className="text-slate-600 font-medium">Location: {activeChallanRow.location || 'Rajkot'} | Pincode: {activeChallanRow.pincode || '360001'}</p>
-                  <p className="text-slate-500 mt-1 font-semibold">Partner: {activeChallanRow.partner || 'Tata Solar'}</p>
+                  <span className="text-slate-500 block text-[10px] font-bold uppercase">Vehicle</span>
+                  <span className="font-semibold text-slate-900">{activeChallanRow.vehicleType || activeChallanRow.vehicle || 'Bolero max'}</span>
                 </div>
                 <div>
-                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] text-blue-600 mb-1">Dispatch & Vehicle Details</h4>
-                  <p className="text-slate-700 font-semibold">Vehicle: <span className="text-slate-900">{activeChallanRow.vehicleType || activeChallanRow.vehicle || 'Bolero max'}</span></p>
-                  <p className="text-slate-700 font-semibold">Driver: <span className="text-slate-900">{activeChallanRow.driver || 'Suresh Patel'}</span></p>
-                  <p className="text-slate-700 font-semibold">Delivery Type: <span className="text-slate-900">{activeChallanRow.deliveryType || 'Regular'}</span></p>
-                  <p className="text-slate-700 font-semibold">System Capacity: <span className="text-blue-700 font-bold">{activeChallanRow.kw || '9 KW'}</span></p>
+                  <span className="text-slate-500 block text-[10px] font-bold uppercase">Driver</span>
+                  <span className="font-semibold text-slate-900">{activeChallanRow.driver || 'Suresh Patel'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] font-bold uppercase">Delivery Type</span>
+                  <span className="font-semibold text-slate-900">{activeChallanRow.deliveryType || 'Regular'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-500 block text-[10px] font-bold uppercase">System Capacity</span>
+                  <span className="font-bold text-blue-700">{activeChallanRow.kw || '9 KW'}</span>
                 </div>
               </div>
 
@@ -499,13 +657,66 @@ export default function DeliveryManagement() {
 
               {/* Signatures */}
               <div className="pt-6 border-t border-slate-200 grid grid-cols-2 gap-8 text-center text-xs text-slate-500">
-                <div>
-                  <div className="border-b border-slate-300 mb-1 pb-8"></div>
-                  <p className="font-bold text-slate-700">Driver / Dispatcher Signature</p>
+                {/* Driver / Dispatcher Signature */}
+                <div className="flex flex-col items-center">
+                  <div className="w-full h-24 flex flex-col justify-end items-center mb-1 relative border-b border-slate-300 pb-2">
+                    {driverSignature ? (
+                      <div className="relative group flex items-center justify-center">
+                        <img src={driverSignature} alt="Driver Signature" className="max-h-16 object-contain" />
+                        <button 
+                          type="button"
+                          onClick={() => setDriverSignature(null)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow opacity-0 group-hover:opacity-100 transition print:hidden"
+                          title="Remove Signature"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 border border-dashed border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition print:hidden mb-2">
+                        <Upload size={14} className="text-blue-600" />
+                        <span>Upload Driver Sign</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleSignatureUpload(e, setDriverSignature)} 
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="font-bold text-slate-700 mt-1">Driver / Dispatcher Signature</p>
                 </div>
-                <div>
-                  <div className="border-b border-slate-300 mb-1 pb-8"></div>
-                  <p className="font-bold text-slate-700">Client Consignee Signature</p>
+
+                {/* Client Consignee Signature */}
+                <div className="flex flex-col items-center">
+                  <div className="w-full h-24 flex flex-col justify-end items-center mb-1 relative border-b border-slate-300 pb-2">
+                    {clientSignature ? (
+                      <div className="relative group flex items-center justify-center">
+                        <img src={clientSignature} alt="Client Signature" className="max-h-16 object-contain" />
+                        <button 
+                          type="button"
+                          onClick={() => setClientSignature(null)}
+                          className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow opacity-0 group-hover:opacity-100 transition print:hidden"
+                          title="Remove Signature"
+                        >
+                          <X size={12} />
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="cursor-pointer bg-slate-100 hover:bg-slate-200 border border-dashed border-slate-300 text-slate-600 px-3 py-1.5 rounded-lg text-xs font-medium flex items-center space-x-1.5 transition print:hidden mb-2">
+                        <Upload size={14} className="text-blue-600" />
+                        <span>Upload Client Sign</span>
+                        <input 
+                          type="file" 
+                          accept="image/*" 
+                          className="hidden" 
+                          onChange={(e) => handleSignatureUpload(e, setClientSignature)} 
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="font-bold text-slate-700 mt-1">Client Consignee Signature</p>
                 </div>
               </div>
             </div>
@@ -570,25 +781,74 @@ export default function DeliveryManagement() {
                 </span>
               </div>
 
-              {/* Driver & Vehicle Card */}
-              <div className="grid grid-cols-2 gap-3 bg-slate-50 p-4 rounded-xl border border-slate-200">
-                <div className="flex items-start space-x-2">
-                  <User className="w-4 h-4 text-emerald-600 mt-0.5" />
-                  <div>
-                    <span className="font-bold text-slate-500 block text-[10px] uppercase">Assigned Driver</span>
-                    <p className="font-bold text-slate-900 text-sm">{activeDriverRow.driver || 'Suresh Patel'}</p>
-                    <p className="text-slate-500 font-medium flex items-center mt-0.5">
-                      <PhoneCall size={11} className="mr-1 text-slate-400" /> +91 98250 12345
-                    </p>
-                  </div>
+              {/* Driver & Vehicle Card (Editable) */}
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-3">
+                <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                  <h4 className="font-bold text-slate-800 uppercase tracking-wider text-[11px] text-emerald-700 flex items-center">
+                    <User size={13} className="mr-1 text-emerald-600" /> Driver & Vehicle Details (Edit Below)
+                  </h4>
+                  <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">Editable</span>
                 </div>
 
-                <div className="flex items-start space-x-2">
-                  <Truck className="w-4 h-4 text-emerald-600 mt-0.5" />
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+                  {/* Driver Name */}
                   <div>
-                    <span className="font-bold text-slate-500 block text-[10px] uppercase">Vehicle Assigned</span>
-                    <p className="font-bold text-slate-900 text-sm">{activeDriverRow.vehicleType || activeDriverRow.vehicle || 'Bolero max'}</p>
-                    <p className="text-slate-500 font-medium">Reg: GJ-03-AB-4829</p>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Assigned Driver Name</label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        value={driverNameInput}
+                        onChange={(e) => setDriverNameInput(e.target.value)}
+                        placeholder="Enter Driver Name"
+                        className="w-full pl-7 pr-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                      />
+                      <User size={13} className="absolute left-2 top-2 text-emerald-600" />
+                    </div>
+                  </div>
+
+                  {/* Driver Phone Number */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Driver Mobile Number</label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        value={driverPhoneInput}
+                        onChange={(e) => setDriverPhoneInput(e.target.value)}
+                        placeholder="Enter Mobile (+91 ...)"
+                        className="w-full pl-7 pr-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                      />
+                      <PhoneCall size={13} className="absolute left-2 top-2 text-emerald-600" />
+                    </div>
+                  </div>
+
+                  {/* Vehicle Assigned Name */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Vehicle Assigned</label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        value={vehicleTypeInput}
+                        onChange={(e) => setVehicleTypeInput(e.target.value)}
+                        placeholder="Enter Vehicle Name (Bolero Max, etc.)"
+                        className="w-full pl-7 pr-2 py-1.5 border border-slate-300 rounded-lg text-xs font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                      />
+                      <Truck size={13} className="absolute left-2 top-2 text-emerald-600" />
+                    </div>
+                  </div>
+
+                  {/* Car / Vehicle Reg Number */}
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase mb-0.5">Car / Registration Number</label>
+                    <div className="relative">
+                      <input 
+                        type="text"
+                        value={vehicleRegInput}
+                        onChange={(e) => setVehicleRegInput(e.target.value)}
+                        placeholder="Enter Reg No (e.g. GJ-03-AB-4829)"
+                        className="w-full pl-7 pr-2 py-1.5 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:outline-none focus:ring-1 focus:ring-emerald-500 bg-white"
+                      />
+                      <Sparkles size={13} className="absolute left-2 top-2 text-emerald-600" />
+                    </div>
                   </div>
                 </div>
               </div>
@@ -649,15 +909,15 @@ export default function DeliveryManagement() {
         </div>
       )}
 
-      {/* MODAL 3: UPLOAD VEHICLE PHOTO */}
+      {/* MODAL 3: UPLOAD VEHICLE PHOTO (MULTIPLE PHOTOS SUPPORT) */}
       {showVehiclePhotoModal && activePhotoRow && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
+          <div className="bg-white rounded-2xl max-w-xl w-full overflow-hidden shadow-2xl border border-slate-200 animate-in fade-in zoom-in duration-200">
             {/* Modal Header */}
             <div className="bg-slate-900 text-white px-6 py-4 flex items-center justify-between">
               <div className="flex items-center space-x-2">
                 <Upload className="w-5 h-5 text-amber-400" />
-                <h2 className="text-base font-bold">Upload Vehicle Loading Photo</h2>
+                <h2 className="text-base font-bold">Upload Vehicle Loading Photos</h2>
               </div>
               <button 
                 onClick={() => setShowVehiclePhotoModal(false)}
@@ -668,52 +928,94 @@ export default function DeliveryManagement() {
             </div>
 
             {/* Content */}
-            <div className="p-6 space-y-4 text-xs text-slate-800">
+            <div className="p-6 space-y-4 text-xs text-slate-800 max-h-[75vh] overflow-y-auto">
               <div className="text-center space-y-1">
-                <p className="font-bold text-slate-900 text-sm">Vehicle Photo Verification</p>
+                <p className="font-bold text-slate-900 text-sm">Vehicle Loading Photos Verification</p>
                 <p className="text-slate-500">Order: <span className="font-mono font-bold text-blue-600">{(activePhotoRow.no || activePhotoRow.id)}</span> | Vehicle: <span className="font-semibold">{activePhotoRow.vehicleType || activePhotoRow.vehicle || 'Bolero max'}</span></p>
               </div>
 
-              {/* Photo Drag & Drop Preview Box */}
-              <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-2xl p-6 text-center bg-slate-50 transition flex flex-col items-center justify-center relative">
-                {tempPhotoUrl ? (
-                  <div className="space-y-3 w-full">
-                    <img src={tempPhotoUrl} alt="Vehicle Inspection" className="max-h-48 rounded-xl mx-auto object-cover border border-slate-300 shadow-md" />
-                    <span className="text-[11px] text-emerald-600 font-bold block">✓ Photo Selected & Ready to Upload</span>
-                  </div>
-                ) : (
-                  <div className="space-y-2 py-4">
-                    <div className="p-3 bg-blue-50 text-blue-600 rounded-full inline-block">
-                      <Upload size={24} />
-                    </div>
-                    <p className="font-bold text-slate-700">Click to upload vehicle photo</p>
-                    <p className="text-[11px] text-slate-400">PNG, JPG or WEBP (Max 5MB)</p>
-                  </div>
-                )}
+              {/* Photo Upload Zone */}
+              <div className="border-2 border-dashed border-slate-300 hover:border-amber-500 rounded-2xl p-5 text-center bg-amber-50/40 transition flex flex-col items-center justify-center relative cursor-pointer group">
                 <input 
                   type="file" 
+                  multiple
                   accept="image/*" 
                   onChange={handleFileChange}
-                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full" 
+                  className="absolute inset-0 opacity-0 cursor-pointer w-full h-full z-10" 
                 />
+                <div className="p-3 bg-amber-100 text-amber-700 rounded-full inline-block group-hover:scale-110 transition-transform">
+                  <Upload size={22} />
+                </div>
+                <p className="font-bold text-slate-800 mt-2">Click or Drag to Upload Multiple Photos</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">Select multiple loading images (PNG, JPG, WEBP)</p>
               </div>
+
+              {/* Uploaded Photos Grid Preview */}
+              {tempPhotos.length > 0 && (
+                <div className="space-y-2 pt-2 border-t border-slate-200">
+                  <div className="flex justify-between items-center">
+                    <span className="font-bold text-slate-700 text-xs">Selected Photos ({tempPhotos.length})</span>
+                    <label className="text-[11px] font-bold text-amber-700 bg-amber-100 hover:bg-amber-200 px-2.5 py-1 rounded-lg cursor-pointer transition">
+                      + Add More
+                      <input 
+                        type="file" 
+                        multiple 
+                        accept="image/*" 
+                        onChange={handleFileChange} 
+                        className="hidden" 
+                      />
+                    </label>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {tempPhotos.map((photoUrl, idx) => (
+                      <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-300 shadow-sm bg-slate-100">
+                        <img 
+                          src={photoUrl} 
+                          alt={`Vehicle photo ${idx + 1}`} 
+                          className="w-full h-28 object-cover group-hover:scale-105 transition-transform" 
+                        />
+                        <div className="absolute top-1 right-1">
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="bg-red-600 text-white rounded-full p-1 shadow hover:bg-red-700 transition"
+                            title="Delete photo"
+                          >
+                            <X size={13} />
+                          </button>
+                        </div>
+                        <span className="absolute bottom-1 left-1 bg-slate-900/75 text-white font-mono text-[9px] px-1.5 py-0.5 rounded">
+                          #{idx + 1}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Modal Actions */}
-            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-end space-x-2">
-              <button
-                onClick={() => setShowVehiclePhotoModal(false)}
-                className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100 transition"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSavePhoto}
-                className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-5 py-2 rounded-xl flex items-center space-x-2 transition shadow-md"
-              >
-                <Check size={15} />
-                <span>Save Vehicle Photo</span>
-              </button>
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+              <span className="text-[11px] text-slate-500 font-medium">
+                {tempPhotos.length > 0 ? `✓ ${tempPhotos.length} photo(s) selected` : 'No photos selected'}
+              </span>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => setShowVehiclePhotoModal(false)}
+                  className="px-4 py-2 rounded-xl border border-slate-300 text-slate-600 text-xs font-bold hover:bg-slate-100 transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSavePhoto}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-5 py-2 rounded-xl flex items-center space-x-2 transition shadow-md"
+                >
+                  <Check size={15} />
+                  <span>Save {tempPhotos.length > 0 ? `(${tempPhotos.length})` : ''} Vehicle Photos</span>
+                </button>
+              </div>
             </div>
           </div>
         </div>

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import api from '../../../api/axios';
 import CreateOrder from './order-journey/CreateOrder';
 import LoanOrders from './order-journey/LoanOrders';
@@ -19,6 +19,7 @@ const componentRegistry = {
   'ChannelPartnerPay': ChannelPartnerPay,
   'ProcurementPlaceholder': ProcurementPlan,
   'GenerateOrderNumberPlaceholder': function GenerateOrderNumber({ onNext, sharedOrderData, setSharedOrderData, dashboardData, setDashboardData }) {
+    const navigate = useNavigate();
     const [orders, setOrders] = React.useState([]);
     const [overdueFilter, setOverdueFilter] = React.useState('');
     const [pendingFilter, setPendingFilter] = React.useState('');
@@ -65,6 +66,7 @@ const componentRegistry = {
       });
       setOrders(updated);
       if (setSharedOrderData && sharedOrderData?.length > 0) setSharedOrderData(updated);
+      navigate('/account-manager/my-task/warehouse-vendor-pay');
     };
 
     const handleDeleteInvoice = (id) => {
@@ -178,25 +180,22 @@ const componentRegistry = {
                        <option value="Surya Distributors">Surya Distributors</option>
                        <option value="SunPower Energy">SunPower Energy</option>
                        <option value="EcoGreen Suppliers">EcoGreen Suppliers</option>
+                       <option value="Waaree Energies">Waaree Energies</option>
+                       <option value="Tata Power Solar">Tata Power Solar</option>
+                       <option value="Vikram Solar">Vikram Solar</option>
                      </select>
                   </td>
-                  <td className="px-4 py-4">
-                     {order.equipment ? (
-                        <div className="text-[11px] text-gray-600 space-y-0.5">
-                          <p><span className="font-semibold text-gray-800">Panels:</span> {order.equipment.panels}</p>
-                          <p><span className="font-semibold text-gray-800">Inv:</span> {order.equipment.inverters}</p>
-                          <p><span className="font-semibold text-gray-800">BOS:</span> {order.equipment.bos}</p>
-                        </div>
-                     ) : (
-                        <span className="text-gray-400 text-xs">N/A</span>
-                     )}
+                  <td className="px-4 py-4 text-xs text-gray-600">
+                    <p><span className="font-medium">Panels:</span> {order.equipment?.panels || 'N/A'}</p>
+                    <p><span className="font-medium">Inv:</span> {order.equipment?.inverters || 'N/A'}</p>
+                    <p><span className="font-medium">BOS:</span> {order.equipment?.bos || 'N/A'}</p>
                   </td>
-                  <td className="px-4 py-4">
-                     <p className="text-gray-700 text-sm font-medium mb-0.5">{order.paymentMode}</p>
-                     <p className="text-gray-400 font-mono text-[10px] font-bold">UTR: {order.utr}</p>
+                  <td className="px-4 py-4 text-xs">
+                    <p className="font-medium text-gray-800">{order.paymentMode}</p>
+                    <p className="text-[10px] text-gray-400">UTR: {order.utr || 'Pending'}</p>
                   </td>
-                  <td className="px-4 py-4">
-                    <span className={`px-3 py-1.5 rounded text-[11px] font-bold shadow-sm ${
+                  <td className="px-4 py-4 text-xs font-semibold">
+                    <span className={`px-2.5 py-1 rounded-full text-[11px] ${
                       order.status === 'Paid' ? 'bg-green-100 text-green-700 border border-green-200' :
                       order.status === 'Rejected' ? 'bg-red-100 text-red-700 border border-red-200' :
                       'bg-yellow-100 text-yellow-700 border border-yellow-200'
@@ -242,7 +241,13 @@ const componentRegistry = {
                         </>
                       ) : (
                         <div className="flex items-center space-x-2 ml-2">
-                          <span className="bg-purple-100 text-purple-700 border border-purple-200 px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wider">Vendor Payment Pending</span>
+                          <button 
+                            onClick={() => navigate('/account-manager/my-task/warehouse-vendor-pay')}
+                            className="bg-purple-100 hover:bg-purple-200 text-purple-700 border border-purple-300 px-2.5 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition cursor-pointer shadow-sm flex items-center"
+                            title="Go to Warehouse Vendor Pay"
+                          >
+                            Vendor Payment Pending <ChevronRight size={12} className="ml-1" />
+                          </button>
                           {order.invoiceFile && (
                             <>
                               <a href={order.invoiceFile.url} target="_blank" rel="noopener noreferrer" className="p-1.5 text-blue-600 hover:bg-blue-100 rounded transition border border-blue-600 flex items-center" title={`View ${order.invoiceFile.name}`}>
@@ -551,7 +556,10 @@ const componentRegistry = {
                                       selectedOrderForSummary.subCustomers.every(c => c.isPaid || (c.isPaid === undefined && selectedOrderForSummary.status === 'Paid'));
                   return isFullyPaid ? (
                     <button
-                      onClick={() => alert('PI Generated Successfully!')}
+                      onClick={() => {
+                        alert('PI Generated Successfully!');
+                        setSelectedOrderForSummary(null);
+                      }}
                       className="px-5 py-2 text-sm font-bold text-white bg-green-600 rounded shadow-sm hover:bg-green-700 transition flex items-center"
                     >
                       Generate PI

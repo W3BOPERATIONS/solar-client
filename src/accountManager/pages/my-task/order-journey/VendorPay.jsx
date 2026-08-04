@@ -169,6 +169,87 @@ export default function VendorPay({ onNext, sharedOrderData }) {
     fetchDashboardData();
   }, []);
 
+  const processVendorPayment = (selectedIndices) => {
+    const rowsToProcess = selectedIndices.length > 0 
+      ? selectedIndices.map(idx => displayData[idx]).filter(Boolean)
+      : displayData.filter(r => r.deadline !== 'Paid');
+
+    if (rowsToProcess.length === 0) {
+      alert("No pending orders available to process payment.");
+      return;
+    }
+
+    try {
+      const savedCompleted = JSON.parse(localStorage.getItem('completedVendorPayments') || '[]');
+      const storedInward = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
+
+      rowsToProcess.forEach(row => {
+        const orderId = row.orderId || 'ORD-' + Math.floor(1000 + Math.random() * 9000);
+        const procNum = row.procurementNo && row.procurementNo !== '-' 
+          ? row.procurementNo 
+          : 'PROC-' + orderId + '-' + Math.floor(100 + Math.random() * 900);
+
+        let cleanVendor = row.vendorName || 'Vendor';
+        if (typeof cleanVendor === 'string' && cleanVendor.includes('(')) {
+          cleanVendor = cleanVendor.split('(')[0].trim();
+        }
+
+        // Add to completed payments
+        if (!savedCompleted.some(c => c.orderId === orderId)) {
+          savedCompleted.unshift({
+            id: 'PAY-VP-' + Math.floor(1000 + Math.random() * 9000),
+            vendor: cleanVendor,
+            date: new Date().toLocaleDateString('en-GB').replace(/\//g, '-'),
+            warehouse: 'Main Warehouse',
+            amount: typeof row.totalPrice === 'string' && row.totalPrice.startsWith('₹') ? row.totalPrice : `₹${row.totalPrice || '50,000'}`,
+            method: 'Vendor Payment',
+            orderId: orderId,
+            procurementNo: procNum
+          });
+        }
+
+        // Add to inward orders data
+        const existsInwardIndex = storedInward.findIndex(i => i.orderNo === orderId || i.sku === procNum);
+        const newInwardItem = {
+          orderNo: orderId,
+          poNumber: `PO-${Math.floor(10000 + Math.random() * 90000)}`,
+          vendorName: cleanVendor,
+          poAmount: typeof row.totalPrice === 'string' && row.totalPrice.startsWith('₹') ? row.totalPrice : `₹${row.totalPrice || '50,000'}`,
+          brand: row.brand || 'Mixed',
+          product: 'Solar Kit Components',
+          technology: row.technology || 'Bifacial',
+          projectType: row.projectType === 'Mixed' ? 'Commercial' : (row.projectType || 'Commercial'),
+          wattPeak: row.wattPeak || '540W',
+          totalKw: row.totalKW || '7.95 KW',
+          totalUnits: row.totalPanels || '15',
+          sku: procNum,
+          status: 'Pending',
+          scanNo: '-',
+          receivedDate: '-',
+          downloadable: false,
+        };
+
+        if (existsInwardIndex >= 0) {
+          storedInward[existsInwardIndex] = { ...storedInward[existsInwardIndex], ...newInwardItem };
+        } else {
+          storedInward.unshift(newInwardItem);
+        }
+      });
+
+      localStorage.setItem('completedVendorPayments', JSON.stringify(savedCompleted));
+      localStorage.setItem('inwardOrdersData', JSON.stringify(storedInward));
+      
+      window.dispatchEvent(new Event('storage'));
+      setCompletedOrders(savedCompleted);
+      setSelectedRows([]);
+      
+      alert('Payment Successful! Procurement generated & sent to Delivery Manager Inward Management.');
+      if (onNext) onNext();
+    } catch (e) {
+      console.error("Error processing payment", e);
+    }
+  };
+
   return (
     <div className="p-6 bg-[#f8f9fa] min-h-screen space-y-6 animate-fade-in">
       {/* Header */}
@@ -347,13 +428,13 @@ export default function VendorPay({ onNext, sharedOrderData }) {
       {/* Footer Actions */}
       <div className="flex justify-end mt-6 pb-6 space-x-4">
         <button 
-          onClick={() => alert("Payment Made to Vendor!")}
+          onClick={() => processVendorPayment(selectedRows)}
           className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition"
         >
           Make Payment to Vendor
         </button>
         <button 
-          onClick={onNext}
+          onClick={() => processVendorPayment(selectedRows)}
           className="bg-[#2cb25d] hover:bg-green-700 text-white px-6 py-2.5 rounded text-[13px] font-bold shadow-md transition flex items-center"
         >
           Generate Procurement Number <ChevronDown size={16} className="ml-1 -rotate-90"/>

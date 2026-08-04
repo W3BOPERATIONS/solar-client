@@ -23,12 +23,15 @@ export default function InwardManagement() {
         let inwardUpdated = false;
 
         completed.forEach((c, index) => {
-          const existsInInward = inwardStorage.some(item => item.orderNo === c.orderId);
+          const existsInInward = inwardStorage.some(item => 
+            (c.orderId && item.orderNo === c.orderId) || 
+            (c.procurementNo && item.sku === c.procurementNo)
+          );
           if (!existsInInward) {
             const o = generated.find(g => g.id === c.orderId);
             let procNum = c.procurementNo;
             if (!procNum) {
-              procNum = 'PROC-' + c.orderId + '-' + Math.floor(100 + Math.random() * 900);
+              procNum = 'PROC-' + (c.orderId || 'ORD') + '-' + Math.floor(100 + Math.random() * 900);
               updatedCompleted[index] = { ...c, procurementNo: procNum };
               completedUpdated = true;
             }
@@ -40,17 +43,22 @@ export default function InwardManagement() {
             const gst = o?.amount?.gst || 0;
             const totalWithGst = baseAmount + (baseAmount * gst / 100);
 
+            let cleanVendor = o?.vendorName || c.vendor || 'N/A';
+            if (typeof cleanVendor === 'string' && cleanVendor.includes('(')) {
+              cleanVendor = cleanVendor.split('(')[0].trim();
+            }
+
             const newInwardData = {
-              orderNo: c.orderId,
-              poNumber: o?.poNumber || 'N/A',
-              vendorName: o?.vendorName || c.vendor || 'N/A',
-              poAmount: totalWithGst ? `₹${totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : (c.amount || '₹0'),
-              brand: o?.panelDetails?.brands ? (Object.keys(o.panelDetails.brands)[0] || 'Mixed') : 'Mixed',
+              orderNo: c.orderId || 'ORD-UNKNOWN',
+              poNumber: o?.poNumber || `PO-${Math.floor(10000 + Math.random() * 90000)}`,
+              vendorName: cleanVendor,
+              poAmount: totalWithGst ? `₹${totalWithGst.toLocaleString('en-IN', { maximumFractionDigits: 0 })}` : (c.amount || '₹50,000'),
+              brand: o?.panelDetails?.brand || (o?.panelDetails?.brands ? Object.keys(o.panelDetails.brands)[0] : null) || 'Waaree',
               product: 'Solar Kit Components',
-              technology: o?.panelDetails?.technology || 'Mixed',
+              technology: o?.panelDetails?.technology || 'Monocrystalline, Polycrystalline, Bifacial',
               projectType: 'Commercial',
               wattPeak: o?.panelDetails?.wattage || '540W',
-              totalKw: o?.panelDetails?.totalCapacity ? `${o.panelDetails.totalCapacity / 1000} KW` : '8.0 KW',
+              totalKw: o?.panelDetails?.totalCapacity ? `${o.panelDetails.totalCapacity / 1000} KW` : '7.95 KW',
               totalUnits: `${numPanels}`,
               sku: procNum,
               status: 'Pending',
@@ -75,9 +83,8 @@ export default function InwardManagement() {
       }
     };
 
-    syncExistingCompletedPayments();
-
     const loadInwardData = () => {
+      syncExistingCompletedPayments();
       try {
         const storedInward = JSON.parse(localStorage.getItem('inwardOrdersData') || '[]');
         const sanitized = storedInward.map(item => ({
@@ -103,6 +110,12 @@ export default function InwardManagement() {
     };
   }, []);
 
+  const parseAmountNumber = (val) => {
+    if (!val) return 0;
+    const cleaned = String(val).replace(/[^0-9.]/g, '');
+    return parseFloat(cleaned) || 0;
+  };
+
   const handleInwardClick = (row) => {
     setSelectedInwardRow(row);
     setInputOrderNo(row.orderNo || '');
@@ -118,6 +131,19 @@ export default function InwardManagement() {
         alert('Please upload the invoice first.');
         return;
       }
+      if (!invoiceAmountInput || !invoiceAmountInput.trim()) {
+        alert('Please enter the invoice amount.');
+        return;
+      }
+
+      const poAmountNum = parseAmountNumber(selectedInwardRow.poAmount);
+      const invoiceAmountNum = parseAmountNumber(invoiceAmountInput);
+
+      if (poAmountNum !== invoiceAmountNum) {
+        alert(`Match Failed! Invoice Amount (${invoiceAmountInput}) does not match PO Amount (${selectedInwardRow.poAmount || 'N/A'}). Both amounts must match to complete.`);
+        return;
+      }
+
       if (inputOrderNo === selectedInwardRow.orderNo && inputPurchaseNo === selectedInwardRow.sku) {
         const todayStr = new Date().toLocaleDateString('en-GB').replace(/\//g, '-');
         
@@ -453,8 +479,25 @@ export default function InwardManagement() {
                     value={invoiceAmountInput}
                     onChange={(e) => setInvoiceAmountInput(e.target.value)}
                     placeholder="Enter Invoice Amount"
-                    className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500 font-semibold"
+                    className={`w-full border rounded px-3 py-1.5 text-xs focus:outline-none font-semibold ${
+                      invoiceAmountInput.trim() 
+                        ? (parseAmountNumber(invoiceAmountInput) === parseAmountNumber(selectedInwardRow?.poAmount)
+                            ? 'border-green-500 bg-green-50/30' 
+                            : 'border-red-500 bg-red-50/30') 
+                        : 'border-gray-300 focus:border-blue-500'
+                    }`}
                   />
+                  {invoiceAmountInput.trim() && (
+                    parseAmountNumber(invoiceAmountInput) === parseAmountNumber(selectedInwardRow?.poAmount) ? (
+                      <p className="text-[11px] text-green-600 font-semibold mt-1 flex items-center">
+                        <Check size={13} className="mr-1 text-green-600 flex-shrink-0" /> Amount matches PO Amount ({selectedInwardRow?.poAmount})
+                      </p>
+                    ) : (
+                      <p className="text-[11px] text-red-600 font-semibold mt-1">
+                        ✕ Amount must match PO Amount ({selectedInwardRow?.poAmount || 'N/A'})
+                      </p>
+                    )
+                  )}
                 </div>
 
                 <div>
@@ -477,8 +520,10 @@ export default function InwardManagement() {
                     className="w-full border border-gray-300 rounded px-3 py-1.5 text-xs focus:outline-none focus:border-blue-500"
                   />
                 </div>
-                <p className="text-[10px] text-gray-400 bg-amber-50 p-2 border border-amber-100 rounded">
-                  <b>Verification Hint:</b> Order No is <span className="font-mono bg-white border px-1 font-bold text-gray-800">{selectedInwardRow?.orderNo}</span> and Procurement No is <span className="font-mono bg-white border px-1 font-bold text-gray-800">{selectedInwardRow?.sku}</span>
+                <p className="text-[10px] text-gray-500 bg-amber-50 p-2 border border-amber-100 rounded space-y-1">
+                  <span><b>Verification Hint:</b> Order No is <span className="font-mono bg-white border px-1 font-bold text-gray-800">{selectedInwardRow?.orderNo}</span> and Procurement No is <span className="font-mono bg-white border px-1 font-bold text-gray-800">{selectedInwardRow?.sku}</span></span>
+                  <br />
+                  <span>Invoice Amount must match PO Amount: <span className="font-mono bg-white border px-1 font-bold text-green-700">{selectedInwardRow?.poAmount}</span></span>
                 </p>
               </div>
             </div>
@@ -495,7 +540,13 @@ export default function InwardManagement() {
                 onClick={handleMatchInward}
                 className="px-4 py-2 bg-blue-600 text-white rounded text-sm font-semibold hover:bg-blue-700 transition shadow-sm"
               >
-                {selectedInvoiceFile && invoiceAmountInput?.trim() && inputOrderNo?.trim() && inputPurchaseNo?.trim() ? 'Done' : 'Match & Save Inward'}
+                {selectedInvoiceFile && 
+                 invoiceAmountInput?.trim() && 
+                 parseAmountNumber(invoiceAmountInput) === parseAmountNumber(selectedInwardRow?.poAmount) &&
+                 inputOrderNo?.trim() === selectedInwardRow?.orderNo && 
+                 inputPurchaseNo?.trim() === selectedInwardRow?.sku 
+                  ? 'Done' 
+                  : 'Match & Save Inward'}
               </button>
             </div>
           </div>
