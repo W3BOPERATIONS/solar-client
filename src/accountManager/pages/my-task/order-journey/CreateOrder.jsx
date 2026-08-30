@@ -150,6 +150,94 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
   const [vendorEmail, setVendorEmail] = useState('');
   const [currentPONumber, setCurrentPONumber] = useState('');
 
+  // 4-Step Solarkit Order Creation Form State
+  const [isSolarkitOrderModalOpen, setIsSolarkitOrderModalOpen] = useState(false);
+  const [orderFormStep, setOrderFormStep] = useState(1);
+  const [orderType, setOrderType] = useState('PO Order'); // 'PO Order' | 'One Order'
+  const [poNumberInput, setPoNumberInput] = useState('');
+  const [poValidityDateInput, setPoValidityDateInput] = useState('');
+  const [selectedRegularBuyer, setSelectedRegularBuyer] = useState('');
+  const [buyerGstInput, setBuyerGstInput] = useState('');
+  const [projectTypeInput, setProjectTypeInput] = useState('Residential Subsidy');
+  const [districtInput, setDistrictInput] = useState('Ahmedabad');
+  const [capacityKwInput, setCapacityKwInput] = useState('5');
+  const [productTypeInput, setProductTypeInput] = useState('Solarkit');
+  const [numberOfKitsInput, setNumberOfKitsInput] = useState(1);
+  const [orderAmountInput, setOrderAmountInput] = useState(259600);
+  const [inventorySource, setInventorySource] = useState('Warehouse Inventory'); // 'Warehouse Inventory' | 'Vendor Inventory'
+
+  // Generated Order Details State
+  const [generatedOrderDetails, setGeneratedOrderDetails] = useState(null);
+
+  const regularBuyersList = [
+    { name: 'SunSolar EPC Solutions Pvt Ltd', gst: '24AAACS1423N1Z5', district: 'Ahmedabad' },
+    { name: 'Gujarat Green Energy EPC', gst: '24BBBCS2345M1Z8', district: 'Surat' },
+    { name: 'Adani Solar EPC', gst: '24CCCCS3456L1Z2', district: 'Vadodara' },
+    { name: 'Rajkot Renewable Systems', gst: '24DDDCS4567K1Z4', district: 'Rajkot' }
+  ];
+
+  const handleSelectRegularBuyer = (buyerName) => {
+    setSelectedRegularBuyer(buyerName);
+    const found = regularBuyersList.find(b => b.name === buyerName);
+    if (found) {
+      setBuyerGstInput(found.gst);
+      if (found.district) setDistrictInput(found.district);
+    }
+  };
+
+  const handleGenerateSolarkitPI = () => {
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    const newOrderNo = `ORD-${randomSuffix}`;
+    const newPiNo = `PI-2026-0${Math.floor(40 + Math.random() * 50)}`;
+    const trackingLink = `${window.location.origin}/epc/order-tracking/${newOrderNo}`;
+
+    const newOrderObj = {
+      orderNumber: newOrderNo,
+      piNumber: newPiNo,
+      orderType,
+      poNumber: orderType === 'PO Order' ? (poNumberInput || `PO-GUJ-${randomSuffix}`) : 'N/A',
+      poValidity: orderType === 'PO Order' ? (poValidityDateInput || '2026-10-31') : 'N/A',
+      buyerName: selectedRegularBuyer || 'Gujarat EPC Buyer',
+      buyerGst: buyerGstInput || '24AAACS1423N1Z5',
+      district: districtInput,
+      projectType: projectTypeInput,
+      capacity: `${capacityKwInput} KW`,
+      productType: productTypeInput,
+      numberOfKits: parseInt(numberOfKitsInput, 10) || 1,
+      basicAmount: Math.round(orderAmountInput / 1.18),
+      gstAmount: Math.round(orderAmountInput - (orderAmountInput / 1.18)),
+      totalAmount: parseFloat(orderAmountInput),
+      amountReceived: 0,
+      balanceAmount: parseFloat(orderAmountInput),
+      paymentStatus: 'Payment Pending',
+      orderStatus: inventorySource === 'Warehouse Inventory' ? 'At Warehouse' : 'Order Created',
+      deliveryMilestones: [
+        { id: 1, name: 'Order Created', date: new Date().toLocaleDateString(), completed: true, active: false },
+        { id: 2, name: 'Payment Confirmed', date: 'Pending', completed: false, active: false },
+        { id: 3, name: 'Order Confirmed', date: 'Pending', completed: false, active: false },
+        { id: 4, name: 'Material Ready', date: 'Pending', completed: false, active: false },
+        { id: 5, name: 'Delivery Plan Created', date: 'Pending', completed: false, active: false },
+        { id: 6, name: 'Dispatched', date: 'Pending', completed: false, active: false },
+        { id: 7, name: 'Out for Delivery', date: 'Pending', completed: false, active: false },
+        { id: 8, name: 'Delivered', date: 'Pending', completed: false, active: false }
+      ],
+      trackingLink
+    };
+
+    setGeneratedOrderDetails(newOrderObj);
+
+    // Save to localStorage for Performa Invoice module & Buyer view
+    try {
+      const existing = JSON.parse(localStorage.getItem('solarOrdersList') || '[]');
+      existing.unshift(newOrderObj);
+      localStorage.setItem('solarOrdersList', JSON.stringify(existing));
+    } catch (e) {
+      console.error(e);
+    }
+
+    setOrderFormStep(3);
+  };
+
 
 
   const inventoryStats = React.useMemo(() => {
@@ -353,7 +441,17 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
 
 
       {/* Tabs / Buttons */}
-      <div className="flex space-x-2 mt-6 lg:mt-0 justify-end">
+      <div className="flex flex-wrap space-x-2 mt-6 lg:mt-0 justify-end items-center gap-2">
+        <button
+          onClick={() => {
+            setOrderFormStep(1);
+            setIsSolarkitOrderModalOpen(true);
+          }}
+          className="bg-gradient-to-r from-[#145a80] to-[#0b74ba] hover:from-[#0f4461] hover:to-[#085a93] text-white text-xs font-bold px-4 py-1.5 rounded shadow-sm hover:shadow transition-all flex items-center gap-1.5 border border-blue-800/30"
+        >
+          <FileText size={14} className="text-blue-200" />
+          + Create Solarkit Order (4 Steps)
+        </button>
         <button
           onClick={() => setActiveTab('ComboKit')}
           className={`${activeTab === 'ComboKit' ? 'bg-green-600 ring-2 ring-green-300' : 'bg-[#2cb25d]'} text-white text-xs font-semibold px-4 py-1.5 rounded shadow-sm hover:bg-green-700 transition`}
@@ -1162,6 +1260,416 @@ export default function CreateOrder({ onNext, setSharedOrderData, dashboardData:
                 <Check size={16} className="mr-1.5" />
                 Yes, Send PO
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4-Step Solarkit Order Creation Modal */}
+      {isSolarkitOrderModalOpen && (
+        <div className="fixed inset-0 bg-black bg-opacity-60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden animate-fade-in border border-gray-200">
+            {/* Modal Header */}
+            <div className="bg-gradient-to-r from-[#145a80] to-blue-900 text-white p-5 flex justify-between items-center">
+              <div>
+                <span className="text-[10px] uppercase tracking-wider font-bold text-blue-200">Accounts Login Module</span>
+                <h2 className="text-lg font-bold flex items-center gap-2">
+                  Create Solarkit Order — Gujarat State Business
+                </h2>
+              </div>
+              <button 
+                onClick={() => setIsSolarkitOrderModalOpen(false)}
+                className="text-gray-300 hover:text-white transition"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Stepper Progress Indicator */}
+            <div className="bg-slate-100 px-6 py-3 border-b border-slate-200 flex justify-between text-xs font-semibold text-slate-600">
+              <span className={orderFormStep === 1 ? 'text-blue-700 font-bold border-b-2 border-blue-700 pb-0.5' : ''}>
+                1. Order Type
+              </span>
+              <span className={orderFormStep === 2 ? 'text-blue-700 font-bold border-b-2 border-blue-700 pb-0.5' : ''}>
+                2. Project & Product
+              </span>
+              <span className={orderFormStep === 3 ? 'text-blue-700 font-bold border-b-2 border-blue-700 pb-0.5' : ''}>
+                3. Generate PI & Link
+              </span>
+              <span className={orderFormStep === 4 ? 'text-blue-700 font-bold border-b-2 border-blue-700 pb-0.5' : ''}>
+                4. Share Link
+              </span>
+            </div>
+
+            {/* Modal Body */}
+            <div className="p-6 max-h-[70vh] overflow-y-auto space-y-5">
+              
+              {/* STEP 1: Select Order Type */}
+              {orderFormStep === 1 && (
+                <div className="space-y-4 animate-fade-in">
+                  <h3 className="text-sm font-bold text-slate-800 border-b pb-2">Step 1 — Select Order Type</h3>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      type="button"
+                      onClick={() => setOrderType('PO Order')}
+                      className={`p-4 rounded-xl border-2 text-left font-bold text-sm transition-all ${
+                        orderType === 'PO Order' 
+                          ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm' 
+                          : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span>PO Order</span>
+                        {orderType === 'PO Order' && <Check size={16} className="text-blue-600" />}
+                      </div>
+                      <p className="text-[11px] font-normal text-slate-500">Includes PO Number & Validity Date tracking</p>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setOrderType('One Order')}
+                      className={`p-4 rounded-xl border-2 text-left font-bold text-sm transition-all ${
+                        orderType === 'One Order' 
+                          ? 'border-blue-600 bg-blue-50 text-blue-900 shadow-sm' 
+                          : 'border-slate-200 hover:border-slate-300 text-slate-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span>One Order</span>
+                        {orderType === 'One Order' && <Check size={16} className="text-blue-600" />}
+                      </div>
+                      <p className="text-[11px] font-normal text-slate-500">Single one-time order without PO contract</p>
+                    </button>
+                  </div>
+
+                  {/* Regular Buyer Selection or Custom GST */}
+                  <div className="space-y-3 pt-2">
+                    <label className="block text-xs font-bold text-slate-700">
+                      Select Buyer from Regular Buyer OR enter Buyer GST Number
+                    </label>
+                    
+                    <select
+                      value={selectedRegularBuyer}
+                      onChange={(e) => handleSelectRegularBuyer(e.target.value)}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-xs bg-white text-slate-800 focus:ring-2 focus:ring-blue-400"
+                    >
+                      <option value="">-- Select Regular Buyer (Auto-populates details) --</option>
+                      {regularBuyersList.map((buyer, idx) => (
+                        <option key={idx} value={buyer.name}>{buyer.name} ({buyer.district})</option>
+                      ))}
+                    </select>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 mb-1">Buyer GST Number</label>
+                        <input
+                          type="text"
+                          placeholder="e.g. 24AAACS1423N1Z5"
+                          value={buyerGstInput}
+                          onChange={(e) => setBuyerGstInput(e.target.value)}
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono uppercase focus:ring-2 focus:ring-blue-400"
+                        />
+                      </div>
+
+                      {orderType === 'PO Order' && (
+                        <>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">PO Number</label>
+                            <input
+                              type="text"
+                              placeholder="e.g. PO-GUJ-2026-88"
+                              value={poNumberInput}
+                              onChange={(e) => setPoNumberInput(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-400"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 mb-1">PO Validity Date</label>
+                            <input
+                              type="date"
+                              value={poValidityDateInput}
+                              onChange={(e) => setPoValidityDateInput(e.target.value)}
+                              className="w-full border border-slate-300 rounded-lg p-2 text-xs focus:ring-2 focus:ring-blue-400"
+                            />
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 2: Project & Product Details */}
+              {orderFormStep === 2 && (
+                <div className="space-y-4 animate-fade-in">
+                  <h3 className="text-sm font-bold text-slate-800 border-b pb-2">Step 2 — Project & Product Details</h3>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Project Type</label>
+                      <select
+                        value={projectTypeInput}
+                        onChange={(e) => setProjectTypeInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white"
+                      >
+                        <option value="Residential Subsidy">Residential Subsidy</option>
+                        <option value="Residential">Residential</option>
+                        <option value="Commercial">Commercial</option>
+                        <option value="Industrial">Industrial</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Gujarat District Location</label>
+                      <select
+                        value={districtInput}
+                        onChange={(e) => setDistrictInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white"
+                      >
+                        <option value="Ahmedabad">Ahmedabad</option>
+                        <option value="Surat">Surat</option>
+                        <option value="Vadodara">Vadodara</option>
+                        <option value="Rajkot">Rajkot</option>
+                        <option value="Bhavnagar">Bhavnagar</option>
+                        <option value="Gandhinagar">Gandhinagar</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Capacity (KW)</label>
+                      <input
+                        type="number"
+                        placeholder="e.g. 5"
+                        value={capacityKwInput}
+                        onChange={(e) => setCapacityKwInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Product Type</label>
+                      <select
+                        value={productTypeInput}
+                        onChange={(e) => setProductTypeInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs bg-white"
+                      >
+                        <option value="Solarkit">Solarkit</option>
+                        <option value="BOSKit">BOSKit</option>
+                        <option value="Other approved products">Other approved products</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">No. of Kits</label>
+                      <input
+                        type="number"
+                        value={numberOfKitsInput}
+                        onChange={(e) => setNumberOfKitsInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block font-semibold text-slate-700 mb-1">Total Order Amount (₹)</label>
+                      <input
+                        type="number"
+                        value={orderAmountInput}
+                        onChange={(e) => setOrderAmountInput(e.target.value)}
+                        className="w-full border border-slate-300 rounded-lg p-2 text-xs font-bold text-blue-700"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Section 9 Critical System Rule: Inventory Stock Source */}
+                  <div className="bg-amber-50 p-4 rounded-xl border border-amber-200 mt-4 space-y-2">
+                    <label className="block text-xs font-bold text-amber-900">
+                      Inventory Stock Allocation Source (Critical System Rule)
+                    </label>
+                    <div className="grid grid-cols-2 gap-3 text-xs">
+                      <button
+                        type="button"
+                        onClick={() => setInventorySource('Warehouse Inventory')}
+                        className={`p-3 rounded-lg border text-left font-semibold transition ${
+                          inventorySource === 'Warehouse Inventory'
+                            ? 'bg-amber-600 text-white border-amber-700 shadow'
+                            : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        <p className="font-bold text-xs">Warehouse Inventory</p>
+                        <p className="text-[10px] opacity-90 mt-0.5">Directly At Warehouse (Skips vendor procurement)</p>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setInventorySource('Vendor Inventory')}
+                        className={`p-3 rounded-lg border text-left font-semibold transition ${
+                          inventorySource === 'Vendor Inventory'
+                            ? 'bg-amber-600 text-white border-amber-700 shadow'
+                            : 'bg-white text-slate-700 border-amber-200 hover:bg-amber-100'
+                        }`}
+                      >
+                        <p className="font-bold text-xs">Vendor Inventory</p>
+                        <p className="text-[10px] opacity-90 mt-0.5">Standard Vendor PO Procurement Path</p>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 3: Generate PI & Order Link */}
+              {orderFormStep === 3 && generatedOrderDetails && (
+                <div className="space-y-4 animate-fade-in">
+                  <div className="bg-emerald-50 text-emerald-800 p-4 rounded-xl border border-emerald-200 flex items-center space-x-3">
+                    <Check className="w-6 h-6 text-emerald-600 shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-sm">Performa Invoice (PI) & Order Link Successfully Generated!</h4>
+                      <p className="text-xs text-emerald-700 mt-0.5">PI recorded automatically in Accounts Login → Performa Invoice Module.</p>
+                    </div>
+                  </div>
+
+                  <div className="bg-white border border-slate-200 rounded-xl p-4 space-y-3 text-xs">
+                    <div className="grid grid-cols-2 gap-2 border-b pb-2">
+                      <div>
+                        <span className="text-slate-400 block">PI Number</span>
+                        <strong className="text-blue-700 text-sm">{generatedOrderDetails.piNumber}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Order Number</span>
+                        <strong className="text-slate-800 text-sm">{generatedOrderDetails.orderNumber}</strong>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 border-b pb-2">
+                      <div>
+                        <span className="text-slate-400 block">Buyer Name</span>
+                        <strong className="text-slate-800">{generatedOrderDetails.buyerName}</strong>
+                      </div>
+                      <div>
+                        <span className="text-slate-400 block">Total Amount</span>
+                        <strong className="text-emerald-700 text-sm">₹{generatedOrderDetails.totalAmount.toLocaleString('en-IN')}</strong>
+                      </div>
+                    </div>
+
+                    <div>
+                      <span className="text-slate-400 block mb-1">Generated Order Link (Payment Link + Customer Order Tracking)</span>
+                      <div className="flex items-center space-x-2">
+                        <input
+                          type="text"
+                          readOnly
+                          value={generatedOrderDetails.trackingLink}
+                          className="w-full border border-slate-300 rounded-lg p-2 text-xs font-mono bg-slate-50 text-blue-700"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(generatedOrderDetails.trackingLink);
+                            setToast({ message: 'Order Link copied to clipboard!', type: 'success' });
+                            setTimeout(() => setToast(null), 3000);
+                          }}
+                          className="bg-blue-600 text-white font-bold text-xs px-3 py-2 rounded-lg hover:bg-blue-700 shrink-0"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* STEP 4: Share Order Link with Buyer */}
+              {orderFormStep === 4 && generatedOrderDetails && (
+                <div className="space-y-4 animate-fade-in text-center py-4">
+                  <FileText className="w-12 h-12 text-blue-600 mx-auto" />
+                  <h3 className="text-base font-bold text-slate-900">Share Generated Order Link with Buyer</h3>
+                  <p className="text-xs text-slate-500 max-w-md mx-auto">
+                    The buyer will open this link to access their order and customer-facing delivery tracking via Solarkits EPC Login.
+                  </p>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4">
+                    <a
+                      href={`https://wa.me/?text=${encodeURIComponent(`Hello ${generatedOrderDetails.buyerName}, here is your Solarkits Order Link for ${generatedOrderDetails.orderNumber}: ${generatedOrderDetails.trackingLink}`)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold p-3 rounded-xl transition flex flex-col items-center justify-center gap-1 shadow"
+                    >
+                      <span>WhatsApp</span>
+                    </a>
+
+                    <a
+                      href={`mailto:?subject=${encodeURIComponent(`Solarkits Order Link - ${generatedOrderDetails.orderNumber}`)}&body=${encodeURIComponent(`Hello ${generatedOrderDetails.buyerName},\n\nYour Performa Invoice ${generatedOrderDetails.piNumber} is ready. Access your order & payment tracking link here: ${generatedOrderDetails.trackingLink}`)}`}
+                      className="bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold p-3 rounded-xl transition flex flex-col items-center justify-center gap-1 shadow"
+                    >
+                      <span>Email</span>
+                    </a>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        window.open(`https://wa.me/?text=${encodeURIComponent(`Order Link: ${generatedOrderDetails.trackingLink}`)}`, '_blank');
+                        window.open(`mailto:?subject=Order Link&body=${encodeURIComponent(generatedOrderDetails.trackingLink)}`);
+                      }}
+                      className="bg-indigo-700 hover:bg-indigo-800 text-white text-xs font-bold p-3 rounded-xl transition flex flex-col items-center justify-center gap-1 shadow"
+                    >
+                      <span>WhatsApp + Email</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+            </div>
+
+            {/* Modal Footer */}
+            <div className="bg-slate-50 px-6 py-4 border-t border-slate-200 flex justify-between items-center">
+              {orderFormStep > 1 && orderFormStep < 4 ? (
+                <button
+                  type="button"
+                  onClick={() => setOrderFormStep(prev => prev - 1)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-200 rounded-lg"
+                >
+                  Back
+                </button>
+              ) : <div></div>}
+
+              {orderFormStep === 1 && (
+                <button
+                  type="button"
+                  onClick={() => setOrderFormStep(2)}
+                  className="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow"
+                >
+                  Next: Project Details ➔
+                </button>
+              )}
+
+              {orderFormStep === 2 && (
+                <button
+                  type="button"
+                  onClick={handleGenerateSolarkitPI}
+                  className="px-6 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg shadow"
+                >
+                  Generate PI & Link ➔
+                </button>
+              )}
+
+              {orderFormStep === 3 && (
+                <button
+                  type="button"
+                  onClick={() => setOrderFormStep(4)}
+                  className="px-6 py-2 text-xs font-bold text-white bg-blue-600 hover:bg-blue-700 rounded-lg shadow"
+                >
+                  Next: Share Link ➔
+                </button>
+              )}
+
+              {orderFormStep === 4 && (
+                <button
+                  type="button"
+                  onClick={() => setIsSolarkitOrderModalOpen(false)}
+                  className="px-6 py-2 text-xs font-bold text-white bg-slate-800 hover:bg-slate-900 rounded-lg shadow"
+                >
+                  Done & Close
+                </button>
+              )}
             </div>
           </div>
         </div>

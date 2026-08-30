@@ -27,6 +27,7 @@ export default function AccountManagerSidebar() {
 
   const topMenuItems = [
     { icon: Home, label: 'Dashboard', path: '/account-manager/dashboard' },
+    { icon: FileText, label: 'Performa Invoice', path: '/account-manager/performa-invoice' },
   ];
 
   const bottomMenuItems = [

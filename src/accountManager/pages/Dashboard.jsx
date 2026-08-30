@@ -298,39 +298,54 @@ export default function AccountManagerDashboard() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white p-5 rounded-lg border border-gray-100 shadow-sm flex flex-col items-start justify-between">
-          <p className="text-[11px] font-bold text-gray-500 tracking-wider">PROJECT SIGNUP</p>
-          <p className="text-3xl font-bold text-[#3478c9] mt-2">42</p>
-          <span className="mt-3 bg-[#2cb25d] text-white text-[10px] font-bold px-2 py-1 rounded">+5 this month</span>
+      {/* Accounts Dashboard Cards (Section 7) */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wide">Total Orders</p>
+          <p className="text-2xl font-black text-gray-900 mt-1">42</p>
+          <span className="text-[10px] text-gray-400 font-medium">Solarkit orders</span>
         </div>
-        <div className="bg-white p-5 rounded-lg border border-gray-100 shadow-sm flex flex-col items-start justify-between">
-          <p className="text-[11px] font-bold text-gray-500 tracking-wider">TOTAL ORDER AMOUNT</p>
-          <p className="text-3xl font-bold text-[#2cb25d] mt-2">₹12,75,000</p>
-          <span className="mt-3 bg-[#2cb25d] text-white text-[10px] font-bold px-2 py-1 rounded">+15% from last month</span>
+
+        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">Total PI</p>
+          <p className="text-2xl font-black text-blue-700 mt-1">42</p>
+          <span className="text-[10px] text-gray-400 font-medium">Generated PIs</span>
         </div>
-        <div className="bg-white p-5 rounded-lg border border-gray-100 shadow-sm flex flex-col justify-between">
-          <div className="flex justify-between items-start">
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 tracking-wider">PENDING PAYMENT</p>
-              <p className="text-xl font-bold text-red-500 mt-1">8 Projects</p>
-              <p className="text-sm font-semibold text-gray-700">₹2,45,000</p>
-            </div>
-            <div>
-              <p className="text-[11px] font-bold text-gray-500 tracking-wider">OVERDUE PAYMENT</p>
-              <p className="text-xl font-bold text-red-500 mt-1">2 Projects</p>
-              <p className="text-sm font-semibold text-gray-700">₹1,25,000</p>
-            </div>
-          </div>
-          <span className="mt-3 bg-[#fbb03b] text-white text-[10px] font-bold px-2 py-1 rounded w-max">Action required</span>
+
+        <div className="bg-amber-50/70 p-4 rounded-xl border border-amber-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-amber-800 uppercase tracking-wide">Payment Pending</p>
+          <p className="text-2xl font-black text-amber-800 mt-1">12</p>
+          <span className="text-[10px] text-amber-600 font-bold">₹8.4L Awaiting</span>
         </div>
-        <div className="bg-white p-5 rounded-lg border border-gray-100 shadow-sm flex flex-col items-start justify-between">
-          <p className="text-[11px] font-bold text-gray-500 tracking-wider">PENDING INSTALLATIONS</p>
-          <p className="text-3xl font-bold text-[#f29f05] mt-2">15</p>
-          <div className="flex items-center mt-3 space-x-2">
-             <span className="bg-[#48a9a6] text-white text-[10px] font-bold px-2 py-1 rounded">5 scheduled this week</span>
-             <span className="text-red-500 font-bold text-[11px]">Rs: 2,40,000</span>
-          </div>
+
+        <div className="bg-blue-50/70 p-4 rounded-xl border border-blue-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-blue-800 uppercase tracking-wide">Partially Paid</p>
+          <p className="text-2xl font-black text-blue-800 mt-1">6</p>
+          <span className="text-[10px] text-blue-600 font-bold">Balance orders</span>
+        </div>
+
+        <div className="bg-emerald-50/70 p-4 rounded-xl border border-emerald-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide">Payment Received</p>
+          <p className="text-2xl font-black text-emerald-800 mt-1">22</p>
+          <span className="text-[10px] text-emerald-600 font-bold">Fully paid</span>
+        </div>
+
+        <div className="bg-rose-50/70 p-4 rounded-xl border border-rose-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-rose-800 uppercase tracking-wide">Payment Overdue</p>
+          <p className="text-2xl font-black text-rose-800 mt-1">2</p>
+          <span className="text-[10px] text-rose-600 font-bold">Beyond due date</span>
+        </div>
+
+        <div className="bg-purple-50/70 p-4 rounded-xl border border-purple-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-purple-800 uppercase tracking-wide">PO Expiring Soon</p>
+          <p className="text-2xl font-black text-purple-800 mt-1">3</p>
+          <span className="text-[10px] text-purple-600 font-bold">PO validity limit</span>
+        </div>
+
+        <div className="bg-orange-50/70 p-4 rounded-xl border border-orange-200 shadow-sm hover:shadow-md transition">
+          <p className="text-[10px] font-bold text-orange-800 uppercase tracking-wide">PI Expiring Soon</p>
+          <p className="text-2xl font-black text-orange-800 mt-1">4</p>
+          <span className="text-[10px] text-orange-600 font-bold">PI validity limit</span>
         </div>
       </div>
 

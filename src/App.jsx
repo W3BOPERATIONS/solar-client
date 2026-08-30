@@ -300,6 +300,8 @@ import AccountManagerDashboard from './accountManager/pages/Dashboard';
 import SolarPanelBundlePlan from './accountManager/pages/SolarPanelBundlePlan';
 import ProcurementPlan from './accountManager/pages/ProcurementPlan';
 import Report from './accountManager/pages/Report';
+import PerformaInvoice from './accountManager/pages/PerformaInvoice';
+import BuyerEpcOrderTracking from './dealer/pages/BuyerEpcOrderTracking';
 import OrderJourney from './accountManager/pages/my-task/OrderJourney';
 import CreateOrder from './accountManager/pages/my-task/order-journey/CreateOrder';
 import LoanOrders from './accountManager/pages/my-task/order-journey/LoanOrders';
@@ -827,6 +829,7 @@ function App() {
               }
             >
               <Route path="dashboard" element={<AccountManagerDashboard />} />
+              <Route path="performa-invoice" element={<PerformaInvoice />} />
               <Route path="solar-panel-bundle-plan" element={<SolarPanelBundlePlan />} />
               <Route path="procurement-plan" element={<ProcurementPlan />} />
               <Route path="report" element={<Report />} />
@@ -852,6 +855,9 @@ function App() {
               {sharedAdminRoutes}
               <Route path="" element={<Navigate to="dashboard" />} />
             </Route>
+
+            {/* Buyer Side — Solarkits EPC Order Tracking Public Link */}
+            <Route path="/epc/order-tracking/:orderId" element={<BuyerEpcOrderTracking />} />
 
             {/* Delivery Manager Routes */}
             <Route

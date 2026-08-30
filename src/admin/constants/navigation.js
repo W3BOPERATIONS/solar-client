@@ -314,6 +314,7 @@ export const SIDEBAR_NAVIGATION = [
 
 export const ACCOUNT_MANAGER_NAVIGATION = [
   { id: 'amDashboard', name: 'Account Dashboard', icon: Home, href: '/account-manager/dashboard' },
+  { id: 'amPerformaInvoice', name: 'Performa Invoice', icon: FileText, href: '/account-manager/performa-invoice' },
   { id: 'amSolarPanelBundlePlan', name: 'Account Solar Panel Bundle Plan', icon: Settings, href: '/account-manager/solar-panel-bundle-plan' },
   { id: 'amProcurementPlan', name: 'Account Procurement Plan', icon: FileText, href: '/account-manager/procurement-plan' },
   { id: 'amReport', name: 'Account Report', icon: ClipboardList, href: '/account-manager/report' },
