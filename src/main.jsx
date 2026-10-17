@@ -9,9 +9,9 @@ import './index.css';
  * -------------------------------------------------------------
  * ⚙️ CRM MAINTENANCE TOGGLE VIA .ENV
  * -------------------------------------------------------------
- * Yeh value seedhe aapke .env file se aati hai:
- * VITE_MAINTENANCE_MODE=true  --> CRM band rahega
- * VITE_MAINTENANCE_MODE=false --> CRM chalu rahega
+ * This value is read directly from your environment:
+ * VITE_MAINTENANCE_MODE=true  --> Shows Maintenance screen
+ * VITE_MAINTENANCE_MODE=false --> Runs standard CRM application
  * -------------------------------------------------------------
  */
 const IS_MAINTENANCE_MODE = import.meta.env.VITE_MAINTENANCE_MODE === 'true';

@@ -44,11 +44,11 @@ export default function Maintenance() {
         </h1>
 
         {/* Description */}
-        <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-2">
+        <p className="text-slate-300 text-sm sm:text-base leading-relaxed mb-3">
           We are currently performing scheduled system updates and maintenance to serve you better.
         </p>
-        <p className="text-amber-200/80 text-xs sm:text-sm font-medium mb-8">
-          (Hum system par zaroori kaam kar rahe hain. CRM jald hi dobara chalu ho jayega.)
+        <p className="text-amber-300/90 text-xs sm:text-sm font-medium mb-8">
+          The platform will be back online shortly. Thank you for your patience.
         </p>
 
         {/* Status Features Card */}
